@@ -17,7 +17,11 @@ DEFAULT_VALIDATION_DIR = Path("outputs/validation")
 KNOWN_CHALLENGE_TYPES = {"asl", "dce"}
 NIFTI_SUFFIXES = (".nii", ".nii.gz")
 METADATA_SUFFIXES = {".json", ".yaml", ".yml", ".csv", ".tsv"}
-CODE_SUFFIXES = {".py", ".m", ".r", ".R", ".ipynb", ".sh", ".jl", ".c", ".cpp", ".h", ".hpp"}
+CODE_SUFFIXES = {".py", ".m", ".r", ".sh", ".ipynb"}
+EXPECTED_PARAMETER_MAPS = {
+    "dce": ("ktrans", "kep", "vp"),
+    "asl": ("cbf", "att"),
+}
 
 
 def validate_submission(
@@ -86,6 +90,11 @@ def validate_submission(
                 path=str(path),
             )
         )
+    else:
+        warnings.extend(_empty_nifti_warnings(nifti_files))
+        warnings.extend(_missing_expected_map_warnings(nifti_files, normalized_challenge, path))
+
+    warnings.extend(_duplicate_filename_warnings(files))
 
     if not any(_is_readme(file_path) or file_path.suffix.lower() in METADATA_SUFFIXES for file_path in files):
         errors.append(
@@ -107,7 +116,7 @@ def validate_submission(
             )
         )
 
-    if not any(file_path.suffix in CODE_SUFFIXES for file_path in files):
+    if not any(file_path.suffix.lower() in CODE_SUFFIXES for file_path in files):
         warnings.append(
             ValidationIssue(
                 severity="warning",
@@ -176,6 +185,62 @@ def _is_docker_file(path: Path) -> bool:
     return name == "dockerfile" or name == ".dockerignore" or name.startswith("docker-compose")
 
 
+def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
+    warnings: list[ValidationIssue] = []
+    for file_path in nifti_files:
+        if file_path.stat().st_size == 0:
+            warnings.append(
+                ValidationIssue(
+                    severity="warning",
+                    code="EMPTY_NIFTI_FILE",
+                    message=".nii or .nii.gz file is empty.",
+                    path=str(file_path),
+                )
+            )
+    return warnings
+
+
+def _missing_expected_map_warnings(
+    nifti_files: list[Path],
+    challenge_type: str,
+    submission_path: Path,
+) -> list[ValidationIssue]:
+    expected_maps = EXPECTED_PARAMETER_MAPS.get(challenge_type, ())
+    file_names = " ".join(file_path.name.lower() for file_path in nifti_files)
+    warnings: list[ValidationIssue] = []
+    for expected_map in expected_maps:
+        if expected_map not in file_names:
+            warnings.append(
+                ValidationIssue(
+                    severity="warning",
+                    code="EXPECTED_MAP_MISSING",
+                    message=f"Expected {expected_map} parameter map was not found.",
+                    path=str(submission_path),
+                )
+            )
+    return warnings
+
+
+def _duplicate_filename_warnings(files: list[Path]) -> list[ValidationIssue]:
+    seen: dict[str, list[Path]] = {}
+    for file_path in files:
+        seen.setdefault(file_path.name.lower(), []).append(file_path)
+
+    warnings: list[ValidationIssue] = []
+    for filename, matches in seen.items():
+        if len(matches) > 1:
+            paths = ", ".join(str(path) for path in matches)
+            warnings.append(
+                ValidationIssue(
+                    severity="warning",
+                    code="DUPLICATE_FILENAME",
+                    message=f"Filename appears more than once: {filename}",
+                    path=paths,
+                )
+            )
+    return warnings
+
+
 def _safe_submission_id(raw_id: str) -> str:
     safe_id = "".join(character if character.isalnum() or character in "._-" else "_" for character in raw_id)
     return safe_id.strip("._-") or "submission"
@@ -184,6 +249,8 @@ def _safe_submission_id(raw_id: str) -> str:
 def _print_summary(result: ValidationResult) -> None:
     status = "PASSED" if result.passed else "FAILED"
     print(f"Validation: {status}")
+    print(f"Checked path: {result.submission_path}")
+    print(f"Challenge type: {result.challenge_type}")
     print(f"Errors: {len(result.errors)}")
     print(f"Warnings: {len(result.warnings)}")
 
@@ -197,4 +264,3 @@ def _print_summary(result: ValidationResult) -> None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
