@@ -1,0 +1,6 @@
+FROM alpine:3.20
+
+WORKDIR /submission
+
+CMD ["sh", "-lc", "echo \"OSIPI fallback Docker image\""]
+
