@@ -238,3 +238,4 @@ outputs/manifests/*.json
 outputs/manifests/*.csv
 outputs/manifests/*.json
 outputs/manifests/*.csv
+.DS_Store
