@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# OSIPI local data and submission workspaces
+submissions/incoming/*
+!submissions/incoming/.gitkeep
+submissions/extracted/*
+!submissions/extracted/.gitkeep
+data/reference/*
+!data/reference/.gitkeep
+
+# Large medical imaging data should stay outside version control.
+*.nii
+*.nii.gz
+*.dcm
+*.ima
+*.mha
+*.mhd
+*.nrrd
