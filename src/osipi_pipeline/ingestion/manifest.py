@@ -1,5 +1,4 @@
-"""Create and save ingestion manifests.
-
+"""
 A manifest is a small inventory file. It tells us what source was ingested,
 where the local working copy lives, and what kinds of files were found.
 """

@@ -233,3 +233,6 @@ data/reference/*
 *.mha
 *.mhd
 *.nrrd
+
+outputs/manifests/*.json
+outputs/manifests/*.csv

@@ -1,5 +1,4 @@
-"""Simple rule-based challenge type detection.
-
+"""
 Challenge type detection means deciding whether a submission looks like ASL,
 DCE, or something unknown. For now we only inspect file and folder names.
 """

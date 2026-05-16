@@ -1,7 +1,6 @@
-"""Command line entry point and high-level ingestion flow.
-
-This module keeps the user-facing command simple. It accepts one input source,
-creates a normalized local working copy, builds a manifest, and prints a summary.
+"""
+This module accepts one input source, creates a normalized local working copy, 
+builds a manifest, and prints a summary.
 """
 
 # TODO: This file handles the first pipeline step: bringing a submission into the workspace.
