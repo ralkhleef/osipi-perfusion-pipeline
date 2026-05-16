@@ -236,3 +236,5 @@ data/reference/*
 
 outputs/manifests/*.json
 outputs/manifests/*.csv
+outputs/manifests/*.json
+outputs/manifests/*.csv
