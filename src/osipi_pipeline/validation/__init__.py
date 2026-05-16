@@ -1,3 +1,3 @@
-# TODO: This module will hold validation logic in a future phase.
-# TODO: Later, add checks for NIfTI files, required metadata, naming rules, and challenge folder structure.
+# TODO: This module marks the validation package for this pipeline step.
+# TODO: Later, add deeper NIfTI, metadata, naming, and challenge folder checks.
 # TODO: Validation should run after ingestion and before Docker execution or scoring.

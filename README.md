@@ -35,6 +35,10 @@ flowchart LR
 python -m osipi_pipeline.ingestion.ingest --input submissions/incoming/team_alpha.zip
 ```
 
+```bash
+PYTHONPATH=src python3 -m osipi_pipeline.validation.validate --input submissions/extracted/dce/dce_team_alpha --challenge dce
+```
+
 ---
 
 ## Run Tests
