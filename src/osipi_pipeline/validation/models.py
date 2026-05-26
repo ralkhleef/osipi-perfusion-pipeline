@@ -6,7 +6,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,9 @@ class ValidationResult:
     errors: list[ValidationIssue]
     warnings: list[ValidationIssue]
     checked_at: str
+    # Each entry is one NiftiFileResult dict produced by nifti_validator.
+    # Empty list means no NIfTI files were inspected (e.g. early-exit paths).
+    nifti_summary: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         """Convert the result into a plain dictionary for JSON output."""
@@ -41,5 +45,5 @@ class ValidationResult:
         data = asdict(self)
         data["errors"] = [issue.to_dict() for issue in self.errors]
         data["warnings"] = [issue.to_dict() for issue in self.warnings]
+        # nifti_summary is already list[dict]; asdict deep-copies it in place.
         return data
-

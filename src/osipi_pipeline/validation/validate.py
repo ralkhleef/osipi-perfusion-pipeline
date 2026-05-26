@@ -1,8 +1,6 @@
 """Basic validation checks for ingested submissions."""
 
-# TODO: This file checks whether an ingested submission looks usable.
-# TODO: Later, add real NIfTI reading, BIDS checks, and challenge-specific validation rules.
-# TODO: Validation stays separate from ingestion so each pipeline step has one job.
+# TODO: Later, add BIDS checks and more challenge-specific naming rules.
 
 from __future__ import annotations
 
@@ -10,8 +8,10 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from osipi_pipeline.validation.models import ValidationIssue, ValidationResult
+from osipi_pipeline.validation.nifti_validator import validate_nifti_files
 
 DEFAULT_VALIDATION_DIR = Path("outputs/validation")
 KNOWN_CHALLENGE_TYPES = {"asl", "dce"}
@@ -36,6 +36,7 @@ def validate_submission(
     normalized_challenge = challenge_type.lower()
     errors: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []
+    nifti_summary: list[dict[str, Any]] = []
 
     if normalized_challenge not in KNOWN_CHALLENGE_TYPES:
         errors.append(
@@ -55,7 +56,7 @@ def validate_submission(
                 path=str(path),
             )
         )
-        return _finish_validation(path, normalized_challenge, errors, warnings, output_dir)
+        return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
 
     if not path.is_dir():
         errors.append(
@@ -66,7 +67,7 @@ def validate_submission(
                 path=str(path),
             )
         )
-        return _finish_validation(path, normalized_challenge, errors, warnings, output_dir)
+        return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
 
     files = sorted(file_path for file_path in path.rglob("*") if file_path.is_file())
     if not files:
@@ -78,8 +79,9 @@ def validate_submission(
                 path=str(path),
             )
         )
-        return _finish_validation(path, normalized_challenge, errors, warnings, output_dir)
+        return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
 
+    # Find NIfTI files and run checks on them.
     nifti_files = [file_path for file_path in files if _is_nifti(file_path)]
     if not nifti_files:
         errors.append(
@@ -93,6 +95,13 @@ def validate_submission(
     else:
         warnings.extend(_empty_nifti_warnings(nifti_files))
         warnings.extend(_missing_expected_map_warnings(nifti_files, normalized_challenge, path))
+
+        # Run nibabel readability check on non-empty files.
+        # 0-byte files are already reported above, so we skip them here.
+        non_empty_niftis = [f for f in nifti_files if f.stat().st_size > 0]
+        if non_empty_niftis:
+            nifti_summary = validate_nifti_files(non_empty_niftis)
+            errors, warnings = _apply_nifti_results(nifti_summary, errors, warnings)
 
     warnings.extend(_duplicate_filename_warnings(files))
 
@@ -126,7 +135,7 @@ def validate_submission(
             )
         )
 
-    return _finish_validation(path, normalized_challenge, errors, warnings, output_dir)
+    return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
 
 
 def save_validation_result(result: ValidationResult, output_dir: str | Path) -> Path:
@@ -158,6 +167,7 @@ def _finish_validation(
     challenge_type: str,
     errors: list[ValidationIssue],
     warnings: list[ValidationIssue],
+    nifti_summary: list[dict[str, Any]],
     output_dir: str | Path,
 ) -> ValidationResult:
     result = ValidationResult(
@@ -167,9 +177,44 @@ def _finish_validation(
         errors=errors,
         warnings=warnings,
         checked_at=datetime.now(timezone.utc).isoformat(),
+        nifti_summary=nifti_summary,
     )
     save_validation_result(result, output_dir)
     return result
+
+
+def _apply_nifti_results(
+    nifti_results: list[dict[str, Any]],
+    errors: list[ValidationIssue],
+    warnings: list[ValidationIssue],
+) -> tuple[list[ValidationIssue], list[ValidationIssue]]:
+    """Turn nibabel results into ValidationIssues and add them to the lists."""
+
+    for nifti_result in nifti_results:
+        file_path = nifti_result["file_path"]
+
+        if not nifti_result["valid"]:
+            for err_msg in nifti_result["errors"]:
+                errors.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="NIFTI_UNREADABLE",
+                        message=err_msg,
+                        path=file_path,
+                    )
+                )
+
+        for warn_msg in nifti_result["warnings"]:
+            warnings.append(
+                ValidationIssue(
+                    severity="warning",
+                    code="NIFTI_WARNING",
+                    message=warn_msg,
+                    path=file_path,
+                )
+            )
+
+    return errors, warnings
 
 
 def _is_nifti(path: Path) -> bool:
@@ -260,6 +305,14 @@ def _print_summary(result: ValidationResult) -> None:
         for issue in issues:
             path_text = f" [{issue.path}]" if issue.path else ""
             print(f"- {issue.severity.upper()} {issue.code}: {issue.message}{path_text}")
+
+    if result.nifti_summary:
+        print(f"NIfTI files inspected: {len(result.nifti_summary)}")
+        for entry in result.nifti_summary:
+            valid_label = "OK" if entry["valid"] else "INVALID"
+            shape_str = str(entry["shape"]) if entry["shape"] else "unknown"
+            dtype_str = entry["dtype"] or "unknown"
+            print(f"  [{valid_label}] {entry['file_path']}  shape={shape_str}  dtype={dtype_str}")
 
 
 if __name__ == "__main__":
