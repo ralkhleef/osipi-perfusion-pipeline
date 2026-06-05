@@ -1,4 +1,5 @@
 # Byte-compiled / optimized / DLL files
+.DS_Store
 __pycache__/
 *.py[codz]
 *$py.class
@@ -222,8 +223,22 @@ submissions/incoming/*
 !submissions/incoming/.gitkeep
 submissions/extracted/*
 !submissions/extracted/.gitkeep
-data/reference/*
-!data/reference/.gitkeep
+submissions/validated/*
+!submissions/validated/.gitkeep
+data/reference_data/*
+!data/reference_data/.gitkeep
+data/outputs/*
+!data/outputs/.gitkeep
+!data/outputs/execution/
+!data/outputs/execution/.gitkeep
+!data/outputs/manifests/
+!data/outputs/manifests/.gitkeep
+!data/outputs/validation/
+!data/outputs/validation/.gitkeep
+/release/
+
+# Legacy generated output folder from older CLI defaults.
+/outputs/
 
 # Large medical imaging data should stay outside version control.
 *.nii
@@ -233,11 +248,3 @@ data/reference/*
 *.mha
 *.mhd
 *.nrrd
-
-outputs/manifests/*.json
-outputs/manifests/*.csv
-outputs/manifests/*.json
-outputs/manifests/*.csv
-.DS_Store
-outputs/validation/*.json
-outputs/execution/*.log

@@ -24,7 +24,7 @@ Docker helps make challenge runs more reproducible.
 | Build image | Runs `docker build` |
 | Mount submission | Mounts the submission folder at `/submission` inside the container |
 | Run placeholder | Runs `echo "OSIPI execution placeholder"` |
-| Save logs | Writes stdout and stderr logs to `outputs/execution/` |
+| Save logs | Writes stdout and stderr logs to `data/outputs/execution/` |
 
 ## Example Command
 
@@ -57,4 +57,3 @@ For example, the pipeline may eventually read a small config file that says how 
 | Fallback image is only a placeholder | It is not a scientific execution environment |
 | The command is only an echo | No real MRI processing happens yet |
 | Logs are local files | They are not summarized into reports yet |
-

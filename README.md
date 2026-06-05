@@ -6,6 +6,26 @@ The goal is to make challenge evaluation more reproducible, automated, and easy 
 
 ---
 
+## Repository
+
+[GitHub Repository](https://github.com/ralkhleef/osipi-perfusion-pipeline)
+
+---
+
+## Local Web App
+
+For the Docker-based local app, see [README_DOCKER.md](README_DOCKER.md).
+
+Mac users can double-click `start.command`. Windows users can double-click `start.bat`.
+
+---
+
+## Project Layout
+
+The folder structure is described in [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
+
+---
+
 ## Pipeline Flow
 
 ```mermaid
@@ -43,7 +63,7 @@ PYTHONPATH=src python3 -m osipi_pipeline.validation.validate --input submissions
 
 ## NIfTI Validation
 
-The validation step uses [nibabel](https://nipy.org/nibabel/) to actually open each `.nii` / `.nii.gz` file, not just check its filename.
+The validation step uses [nibabel](https://nipy.org/nibabel/) to actually open each `.nii` / `.nii.gz` file
 
 What is checked:
 - The file can be loaded by nibabel (if not, validation fails with `NIFTI_UNREADABLE`)
@@ -52,14 +72,7 @@ What is checked:
 - Basic stats are recorded: shape, dtype, min, max, mean, NaN count, inf count
 - NaN or infinite values are reported as warnings, not errors, since some parameter maps use NaN for masked voxels
 
-What this does **not** do:
-- No scientific scoring, RMSE, bias, CoV, or ICC
-- No full BIDS compliance check — only basic readability
-- No comparison against reference data
 
-The NIfTI results are saved under the `nifti_summary` key in the JSON output file.
-
----
 
 ## Run Tests
 

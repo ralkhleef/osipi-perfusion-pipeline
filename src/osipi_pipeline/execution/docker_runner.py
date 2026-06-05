@@ -10,7 +10,7 @@ import subprocess
 from osipi_pipeline.execution.models import ExecutionResult
 
 DEFAULT_FALLBACK_DOCKERFILE = Path("docker/Dockerfile.example")
-DEFAULT_EXECUTION_DIR = Path("outputs/execution")
+DEFAULT_EXECUTION_DIR = Path("data/outputs/execution")
 DEFAULT_RUN_COMMAND = 'echo "OSIPI execution placeholder"'
 
 
@@ -150,4 +150,3 @@ def _safe_name(value: str) -> str:
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
-

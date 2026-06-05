@@ -21,7 +21,7 @@ from osipi_pipeline.ingestion.models import Manifest
 from osipi_pipeline.ingestion.sources import materialize_source, resolve_source
 
 DEFAULT_EXTRACTED_ROOT = Path("submissions/extracted")
-DEFAULT_MANIFESTS_DIR = Path("outputs/manifests")
+DEFAULT_MANIFESTS_DIR = Path("data/outputs/manifests")
 
 
 def ingest_submission(

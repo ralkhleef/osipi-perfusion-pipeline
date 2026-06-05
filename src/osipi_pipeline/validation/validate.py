@@ -13,7 +13,7 @@ from typing import Any
 from osipi_pipeline.validation.models import ValidationIssue, ValidationResult
 from osipi_pipeline.validation.nifti_validator import validate_nifti_files
 
-DEFAULT_VALIDATION_DIR = Path("outputs/validation")
+DEFAULT_VALIDATION_DIR = Path("data/outputs/validation")
 KNOWN_CHALLENGE_TYPES = {"asl", "dce"}
 NIFTI_SUFFIXES = (".nii", ".nii.gz")
 METADATA_SUFFIXES = {".json", ".yaml", ".yml", ".csv", ".tsv"}

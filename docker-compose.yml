@@ -1,0 +1,15 @@
+services:
+  osipi-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: osipi-perfusion-pipeline:local
+    container_name: osipi-backend
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONPATH: /app/backend:/app/src
+    volumes:
+      - ./data:/app/data
+      - ./submissions:/app/submissions
+    restart: unless-stopped

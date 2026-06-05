@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OSIPI Perfusion Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+<div class="app-wrap">
+
+  <!-- ======================================================
+       Left sidebar — logo + stepper
+       ====================================================== -->
+  <aside class="sidebar">
+
+    <div class="logo">
+      <img src="/static/assets/logo.svg" alt="OSIPI logo" class="logo-img" />
+      <div class="logo-wordmark">
+        <span class="logo-name">OSIPI</span>
+        <span class="logo-tagline">Open Science Initiative for Perfusion Imaging</span>
+      </div>
+    </div>
+
+    <nav class="stepper">
+
+      <div class="step-item active" data-step="1">
+        <div class="step-left">
+          <div class="step-dot">1</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <span class="step-title">Submission Details</span>
+          <span class="step-desc">Team details and metadata.</span>
+        </div>
+      </div>
+
+      <div class="step-item" data-step="2">
+        <div class="step-left">
+          <div class="step-dot">2</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <span class="step-title">Import Submission</span>
+          <span class="step-desc">Load participant results.</span>
+        </div>
+      </div>
+
+      <div class="step-item" data-step="3">
+        <div class="step-left">
+          <div class="step-dot">3</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <span class="step-title">Validate</span>
+          <span class="step-desc">Automated checks and verification.</span>
+        </div>
+      </div>
+
+      <div class="step-item step-muted" data-step="4">
+        <div class="step-left">
+          <div class="step-dot">4</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <span class="step-title">Results</span>
+          <span class="step-desc">Feature Currently Offline</span>
+        </div>
+      </div>
+
+      <div class="step-item step-muted" data-step="5">
+        <div class="step-left">
+          <div class="step-dot">5</div>
+        </div>
+        <div class="step-body">
+          <span class="step-title">Export</span>
+          <span class="step-desc">Feature Currently Offline</span>
+        </div>
+      </div>
+
+    </nav>
+
+    <div class="guidance-card">
+      <div class="guidance-icon">?</div>
+      <strong>Need Guidance?</strong>
+      <p>Check out GitHub for detailed instructions.</p>
+      <a class="guidance-link"
+         href="https://github.com/ralkhleef/osipi-perfusion-pipeline"
+         target="_blank"
+         rel="noopener noreferrer">GitHub Repository</a>
+    </div>
+  </aside>
+
+  <!-- ======================================================
+       Main content — one panel per step
+       ====================================================== -->
+  <div class="content">
+
+    <!-- ================================================== -->
+    <!-- Step 1: Submission Details                         -->
+    <!-- ================================================== -->
+    <div id="tab-intake" class="panel active">
+
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Submission Details</h2>
+          <p class="panel-sub">Provide participant/team metadata before importing the submission files.</p>
+        </div>
+      </div>
+
+      <div class="form-body">
+
+        <!-- Team Name + Contact Email -->
+        <div class="form-row-2">
+          <div class="field">
+            <label class="field-label" for="team-name">
+              Team Name
+              <span class="required-marker" aria-hidden="true">*</span>
+            </label>
+            <input type="text" id="team-name" placeholder="e.g. NeuroFlow Lab" autocomplete="off" />
+            <div id="team-name-error" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="field">
+            <label class="field-label" for="contact-email">
+              Contact Email
+              <span class="required-marker" aria-hidden="true">*</span>
+            </label>
+            <input type="email" id="contact-email" placeholder="name@institution.edu" />
+            <div id="contact-email-error" class="field-error" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <!-- Challenge Type + Parameter Map Type -->
+        <div class="form-row-2">
+          <div class="field">
+            <label class="field-label">
+              Challenge Type
+              <span class="required-marker" aria-hidden="true">*</span>
+              <span class="tip" data-tip="Select which challenge workflow this submission belongs to. Choose Other to enter a custom type.">?</span>
+            </label>
+            <div class="radio-inline">
+              <label class="radio-opt">
+                <input type="radio" name="challenge_type" value="asl" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">ASL</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="challenge_type" value="dce" checked />
+                <span class="radio-dot"></span>
+                <span class="radio-text">DCE</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="challenge_type" value="dsc" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">DSC</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="challenge_type" value="other" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Other</span>
+              </label>
+            </div>
+            <div id="challenge-type-other-wrap" class="conditional-input-wrap" style="display:none">
+              <input type="text" id="challenge-type-other" class="other-input"
+                     placeholder="Enter challenge type" />
+              <span class="required-marker conditional-star" aria-hidden="true">*</span>
+            </div>
+            <div id="challenge-type-error" class="field-error" aria-live="polite"></div>
+            <div id="challenge-type-other-error" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="field">
+            <label class="field-label">
+              Parameter Map Type
+              <span class="tip" data-tip="If no map type is selected, the app can try to auto-detect it after import.">?</span>
+            </label>
+            <div class="radio-inline map-type-options">
+              <label class="radio-opt">
+                <input type="radio" name="map_type" value="CBF" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">CBF</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="map_type" value="Ktrans" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Ktrans</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="map_type" value="ATT" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">ATT</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="map_type" value="other" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Other</span>
+              </label>
+            </div>
+            <div id="map-type-other-wrap" class="conditional-input-wrap" style="display:none">
+              <input type="text" id="map-type-other" class="other-input"
+                     placeholder="Enter parameter map type" />
+              <span class="required-marker conditional-star" aria-hidden="true">*</span>
+            </div>
+            <div id="map-type-other-error" class="field-error" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <!-- Expected Maps (half width) -->
+        <div class="form-row-half">
+          <div class="field">
+            <label class="field-label" for="expected-maps">
+              Expected Number of Maps
+              <span class="tip" data-tip="The app can count detected NIfTI maps after import, or you can enter the expected number manually.">?</span>
+            </label>
+            <div class="radio-yes-no compact-radio">
+              <label class="radio-opt">
+                <input type="radio" name="expected_maps_mode" value="auto" checked />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Auto-detect</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="expected_maps_mode" value="manual" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Manual</span>
+              </label>
+            </div>
+            <div id="expected-maps-wrap" class="conditional-input-wrap" style="display:none">
+              <input type="number" id="expected-maps" min="0" step="1"
+                     placeholder="Enter expected count" disabled />
+              <span class="required-marker conditional-star" aria-hidden="true">*</span>
+            </div>
+            <div id="expected-maps-error" class="field-error" aria-live="polite"></div>
+          </div>
+          <div></div>
+        </div>
+
+        <!-- Includes Code? + Includes README? -->
+        <div class="form-row-2">
+          <div class="field">
+            <label class="field-label">
+              Includes Code?
+              <span class="required-marker" aria-hidden="true">*</span>
+              <span class="tip" data-tip="Whether the ZIP contains scripts or code used to generate the maps.">?</span>
+            </label>
+            <div class="radio-yes-no">
+              <label class="radio-opt">
+                <input type="radio" name="include_code" value="yes" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Yes</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="include_code" value="no" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">No</span>
+              </label>
+            </div>
+            <div id="include-code-error" class="field-error" aria-live="polite"></div>
+          </div>
+          <div class="field">
+            <label class="field-label">
+              Includes README / SOP?
+              <span class="required-marker" aria-hidden="true">*</span>
+              <span class="tip" data-tip="A README or SOP describing how results were generated.">?</span>
+            </label>
+            <div class="radio-yes-no">
+              <label class="radio-opt">
+                <input type="radio" name="include_readme" value="yes" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">Yes</span>
+              </label>
+              <label class="radio-opt">
+                <input type="radio" name="include_readme" value="no" />
+                <span class="radio-dot"></span>
+                <span class="radio-text">No</span>
+              </label>
+            </div>
+            <div id="include-readme-error" class="field-error" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="intake-cta-actions">
+          <button id="details-continue-btn" class="btn-action btn-next">Continue to Import</button>
+        </div>
+
+      </div>
+    </div><!-- end tab-intake -->
+
+
+    <!-- ================================================== -->
+    <!-- Step 2: Import Submission                          -->
+    <!-- ================================================== -->
+    <div id="tab-reference" class="panel">
+
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Import Submission</h2>
+          <p class="panel-sub">Choose how to import the participant submission.</p>
+        </div>
+      </div>
+
+      <div class="form-body">
+
+        <div class="import-shell">
+          <div class="import-selector-row">
+            <span class="import-selector-label">Submission Type</span>
+            <div class="submission-type-segment" role="radiogroup" aria-label="Submission Type">
+              <label class="submission-type-card active">
+                <input type="radio" name="submission_type" value="local" checked />
+                <span class="submission-type-title">
+                  Local Upload
+                  <span class="tip local-upload-tip" data-tip="A compressed ZIP file is recommended, but you can also select a folder or files.">?</span>
+                </span>
+              </label>
+              <label class="submission-type-card">
+                <input type="radio" name="submission_type" value="zenodo" />
+                <span class="submission-type-title">
+                  Zenodo Link
+                  <span class="tip local-upload-tip" data-tip="Paste a Zenodo record URL, DOI, or record ID to import hosted submission files.">?</span>
+                </span>
+              </label>
+              <label class="submission-type-card">
+                <input type="radio" name="submission_type" value="github" />
+                <span class="submission-type-title">
+                  GitHub Repo
+                  <span class="tip local-upload-tip" data-tip="Paste a GitHub repository URL to import code or submission files from a repo.">?</span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="submission-source-wrap">
+            <div id="source-local" class="submission-source-panel active">
+              <div id="local-drop-zone" class="upload-zone import-panel">
+                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 16 12 12 8 16"></polyline>
+                  <line x1="12" y1="12" x2="12" y2="21"></line>
+                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+                </svg>
+                <p class="upload-primary">Choose a ZIP file or folder</p>
+                <p class="upload-hint">ZIP recommended</p>
+                <div class="local-upload-actions upload-menu-wrap">
+                  <button id="choose-submission-btn" class="choose-submission-btn" type="button" aria-haspopup="true" aria-expanded="false">
+                    Choose Submission
+                  </button>
+                  <div id="choose-submission-menu" class="choose-submission-menu" role="menu" aria-label="Choose submission upload type">
+                    <button type="button" role="menuitem" data-upload-choice="zip">Upload ZIP file</button>
+                    <button type="button" role="menuitem" data-upload-choice="folder">Select Folder</button>
+                    <button type="button" role="menuitem" data-upload-choice="files">Select Files</button>
+                  </div>
+                </div>
+                <input type="file" id="file-input" accept=".zip" multiple />
+                <input type="file" id="folder-input" webkitdirectory directory multiple />
+                <input type="file" id="files-input" multiple />
+                <span id="folder-selection-text" class="folder-selection-text">No local files selected</span>
+              </div>
+            </div>
+
+            <div id="source-zenodo" class="submission-source-panel">
+              <div class="import-panel">
+                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M3 12h18"></path>
+                  <path d="M12 3a14 14 0 0 1 0 18"></path>
+                  <path d="M12 3a14 14 0 0 0 0 18"></path>
+                </svg>
+                <p class="upload-primary">Import from Zenodo</p>
+                <div class="import-fields">
+                <label class="field-label" for="submission-zenodo-input">Zenodo URL, DOI, or Record ID</label>
+                <div class="inline-import-row">
+                  <input type="text" id="submission-zenodo-input"
+                    placeholder="https://zenodo.org/records/123456782" />
+                  <button id="submission-zenodo-btn" class="btn-action btn-compact" type="button">Import</button>
+                </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="source-github" class="submission-source-panel">
+              <div class="import-panel">
+                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 19c-5 1.5-5-2.5-7-3"></path>
+                  <path d="M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.2 0C6.4.4 5.3.7 5.3.7a4.8 4.8 0 0 0-.1 3.5 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.6V22"></path>
+                </svg>
+                <p class="upload-primary">Import from GitHub</p>
+                <div class="github-import-row">
+                  <div class="field">
+                    <label class="field-label" for="github-url-input">GitHub repository URL</label>
+                    <input type="url" id="github-url-input" placeholder="https://github.com/org/repo" />
+                  </div>
+                  <div class="field compact-branch-field">
+                    <label class="field-label" for="github-branch-input">Branch (optional)</label>
+                    <input type="text" id="github-branch-input" placeholder="main" />
+                  </div>
+                  <button id="github-import-btn" class="btn-action btn-compact github-import-btn" type="button">Import</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="upload-pill" class="upload-pill">
+              <span id="upload-pill-text"></span>
+            </div>
+
+            <div id="submission-list" class="submission-list" aria-live="polite"></div>
+          </div>
+        </div>
+
+        <div class="intake-cta-actions">
+          <button id="intake-continue-btn" class="btn-outline" disabled>Continue to Validation</button>
+        </div>
+
+      </div>
+
+    </div><!-- end tab-reference -->
+
+
+    <!-- ================================================== -->
+    <!-- Step 3: Validation                                 -->
+    <!-- ================================================== -->
+    <div id="tab-validation" class="panel">
+
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Validate</h2>
+          <p class="panel-sub">Automated validation checks will be available after final testing.</p>
+        </div>
+      </div>
+
+      <div class="form-body validate-offline-body">
+        <section class="offline-placeholder" aria-label="Validate feature status">
+          <h3>Feature currently offline</h3>
+          <p>Validation is still being tested and will be re-enabled once the checks are finalized.</p>
+          <button id="validate-continue-results-btn" class="btn-outline" type="button">Continue to Results</button>
+        </section>
+      </div>
+
+    </div><!-- end tab-validation -->
+
+
+    <!-- ================================================== -->
+    <!-- Step 4: Results                                    -->
+    <!-- ================================================== -->
+    <div id="tab-results" class="panel">
+
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Results</h2>
+          <p class="panel-sub">Feature Currently Offline</p>
+        </div>
+      </div>
+
+      <div class="form-body offline-body">
+        <section class="offline-placeholder" aria-label="Results feature status">
+          <h3>Feature currently offline</h3>
+          <p>Results and scoring reports will appear here after validation is finalized.</p>
+          <button id="results-continue-export-btn" class="btn-outline" type="button">Continue to Export</button>
+        </section>
+      </div>
+
+    </div><!-- end tab-results -->
+
+
+    <!-- ================================================== -->
+    <!-- Step 5: Export                                     -->
+    <!-- ================================================== -->
+    <div id="tab-export" class="panel">
+
+      <div class="panel-header">
+        <div>
+          <h2 class="panel-title">Export</h2>
+          <p class="panel-sub">Feature Currently Offline</p>
+        </div>
+      </div>
+
+      <div class="form-body offline-body">
+        <section class="offline-placeholder" aria-label="Export feature status">
+          <h3>Feature currently offline</h3>
+          <p>Export options will be available once scoring and reports are finalized.</p>
+        </section>
+      </div>
+
+    </div><!-- end tab-export -->
+
+  </div><!-- end content -->
+</div><!-- end app-wrap -->
+
+<script src="/static/app.js"></script>
+</body>
+</html>
