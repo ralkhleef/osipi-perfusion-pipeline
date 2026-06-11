@@ -11,7 +11,7 @@ from osipi_pipeline.execution.models import ExecutionResult
 
 DEFAULT_FALLBACK_DOCKERFILE = Path("docker/Dockerfile.example")
 DEFAULT_EXECUTION_DIR = Path("data/outputs/execution")
-DEFAULT_RUN_COMMAND = 'echo "OSIPI execution placeholder"'
+DEFAULT_RUN_COMMAND = "python3 run.py"
 
 
 class DockerExecutionError(RuntimeError):
@@ -26,7 +26,7 @@ def execute_submission(
     output_dir: str | Path = DEFAULT_EXECUTION_DIR,
     fallback_dockerfile: str | Path = DEFAULT_FALLBACK_DOCKERFILE,
 ) -> ExecutionResult:
-    """Build a Docker image, run a placeholder command, and save logs."""
+    """Build a Docker image from the submission, run the command, and save logs."""
 
     submission = Path(submission_path).expanduser()
     if not submission.exists():

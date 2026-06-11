@@ -6,6 +6,7 @@ read the record title and file list, then downloads each file.
 
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -131,44 +132,48 @@ def _parse_record_id(text: str) -> Optional[str]:
 
 
 def _download_files(files: List, record_id: str, target_dir: Path) -> Tuple[List[str], List[str]]:
-    """Download each file in the record's file list.
+    """Download each file in the record's file list in parallel.
 
     Returns (downloaded_filenames, error_messages).
     """
-    downloaded: List[str] = []
-    errors: List[str] = []
-
-    for file_info in files:
+    def _fetch_one(file_info: dict) -> Tuple[Optional[str], Optional[str]]:
         filename = file_info.get("key") or file_info.get("filename")
         if not filename:
-            errors.append(f"Skipped a file entry with no filename: {file_info}")
-            continue
+            return None, f"Skipped a file entry with no filename: {file_info}"
 
-        # Build the download URL.
         download_url = (
             file_info.get("links", {}).get("self")
             or f"https://zenodo.org/records/{record_id}/files/{quote(filename)}?download=1"
         )
-
         try:
             file_resp = requests.get(download_url, timeout=120, stream=True)
             file_resp.raise_for_status()
-
             rel_path = _safe_relative_path(filename)
             dest = target_dir / rel_path
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "wb") as fh:
-                for chunk in file_resp.iter_content(chunk_size=8192):
+                for chunk in file_resp.iter_content(chunk_size=65536):
                     fh.write(chunk)
-
-            downloaded.append(str(rel_path))
-
+            return str(rel_path), None
         except requests.HTTPError as exc:
-            errors.append(f"HTTP error downloading {filename}: {exc}")
+            return None, f"HTTP error downloading {filename}: {exc}"
         except requests.Timeout:
-            errors.append(f"Download timed out for {filename}.")
+            return None, f"Download timed out for {filename}."
         except Exception as exc:
-            errors.append(f"Failed to download {filename}: {exc}")
+            return None, f"Failed to download {filename}: {exc}"
+
+    downloaded: List[str] = []
+    errors: List[str] = []
+    max_workers = min(6, len(files)) if files else 1
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_fetch_one, f): f for f in files}
+        for future in as_completed(futures):
+            result, error = future.result()
+            if result:
+                downloaded.append(result)
+            if error:
+                errors.append(error)
 
     return downloaded, errors
 

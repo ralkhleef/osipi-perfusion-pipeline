@@ -3,17 +3,12 @@ Challenge type detection means deciding whether a submission looks like ASL,
 DCE, or something unknown. For now we only inspect file and folder names.
 """
 
-# TODO: This file guesses the challenge type before validation exists.
-# TODO: Later, replace or extend keyword matching with stronger challenge-specific checks.
-# TODO: This detection result decides where the ingested submission is stored.
-
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 from osipi_pipeline.config.challenge_types import CHALLENGE_TYPES
-
 
 def detect_challenge_type(path: Path, challenge_config: dict[str, dict[str, tuple[str, ...]]] | None = None) -> str:
     """Return the best matching challenge type for a submission folder."""
@@ -31,7 +26,6 @@ def detect_challenge_type(path: Path, challenge_config: dict[str, dict[str, tupl
     best_type, best_score = max(scores.items(), key=lambda item: item[1], default=("unknown", 0))
     return best_type if best_score > 0 else "unknown"
 
-
 def _path_text(path: Path) -> str:
     """Join the folder name and child paths into searchable text."""
 
@@ -39,7 +33,6 @@ def _path_text(path: Path) -> str:
     if path.exists() and path.is_dir():
         parts.extend(str(child.relative_to(path)) for child in path.rglob("*"))
     return _normalize(" ".join(parts))
-
 
 def _keyword_matches(haystack: str, keyword: str) -> bool:
     """Check whether a keyword appears in the normalized path text."""
@@ -50,7 +43,6 @@ def _keyword_matches(haystack: str, keyword: str) -> bool:
     if len(normalized_keyword) <= 3 and " " not in normalized_keyword:
         return re.search(rf"(^|[^a-z0-9]){re.escape(normalized_keyword)}([^a-z0-9]|$)", haystack) is not None
     return normalized_keyword in haystack
-
 
 def _normalize(value: str) -> str:
     """Lowercase text and turn punctuation into spaces for matching."""

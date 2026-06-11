@@ -248,3 +248,13 @@ data/outputs/*
 *.mha
 *.mhd
 *.nrrd
+
+# generated/local data
+data/extracted/
+data/outputs/validation/
+*.nii
+*.nii.gz
+*.zip
+.env
+.venv/
+__pycache__/

@@ -3,10 +3,6 @@ This module accepts one input source, creates a normalized local working copy,
 builds a manifest, and prints a summary.
 """
 
-# TODO: This file handles the first pipeline step: bringing a submission into the workspace.
-# TODO: Later, connect this ingestion command to validation, scoring, and reporting.
-# TODO: Keep this file simple so folders, zip files, GitHub, and future sources all work the same way.
-
 from __future__ import annotations
 
 import argparse
@@ -22,7 +18,6 @@ from osipi_pipeline.ingestion.sources import materialize_source, resolve_source
 
 DEFAULT_EXTRACTED_ROOT = Path("submissions/extracted")
 DEFAULT_MANIFESTS_DIR = Path("data/outputs/manifests")
-
 
 def ingest_submission(
     input_path: str | Path,
@@ -61,7 +56,6 @@ def ingest_submission(
     _print_summary(manifest, json_path, csv_path)
     return manifest
 
-
 def main(argv: list[str] | None = None) -> int:
     """Parse command line arguments and run ingestion."""
 
@@ -80,7 +74,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
     return 0
 
-
 def _normalize_challenge_override(challenge: str | None) -> str | None:
     """Validate a manually provided challenge type, if the user gives one."""
 
@@ -92,14 +85,12 @@ def _normalize_challenge_override(challenge: str | None) -> str | None:
         raise ValueError(f"Unsupported challenge type '{challenge}'. Expected one of: {', '.join(sorted(allowed))}")
     return normalized
 
-
 def _prepare_destination(destination: Path) -> None:
     """Create a clean destination folder."""
 
     if destination.exists():
         shutil.rmtree(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-
 
 def _cleanup_empty_staging(staging_root: Path) -> None:
     """Remove the staging folder if it is empty."""
@@ -108,7 +99,6 @@ def _cleanup_empty_staging(staging_root: Path) -> None:
         staging_root.rmdir()
     except OSError:
         pass
-
 
 def _print_summary(manifest: Manifest, json_path: Path, csv_path: Path) -> None:
     """Print a short ingestion summary for the user."""
@@ -124,7 +114,6 @@ def _print_summary(manifest: Manifest, json_path: Path, csv_path: Path) -> None:
     print(f"README files: {len(manifest.readme_files)}")
     print(f"Manifest JSON: {json_path}")
     print(f"Manifest CSV: {csv_path}")
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

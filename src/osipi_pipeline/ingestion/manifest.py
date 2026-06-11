@@ -3,10 +3,6 @@ A manifest is a small inventory file. It tells us what source was ingested,
 where the local working copy lives, and what kinds of files were found.
 """
 
-# TODO: This file creates the manifest, which is the pipeline's record of an ingested submission.
-# TODO: Later, add fields needed by validation, Docker execution, scoring, and reporting.
-# TODO: Keep manifests small so they can be committed without storing large MRI datasets.
-
 from __future__ import annotations
 
 import csv
@@ -19,7 +15,6 @@ from osipi_pipeline.ingestion.models import Manifest
 NIFTI_SUFFIXES = (".nii", ".nii.gz")
 METADATA_SUFFIXES = {".json", ".yaml", ".yml", ".csv", ".tsv"}
 CODE_SUFFIXES = {".py", ".m", ".r", ".R", ".ipynb", ".sh", ".jl", ".c", ".cpp", ".h", ".hpp"}
-
 
 def build_manifest(
     *,
@@ -48,7 +43,6 @@ def build_manifest(
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
-
 def save_manifest(manifest: Manifest, manifests_dir: Path) -> tuple[Path, Path]:
     """Save one manifest in both JSON and CSV formats."""
 
@@ -67,12 +61,10 @@ def save_manifest(manifest: Manifest, manifests_dir: Path) -> tuple[Path, Path]:
 
     return json_path, csv_path
 
-
 def _is_nifti(path: Path) -> bool:
     """Return true for common NIfTI image filenames."""
 
     return path.name.lower().endswith(NIFTI_SUFFIXES)
-
 
 def _is_docker_file(path: Path) -> bool:
     """Return true for Docker-related files."""
@@ -80,10 +72,8 @@ def _is_docker_file(path: Path) -> bool:
     name = path.name.lower()
     return name == "dockerfile" or name == ".dockerignore" or name.startswith("docker-compose")
 
-
 def _as_relative_posix(path: Path, root: Path) -> str:
     return path.relative_to(root).as_posix()
-
 
 def _csv_value(value: object) -> object:
     """Flatten list values so one manifest fits in one CSV row."""
@@ -91,7 +81,6 @@ def _csv_value(value: object) -> object:
     if isinstance(value, list):
         return ";".join(value)
     return value
-
 
 def _original_path_value(original_path: str | Path) -> str:
     """Keep URLs as URLs, but resolve local paths to absolute paths."""

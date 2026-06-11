@@ -5,10 +5,6 @@ GitHub repository URL. This module turns that source into a local working copy
 that the rest of ingestion can scan.
 """
 
-# TODO: This file decides what kind of input the user gave: folder, zip, or GitHub URL.
-# TODO: Later, add source handlers for OSF, Google Drive, and direct HTTP links.
-# TODO: Keep source handling lightweight so large MRI data is not pulled into the repo.
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,7 +16,6 @@ import subprocess
 import zipfile
 
 CLONE_TIMEOUT_SECONDS = 120
-
 
 @dataclass(frozen=True)
 class SubmissionSource:
@@ -34,7 +29,6 @@ class SubmissionSource:
     kind: str
     original: str
     submission_id: str
-
 
 def resolve_source(input_value: str | Path) -> SubmissionSource:
     """Identify whether the input is a folder, zip file, or GitHub URL."""
@@ -56,7 +50,6 @@ def resolve_source(input_value: str | Path) -> SubmissionSource:
 
     raise ValueError(f"Submission input must be a directory, .zip file, or GitHub repository URL: {input_text}")
 
-
 def materialize_source(source: SubmissionSource, destination: Path) -> None:
     """Create a local working copy of the source at ``destination``."""
 
@@ -75,7 +68,6 @@ def materialize_source(source: SubmissionSource, destination: Path) -> None:
 
     raise ValueError(f"Unsupported submission source type: {source.kind}")
 
-
 def safe_extract_zip(zip_file: zipfile.ZipFile, destination: Path) -> None:
     """Extract a zip file while blocking unsafe paths."""
 
@@ -86,7 +78,6 @@ def safe_extract_zip(zip_file: zipfile.ZipFile, destination: Path) -> None:
         if destination_root not in target.parents and target != destination_root:
             raise ValueError(f"Unsafe zip entry would extract outside destination: {member.filename}")
     zip_file.extractall(destination)
-
 
 def _clone_github_repository(repo_url: str, destination: Path) -> None:
     """Clone a GitHub repository into a local working folder."""
@@ -127,7 +118,6 @@ def _clone_github_repository(repo_url: str, destination: Path) -> None:
         # The manifest should describe the submission files, not Git internals.
         shutil.rmtree(git_metadata)
 
-
 def _github_slug(input_text: str) -> tuple[str, str] | None:
     """Return a safe owner/repo pair for supported GitHub URL styles."""
 
@@ -143,14 +133,12 @@ def _github_slug(input_text: str) -> tuple[str, str] | None:
             return owner, repo
     return None
 
-
 def _prepare_destination(destination: Path) -> None:
     """Create a clean destination folder."""
 
     if destination.exists():
         shutil.rmtree(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-
 
 def _safe_submission_id(raw_id: str) -> str:
     """Convert a folder, zip, or repo name into a safe output folder name."""

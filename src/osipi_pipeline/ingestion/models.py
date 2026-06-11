@@ -1,13 +1,8 @@
 """Small data objects used by submission ingestion."""
 
-# TODO: This file defines simple data containers shared by ingestion code.
-# TODO: Later, add models for validation results, scoring results, and reports.
-# TODO: Keep these models easy to serialize so pipeline stages can pass data cleanly.
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-
 
 @dataclass(frozen=True)
 class Manifest:

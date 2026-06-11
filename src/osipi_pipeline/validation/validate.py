@@ -1,7 +1,5 @@
 """Basic validation checks for ingested submissions."""
 
-# TODO: Later, add BIDS checks and more challenge-specific naming rules.
-
 from __future__ import annotations
 
 import argparse
@@ -14,15 +12,15 @@ from osipi_pipeline.validation.models import ValidationIssue, ValidationResult
 from osipi_pipeline.validation.nifti_validator import validate_nifti_files
 
 DEFAULT_VALIDATION_DIR = Path("data/outputs/validation")
-KNOWN_CHALLENGE_TYPES = {"asl", "dce"}
+KNOWN_CHALLENGE_TYPES = {"asl", "dce", "dsc"}
 NIFTI_SUFFIXES = (".nii", ".nii.gz")
 METADATA_SUFFIXES = {".json", ".yaml", ".yml", ".csv", ".tsv"}
 CODE_SUFFIXES = {".py", ".m", ".r", ".sh", ".ipynb"}
 EXPECTED_PARAMETER_MAPS = {
     "dce": ("ktrans", "kep", "vp"),
     "asl": ("cbf", "att"),
+    "dsc": ("cbv", "cbf", "mtt"),
 }
-
 
 def validate_submission(
     submission_path: str | Path,
@@ -43,7 +41,7 @@ def validate_submission(
             ValidationIssue(
                 severity="error",
                 code="UNKNOWN_CHALLENGE_TYPE",
-                message="Challenge type must be 'asl' or 'dce'.",
+                message="Challenge type must be 'asl', 'dce', or 'dsc'.",
             )
         )
 
@@ -137,7 +135,6 @@ def validate_submission(
 
     return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
 
-
 def save_validation_result(result: ValidationResult, output_dir: str | Path) -> Path:
     """Save validation results as JSON."""
 
@@ -147,7 +144,6 @@ def save_validation_result(result: ValidationResult, output_dir: str | Path) -> 
     file_path = output_path / f"{result.challenge_type}_{submission_id}_validation.json"
     file_path.write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
     return file_path
-
 
 def main(argv: list[str] | None = None) -> int:
     """Run validation from the command line."""
@@ -160,7 +156,6 @@ def main(argv: list[str] | None = None) -> int:
     result = validate_submission(args.input, challenge_type=args.challenge)
     _print_summary(result)
     return 0 if result.passed else 1
-
 
 def _finish_validation(
     path: Path,
@@ -181,7 +176,6 @@ def _finish_validation(
     )
     save_validation_result(result, output_dir)
     return result
-
 
 def _apply_nifti_results(
     nifti_results: list[dict[str, Any]],
@@ -216,19 +210,15 @@ def _apply_nifti_results(
 
     return errors, warnings
 
-
 def _is_nifti(path: Path) -> bool:
     return path.name.lower().endswith(NIFTI_SUFFIXES)
-
 
 def _is_readme(path: Path) -> bool:
     return path.name.lower().startswith("readme")
 
-
 def _is_docker_file(path: Path) -> bool:
     name = path.name.lower()
     return name == "dockerfile" or name == ".dockerignore" or name.startswith("docker-compose")
-
 
 def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
     warnings: list[ValidationIssue] = []
@@ -243,7 +233,6 @@ def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
                 )
             )
     return warnings
-
 
 def _missing_expected_map_warnings(
     nifti_files: list[Path],
@@ -265,7 +254,6 @@ def _missing_expected_map_warnings(
             )
     return warnings
 
-
 def _duplicate_filename_warnings(files: list[Path]) -> list[ValidationIssue]:
     seen: dict[str, list[Path]] = {}
     for file_path in files:
@@ -285,11 +273,9 @@ def _duplicate_filename_warnings(files: list[Path]) -> list[ValidationIssue]:
             )
     return warnings
 
-
 def _safe_submission_id(raw_id: str) -> str:
     safe_id = "".join(character if character.isalnum() or character in "._-" else "_" for character in raw_id)
     return safe_id.strip("._-") or "submission"
-
 
 def _print_summary(result: ValidationResult) -> None:
     status = "PASSED" if result.passed else "FAILED"
@@ -313,7 +299,6 @@ def _print_summary(result: ValidationResult) -> None:
             shape_str = str(entry["shape"]) if entry["shape"] else "unknown"
             dtype_str = entry["dtype"] or "unknown"
             print(f"  [{valid_label}] {entry['file_path']}  shape={shape_str}  dtype={dtype_str}")
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

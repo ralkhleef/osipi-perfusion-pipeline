@@ -1,2 +1,0 @@
-submission_id,challenge_type,original_path,extracted_path,file_count,nifti_files,metadata_files,code_files,docker_files,readme_files,timestamp
-demo_ingestion,asl,/Users/ralkhleef/Desktop/osipi-perfusion-pipeline/submissions/incoming/demo_ingestion,/Users/ralkhleef/Desktop/osipi-perfusion-pipeline/submissions/extracted/asl/demo_ingestion,5,ATT.nii.gz;CBF.nii.gz,metadata.json,run.py,,README.md,2026-05-26T15:37:34.496689+00:00

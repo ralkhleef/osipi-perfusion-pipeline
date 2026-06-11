@@ -23,20 +23,30 @@ def import_github_repo(repo_url: str, branch: Optional[str] = None) -> Dict:
         return _err("Enter a valid GitHub repository URL, for example https://github.com/org/repo.")
 
     owner, repo = parsed
-    selected_branch = (branch or "main").strip() or "main"
-    archive_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{selected_branch}.zip"
 
-    try:
-        resp = requests.get(archive_url, timeout=120)
-    except requests.ConnectionError:
-        return _err("Could not connect to GitHub. Check your internet connection.")
-    except requests.Timeout:
-        return _err("GitHub repository download timed out.")
+    # If the caller specified a branch, use it directly; otherwise try main then master.
+    branches_to_try = [branch.strip()] if branch and branch.strip() else ["main", "master"]
+    resp = None
+    selected_branch = branches_to_try[0]
 
-    if resp.status_code == 404:
-        return _err("Repository or branch was not found on GitHub.")
-    if not resp.ok:
-        return _err(f"GitHub returned HTTP {resp.status_code}.")
+    for attempt_branch in branches_to_try:
+        archive_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{attempt_branch}.zip"
+        try:
+            r = requests.get(archive_url, timeout=120)
+        except requests.ConnectionError:
+            return _err("Could not connect to GitHub. Check your internet connection.")
+        except requests.Timeout:
+            return _err("GitHub repository download timed out.")
+        if r.status_code == 404:
+            continue
+        if not r.ok:
+            return _err(f"GitHub returned HTTP {r.status_code}.")
+        resp = r
+        selected_branch = attempt_branch
+        break
+
+    if resp is None:
+        return _err(f"Repository branch not found on GitHub (tried: {', '.join(branches_to_try)}).")
 
     filename = f"github_{owner}_{repo}_{selected_branch}.zip"
     result = save_and_extract(resp.content, filename)

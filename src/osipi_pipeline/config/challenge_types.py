@@ -1,17 +1,12 @@
 """Challenge type keywords used by ingestion.
 
 Add future challenge types here instead of spreading detection rules throughout
-the ingestion code.
+the ingestion code. The detector uses these keywords to make a best guess from
+file and folder names before validation runs.
 """
-
-# TODO: This file keeps challenge keyword rules in one place.
-# TODO: Later, add DSC or other challenge types without changing ingestion logic.
-# TODO: These settings help ingestion organize submissions before validation and scoring.
 
 from __future__ import annotations
 
-# Each challenge type has keywords that may appear in submitted file or folder
-# names. The detector uses these words to make a simple best guess.
 CHALLENGE_TYPES: dict[str, dict[str, tuple[str, ...]]] = {
     "dce": {
         "keywords": (
@@ -28,6 +23,14 @@ CHALLENGE_TYPES: dict[str, dict[str, tuple[str, ...]]] = {
             "att",
             "asl",
             "arterial spin labeling",
+        )
+    },
+    "dsc": {
+        "keywords": (
+            "cbv",
+            "mtt",
+            "dsc",
+            "dynamic susceptibility contrast",
         )
     },
 }

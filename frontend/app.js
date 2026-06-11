@@ -41,6 +41,7 @@ function goToStep(num) {
 
   // Step-specific side effects
   if (num === 3) refreshValidationPanel();
+  if (num === 4) { loadOutputs(); }
 }
 
 // Wire stepper clicks.
@@ -765,9 +766,19 @@ function refreshValidationPanel() {
 
   el("val-submission").textContent = currentSubmissionId;
   el("val-challenge").textContent = challenge;
-  el("val-map-type").textContent = getMapTypeDisplay();
-  el("val-maps").textContent    = maps;
   el("val-source").textContent  = currentSubmissionSource;
+
+  // Show map type / count info row if available
+  const mapType = getMapTypeDisplay();
+  const mapInfo = el("val-map-info");
+  if (mapType && maps) {
+    el("val-map-type").textContent = mapType;
+    el("val-maps").textContent    = maps;
+    mapInfo.style.display = "flex";
+  } else {
+    mapInfo.style.display = "none";
+  }
+
   resetValidationChecklist();
 }
 
@@ -832,9 +843,14 @@ function renderValidateResult(data, form) {
   renderResultPanel("result-errors-wrap", "result-errors", errorMessages, "error", true);
   renderResultPanel("result-warnings-wrap", "result-warnings", warningMessages, "warning", true);
   renderValidationStatusLine(errorMessages.length, warningMessages.length);
+  updateValidationChecklist(data);
 
   const success = el("result-success-wrap");
-  success.style.display = "none";
+  if (errorMessages.length === 0 && warningMessages.length === 0) {
+    success.style.display = "block";
+  } else {
+    success.style.display = "none";
+  }
 
   // Mark step 3 as active (it already is, but done-state will fill in when step 4 is clicked)
   goToStep(3);
@@ -917,24 +933,29 @@ function updateValidationChecklist(data) {
   );
   setValidationCheckState(
     "code",
-    stateForIssue(errors, warnings, ["code", "dockerfile", "requirements", "scripts"]),
-    hasIssue(errors, warnings, ["code", "dockerfile", "requirements", "scripts"]) ? "Needs review" : "Passed"
+    stateForIssue(errors, warnings, ["code file", "dockerfile", "requirements", "scripts", "no_code"]),
+    hasIssue(errors, warnings, ["code file", "dockerfile", "requirements", "scripts", "no_code"]) ? "Needs review" : "Passed"
   );
   setValidationCheckState(
     "map-type",
-    stateForIssue(errors, warnings, ["map type", "auto-detect", "auto-detected"]),
-    hasIssue(errors, warnings, ["map type", "auto-detect", "auto-detected"]) ? "Needs review" : "Passed"
+    stateForIssue(errors, warnings, ["map type", "auto-detect", "auto-detected", "map_type"]),
+    hasIssue(errors, warnings, ["map type", "auto-detect", "auto-detected", "map_type"]) ? "Needs review" : "Passed"
   );
   setValidationCheckState(
     "map-count",
-    stateForIssue(errors, warnings, ["were expected", "but", "expected parameter map"]),
-    hasIssue(errors, warnings, ["were expected", "but", "expected parameter map"]) ? "Needs review" : "Passed"
+    stateForIssue(errors, warnings, ["were expected", "expected parameter map", "count mismatch", "nifti_count_mismatch"]),
+    hasIssue(errors, warnings, ["were expected", "expected parameter map", "count mismatch", "nifti_count_mismatch"]) ? "Needs review" : "Passed"
   );
+}
+
+function msgText(item) {
+  if (item && typeof item === "object") return item.message || "";
+  return String(item || "");
 }
 
 function hasIssue(errors, warnings, needles) {
   return [...errors, ...warnings].some((msg) => {
-    const lower = String(msg).toLowerCase();
+    const lower = msgText(msg).toLowerCase();
     return needles.some((needle) => lower.includes(needle));
   });
 }
@@ -952,13 +973,6 @@ function setValidationCheckState(name, state, label) {
   row.classList.add(state);
   const badge = row.querySelector(".check-badge");
   if (badge) badge.textContent = label;
-}
-
-function makeChip(text, cls) {
-  const span = document.createElement("span");
-  span.className = `chip ${cls}`;
-  span.textContent = text;
-  return span;
 }
 
 function renderList(listId, items, emptyText = "") {
@@ -1029,61 +1043,94 @@ async function loadOutputs() {
 
 function buildOutputCard(r, variant = "history") {
   const passed = r.passed;
-  const card   = document.createElement("div");
-  card.className = `output-card ${variant} ${passed ? "pass" : "fail"}`;
+  const label  = r.team_name || r.submission_id || "Submission";
+  const date   = formatDate(r.validated_at || r.checked_at);
+  const errCount  = (r.errors || []).length;
+  const warnCount = (r.warnings || []).length;
+  const nifti     = r.nifti_count ?? "—";
+  const challenge = (r.challenge_type || "").toUpperCase() || "—";
 
-  const header = document.createElement("div");
-  header.className = "output-header";
+  if (variant === "latest") {
+    const wrap = document.createElement("div");
+    wrap.className = "result-current";
+
+    const top = document.createElement("div");
+    top.className = "result-current-top";
+
+    const badge = document.createElement("span");
+    badge.className = `badge ${passed ? "badge-pass" : "badge-fail"}`;
+    badge.textContent = passed ? "Passed" : "Failed";
+
+    const name = document.createElement("span");
+    name.className = "result-current-name";
+    name.textContent = label;
+
+    const dateEl = document.createElement("span");
+    dateEl.className = "result-current-date";
+    dateEl.textContent = date;
+
+    top.append(badge, name, dateEl);
+
+    const meta = document.createElement("div");
+    meta.className = "result-current-meta";
+    [`${challenge} challenge`, `${nifti} NIfTI`, `${errCount} error${errCount !== 1 ? "s" : ""}`, `${warnCount} warning${warnCount !== 1 ? "s" : ""}`]
+      .forEach((t) => {
+        const s = document.createElement("span");
+        s.textContent = t;
+        meta.appendChild(s);
+      });
+
+    wrap.append(top, meta);
+
+    // Show up to 4 issues
+    const messages = uniqueDisplayMessages([...(r.errors || []), ...(r.warnings || [])]).slice(0, 4);
+    if (messages.length) {
+      const issueWrap = document.createElement("div");
+      issueWrap.className = "result-current-issues";
+      const errTexts = uniqueDisplayMessages(r.errors || []);
+      messages.forEach((m) => {
+        const d = document.createElement("div");
+        d.className = `rc-issue ${errTexts.includes(m) ? "err" : "warn"}`;
+        d.textContent = m;
+        issueWrap.appendChild(d);
+      });
+      wrap.appendChild(issueWrap);
+    }
+
+    return wrap;
+  }
+
+  // History row — compact single line
+  const row = document.createElement("div");
+  row.className = "result-history-row";
 
   const badge = document.createElement("span");
   badge.className = `badge ${passed ? "badge-pass" : "badge-fail"}`;
-  badge.textContent = passed ? "Passed" : "Failed";
+  badge.textContent = passed ? "P" : "F";
 
-  const idLabel = document.createElement("span");
-  idLabel.className = "output-id";
-  idLabel.textContent = r.team_name || r.submission_id;
+  const name = document.createElement("span");
+  name.className = "rhr-name";
+  name.title = label;
+  name.textContent = label;
 
-  const challengeBadge = document.createElement("span");
-  challengeBadge.className = "badge badge-info";
-  challengeBadge.textContent = r.challenge_type || "—";
+  const ch = document.createElement("span");
+  ch.className = "rhr-challenge";
+  ch.textContent = challenge;
 
-  const meta = document.createElement("span");
-  meta.className = "output-meta";
-  meta.textContent = formatDate(r.validated_at);
+  const stats = document.createElement("span");
+  stats.className = "rhr-stats";
+  stats.textContent = `${errCount} err · ${warnCount} warn`;
 
-  header.append(badge, idLabel, challengeBadge, meta);
+  const dateEl = document.createElement("span");
+  dateEl.className = "rhr-date";
+  dateEl.textContent = date;
 
-  const stats = document.createElement("div");
-  stats.className = "output-stats";
-  [`${r.nifti_count} NIfTI file(s)`, `${r.errors.length} error(s)`, `${r.warnings.length} warning(s)`]
-    .forEach((t) => {
-      const s = document.createElement("span");
-      s.className = "output-stat";
-      s.textContent = t;
-      stats.appendChild(s);
-    });
-
-  card.append(header, stats);
-
-  const messages = uniqueDisplayMessages([...(r.errors || []), ...(r.warnings || [])])
-    .slice(0, variant === "latest" ? 4 : 2);
-  if (messages.length) {
-    const issues = document.createElement("div");
-    issues.className = "output-issues";
-    messages.forEach((m) => {
-      const d = document.createElement("div");
-      d.className = "output-issue";
-      d.textContent = m;
-      issues.appendChild(d);
-    });
-    card.appendChild(issues);
-  }
-
-  return card;
+  row.append(badge, name, ch, stats, dateEl);
+  return row;
 }
 
 function simplifyIssue(message) {
-  const text = String(message || "");
+  const text = msgText(message);
   const lower = text.toLowerCase();
   if (lower.includes("no .nii") || lower.includes("no nifti") || lower.includes("nifti file appears") || lower.includes("missing nifti")) {
     return "No NIfTI files found";
@@ -1094,10 +1141,10 @@ function simplifyIssue(message) {
   if (lower.includes("readme") || lower.includes("sop")) {
     return "README/SOP missing";
   }
-  if (lower.includes("map type") || lower.includes("auto-detect")) {
+  if (lower.includes("map type") || lower.includes("auto-detect") || lower.includes("map_type")) {
     return "Parameter map type missing";
   }
-  if (lower.includes("code")) {
+  if (lower.includes("code file") || lower.includes("dockerfile") || lower.includes("no_code")) {
     return "Code files missing";
   }
   if (text.length > 86) {
@@ -1105,3 +1152,111 @@ function simplifyIssue(message) {
   }
   return text;
 }
+
+// ── Checklist update is called from renderValidateResult (already wired above) ──
+
+// ── Step 5: Export ──────────────────────────────────────────────────────────
+
+async function exportValidation(format) {
+  const statusEl = el("export-status");
+  if (!currentSubmissionId) {
+    showExportStatus("error", "No submission selected. Import and validate first.");
+    return;
+  }
+
+  const btnId = format === "json" ? "export-json-btn" : "export-csv-btn";
+  const btn = el(btnId);
+  setLoading(btn, true, "Download");
+
+  try {
+    const res = await fetch(`${API}/api/export-validation?submission_id=${encodeURIComponent(currentSubmissionId)}&format=${format}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showExportStatus("error", data.detail || "Export failed.");
+      return;
+    }
+    const blob = await res.blob();
+    const ext = format === "json" ? "json" : "csv";
+    triggerDownload(blob, `osipi_validation_${currentSubmissionId}.${ext}`);
+    showExportStatus("success", `${ext.toUpperCase()} downloaded.`);
+  } catch {
+    showExportStatus("error", "Could not reach the server. Is the backend running?");
+  } finally {
+    setLoading(btn, false, "Download");
+  }
+}
+
+async function exportManifest() {
+  if (!currentSubmissionId) {
+    showExportStatus("error", "No submission selected. Import a submission first.");
+    return;
+  }
+
+  const btn = el("export-manifest-btn");
+  setLoading(btn, true, "Download");
+
+  try {
+    const res = await fetch(`${API}/api/export-manifest?submission_id=${encodeURIComponent(currentSubmissionId)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showExportStatus("error", data.detail || "Export failed.");
+      return;
+    }
+    const blob = await res.blob();
+    triggerDownload(blob, `osipi_manifest_${currentSubmissionId}.csv`);
+    showExportStatus("success", "Manifest CSV downloaded.");
+  } catch {
+    showExportStatus("error", "Could not reach the server. Is the backend running?");
+  } finally {
+    setLoading(btn, false, "Download");
+  }
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function showExportStatus(type, message) {
+  const statusEl = el("export-status");
+  if (!statusEl) return;
+  statusEl.style.display = "block";
+  statusEl.className = `upload-pill visible ${type}`;
+  const icon = type === "success" ? `<span class="status-check" aria-hidden="true">✓</span>` : "";
+  statusEl.innerHTML = `${icon}${message}`;
+}
+
+// ── Step 5: HTML report export ──────────────────────────────────────────────
+
+async function exportReport() {
+  if (!currentSubmissionId) {
+    showExportStatus("error", "No submission selected. Import and validate first.");
+    return;
+  }
+
+  const btn = el("export-report-btn");
+  setLoading(btn, true, "Download");
+
+  try {
+    const res = await fetch(`${API}/api/export-report?submission_id=${encodeURIComponent(currentSubmissionId)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      showExportStatus("error", data.detail || "Export failed.");
+      return;
+    }
+    const blob = await res.blob();
+    triggerDownload(blob, `osipi_report_${currentSubmissionId}.html`);
+    showExportStatus("success", "HTML report downloaded.");
+  } catch {
+    showExportStatus("error", "Could not reach the server. Is the backend running?");
+  } finally {
+    setLoading(btn, false, "Download");
+  }
+}
+

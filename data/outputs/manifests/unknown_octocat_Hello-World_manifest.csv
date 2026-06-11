@@ -1,2 +1,0 @@
-submission_id,challenge_type,original_path,extracted_path,file_count,nifti_files,metadata_files,code_files,docker_files,readme_files,timestamp
-octocat_Hello-World,unknown,https://github.com/octocat/Hello-World.git,/Users/ralkhleef/Desktop/osipi-perfusion-pipeline/submissions/extracted/unknown/octocat_Hello-World,1,,,,,README,2026-05-16T18:43:41.081528+00:00

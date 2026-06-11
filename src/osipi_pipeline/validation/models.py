@@ -1,14 +1,9 @@
 """Data models for validation results."""
 
-# TODO: This file stores validation result shapes shared by the validation CLI and tests.
-# TODO: Later, add more detailed issue fields if deeper NIfTI or BIDS checks need them.
-# TODO: These models help pass validation results to future scoring and reporting stages.
-
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
-
 
 @dataclass(frozen=True)
 class ValidationIssue:
@@ -23,7 +18,6 @@ class ValidationIssue:
         """Convert the issue into a plain dictionary for JSON output."""
 
         return asdict(self)
-
 
 @dataclass(frozen=True)
 class ValidationResult:

@@ -1,37 +1,35 @@
 # Project Structure
 
-This project is organized so mentors and users can quickly see what each folder is for.
+**GitHub:** https://github.com/ralkhleef/osipi-perfusion-pipeline
 
-[GitHub Repository](https://github.com/ralkhleef/osipi-perfusion-pipeline)
+## Folders
 
-## Main Folders
-
-| Folder | Purpose |
-| --- | --- |
-| `backend/` | FastAPI backend and web-app pipeline logic. |
-| `frontend/` | Web UI files served by the backend. |
-| `data/` | Reference data, sample submissions, and generated output data. |
-| `data/reference_data/` | Downloaded reference or challenge data, such as Zenodo files. |
-| `data/sample_submissions/` | Small sample or demo submissions for testing and demonstrations. |
-| `data/outputs/` | Generated validation results, manifests, and execution logs. |
-| `submissions/` | Uploaded and extracted participant submissions used by the local app. |
-| `submissions/incoming/` | Uploaded ZIP files or incoming submission material. |
-| `submissions/extracted/` | Extracted submissions ready for validation. |
-| `submissions/validated/` | Reserved space for validated submissions or future workflow outputs. |
-| `scripts/` | Startup, stop, release, and developer utility scripts. |
-| `tests/` | Automated tests for ingestion, validation, and execution logic. |
-| `docs/` | Project notes and documentation. |
+| Folder | What it contains |
+|--------|-----------------|
+| `backend/` | FastAPI server, API routes, and pipeline services |
+| `frontend/` | Web UI — HTML, CSS, and JavaScript |
+| `src/` | Python package for running the pipeline from the command line |
+| `data/reference_data/` | Reference datasets used for scoring (e.g. downloaded from Zenodo) |
+| `data/sample_submissions/` | Small demo submissions for testing |
+| `data/outputs/` | Generated validation results, manifests, and execution logs |
+| `submissions/incoming/` | Uploaded ZIP files |
+| `submissions/extracted/` | Extracted submissions ready for validation |
+| `submissions/validated/` | Reserved for future use |
+| `docker/` | Example Dockerfile for submissions |
+| `scripts/` | Start, stop, and release scripts |
+| `tests/` | Automated tests |
+| `docs/` | Documentation and notes |
 
 ## Root Files
 
 | File | Purpose |
-| --- | --- |
-| `README.md` | General project overview. |
-| `README_DOCKER.md` | Simple Docker app setup instructions. |
-| `docker-compose.yml` | Local Docker Compose configuration. |
-| `Dockerfile` | Docker image definition for the local app. |
-| `.dockerignore` | Files excluded from Docker build context. |
-| `requirements.txt` | Python dependencies for the app and pipeline. |
-| `start.command`, `start.bat`, `stop.sh`, `stop.bat` | Easy launch and stop wrappers for nontechnical users. |
+|------|---------|
+| `README.md` | Project overview and setup instructions |
+| `Dockerfile` | Docker image for the local app |
+| `docker-compose.yml` | Docker Compose config for the local app |
+| `.dockerignore` | Files excluded from the Docker build |
+| `requirements.txt` | Python dependencies |
+| `start.command` / `start.bat` | Launch the app (Mac / Windows) |
+| `stop.sh` / `stop.bat` | Stop the app (Mac / Windows) |
 
-Runtime folders such as `data/outputs/`, `submissions/incoming/`, and `submissions/extracted/` are intentionally kept in the structure, but their generated contents should not be committed.
+The contents of `data/outputs/`, `submissions/incoming/`, and `submissions/extracted/` are generated at runtime and should not be committed to git.

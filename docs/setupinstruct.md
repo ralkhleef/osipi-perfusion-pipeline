@@ -1,60 +1,51 @@
-# Data Ingestion Commands
+# Development Setup
+
+## Requirements
+
+- Python 3.9+
+- Docker Desktop (for the execution step)
+
+## Install dependencies
 
 ```bash
-cd ~/Desktop/osipi-perfusion-pipeline
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-```bash
-PYTHONPATH=src python -m pytest -q
-```
+## Run the backend server
 
 ```bash
-rm -rf submissions/incoming/demo_ingestion
-rm -rf submissions/extracted/asl/demo_ingestion
+cd backend
+python3 -m uvicorn main:app --reload --port 8000
 ```
+
+Then open http://localhost:8000.
+
+## Run tests
+
+```bash
+PYTHONPATH=src python3 -m pytest
+```
+
+## Create a test submission for ingestion
 
 ```bash
 mkdir -p submissions/incoming/demo_ingestion
-```
+echo "fake nifti" > submissions/incoming/demo_ingestion/CBF.nii.gz
+echo "fake nifti" > submissions/incoming/demo_ingestion/ATT.nii.gz
+echo '{"team":"demo","challenge":"asl"}' > submissions/incoming/demo_ingestion/metadata.json
+echo "# Demo" > submissions/incoming/demo_ingestion/README.md
+echo "print('run')" > submissions/incoming/demo_ingestion/run.py
 
-```bash
-echo "fake nifti placeholder" > submissions/incoming/demo_ingestion/CBF.nii.gz
-echo "fake nifti placeholder" > submissions/incoming/demo_ingestion/ATT.nii.gz
-echo '{"team":"demo_ingestion","challenge":"asl"}' > submissions/incoming/demo_ingestion/metadata.json
-echo "# Demo ingestion submission" > submissions/incoming/demo_ingestion/README.md
-echo "print('demo run')" > submissions/incoming/demo_ingestion/run.py
-```
-
-```bash
-PYTHONPATH=src python -m osipi_pipeline.ingestion.ingest \
+PYTHONPATH=src python3 -m osipi_pipeline.ingestion.ingest \
   --input submissions/incoming/demo_ingestion \
   --challenge asl
 ```
 
-```bash
-find submissions/extracted -maxdepth 4 -type f | head -20
-```
-
-```bash
-find data/outputs/manifests -type f | tail
-```
-
-```bash
-cat data/outputs/manifests/asl_demo_ingestion_manifest.json
-```
-
-```bash
-PYTHONPATH=src python -m osipi_pipeline.validation.validate \
-  --input submissions/incoming/demo_ingestion \
-  --challenge asl
-```
+## Clean up test data
 
 ```bash
 rm -rf submissions/incoming/demo_ingestion
 rm -rf submissions/extracted/asl/demo_ingestion
-```
-
-```bash
-git status
 ```

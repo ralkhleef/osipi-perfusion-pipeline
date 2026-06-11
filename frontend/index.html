@@ -4,14 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OSIPI Perfusion Pipeline</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
 
-<div class="app-wrap">
+<!-- Intro / loading splash -->
+<div id="intro-splash" class="intro-splash">
+  <div class="intro-inner">
+    <img src="/static/assets/logo.svg" alt="OSIPI logo" class="intro-logo" />
+    <div class="intro-wordmark">
+      <span class="intro-name">OSIPI</span>
+      <span class="intro-sub">Open Science Initiative for Perfusion Imaging</span>
+    </div>
+    <p class="intro-desc">Perfusion Challenge Evaluation Pipeline</p>
+    <div class="intro-bar"><div class="intro-bar-fill"></div></div>
+  </div>
+</div>
+
+<div class="app-wrap" id="app-wrap" style="opacity:0;transition:opacity 0.35s;">
 
   <!-- ======================================================
        Left sidebar — logo + stepper
@@ -68,7 +78,7 @@
         </div>
         <div class="step-body">
           <span class="step-title">Results</span>
-          <span class="step-desc">Feature Currently Offline</span>
+          <span class="step-desc">Validation outcomes and history.</span>
         </div>
       </div>
 
@@ -78,7 +88,7 @@
         </div>
         <div class="step-body">
           <span class="step-title">Export</span>
-          <span class="step-desc">Feature Currently Offline</span>
+          <span class="step-desc">Download reports and data.</span>
         </div>
       </div>
 
@@ -86,12 +96,12 @@
 
     <div class="guidance-card">
       <div class="guidance-icon">?</div>
-      <strong>Need Guidance?</strong>
-      <p>Check out GitHub for detailed instructions.</p>
+      <strong>Need help?</strong>
+      <p>See the GitHub repo for docs and setup instructions.</p>
       <a class="guidance-link"
          href="https://github.com/ralkhleef/osipi-perfusion-pipeline"
          target="_blank"
-         rel="noopener noreferrer">GitHub Repository</a>
+         rel="noopener noreferrer">GitHub</a>
     </div>
   </aside>
 
@@ -108,7 +118,7 @@
       <div class="panel-header">
         <div>
           <h2 class="panel-title">Submission Details</h2>
-          <p class="panel-sub">Provide participant/team metadata before importing the submission files.</p>
+          <p class="panel-sub">Enter team and submission metadata.</p>
         </div>
       </div>
 
@@ -205,6 +215,7 @@
               <span class="required-marker conditional-star" aria-hidden="true">*</span>
             </div>
             <div id="map-type-other-error" class="field-error" aria-live="polite"></div>
+            <span id="map-type-auto-status" class="auto-detect-status" aria-live="polite"></span>
           </div>
         </div>
 
@@ -233,6 +244,7 @@
               <span class="required-marker conditional-star" aria-hidden="true">*</span>
             </div>
             <div id="expected-maps-error" class="field-error" aria-live="polite"></div>
+            <span id="expected-maps-auto-status" class="auto-detect-status" aria-live="polite"></span>
           </div>
           <div></div>
         </div>
@@ -425,20 +437,100 @@
     <div id="tab-validation" class="panel">
 
       <div class="panel-header">
-        <div>
-          <h2 class="panel-title">Validate</h2>
-          <p class="panel-sub">Automated validation checks will be available after final testing.</p>
+        <h2 class="panel-title">Validate</h2>
+        <p class="panel-sub">Run automated checks on the imported submission.</p>
+      </div>
+
+      <div class="form-body">
+
+        <!-- No submission -->
+        <div id="val-no-submission" class="val-empty" style="display:none">
+          <div class="val-empty-icon">i</div>
+          <div>
+            <h3>No submission imported</h3>
+            <p class="empty-sub">Import a submission in Step 2 first.</p>
+            <button class="step-link" type="button" onclick="goToStep(2)">Go to Import</button>
+          </div>
         </div>
-      </div>
 
-      <div class="form-body validate-offline-body">
-        <section class="offline-placeholder" aria-label="Validate feature status">
-          <h3>Feature currently offline</h3>
-          <p>Validation is still being tested and will be re-enabled once the checks are finalized.</p>
-          <button id="validate-continue-results-btn" class="btn-outline" type="button">Continue to Results</button>
-        </section>
-      </div>
+        <!-- Ready -->
+        <div id="val-ready" style="display:none">
 
+          <!-- Submission info row + run button -->
+          <div class="val-header-row">
+            <div class="val-sub-info">
+              <span class="val-sub-name" id="val-submission"></span>
+              <div class="val-sub-tags">
+                <span class="val-tag" id="val-challenge"></span>
+                <span class="val-tag val-tag-muted" id="val-source"></span>
+              </div>
+            </div>
+            <div class="val-run-area">
+              <button id="validate-btn" class="btn-validate" type="button">Run Validation</button>
+              <div id="validation-status-line" class="validation-status-line" style="display:none"></div>
+            </div>
+          </div>
+
+          <!-- Map info row (populated by JS after import) -->
+          <div id="val-map-info" class="val-map-info" style="display:none">
+            <span>Map type: <strong id="val-map-type"></strong></span>
+            <span>Expected maps: <strong id="val-maps"></strong></span>
+          </div>
+
+          <!-- Result area -->
+          <div id="validation-result-card" style="display:none">
+
+            <div class="val-checklist-plain">
+              <div class="validation-check-row pending" data-check="nifti">
+                <span class="check-icon"></span>
+                <span class="check-label">NIfTI files present</span>
+                <span class="check-badge">Pending</span>
+              </div>
+              <div class="validation-check-row pending" data-check="readme">
+                <span class="check-icon"></span>
+                <span class="check-label">README or metadata file</span>
+                <span class="check-badge">Pending</span>
+              </div>
+              <div class="validation-check-row pending" data-check="code">
+                <span class="check-icon"></span>
+                <span class="check-label">Code files or Dockerfile</span>
+                <span class="check-badge">Pending</span>
+              </div>
+              <div class="validation-check-row pending" data-check="map-type">
+                <span class="check-icon"></span>
+                <span class="check-label">Parameter map names match challenge</span>
+                <span class="check-badge">Pending</span>
+              </div>
+              <div class="validation-check-row pending" data-check="map-count">
+                <span class="check-icon"></span>
+                <span class="check-label">Map count matches expected</span>
+                <span class="check-badge">Pending</span>
+              </div>
+            </div>
+
+            <div id="result-errors-wrap" class="issue-box error-box" style="display:none">
+              <div class="issue-box-title"></div>
+              <ul id="result-errors" class="issue-list"></ul>
+            </div>
+            <div id="result-warnings-wrap" class="issue-box warning-box" style="display:none">
+              <div class="issue-box-title"></div>
+              <ul id="result-warnings" class="issue-list"></ul>
+            </div>
+            <div id="result-success-wrap" class="issue-box success-box" style="display:none">
+              <div class="issue-box-title">
+                <span class="result-icon">✓</span>All checks passed
+              </div>
+            </div>
+
+          </div><!-- end validation-result-card -->
+
+          <div class="intake-cta-actions" style="margin-top:0.75rem;">
+            <button id="validate-continue-results-btn" class="btn-outline" type="button">Continue to Results</button>
+          </div>
+
+        </div><!-- end val-ready -->
+
+      </div>
     </div><!-- end tab-validation -->
 
 
@@ -448,20 +540,34 @@
     <div id="tab-results" class="panel">
 
       <div class="panel-header">
-        <div>
-          <h2 class="panel-title">Results</h2>
-          <p class="panel-sub">Feature Currently Offline</p>
+        <h2 class="panel-title">Results</h2>
+        <p class="panel-sub">Validation outcome for the current submission.</p>
+      </div>
+
+      <div class="form-body">
+
+        <!-- Empty state -->
+        <div id="outputs-empty" class="empty-state" style="display:none">
+          <p>No results yet. Run validation in Step 3 first.</p>
+          <p class="empty-sub">Once you validate a submission it will appear here.</p>
         </div>
-      </div>
 
-      <div class="form-body offline-body">
-        <section class="offline-placeholder" aria-label="Results feature status">
-          <h3>Feature currently offline</h3>
-          <p>Results and scoring reports will appear here after validation is finalized.</p>
+        <!-- Current submission result -->
+        <div id="results-latest" style="display:none">
+          <div id="results-latest-body"></div>
+        </div>
+
+        <!-- Previous submissions (scroll down) -->
+        <div id="validation-history" style="display:none">
+          <div class="history-divider"><span>Previous submissions</span></div>
+          <div id="outputs-list"></div>
+        </div>
+
+        <div class="intake-cta-actions" style="margin-top:0.75rem;">
           <button id="results-continue-export-btn" class="btn-outline" type="button">Continue to Export</button>
-        </section>
-      </div>
+        </div>
 
+      </div>
     </div><!-- end tab-results -->
 
 
@@ -473,15 +579,54 @@
       <div class="panel-header">
         <div>
           <h2 class="panel-title">Export</h2>
-          <p class="panel-sub">Feature Currently Offline</p>
+          <p class="panel-sub">Download reports and data files.</p>
         </div>
       </div>
 
-      <div class="form-body offline-body">
-        <section class="offline-placeholder" aria-label="Export feature status">
-          <h3>Feature currently offline</h3>
-          <p>Export options will be available once scoring and reports are finalized.</p>
-        </section>
+      <div class="form-body">
+
+        <div class="export-list">
+
+          <div class="export-row">
+            <div>
+              <strong>Validation Report (JSON)</strong>
+              <p>Full validation output: checks, errors, warnings, file inventory.</p>
+            </div>
+            <button id="export-json-btn" class="btn-action btn-compact" type="button"
+                    onclick="exportValidation('json')">Download</button>
+          </div>
+
+          <div class="export-row">
+            <div>
+              <strong>Results Table (CSV)</strong>
+              <p>Validation results for all submissions in a spreadsheet-ready format.</p>
+            </div>
+            <button id="export-csv-btn" class="btn-action btn-compact" type="button"
+                    onclick="exportValidation('csv')">Download</button>
+          </div>
+
+          <div class="export-row">
+            <div>
+              <strong>Manifest (CSV)</strong>
+              <p>File inventory from ingestion — submission ID, challenge, NIfTI files.</p>
+            </div>
+            <button id="export-manifest-btn" class="btn-action btn-compact" type="button"
+                    onclick="exportManifest()">Download</button>
+          </div>
+
+          <div class="export-row">
+            <div>
+              <strong>Validation Report (HTML)</strong>
+              <p>Formatted report for this submission — open in any browser.</p>
+            </div>
+            <button id="export-report-btn" class="btn-action btn-compact" type="button"
+                    onclick="exportReport()">Download</button>
+          </div>
+
+        </div>
+
+        <div id="export-status" style="display:none; margin-top:0.5rem;"></div>
+
       </div>
 
     </div><!-- end tab-export -->
@@ -490,5 +635,24 @@
 </div><!-- end app-wrap -->
 
 <script src="/static/app.js"></script>
+<script>
+  // Intro splash: show for ~1.8s then fade out (skip on page refresh within same session)
+  window.addEventListener("load", () => {
+    const splash = document.getElementById("intro-splash");
+    const app    = document.getElementById("app-wrap");
+    const shown  = sessionStorage.getItem("osipi_splash_shown");
+    if (shown) {
+      splash.style.display = "none";
+      app.style.opacity    = "1";
+      return;
+    }
+    sessionStorage.setItem("osipi_splash_shown", "1");
+    setTimeout(() => {
+      splash.style.opacity = "0";
+      app.style.opacity    = "1";
+      setTimeout(() => { splash.style.display = "none"; }, 400);
+    }, 1800);
+  });
+</script>
 </body>
 </html>

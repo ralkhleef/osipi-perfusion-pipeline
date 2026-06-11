@@ -1,81 +1,113 @@
 # OSIPI Perfusion Pipeline
 
-A Python pipeline for organizing, validating, running, scoring, and reporting OSIPI perfusion MRI challenge submissions.
+A Python pipeline for evaluating OSIPI perfusion MRI challenge submissions. It handles ingestion, validation, execution, scoring, and reporting.
 
-The goal is to make challenge evaluation more reproducible, automated, and easy to extend.
-
----
-
-## Repository
-
-[GitHub Repository](https://github.com/ralkhleef/osipi-perfusion-pipeline)
+**GitHub:** https://github.com/ralkhleef/osipi-perfusion-pipeline
 
 ---
 
-## Local Web App
+## Running the App
 
-For the Docker-based local app, see [README_DOCKER.md](README_DOCKER.md).
+The app runs locally using Docker. You do not need to write any code.
 
-Mac users can double-click `start.command`. Windows users can double-click `start.bat`.
+**Requirements:** Docker Desktop installed and running.
+
+**Mac** — double-click `start.command`
+
+**Windows** — double-click `start.bat`
+
+Then open http://localhost:8000 in your browser.
+
+To stop the app, double-click `stop.sh` (Mac) or `stop.bat` (Windows).
+
+### Running without Docker (development)
+
+```bash
+cd backend
+~/Desktop/osipi-perfusion-pipeline/.venv/bin/python3 -m uvicorn main:app --reload --port 8000
+```
+
+---
+
+## Pipeline Steps
+
+```
+Submission → Ingestion → Validation → Execution → Scoring → Reporting
+```
+
+| Step | Status |
+|------|--------|
+| Ingestion | Done — accepts ZIP, folder, GitHub repo, or Zenodo link |
+| Validation | Done — checks NIfTI files, README, code, map types |
+| Execution | Done — runs submission in Docker container |
+| Scoring | In progress — rankings by pass/fail and error count |
+| Reporting | Done — CSV export, JSON export, HTML validation report, rankings table |
 
 ---
 
 ## Project Layout
 
-The folder structure is described in [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
-
----
-
-## Pipeline Flow
-
-```mermaid
-flowchart LR
-    A[Submission] --> B[Ingestion]
-    B --> C[Validation]
-    C --> D[Execution]
-    D --> E[Scoring]
-    E --> F[Reporting]
+```
+backend/          FastAPI server and pipeline services
+frontend/         Web UI (HTML, CSS, JS)
+src/              Python package for CLI pipeline use
+data/
+  reference_data/ Reference datasets for scoring
+  sample_submissions/ Small demo submissions for testing
+  outputs/        Generated validation results and manifests
+submissions/
+  incoming/       Uploaded ZIPs
+  extracted/      Extracted submissions ready for validation
+docker/           Example Dockerfile for submissions
+docs/             Notes and documentation
+tests/            Automated tests
+scripts/          Start, stop, and release scripts
 ```
 
 ---
 
-## Supported Submission Sources
+## Submission Sources
 
-| Source       | Purpose                                   |
-| ------------ | ----------------------------------------- |
-| Local folder | Use a submission already on your computer |
-| ZIP archive  | Use a compressed submission               |
-| GitHub repo  | Pull a submission from GitHub             |
+| Source | How to use |
+|--------|-----------|
+| Local ZIP | Upload a .zip file in the app |
+| Local folder | Select a folder or files |
+| GitHub repo | Paste a GitHub URL |
+| Zenodo | Paste a Zenodo URL, DOI, or record ID |
 
 ---
 
-## Commands
+## Validation Checks
 
+| Check | Type |
+|-------|------|
+| Submission folder exists and has files | Error |
+| At least one .nii or .nii.gz file | Error |
+| README or metadata file present | Error |
+| Challenge type is asl or dce | Error |
+| Dockerfile present | Warning |
+| Code files present | Warning |
+| Expected map names present (Ktrans/kep/vp for DCE, CBF/ATT for ASL) | Warning |
+| NIfTI files are not empty | Warning |
+| No duplicate filenames | Warning |
+
+NIfTI files are opened with nibabel to check that they load, have at least 3 dimensions, and have a valid affine matrix.
+
+---
+
+## CLI Commands
+
+Ingest a submission:
 ```bash
-python -m osipi_pipeline.ingestion.ingest --input submissions/incoming/team_alpha.zip
+PYTHONPATH=src python3 -m osipi_pipeline.ingestion.ingest --input submissions/incoming/team_alpha.zip
 ```
 
+Validate a submission:
 ```bash
 PYTHONPATH=src python3 -m osipi_pipeline.validation.validate --input submissions/extracted/dce/dce_team_alpha --challenge dce
 ```
 
----
-
-## NIfTI Validation
-
-The validation step uses [nibabel](https://nipy.org/nibabel/) to actually open each `.nii` / `.nii.gz` file
-
-What is checked:
-- The file can be loaded by nibabel (if not, validation fails with `NIFTI_UNREADABLE`)
-- The image shape exists and has at least 3 dimensions (fewer triggers a warning)
-- The affine matrix exists and is 4×4
-- Basic stats are recorded: shape, dtype, min, max, mean, NaN count, inf count
-- NaN or infinite values are reported as warnings, not errors, since some parameter maps use NaN for masked voxels
-
-
-
-## Run Tests
-
+Run tests:
 ```bash
 PYTHONPATH=src python3 -m pytest
 ```
