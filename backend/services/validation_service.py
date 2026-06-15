@@ -27,10 +27,19 @@ EXPECTED_MAPS: Dict[str, tuple] = {
 }
 
 MAP_TYPE_PATTERNS: Dict[str, tuple] = {
-    "cbf": ("cbf", "cerebral_blood_flow"),
+    "cbf":    ("cbf", "cerebral_blood_flow"),
     "ktrans": ("ktrans", "k_trans", "transfer_constant"),
-    "att": ("att", "arterial_transit_time"),
+    "att":    ("att", "arterial_transit_time"),
+    "kep":    ("kep", "k_ep", "rate_constant"),
+    "vp":     ("vp", "v_p", "plasma_volume"),
+    "cbv":    ("cbv", "cerebral_blood_volume"),
+    "mtt":    ("mtt", "mean_transit_time"),
 }
+
+# All map type labels that detect_submission_metadata() can return (title-cased)
+KNOWN_AUTO_DETECTED = frozenset({
+    "CBF", "Ktrans", "ATT", "Kep", "Vp", "CBV", "MTT", "Mixed/Other",
+})
 
 CODE_FILE_NAMES = {
     "dockerfile", "requirements.txt", "environment.yml",
@@ -110,7 +119,7 @@ def validate_submission(
     effective_map_type = map_type
     if (map_type_mode or "").lower() == "auto" or (map_type or "").lower() == "auto":
         detected = detection.get("detected_parameter_map_type", "Unknown")
-        if detected in {"CBF", "Ktrans", "ATT", "Mixed/Other"}:
+        if detected in KNOWN_AUTO_DETECTED:
             effective_map_type = detected
         else:
             effective_map_type = ""
@@ -283,3 +292,89 @@ def _has_code(files: List[Path]) -> bool:
         if any(part.lower() in CODE_FOLDER_NAMES for part in f.parts):
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Batch validation
+# ---------------------------------------------------------------------------
+
+
+def validate_batch(
+    submission_ids: List[str],
+    challenge_type: str = "dce",
+    map_type: Optional[str] = None,
+    map_type_mode: Optional[str] = None,
+    notes: Optional[str] = None,
+    team_names: Optional[Dict] = None,
+    contact_emails: Optional[Dict] = None,
+) -> Dict:
+    """Validate multiple submissions and return an aggregate batch result.
+
+    Each submission is validated independently.  Failures in one submission do
+    not prevent the remaining ones from being validated.
+    """
+    team_names    = team_names    or {}
+    contact_emails = contact_emails or {}
+
+    results: List[Dict] = []
+    for sid in submission_ids:
+        try:
+            result = validate_submission(
+                sid,
+                challenge_type=challenge_type,
+                map_type=map_type,
+                map_type_mode=map_type_mode,
+                notes=notes,
+                team_name=team_names.get(sid),
+                contact_email=contact_emails.get(sid),
+            )
+        except Exception as exc:
+            now = datetime.now(timezone.utc).isoformat()
+            result = {
+                "submission_id": sid,
+                "team_name":     team_names.get(sid, ""),
+                "contact_email": contact_emails.get(sid, ""),
+                "challenge_type": challenge_type.upper(),
+                "map_type":      "",
+                "passed":        False,
+                "errors":        [_err("BATCH_ERROR", f"Validation failed unexpectedly: {exc}")],
+                "warnings":      [],
+                "nifti_count":   0,
+                "total_files":   0,
+                "validated_at":  now,
+                "checked_at":    now,
+            }
+        results.append(result)
+
+    now = datetime.now(timezone.utc).isoformat()
+    batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+
+    summary: Dict = {
+        "batch_id":         batch_id,
+        "challenge_type":   challenge_type.upper(),
+        "submission_count": len(results),
+        "passed_count":     sum(1 for r in results if r.get("passed")),
+        "failed_count":     sum(1 for r in results if not r.get("passed")),
+        "validated_at":     now,
+        "results":          results,
+    }
+    _save_batch_result(batch_id, summary)
+    return summary
+
+
+def find_batch_result(batch_id: str) -> Optional[Dict]:
+    """Load a saved batch validation result by ID, or return None if not found."""
+    safe_id = batch_id.replace("/", "_").replace("\\", "_")
+    batch_file = VALIDATION_SUBDIR / f"{safe_id}_batch.json"
+    if not batch_file.exists():
+        return None
+    try:
+        return json.loads(batch_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_batch_result(batch_id: str, result: Dict) -> None:
+    VALIDATION_SUBDIR.mkdir(parents=True, exist_ok=True)
+    out_file = VALIDATION_SUBDIR / f"{batch_id}_batch.json"
+    out_file.write_text(json.dumps(result, indent=2), encoding="utf-8")

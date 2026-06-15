@@ -4,7 +4,7 @@ import csv
 import io
 import json
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from services.github_service import import_github_repo
-from services.ingest_service import detect_submission_metadata, save_and_extract, save_uploaded_folder
+from services.ingest_service import (
+    detect_submission_metadata,
+    save_and_extract,
+    save_and_extract_batch,
+    save_uploaded_folder,
+)
 from services.path_config import (
     EXTRACTED_DIR,
     FRONTEND_DIR,
@@ -290,26 +295,49 @@ def export_validation(
             headers={"Content-Disposition": f'attachment; filename="osipi_validation_{safe_id}.json"'},
         )
 
-    # CSV format
+    # CSV format — one summary row per submission
+    errors   = data.get("errors") or []
+    warnings = data.get("warnings") or []
+    passed   = data.get("passed", False)
+
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["submission_id", "challenge_type", "passed", "nifti_count",
-                     "error_count", "warning_count", "errors", "warnings", "validated_at"])
+    writer.writerow([
+        "submission_id",
+        "validation_timestamp",
+        "team_name",
+        "contact_email",
+        "challenge_type",
+        "parameter_map_type",
+        "validation_status",
+        "ready_for_scoring",
+        "nifti_file_count",
+        "total_file_count",
+        "error_count",
+        "warning_count",
+        "errors",
+        "warnings",
+    ])
     writer.writerow([
         data.get("submission_id", ""),
-        data.get("challenge_type", ""),
-        data.get("passed", ""),
-        data.get("nifti_count", ""),
-        len(data.get("errors", [])),
-        len(data.get("warnings", [])),
-        "; ".join(_msg(e) for e in data.get("errors", [])),
-        "; ".join(_msg(w) for w in data.get("warnings", [])),
         data.get("validated_at") or data.get("checked_at", ""),
+        data.get("team_name", ""),
+        data.get("contact_email", ""),
+        data.get("challenge_type", ""),
+        data.get("map_type", ""),
+        "PASSED" if passed else "FAILED",
+        "yes" if passed else "no",
+        data.get("nifti_count", ""),
+        data.get("total_files", ""),
+        len(errors),
+        len(warnings),
+        " | ".join(_msg(e) for e in errors),
+        " | ".join(_msg(w) for w in warnings),
     ])
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="osipi_validation_{safe_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="osipi-validation-{safe_id}.csv"'},
     )
 
 
@@ -406,91 +434,175 @@ def get_rankings():
 
 
 # ---------------------------------------------------------------------------
-# Export — HTML report
+# Batch upload — auto-detects single vs. multi-submission ZIP
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/export-report")
-def export_report(submission_id: str = Query(...)):
-    """Generate and return a self-contained HTML validation report."""
-    safe_id = submission_id.replace("/", "_").replace("\\", "_")
-    candidates = _find_validation_files(submission_id)
+@app.post("/api/upload-batch")
+async def upload_batch(file: UploadFile = File(...)):
+    """Accept a ZIP that may contain multiple team submissions.
 
-    if not candidates:
-        raise HTTPException(status_code=404, detail="No validation result found. Run validation first.")
+    If the ZIP's top-level structure contains several directories that each
+    hold NIfTI files, each directory is treated as an independent submission
+    and the response includes a ``submissions`` list.  If only one submission
+    is found the response is identical to ``/api/upload-submission``.
+    """
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
-    d = json.loads(candidates[0].read_text(encoding="utf-8"))
+    contents = await file.read()
+    result = save_and_extract_batch(contents, file.filename)
 
-    passed = d.get("passed", False)
-    status_color = "#2D6A4F" if passed else "#A83232"
-    status_text = "PASSED" if passed else "FAILED"
-    errors = d.get("errors") or []
-    warnings = d.get("warnings") or []
-    checked = d.get("validated_at") or d.get("checked_at", "")
-    team = d.get("team_name", "") or d.get("submission_id", submission_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
 
-    def issue_rows(items, row_class):
-        if not items:
-            return "<p style='color:#6B6278;margin:0'>None</p>"
-        rows = ""
-        for item in items:
-            msg = item.get("message", str(item)) if isinstance(item, dict) else str(item)
-            rows += f'<div class="{row_class}" style="padding:6px 10px;margin:4px 0;border-radius:6px;font-size:13px">{msg}</div>'
-        return rows
+    return result
 
-    error_html = issue_rows(errors, "error-row")
-    warn_html = issue_rows(warnings, "warn-row")
 
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<title>OSIPI Validation Report — {team}</title>
-<style>
-  body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-    background:#F2EEF6;margin:0;padding:2rem;color:#1E1A2E}}
-  .card{{background:#fff;border:1px solid #E0D9EA;border-radius:12px;padding:1.5rem 2rem;
-    max-width:720px;margin:0 auto 1.5rem}}
-  h1{{font-size:1.25rem;margin:0 0 0.25rem;color:#5B4678}}
-  .sub{{color:#6B6278;font-size:0.85rem;margin:0 0 1.25rem}}
-  .meta-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:0.75rem;
-    margin-bottom:1.25rem}}
-  .meta-item span{{display:block;font-size:0.75rem;color:#6B6278;text-transform:uppercase;
-    letter-spacing:.05em;margin-bottom:2px}}
-  .meta-item strong{{font-size:0.9rem}}
-  .status-banner{{border-radius:8px;padding:0.6rem 1rem;font-weight:600;font-size:1rem;
-    color:#fff;background:{status_color};margin-bottom:1.25rem;display:inline-block}}
-  .section-title{{font-size:0.8rem;font-weight:600;text-transform:uppercase;
-    letter-spacing:.06em;color:#6B6278;margin:1rem 0 0.4rem}}
-  .error-row{{background:#FCF1F1;color:#A83232;border-left:3px solid #A83232}}
-  .warn-row{{background:#FBF5EA;color:#8A5A1A;border-left:3px solid #D4A017}}
-</style>
-</head>
-<body>
-<div class="card">
-  <h1>OSIPI Perfusion Pipeline — Validation Report</h1>
-  <p class="sub">Generated {checked}</p>
-  <div class="status-banner">{status_text}</div>
-  <div class="meta-grid">
-    <div class="meta-item"><span>Team / Submission</span><strong>{team}</strong></div>
-    <div class="meta-item"><span>Challenge</span><strong>{d.get("challenge_type","—").upper()}</strong></div>
-    <div class="meta-item"><span>NIfTI files</span><strong>{d.get("nifti_count","—")}</strong></div>
-    <div class="meta-item"><span>Errors</span><strong>{len(errors)}</strong></div>
-    <div class="meta-item"><span>Warnings</span><strong>{len(warnings)}</strong></div>
-  </div>
-  <div class="section-title">Errors ({len(errors)})</div>
-  {error_html}
-  <div class="section-title">Warnings ({len(warnings)})</div>
-  {warn_html}
-</div>
-</body>
-</html>"""
+# ---------------------------------------------------------------------------
+# Batch validation — validate multiple submission IDs in one request
+# ---------------------------------------------------------------------------
 
-    return Response(
-        content=html,
-        media_type="text/html",
-        headers={"Content-Disposition": f'attachment; filename="osipi_report_{safe_id}.html"'},
+
+class BatchValidateRequest(BaseModel):
+    submission_ids: List[str]
+    challenge_type: str = "dce"
+    map_type: Optional[str] = None
+    map_type_mode: Optional[str] = None
+    notes: Optional[str] = None
+    # Optional per-submission metadata; key = submission_id
+    team_names: Optional[Dict[str, str]] = None
+    contact_emails: Optional[Dict[str, str]] = None
+
+
+@app.post("/api/validate-batch")
+def validate_batch_endpoint(req: BatchValidateRequest):
+    """Validate multiple submission IDs and return an aggregate batch result.
+
+    Each submission is validated independently; one failure does not stop the
+    rest.  The response contains a ``batch_id`` that can be used with
+    ``/api/export-batch`` to download the results as CSV.
+    """
+    from services.validation_service import validate_batch
+
+    if not req.submission_ids:
+        raise HTTPException(status_code=400, detail="submission_ids must not be empty.")
+    if len(req.submission_ids) > 500:
+        raise HTTPException(status_code=400, detail="At most 500 submission IDs per batch.")
+
+    return validate_batch(
+        submission_ids=req.submission_ids,
+        challenge_type=req.challenge_type,
+        map_type=req.map_type,
+        map_type_mode=req.map_type_mode,
+        notes=req.notes,
+        team_names=req.team_names,
+        contact_emails=req.contact_emails,
     )
+
+
+# ---------------------------------------------------------------------------
+# Batch export — blinded and unblinded CSV
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/export-batch")
+def export_batch(
+    batch_id: str = Query(..., description="batch_id returned by /api/validate-batch"),
+    format: str = Query("csv", description="'csv' or 'json'"),
+    blinded: bool = Query(False, description="True to strip team_name and contact_email"),
+):
+    """Export a previously validated batch as CSV (blinded or unblinded) or JSON.
+
+    Unblinded CSV includes ``team_name`` and ``contact_email``.
+    Blinded CSV replaces them with the anonymous ``submission_id`` only.
+    """
+    from services.validation_service import find_batch_result
+
+    batch = find_batch_result(batch_id)
+    if batch is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Batch not found. Run /api/validate-batch first and use the returned batch_id.",
+        )
+
+    safe_id = batch_id.replace("/", "_").replace("\\", "_")
+
+    if format == "json":
+        if blinded:
+            # Strip PII before returning
+            batch = _blind_batch(batch)
+        return Response(
+            content=json.dumps(batch, indent=2),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{safe_id}.json"'},
+        )
+
+    # ── CSV ───────────────────────────────────────────────────────────────────
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if blinded:
+        writer.writerow([
+            "submission_id", "challenge_type", "detected_map_types",
+            "validation_status", "ready_for_scoring",
+            "nifti_count", "total_files",
+            "error_count", "warning_count",
+            "errors", "warnings",
+            "validation_timestamp",
+        ])
+    else:
+        writer.writerow([
+            "submission_id", "team_name", "contact_email",
+            "challenge_type", "detected_map_types",
+            "validation_status", "ready_for_scoring",
+            "nifti_count", "total_files",
+            "error_count", "warning_count",
+            "errors", "warnings",
+            "validation_timestamp",
+        ])
+
+    for r in batch.get("results", []):
+        errors   = r.get("errors")   or []
+        warnings = r.get("warnings") or []
+        passed   = r.get("passed", False)
+
+        row: list = [r.get("submission_id", "")]
+        if not blinded:
+            row.append(r.get("team_name", ""))
+            row.append(r.get("contact_email", ""))
+        row.extend([
+            r.get("challenge_type", ""),
+            r.get("map_type", ""),
+            "PASSED" if passed else "FAILED",
+            "yes" if passed else "no",
+            r.get("nifti_count", ""),
+            r.get("total_files", ""),
+            len(errors),
+            len(warnings),
+            " | ".join(_msg(e) for e in errors),
+            " | ".join(_msg(w) for w in warnings),
+            r.get("validated_at") or r.get("checked_at", ""),
+        ])
+        writer.writerow(row)
+
+    suffix   = "blinded" if blinded else "unblinded"
+    csv_name = f"{safe_id}_{suffix}.csv"
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{csv_name}"'},
+    )
+
+
+def _blind_batch(batch: dict) -> dict:
+    """Return a copy of a batch result with PII fields removed."""
+    import copy
+    b = copy.deepcopy(batch)
+    for r in b.get("results", []):
+        r.pop("team_name", None)
+        r.pop("contact_email", None)
+    return b
 
 
 # ---------------------------------------------------------------------------
