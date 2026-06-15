@@ -8,23 +8,18 @@ A Python pipeline for evaluating OSIPI perfusion MRI challenge submissions. It h
 
 ## Running the App
 
-The app runs locally using Docker. You do not need to write any code.
-
 **Requirements:** Docker Desktop installed and running.
 
-**Mac** — double-click `start.command`
-
-**Windows** — double-click `start.bat`
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
 
 Then open http://localhost:8000 in your browser.
 
-To stop the app, double-click `stop.sh` (Mac) or `stop.bat` (Windows).
-
-### Running without Docker (development)
-
+To stop:
 ```bash
-cd backend
-~/Desktop/osipi-perfusion-pipeline/.venv/bin/python3 -m uvicorn main:app --reload --port 8000
+docker compose down
 ```
 
 ---

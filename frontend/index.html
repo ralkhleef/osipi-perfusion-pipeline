@@ -3,656 +3,224 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OSIPI Perfusion Pipeline</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <title>OSIPI Perfusion Challenge Submission</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=5" />
 </head>
 <body>
 
-<!-- Intro / loading splash -->
-<div id="intro-splash" class="intro-splash">
-  <div class="intro-inner">
-    <img src="/static/assets/logo.svg" alt="OSIPI logo" class="intro-logo" />
-    <div class="intro-wordmark">
-      <span class="intro-name">OSIPI</span>
-      <span class="intro-sub">Open Science Initiative for Perfusion Imaging</span>
-    </div>
-    <p class="intro-desc">Perfusion Challenge Evaluation Pipeline</p>
-    <div class="intro-bar"><div class="intro-bar-fill"></div></div>
-  </div>
-</div>
+<main class="page-shell">
 
-<div class="app-wrap" id="app-wrap" style="opacity:0;transition:opacity 0.35s;">
+  <!-- ============================================================
+       Screen 1 — Submission Form
+       ============================================================ -->
+  <section id="submission-screen" class="screen">
+    <div class="form-card">
 
-  <!-- ======================================================
-       Left sidebar — logo + stepper
-       ====================================================== -->
-  <aside class="sidebar">
-
-    <div class="logo">
-      <img src="/static/assets/logo.svg" alt="OSIPI logo" class="logo-img" />
-      <div class="logo-wordmark">
-        <span class="logo-name">OSIPI</span>
-        <span class="logo-tagline">Open Science Initiative for Perfusion Imaging</span>
-      </div>
-    </div>
-
-    <nav class="stepper">
-
-      <div class="step-item active" data-step="1">
-        <div class="step-left">
-          <div class="step-dot">1</div>
-          <div class="step-line"></div>
+      <header class="form-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <h1 class="card-title">Perfusion Challenge Submission</h1>
+          <p class="card-desc">Submit your parameter maps for automated validation against OSIPI challenge criteria.</p>
         </div>
-        <div class="step-body">
-          <span class="step-title">Submission Details</span>
-          <span class="step-desc">Team details and metadata.</span>
-        </div>
-      </div>
+      </header>
 
-      <div class="step-item" data-step="2">
-        <div class="step-left">
-          <div class="step-dot">2</div>
-          <div class="step-line"></div>
-        </div>
-        <div class="step-body">
-          <span class="step-title">Import Submission</span>
-          <span class="step-desc">Load participant results.</span>
-        </div>
-      </div>
-
-      <div class="step-item" data-step="3">
-        <div class="step-left">
-          <div class="step-dot">3</div>
-          <div class="step-line"></div>
-        </div>
-        <div class="step-body">
-          <span class="step-title">Validate</span>
-          <span class="step-desc">Automated checks and verification.</span>
-        </div>
-      </div>
-
-      <div class="step-item step-muted" data-step="4">
-        <div class="step-left">
-          <div class="step-dot">4</div>
-          <div class="step-line"></div>
-        </div>
-        <div class="step-body">
-          <span class="step-title">Results</span>
-          <span class="step-desc">Validation outcomes and history.</span>
-        </div>
-      </div>
-
-      <div class="step-item step-muted" data-step="5">
-        <div class="step-left">
-          <div class="step-dot">5</div>
-        </div>
-        <div class="step-body">
-          <span class="step-title">Export</span>
-          <span class="step-desc">Download reports and data.</span>
-        </div>
-      </div>
-
-    </nav>
-
-    <div class="guidance-card">
-      <div class="guidance-icon">?</div>
-      <strong>Need help?</strong>
-      <p>See the GitHub repo for docs and setup instructions.</p>
-      <a class="guidance-link"
-         href="https://github.com/ralkhleef/osipi-perfusion-pipeline"
-         target="_blank"
-         rel="noopener noreferrer">GitHub</a>
-    </div>
-  </aside>
-
-  <!-- ======================================================
-       Main content — one panel per step
-       ====================================================== -->
-  <div class="content">
-
-    <!-- ================================================== -->
-    <!-- Step 1: Submission Details                         -->
-    <!-- ================================================== -->
-    <div id="tab-intake" class="panel active">
-
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">Submission Details</h2>
-          <p class="panel-sub">Enter team and submission metadata.</p>
-        </div>
-      </div>
-
-      <div class="form-body">
-
-        <!-- Team Name + Contact Email -->
-        <div class="form-row-2">
-          <div class="field">
-            <label class="field-label" for="team-name">
-              Team Name
-              <span class="required-marker" aria-hidden="true">*</span>
-            </label>
+      <!-- Submission Information -->
+      <div class="form-section">
+        <h2 class="section-heading">Submission Information</h2>
+        <div class="field-row-2">
+          <div class="form-group">
+            <label class="label" for="team-name">Team Name <span class="req">*</span></label>
             <input type="text" id="team-name" placeholder="e.g. NeuroFlow Lab" autocomplete="off" />
-            <div id="team-name-error" class="field-error" aria-live="polite"></div>
+            <div id="team-name-error" class="field-error"></div>
           </div>
-          <div class="field">
-            <label class="field-label" for="contact-email">
-              Contact Email
-              <span class="required-marker" aria-hidden="true">*</span>
-            </label>
+          <div class="form-group">
+            <label class="label" for="contact-email">Contact Email <span class="req">*</span></label>
             <input type="email" id="contact-email" placeholder="name@institution.edu" />
-            <div id="contact-email-error" class="field-error" aria-live="polite"></div>
+            <div id="contact-email-error" class="field-error"></div>
           </div>
         </div>
-
-        <!-- Challenge Type + Parameter Map Type -->
-        <div class="form-row-2">
-          <div class="field">
-            <label class="field-label">
-              Challenge Type
-              <span class="required-marker" aria-hidden="true">*</span>
-              <span class="tip" data-tip="Select which challenge workflow this submission belongs to. Choose Other to enter a custom type.">?</span>
-            </label>
-            <div class="radio-inline">
-              <label class="radio-opt">
-                <input type="radio" name="challenge_type" value="asl" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">ASL</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="challenge_type" value="dce" checked />
-                <span class="radio-dot"></span>
-                <span class="radio-text">DCE</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="challenge_type" value="dsc" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">DSC</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="challenge_type" value="other" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Other</span>
-              </label>
-            </div>
-            <div id="challenge-type-other-wrap" class="conditional-input-wrap" style="display:none">
-              <input type="text" id="challenge-type-other" class="other-input"
-                     placeholder="Enter challenge type" />
-              <span class="required-marker conditional-star" aria-hidden="true">*</span>
-            </div>
-            <div id="challenge-type-error" class="field-error" aria-live="polite"></div>
-            <div id="challenge-type-other-error" class="field-error" aria-live="polite"></div>
-          </div>
-          <div class="field">
-            <label class="field-label">
-              Parameter Map Type
-              <span class="tip" data-tip="If no map type is selected, the app can try to auto-detect it after import.">?</span>
-            </label>
-            <div class="radio-inline map-type-options">
-              <label class="radio-opt">
-                <input type="radio" name="map_type" value="CBF" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">CBF</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="map_type" value="Ktrans" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Ktrans</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="map_type" value="ATT" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">ATT</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="map_type" value="other" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Other</span>
-              </label>
-            </div>
-            <div id="map-type-other-wrap" class="conditional-input-wrap" style="display:none">
-              <input type="text" id="map-type-other" class="other-input"
-                     placeholder="Enter parameter map type" />
-              <span class="required-marker conditional-star" aria-hidden="true">*</span>
-            </div>
-            <div id="map-type-other-error" class="field-error" aria-live="polite"></div>
-            <span id="map-type-auto-status" class="auto-detect-status" aria-live="polite"></span>
-          </div>
-        </div>
-
-        <!-- Expected Maps (half width) -->
-        <div class="form-row-half">
-          <div class="field">
-            <label class="field-label" for="expected-maps">
-              Expected Number of Maps
-              <span class="tip" data-tip="The app can count detected NIfTI maps after import, or you can enter the expected number manually.">?</span>
-            </label>
-            <div class="radio-yes-no compact-radio">
-              <label class="radio-opt">
-                <input type="radio" name="expected_maps_mode" value="auto" checked />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Auto-detect</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="expected_maps_mode" value="manual" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Manual</span>
-              </label>
-            </div>
-            <div id="expected-maps-wrap" class="conditional-input-wrap" style="display:none">
-              <input type="number" id="expected-maps" min="0" step="1"
-                     placeholder="Enter expected count" disabled />
-              <span class="required-marker conditional-star" aria-hidden="true">*</span>
-            </div>
-            <div id="expected-maps-error" class="field-error" aria-live="polite"></div>
-            <span id="expected-maps-auto-status" class="auto-detect-status" aria-live="polite"></span>
-          </div>
-          <div></div>
-        </div>
-
-        <!-- Includes Code? + Includes README? -->
-        <div class="form-row-2">
-          <div class="field">
-            <label class="field-label">
-              Includes Code?
-              <span class="required-marker" aria-hidden="true">*</span>
-              <span class="tip" data-tip="Whether the ZIP contains scripts or code used to generate the maps.">?</span>
-            </label>
-            <div class="radio-yes-no">
-              <label class="radio-opt">
-                <input type="radio" name="include_code" value="yes" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Yes</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="include_code" value="no" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">No</span>
-              </label>
-            </div>
-            <div id="include-code-error" class="field-error" aria-live="polite"></div>
-          </div>
-          <div class="field">
-            <label class="field-label">
-              Includes README / SOP?
-              <span class="required-marker" aria-hidden="true">*</span>
-              <span class="tip" data-tip="A README or SOP describing how results were generated.">?</span>
-            </label>
-            <div class="radio-yes-no">
-              <label class="radio-opt">
-                <input type="radio" name="include_readme" value="yes" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">Yes</span>
-              </label>
-              <label class="radio-opt">
-                <input type="radio" name="include_readme" value="no" />
-                <span class="radio-dot"></span>
-                <span class="radio-text">No</span>
-              </label>
-            </div>
-            <div id="include-readme-error" class="field-error" aria-live="polite"></div>
-          </div>
-        </div>
-
-        <div class="intake-cta-actions">
-          <button id="details-continue-btn" class="btn-action btn-next">Continue to Import</button>
-        </div>
-
       </div>
-    </div><!-- end tab-intake -->
+
+      <!-- Challenge Details -->
+      <div class="form-section">
+        <h2 class="section-heading">Challenge Details</h2>
+
+        <div class="form-group">
+          <label class="label">Challenge Type <span class="req">*</span></label>
+          <div class="pill-row" role="radiogroup" aria-label="Challenge type">
+            <label class="pill"><input type="radio" name="challenge_type" value="asl" /><span>ASL</span></label>
+            <label class="pill"><input type="radio" name="challenge_type" value="dce" checked /><span>DCE</span></label>
+            <label class="pill"><input type="radio" name="challenge_type" value="dsc" /><span>DSC</span></label>
+            <label class="pill"><input type="radio" name="challenge_type" value="other" /><span>Other</span></label>
+          </div>
+          <div id="challenge-other-wrap" style="display:none; margin-top:10px;">
+            <input type="text" id="challenge-type-other" placeholder="Enter challenge type" />
+          </div>
+          <div id="challenge-type-error" class="field-error"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <div class="field-label-row">
+            <label class="label" style="margin-bottom:0">Parameter Map Type</label>
+            <span class="optional-tag">Optional</span>
+            <button type="button" class="help-tooltip" aria-label="Parameter map type help">
+              ?
+              <span class="tooltip-text">Leave this blank and the system will automatically detect the parameter map type from the submitted files.</span>
+            </button>
+          </div>
+          <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type">
+            <!-- populated by JS based on challenge type -->
+          </div>
+          <div id="map-type-other-wrap" style="display:none; margin-top:8px;">
+            <input type="text" id="map-type-other" placeholder="Specify map type" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload Submission -->
+      <div class="form-section">
+        <h2 class="section-heading">Upload Submission</h2>
+
+        <div class="source-tabs" role="radiogroup" aria-label="Submission source">
+          <label class="source-tab active" id="tab-local">
+            <input type="radio" name="submission_type" value="local" checked />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Local Upload
+          </label>
+          <label class="source-tab" id="tab-zenodo">
+            <input type="radio" name="submission_type" value="zenodo" />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>
+            Zenodo
+          </label>
+          <label class="source-tab" id="tab-github">
+            <input type="radio" name="submission_type" value="github" />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.2 0C6.4.4 5.3.7 5.3.7a4.8 4.8 0 0 0-.1 3.5 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.6V22"/></svg>
+            GitHub
+          </label>
+        </div>
+
+        <!-- Local panel -->
+        <div id="source-local" class="source-panel active">
+          <div id="drop-zone" class="drop-zone">
+            <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="16 16 12 12 8 16"></polyline>
+              <line x1="12" y1="12" x2="12" y2="21"></line>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
+            </svg>
+            <p class="drop-primary">Drag and drop your submission here</p>
+            <p class="drop-hint">ZIP file, folder, or individual files</p>
+            <div class="choose-wrap">
+              <button type="button" id="choose-btn" class="choose-btn" aria-haspopup="true" aria-expanded="false">
+                Browse Files
+              </button>
+              <div id="choose-menu" class="choose-menu" role="menu">
+                <button type="button" role="menuitem" data-choice="zip">Upload ZIP file</button>
+                <button type="button" role="menuitem" data-choice="folder">Select Folder</button>
+                <button type="button" role="menuitem" data-choice="files">Select Files</button>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="file-input" accept=".zip" />
+          <input type="file" id="folder-input" webkitdirectory directory multiple />
+          <input type="file" id="files-input" multiple />
+          <div id="local-file-label" class="file-label"></div>
+        </div>
+
+        <!-- Zenodo panel -->
+        <div id="source-zenodo" class="source-panel">
+          <input type="text" id="zenodo-input"
+                 placeholder="https://zenodo.org/records/123456, DOI, or record ID" />
+        </div>
+
+        <!-- GitHub panel -->
+        <div id="source-github" class="source-panel">
+          <div class="github-fields">
+            <input type="url" id="github-url" placeholder="https://github.com/org/repo" />
+            <input type="text" id="github-branch" placeholder="Branch (optional)" />
+          </div>
+        </div>
+
+        <div id="source-error" class="field-error"></div>
+      </div>
+
+      <!-- Submit -->
+      <div class="form-actions">
+        <div id="submit-status" class="submit-status" style="display:none"></div>
+        <button type="button" id="submit-btn" class="submit-btn">Upload and Validate</button>
+      </div>
+
+    </div>
+  </section>
 
 
-    <!-- ================================================== -->
-    <!-- Step 2: Import Submission                          -->
-    <!-- ================================================== -->
-    <div id="tab-reference" class="panel">
+  <!-- ============================================================
+       Screen 2 — Validation Results
+       ============================================================ -->
+  <section id="results-screen" class="screen" hidden>
+    <div class="form-card">
 
-      <div class="panel-header">
+      <!-- Status banner -->
+      <div id="result-banner" class="result-banner">
+        <span id="banner-icon" class="banner-icon" aria-hidden="true"></span>
         <div>
-          <h2 class="panel-title">Import Submission</h2>
-          <p class="panel-sub">Choose how to import the participant submission.</p>
+          <div id="banner-title" class="banner-title"></div>
+          <div id="banner-sub" class="banner-sub"></div>
         </div>
       </div>
 
-      <div class="form-body">
-
-        <div class="import-shell">
-          <div class="import-selector-row">
-            <span class="import-selector-label">Submission Type</span>
-            <div class="submission-type-segment" role="radiogroup" aria-label="Submission Type">
-              <label class="submission-type-card active">
-                <input type="radio" name="submission_type" value="local" checked />
-                <span class="submission-type-title">
-                  Local Upload
-                  <span class="tip local-upload-tip" data-tip="A compressed ZIP file is recommended, but you can also select a folder or files.">?</span>
-                </span>
-              </label>
-              <label class="submission-type-card">
-                <input type="radio" name="submission_type" value="zenodo" />
-                <span class="submission-type-title">
-                  Zenodo Link
-                  <span class="tip local-upload-tip" data-tip="Paste a Zenodo record URL, DOI, or record ID to import hosted submission files.">?</span>
-                </span>
-              </label>
-              <label class="submission-type-card">
-                <input type="radio" name="submission_type" value="github" />
-                <span class="submission-type-title">
-                  GitHub Repo
-                  <span class="tip local-upload-tip" data-tip="Paste a GitHub repository URL to import code or submission files from a repo.">?</span>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <div class="submission-source-wrap">
-            <div id="source-local" class="submission-source-panel active">
-              <div id="local-drop-zone" class="upload-zone import-panel">
-                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="16 16 12 12 8 16"></polyline>
-                  <line x1="12" y1="12" x2="12" y2="21"></line>
-                  <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
-                </svg>
-                <p class="upload-primary">Choose a ZIP file or folder</p>
-                <p class="upload-hint">ZIP recommended</p>
-                <div class="local-upload-actions upload-menu-wrap">
-                  <button id="choose-submission-btn" class="choose-submission-btn" type="button" aria-haspopup="true" aria-expanded="false">
-                    Choose Submission
-                  </button>
-                  <div id="choose-submission-menu" class="choose-submission-menu" role="menu" aria-label="Choose submission upload type">
-                    <button type="button" role="menuitem" data-upload-choice="zip">Upload ZIP file</button>
-                    <button type="button" role="menuitem" data-upload-choice="folder">Select Folder</button>
-                    <button type="button" role="menuitem" data-upload-choice="files">Select Files</button>
-                  </div>
-                </div>
-                <input type="file" id="file-input" accept=".zip" multiple />
-                <input type="file" id="folder-input" webkitdirectory directory multiple />
-                <input type="file" id="files-input" multiple />
-                <span id="folder-selection-text" class="folder-selection-text">No local files selected</span>
-              </div>
-            </div>
-
-            <div id="source-zenodo" class="submission-source-panel">
-              <div class="import-panel">
-                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M3 12h18"></path>
-                  <path d="M12 3a14 14 0 0 1 0 18"></path>
-                  <path d="M12 3a14 14 0 0 0 0 18"></path>
-                </svg>
-                <p class="upload-primary">Import from Zenodo</p>
-                <div class="import-fields">
-                <label class="field-label" for="submission-zenodo-input">Zenodo URL, DOI, or Record ID</label>
-                <div class="inline-import-row">
-                  <input type="text" id="submission-zenodo-input"
-                    placeholder="https://zenodo.org/records/123456782" />
-                  <button id="submission-zenodo-btn" class="btn-action btn-compact" type="button">Import</button>
-                </div>
-                </div>
-              </div>
-            </div>
-
-            <div id="source-github" class="submission-source-panel">
-              <div class="import-panel">
-                <svg class="upload-cloud" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M9 19c-5 1.5-5-2.5-7-3"></path>
-                  <path d="M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.2 0C6.4.4 5.3.7 5.3.7a4.8 4.8 0 0 0-.1 3.5 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.6V22"></path>
-                </svg>
-                <p class="upload-primary">Import from GitHub</p>
-                <div class="github-import-row">
-                  <div class="field">
-                    <label class="field-label" for="github-url-input">GitHub repository URL</label>
-                    <input type="url" id="github-url-input" placeholder="https://github.com/org/repo" />
-                  </div>
-                  <div class="field compact-branch-field">
-                    <label class="field-label" for="github-branch-input">Branch (optional)</label>
-                    <input type="text" id="github-branch-input" placeholder="main" />
-                  </div>
-                  <button id="github-import-btn" class="btn-action btn-compact github-import-btn" type="button">Import</button>
-                </div>
-              </div>
-            </div>
-
-            <div id="upload-pill" class="upload-pill">
-              <span id="upload-pill-text"></span>
-            </div>
-
-            <div id="submission-list" class="submission-list" aria-live="polite"></div>
-          </div>
-        </div>
-
-        <div class="intake-cta-actions">
-          <button id="intake-continue-btn" class="btn-outline" disabled>Continue to Validation</button>
-        </div>
-
+      <!-- Submission summary -->
+      <div class="form-section">
+        <h2 class="section-heading">Submission Summary</h2>
+        <dl id="summary-grid" class="summary-grid"></dl>
       </div>
 
-    </div><!-- end tab-reference -->
-
-
-    <!-- ================================================== -->
-    <!-- Step 3: Validation                                 -->
-    <!-- ================================================== -->
-    <div id="tab-validation" class="panel">
-
-      <div class="panel-header">
-        <h2 class="panel-title">Validate</h2>
-        <p class="panel-sub">Run automated checks on the imported submission.</p>
+      <!-- Errors -->
+      <div id="errors-section" class="form-section error-section" style="display:none">
+        <h2 class="section-heading">Errors</h2>
+        <ul id="errors-list" class="issue-list"></ul>
       </div>
 
-      <div class="form-body">
-
-        <!-- No submission -->
-        <div id="val-no-submission" class="val-empty" style="display:none">
-          <div class="val-empty-icon">i</div>
-          <div>
-            <h3>No submission imported</h3>
-            <p class="empty-sub">Import a submission in Step 2 first.</p>
-            <button class="step-link" type="button" onclick="goToStep(2)">Go to Import</button>
-          </div>
-        </div>
-
-        <!-- Ready -->
-        <div id="val-ready" style="display:none">
-
-          <!-- Submission info row + run button -->
-          <div class="val-header-row">
-            <div class="val-sub-info">
-              <span class="val-sub-name" id="val-submission"></span>
-              <div class="val-sub-tags">
-                <span class="val-tag" id="val-challenge"></span>
-                <span class="val-tag val-tag-muted" id="val-source"></span>
-              </div>
-            </div>
-            <div class="val-run-area">
-              <button id="validate-btn" class="btn-validate" type="button">Run Validation</button>
-              <div id="validation-status-line" class="validation-status-line" style="display:none"></div>
-            </div>
-          </div>
-
-          <!-- Map info row (populated by JS after import) -->
-          <div id="val-map-info" class="val-map-info" style="display:none">
-            <span>Map type: <strong id="val-map-type"></strong></span>
-            <span>Expected maps: <strong id="val-maps"></strong></span>
-          </div>
-
-          <!-- Result area -->
-          <div id="validation-result-card" style="display:none">
-
-            <div class="val-checklist-plain">
-              <div class="validation-check-row pending" data-check="nifti">
-                <span class="check-icon"></span>
-                <span class="check-label">NIfTI files present</span>
-                <span class="check-badge">Pending</span>
-              </div>
-              <div class="validation-check-row pending" data-check="readme">
-                <span class="check-icon"></span>
-                <span class="check-label">README or metadata file</span>
-                <span class="check-badge">Pending</span>
-              </div>
-              <div class="validation-check-row pending" data-check="code">
-                <span class="check-icon"></span>
-                <span class="check-label">Code files or Dockerfile</span>
-                <span class="check-badge">Pending</span>
-              </div>
-              <div class="validation-check-row pending" data-check="map-type">
-                <span class="check-icon"></span>
-                <span class="check-label">Parameter map names match challenge</span>
-                <span class="check-badge">Pending</span>
-              </div>
-              <div class="validation-check-row pending" data-check="map-count">
-                <span class="check-icon"></span>
-                <span class="check-label">Map count matches expected</span>
-                <span class="check-badge">Pending</span>
-              </div>
-            </div>
-
-            <div id="result-errors-wrap" class="issue-box error-box" style="display:none">
-              <div class="issue-box-title"></div>
-              <ul id="result-errors" class="issue-list"></ul>
-            </div>
-            <div id="result-warnings-wrap" class="issue-box warning-box" style="display:none">
-              <div class="issue-box-title"></div>
-              <ul id="result-warnings" class="issue-list"></ul>
-            </div>
-            <div id="result-success-wrap" class="issue-box success-box" style="display:none">
-              <div class="issue-box-title">
-                <span class="result-icon">✓</span>All checks passed
-              </div>
-            </div>
-
-          </div><!-- end validation-result-card -->
-
-          <div class="intake-cta-actions" style="margin-top:0.75rem;">
-            <button id="validate-continue-results-btn" class="btn-outline" type="button">Continue to Results</button>
-          </div>
-
-        </div><!-- end val-ready -->
-
-      </div>
-    </div><!-- end tab-validation -->
-
-
-    <!-- ================================================== -->
-    <!-- Step 4: Results                                    -->
-    <!-- ================================================== -->
-    <div id="tab-results" class="panel">
-
-      <div class="panel-header">
-        <h2 class="panel-title">Results</h2>
-        <p class="panel-sub">Validation outcome for the current submission.</p>
+      <!-- Warnings -->
+      <div id="warnings-section" class="form-section warn-section" style="display:none">
+        <h2 class="section-heading">Warnings</h2>
+        <ul id="warnings-list" class="issue-list"></ul>
       </div>
 
-      <div class="form-body">
-
-        <!-- Empty state -->
-        <div id="outputs-empty" class="empty-state" style="display:none">
-          <p>No results yet. Run validation in Step 3 first.</p>
-          <p class="empty-sub">Once you validate a submission it will appear here.</p>
-        </div>
-
-        <!-- Current submission result -->
-        <div id="results-latest" style="display:none">
-          <div id="results-latest-body"></div>
-        </div>
-
-        <!-- Previous submissions (scroll down) -->
-        <div id="validation-history" style="display:none">
-          <div class="history-divider"><span>Previous submissions</span></div>
-          <div id="outputs-list"></div>
-        </div>
-
-        <div class="intake-cta-actions" style="margin-top:0.75rem;">
-          <button id="results-continue-export-btn" class="btn-outline" type="button">Continue to Export</button>
-        </div>
-
-      </div>
-    </div><!-- end tab-results -->
-
-
-    <!-- ================================================== -->
-    <!-- Step 5: Export                                     -->
-    <!-- ================================================== -->
-    <div id="tab-export" class="panel">
-
-      <div class="panel-header">
-        <div>
-          <h2 class="panel-title">Export</h2>
-          <p class="panel-sub">Download reports and data files.</p>
-        </div>
+      <!-- Successful checks -->
+      <div id="checks-section" class="form-section pass-section" style="display:none">
+        <h2 class="section-heading">Successful Checks</h2>
+        <ul id="checks-list" class="issue-list"></ul>
       </div>
 
-      <div class="form-body">
+      <!-- File inventory -->
+      <details id="inventory-details" class="form-section inventory-details" style="display:none">
+        <summary class="inventory-summary">
+          File Inventory <span id="inventory-count" class="inventory-count"></span>
+        </summary>
+        <ul id="inventory-list" class="inventory-list"></ul>
+      </details>
 
-        <div class="export-list">
-
-          <div class="export-row">
-            <div>
-              <strong>Validation Report (JSON)</strong>
-              <p>Full validation output: checks, errors, warnings, file inventory.</p>
-            </div>
-            <button id="export-json-btn" class="btn-action btn-compact" type="button"
-                    onclick="exportValidation('json')">Download</button>
-          </div>
-
-          <div class="export-row">
-            <div>
-              <strong>Results Table (CSV)</strong>
-              <p>Validation results for all submissions in a spreadsheet-ready format.</p>
-            </div>
-            <button id="export-csv-btn" class="btn-action btn-compact" type="button"
-                    onclick="exportValidation('csv')">Download</button>
-          </div>
-
-          <div class="export-row">
-            <div>
-              <strong>Manifest (CSV)</strong>
-              <p>File inventory from ingestion — submission ID, challenge, NIfTI files.</p>
-            </div>
-            <button id="export-manifest-btn" class="btn-action btn-compact" type="button"
-                    onclick="exportManifest()">Download</button>
-          </div>
-
-          <div class="export-row">
-            <div>
-              <strong>Validation Report (HTML)</strong>
-              <p>Formatted report for this submission — open in any browser.</p>
-            </div>
-            <button id="export-report-btn" class="btn-action btn-compact" type="button"
-                    onclick="exportReport()">Download</button>
-          </div>
-
+      <!-- Action buttons -->
+      <div class="form-actions result-actions">
+        <div class="actions-left">
+          <button type="button" id="replace-btn" class="btn-secondary">Replace Submission</button>
+          <button type="button" id="edit-btn" class="btn-secondary">Edit Details</button>
+          <button type="button" id="download-btn" class="btn-secondary">Export Validation CSV</button>
         </div>
-
-        <div id="export-status" style="display:none; margin-top:0.5rem;"></div>
-
+        <button type="button" id="new-btn" class="btn-ghost">Start New Submission</button>
       </div>
 
-    </div><!-- end tab-export -->
+      <div id="download-status" class="submit-status" style="display:none; padding: 9px 34px;"></div>
 
-  </div><!-- end content -->
-</div><!-- end app-wrap -->
+    </div>
+  </section>
 
-<script src="/static/app.js"></script>
-<script>
-  // Intro splash: show for ~1.8s then fade out (skip on page refresh within same session)
-  window.addEventListener("load", () => {
-    const splash = document.getElementById("intro-splash");
-    const app    = document.getElementById("app-wrap");
-    const shown  = sessionStorage.getItem("osipi_splash_shown");
-    if (shown) {
-      splash.style.display = "none";
-      app.style.opacity    = "1";
-      return;
-    }
-    sessionStorage.setItem("osipi_splash_shown", "1");
-    setTimeout(() => {
-      splash.style.opacity = "0";
-      app.style.opacity    = "1";
-      setTimeout(() => { splash.style.display = "none"; }, 400);
-    }, 1800);
-  });
-</script>
+</main>
+
+<script src="/static/app.js?v=4" defer></script>
 </body>
 </html>
