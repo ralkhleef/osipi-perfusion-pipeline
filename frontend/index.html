@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=5" />
+  <link rel="stylesheet" href="/static/styles.css?v=6" />
 </head>
 <body>
 
@@ -158,6 +158,97 @@
 
 
   <!-- ============================================================
+       Screen 3 — Batch Dashboard
+       ============================================================ -->
+  <section id="batch-screen" class="screen" hidden>
+    <div class="form-card">
+
+      <header class="form-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <h1 class="card-title">Batch Upload Detected</h1>
+          <p id="batch-header-desc" class="card-desc"></p>
+        </div>
+      </header>
+
+      <div class="form-section">
+        <div class="batch-controls">
+          <div class="batch-controls-left">
+            <button type="button" id="batch-select-all-btn" class="btn-secondary btn-sm">Select All</button>
+            <button type="button" id="batch-deselect-all-btn" class="btn-secondary btn-sm">Deselect All</button>
+          </div>
+          <div class="batch-controls-right">
+            <button type="button" id="batch-validate-selected-btn" class="submit-btn btn-sm">
+              Validate Selected
+            </button>
+            <button type="button" id="batch-validate-all-btn" class="submit-btn btn-sm btn-outline">
+              Validate All
+            </button>
+          </div>
+        </div>
+        <div id="batch-validate-status" class="submit-status" style="display:none; margin-top:12px;"></div>
+        <div id="batch-table-wrap" class="batch-table-wrap"></div>
+      </div>
+
+      <div class="form-actions result-actions" style="border-top: 1px solid var(--divider); padding-top:16px; margin-top:0;">
+        <button type="button" id="batch-new-btn" class="btn-ghost">Start New Submission</button>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ============================================================
+       Screen 4 — Batch Validation Results
+       ============================================================ -->
+  <section id="batch-results-screen" class="screen" hidden>
+    <div class="form-card">
+
+      <header class="form-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <h1 class="card-title">Batch Validation Results</h1>
+          <p id="batch-results-desc" class="card-desc"></p>
+        </div>
+      </header>
+
+      <!-- Summary banner -->
+      <div id="batch-result-banner" class="result-banner">
+        <span id="batch-banner-icon" class="banner-icon" aria-hidden="true"></span>
+        <div>
+          <div id="batch-banner-title" class="banner-title"></div>
+          <div id="batch-banner-sub" class="banner-sub"></div>
+        </div>
+      </div>
+
+      <!-- Stats grid -->
+      <div class="form-section">
+        <h2 class="section-heading">Summary</h2>
+        <dl id="batch-stats-grid" class="summary-grid"></dl>
+      </div>
+
+      <!-- Per-submission results (expandable cards) -->
+      <div class="form-section">
+        <h2 class="section-heading">Submission Results</h2>
+        <div id="batch-submissions-list"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="form-actions result-actions">
+        <div class="actions-left">
+          <button type="button" id="batch-back-to-batch-btn" class="btn-secondary">← Back to Batch</button>
+          <button type="button" id="batch-export-blinded-btn" class="btn-secondary">Export Blinded CSV</button>
+          <button type="button" id="batch-export-unblinded-btn" class="btn-secondary">Export Unblinded CSV</button>
+        </div>
+        <button type="button" id="batch-results-new-btn" class="btn-ghost">Start New Submission</button>
+      </div>
+      <div id="batch-export-status" class="submit-status" style="display:none; padding: 9px 34px;"></div>
+
+    </div>
+  </section>
+
+
+  <!-- ============================================================
        Screen 2 — Validation Results
        ============================================================ -->
   <section id="results-screen" class="screen" hidden>
@@ -221,6 +312,6 @@
 
 </main>
 
-<script src="/static/app.js?v=4" defer></script>
+<script src="/static/app.js?v=6" defer></script>
 </body>
 </html>

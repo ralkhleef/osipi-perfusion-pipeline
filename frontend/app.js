@@ -30,8 +30,10 @@ const MAP_OPTIONS = {
 
 // ── Cached screen references (avoids querySelectorAll on every transition) ────
 
-const submissionScreen = document.getElementById("submission-screen");
-const resultsScreen    = document.getElementById("results-screen");
+const submissionScreen    = document.getElementById("submission-screen");
+const resultsScreen       = document.getElementById("results-screen");
+const batchScreen         = document.getElementById("batch-screen");
+const batchResultsScreen  = document.getElementById("batch-results-screen");
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -61,6 +63,17 @@ function msgText(item) {
   return String(item || "");
 }
 
+/** Escape a string for safe insertion into HTML via innerHTML. */
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 function dedupeMessages(items) {
   const seen = new Set();
   return (items || []).filter((item) => {
@@ -74,20 +87,30 @@ function dedupeMessages(items) {
 function simplifyMessage(item) {
   const text  = msgText(item);
   const lower = text.toLowerCase();
+
   if (lower.includes("no .nii") || lower.includes("no nifti") ||
       lower.includes("nifti file appears") || lower.includes("missing nifti"))
     return "No NIfTI files found";
-  if (lower.includes("expected parameter map not found") ||
-      lower.includes("parameter map not found"))
-    return "Parameter map type not found in submission";
+
+  // EXPECTED_MAP_MISSING — keep the original message intact so the specific map
+  // name (e.g. "KTRANS") is visible.  Match: "Expected ... parameter map was not found."
+  if (lower.includes("expected") && lower.includes("parameter map") &&
+      lower.includes("not found"))
+    return text.length > 90 ? text.slice(0, 87) + "…" : text;
+
   if (lower.includes("readme") || lower.includes("sop"))
     return "README / SOP file missing";
-  if (lower.includes("map type") || lower.includes("auto-detect") ||
-      lower.includes("map_type"))
+
+  // MAP_TYPE_UNDETECTED / MAP_TYPE_MIXED — only match when the message is
+  // explicitly about detection failure, NOT about a missing expected map.
+  if (lower.includes("map type could not") || lower.includes("could not auto-detect") ||
+      lower.includes("multiple parameter map types") ||
+      (lower.includes("map type") && (lower.includes("auto") || lower.includes("undetect"))))
     return "Parameter map type could not be determined";
-  if (lower.includes("code file") || lower.includes("dockerfile") ||
-      lower.includes("no_code"))
+
+  if (lower.includes("dockerfile") || lower.includes("code file"))
     return "No code files detected";
+
   if (text.length > 90) return text.slice(0, 87) + "…";
   return text;
 }
@@ -102,11 +125,22 @@ function formatDate(iso) {
   } catch { return iso.slice(0, 16).replace("T", " "); }
 }
 
+// ── Batch state ───────────────────────────────────────────────────────────────
+
+const batchState = {
+  uploadData:      null,   // full /api/upload-batch response
+  selectedIds:     new Set(),
+  batchId:         null,   // returned by /api/validate-batch
+  validationData:  null,   // full /api/validate-batch response
+};
+
 // ── Screen switching ──────────────────────────────────────────────────────────
 
 function showScreen(screenId) {
-  if (submissionScreen) submissionScreen.hidden = (screenId !== "submission-screen");
-  if (resultsScreen)    resultsScreen.hidden    = (screenId !== "results-screen");
+  if (submissionScreen)   submissionScreen.hidden   = (screenId !== "submission-screen");
+  if (resultsScreen)      resultsScreen.hidden      = (screenId !== "results-screen");
+  if (batchScreen)        batchScreen.hidden        = (screenId !== "batch-screen");
+  if (batchResultsScreen) batchResultsScreen.hidden = (screenId !== "batch-results-screen");
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
@@ -449,17 +483,19 @@ async function uploadLocalFiles() {
   const isZip = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip");
 
   if (isZip) {
+    // Always use the batch endpoint — it auto-detects single vs. multi-submission
     const fd = new FormData();
     fd.append("file", files[0]);
-    const res  = await fetch(`${API}/api/upload-submission`, { method: "POST", body: fd });
+    const res  = await fetch(`${API}/api/upload-batch`, { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Upload failed.");
     return data;
   }
 
+  // Folder / multi-file upload — use the batch-aware folder endpoint
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f, f.webkitRelativePath || f.name));
-  const res  = await fetch(`${API}/api/upload-folder-submission`, { method: "POST", body: fd });
+  const res  = await fetch(`${API}/api/upload-folder-batch`, { method: "POST", body: fd });
   const data = await res.json();
   if (!res.ok) throw new Error(data.detail || "Folder upload failed.");
   return data;
@@ -573,8 +609,19 @@ async function handleSubmit() {
     else if (source === "zenodo") { showSubmitStatus("info", "Importing from Zenodo…");  importData = await importZenodo();  }
     else if (source === "github") { showSubmitStatus("info", "Importing from GitHub…");  importData = await importGithub();  }
 
-    state.submissionId      = importData.submission_id;
     state.pendingLocalFiles = null;  // Free memory — upload complete
+
+    // ── Batch detected — hand off to batch dashboard ──────────────────────
+    if (importData.batch === true) {
+      clearSubmitStatus();
+      requestInProgress = false;
+      setLoading(btn, false, submitLabel());
+      showBatchDashboard(importData);
+      return;
+    }
+
+    // ── Single submission — continue with normal validation flow ──────────
+    state.submissionId = importData.submission_id;
     state.detection = {
       nifti_count: Number.isFinite(Number(importData.nifti_count))
         ? Number(importData.nifti_count) : null,
@@ -796,6 +843,373 @@ if (newBtn) {
     showScreen("submission-screen");
   });
 }
+
+// ── Batch Dashboard ───────────────────────────────────────────────────────────
+
+function showBatchDashboard(uploadData) {
+  batchState.uploadData     = uploadData;
+  batchState.selectedIds    = new Set(uploadData.submissions.map((s) => s.submission_id));
+  batchState.batchId        = null;
+  batchState.validationData = null;
+
+  const desc = el("batch-header-desc");
+  if (desc) {
+    const sourceLabel = uploadData.source_type && uploadData.source_type !== "local"
+      ? `${uploadData.source_type.charAt(0).toUpperCase() + uploadData.source_type.slice(1)}: `
+      : "";
+    const name  = uploadData.original_filename || "upload";
+    const count = uploadData.submission_count;
+    desc.textContent = `${sourceLabel}"${name}" contains ${count} submission${count !== 1 ? "s" : ""}.`;
+  }
+
+  renderBatchTable(uploadData.submissions);
+  showScreen("batch-screen");
+}
+
+function renderBatchTable(submissions) {
+  const wrap = el("batch-table-wrap");
+  if (!wrap) return;
+
+  const table = document.createElement("table");
+  table.className = "batch-table";
+
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th class="td-check"><input type="checkbox" id="batch-check-all" title="Toggle all" /></th>
+        <th>Source Folder</th>
+        <th>Submission ID</th>
+        <th>NIfTI</th>
+        <th>Detected Map</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="batch-tbody"></tbody>
+  `;
+  wrap.innerHTML = "";
+  wrap.appendChild(table);
+
+  const tbody = table.querySelector("#batch-tbody");
+
+  submissions.forEach((sub) => {
+    const isSelected = batchState.selectedIds.has(sub.submission_id);
+    const tr = document.createElement("tr");
+    if (isSelected) tr.classList.add("selected-row");
+
+    // Escape all server-supplied strings before innerHTML insertion (XSS prevention)
+    const safeMapLabel  = escapeHtml(sub.detected_parameter_map_type || "Unknown");
+    const safeWarning   = escapeHtml(sub.detection_warning || "");
+    const safeFolder    = escapeHtml(sub.source_folder || "—");
+    const safeSubId     = escapeHtml(sub.submission_id);
+    const mapCell = safeWarning
+      ? `${safeMapLabel}<div class="batch-warn-text">${safeWarning}</div>`
+      : safeMapLabel;
+
+    const statusBadge = sub.status === "passed"
+      ? `<span class="batch-badge badge-pass">Passed</span>`
+      : sub.status === "failed"
+        ? `<span class="batch-badge badge-fail">Failed</span>`
+        : `<span class="batch-badge badge-ready">Ready</span>`;
+
+    // submission_id is guaranteed alphanumeric+hyphens/underscores by _safe_id
+    // so it's safe to use directly in data- attributes and title without escaping.
+    tr.innerHTML = `
+      <td class="td-check">
+        <input type="checkbox" data-id="${sub.submission_id}" ${isSelected ? "checked" : ""} />
+      </td>
+      <td class="td-folder">${safeFolder}</td>
+      <td class="td-id" title="${sub.submission_id}">${safeSubId}</td>
+      <td>${sub.nifti_count ?? "—"}</td>
+      <td>${mapCell}</td>
+      <td>${statusBadge}</td>
+    `;
+
+    const cb = tr.querySelector(`input[data-id="${sub.submission_id}"]`);
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        batchState.selectedIds.add(sub.submission_id);
+        tr.classList.add("selected-row");
+      } else {
+        batchState.selectedIds.delete(sub.submission_id);
+        tr.classList.remove("selected-row");
+      }
+      syncBatchHeaderCheckbox();
+      syncBatchValidateBtn();
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  // Header checkbox
+  const checkAll = table.querySelector("#batch-check-all");
+  checkAll.checked = batchState.selectedIds.size === submissions.length;
+  checkAll.addEventListener("change", () => {
+    if (checkAll.checked) {
+      submissions.forEach((s) => batchState.selectedIds.add(s.submission_id));
+    } else {
+      batchState.selectedIds.clear();
+    }
+    tbody.querySelectorAll("input[data-id]").forEach((cb) => {
+      cb.checked = batchState.selectedIds.has(cb.dataset.id);
+      cb.closest("tr").classList.toggle("selected-row", cb.checked);
+    });
+    syncBatchValidateBtn();
+  });
+
+  syncBatchValidateBtn();
+}
+
+function syncBatchHeaderCheckbox() {
+  const checkAll = document.querySelector("#batch-check-all");
+  if (!checkAll || !batchState.uploadData) return;
+  checkAll.checked = batchState.selectedIds.size === batchState.uploadData.submissions.length;
+}
+
+function syncBatchValidateBtn() {
+  const btn = el("batch-validate-selected-btn");
+  if (!btn) return;
+  btn.disabled = batchState.selectedIds.size === 0;
+}
+
+// Batch controls
+const batchSelectAllBtn    = el("batch-select-all-btn");
+const batchDeselectAllBtn  = el("batch-deselect-all-btn");
+const batchValSelBtn       = el("batch-validate-selected-btn");
+const batchValAllBtn       = el("batch-validate-all-btn");
+
+if (batchSelectAllBtn) {
+  batchSelectAllBtn.addEventListener("click", () => {
+    if (!batchState.uploadData) return;
+    batchState.uploadData.submissions.forEach((s) => batchState.selectedIds.add(s.submission_id));
+    renderBatchTable(batchState.uploadData.submissions);
+  });
+}
+
+if (batchDeselectAllBtn) {
+  batchDeselectAllBtn.addEventListener("click", () => {
+    batchState.selectedIds.clear();
+    if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions);
+  });
+}
+
+if (batchValSelBtn) {
+  batchValSelBtn.addEventListener("click", () => runBatchValidation([...batchState.selectedIds]));
+}
+
+if (batchValAllBtn) {
+  batchValAllBtn.addEventListener("click", () => {
+    if (!batchState.uploadData) return;
+    runBatchValidation(batchState.uploadData.submissions.map((s) => s.submission_id));
+  });
+}
+
+const batchNewBtn = el("batch-new-btn");
+if (batchNewBtn) {
+  batchNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); showScreen("submission-screen"); });
+}
+
+async function runBatchValidation(submissionIds) {
+  if (!submissionIds.length) return;
+  const statusEl = el("batch-validate-status");
+
+  const disableBtns = (v) => {
+    [batchValSelBtn, batchValAllBtn, batchSelectAllBtn, batchDeselectAllBtn].forEach((b) => { if (b) b.disabled = v; });
+  };
+  disableBtns(true);
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.className = "submit-status status-info";
+    statusEl.textContent = `Validating ${submissionIds.length} submission${submissionIds.length !== 1 ? "s" : ""}…`;
+  }
+
+  try {
+    const res  = await fetch(`${API}/api/validate-batch`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        submission_ids: submissionIds,
+        challenge_type: getChallengeType(),
+        map_type:       getMapType(),
+        map_type_mode:  getMapTypeMode(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Batch validation failed.");
+
+    batchState.batchId        = data.batch_id;
+    batchState.validationData = data;
+
+    // Update submission statuses in table
+    if (batchState.uploadData) {
+      const resultMap = {};
+      (data.results || []).forEach((r) => { resultMap[r.submission_id] = r; });
+      batchState.uploadData.submissions.forEach((s) => {
+        const r = resultMap[s.submission_id];
+        if (r) s.status = r.passed ? "passed" : "failed";
+      });
+      renderBatchTable(batchState.uploadData.submissions);
+    }
+
+    if (statusEl) statusEl.style.display = "none";
+    showBatchResults(data);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.className = "submit-status status-error";
+      statusEl.textContent = err.message || "Batch validation failed.";
+    }
+  } finally {
+    disableBtns(false);
+    syncBatchValidateBtn();
+  }
+}
+
+// ── Batch Results ─────────────────────────────────────────────────────────────
+
+function showBatchResults(data) {
+  const desc = el("batch-results-desc");
+  if (desc) {
+    const validated = (data.results || []).length;
+    desc.textContent = `${validated} submission${validated !== 1 ? "s" : ""} validated — ${data.passed_count} passed, ${data.failed_count} failed.`;
+  }
+
+  // Banner
+  const banner = el("batch-result-banner");
+  const icon   = el("batch-banner-icon");
+  const title  = el("batch-banner-title");
+  const sub    = el("batch-banner-sub");
+  if (banner) {
+    banner.className = "result-banner";
+    const allPassed = data.failed_count === 0;
+    banner.classList.add(allPassed ? "banner-pass" : data.passed_count > 0 ? "banner-warn" : "banner-fail");
+    if (icon)  icon.textContent  = allPassed ? "✓" : data.passed_count > 0 ? "!" : "✕";
+    if (title) title.textContent = allPassed ? "All submissions passed" : data.failed_count > 0 && data.passed_count === 0 ? "All submissions failed" : "Partial pass";
+    if (sub) {
+      const total    = (data.results || []).length;
+      const warnings = (data.results || []).reduce((acc, r) => acc + (r.warnings || []).length, 0);
+      sub.textContent = `${total} validated · ${data.passed_count} passed · ${data.failed_count} failed · ${warnings} warning${warnings !== 1 ? "s" : ""}`;
+    }
+  }
+
+  // Stats grid
+  const grid = el("batch-stats-grid");
+  if (grid) {
+    grid.innerHTML = "";
+    const items = [
+      ["Batch ID",     data.batch_id],
+      ["Total",        (data.results || []).length],
+      ["Passed",       data.passed_count],
+      ["Failed",       data.failed_count],
+      ["Validated At", formatDate(data.validated_at)],
+    ];
+    items.forEach(([k, v]) => {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v || "—";
+      grid.append(dt, dd);
+    });
+  }
+
+  // Per-submission expandable cards
+  const list = el("batch-submissions-list");
+  if (list) {
+    list.innerHTML = "";
+    (data.results || []).forEach((r) => {
+      const errors   = (r.errors   || []).map(msgText);
+      const warnings = (r.warnings || []).map(msgText);
+      const passed   = r.passed;
+
+      const statusBadge = passed
+        ? `<span class="batch-badge badge-pass">Passed</span>`
+        : `<span class="batch-badge badge-fail">Failed</span>`;
+
+      // Escape all server-supplied strings before innerHTML insertion (XSS prevention)
+      const issuesHtml = [
+        ...errors.map((m) => `<li class="is-error">✕ ${escapeHtml(m)}</li>`),
+        ...warnings.map((m) => `<li class="is-warning">! ${escapeHtml(m)}</li>`),
+        ...(errors.length === 0 && warnings.length === 0
+          ? [`<li class="is-pass">✓ All checks passed</li>`]
+          : []),
+      ].join("");
+
+      const safeSubId   = escapeHtml(r.submission_id);
+      const safeMapType = escapeHtml(r.map_type || "—");
+      const safeTeam    = r.team_name ? escapeHtml(r.team_name) : "";
+
+      const details = document.createElement("details");
+      details.className = "batch-sub-card";
+      details.innerHTML = `
+        <summary class="batch-sub-header">
+          <span class="batch-sub-toggle">▸</span>
+          <span class="batch-sub-name">${safeSubId}</span>
+          ${statusBadge}
+        </summary>
+        <div class="batch-sub-body">
+          <div class="batch-sub-meta">
+            NIfTI files: ${r.nifti_count ?? "—"} &nbsp;·&nbsp;
+            Total files: ${r.total_files ?? "—"} &nbsp;·&nbsp;
+            Map type: ${safeMapType}
+            ${safeTeam ? ` &nbsp;·&nbsp; Team: ${safeTeam}` : ""}
+          </div>
+          <ul class="batch-issue-list">${issuesHtml}</ul>
+        </div>
+      `;
+      // Auto-expand failed submissions
+      if (!passed) details.open = true;
+      list.appendChild(details);
+    });
+  }
+
+  showScreen("batch-results-screen");
+}
+
+// Batch result action buttons
+const batchBackToBatchBtn   = el("batch-back-to-batch-btn");
+const batchExportBlindedBtn = el("batch-export-blinded-btn");
+const batchExportUnblindedBtn = el("batch-export-unblinded-btn");
+const batchResultsNewBtn    = el("batch-results-new-btn");
+
+if (batchBackToBatchBtn) {
+  batchBackToBatchBtn.addEventListener("click", () => showScreen("batch-screen"));
+}
+
+if (batchResultsNewBtn) {
+  batchResultsNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); showScreen("submission-screen"); });
+}
+
+async function exportBatch(blinded) {
+  const statusEl = el("batch-export-status");
+  if (!batchState.batchId) {
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.className = "submit-status status-error";
+      statusEl.textContent = "No batch to export. Run validation first.";
+    }
+    return;
+  }
+  const btn    = blinded ? batchExportBlindedBtn : batchExportUnblindedBtn;
+  const label  = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  if (btn) setLoading(btn, true, label);
+  if (statusEl) statusEl.style.display = "none";
+  try {
+    const url = `${API}/api/export-batch?batch_id=${encodeURIComponent(batchState.batchId)}&blinded=${blinded}`;
+    const res = await fetch(url);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+    const blob = await res.blob();
+    const suffix = blinded ? "blinded" : "unblinded";
+    triggerDownload(blob, `osipi-batch-${batchState.batchId}-${suffix}.csv`);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.className = "submit-status status-error";
+      statusEl.textContent = err.message || "Export failed.";
+    }
+  } finally {
+    if (btn) setLoading(btn, false, label);
+  }
+}
+
+if (batchExportBlindedBtn)   batchExportBlindedBtn.addEventListener("click", () => exportBatch(true));
+if (batchExportUnblindedBtn) batchExportUnblindedBtn.addEventListener("click", () => exportBatch(false));
 
 // ── Initialise ────────────────────────────────────────────────────────────────
 

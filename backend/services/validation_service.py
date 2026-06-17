@@ -7,12 +7,13 @@ Results are saved to data/outputs/validation/ for the Outputs page.
 """
 
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
-from services.ingest_service import detect_submission_metadata
+from services.ingest_service import detect_submission_metadata, make_safe_id
 
 # ---------------------------------------------------------------------------
 # Shared constants
@@ -86,7 +87,21 @@ def validate_submission(
     notes: Optional[str] = None,
 ) -> Dict:
     """Validate the submission folder for the given submission_id."""
-    folder = EXTRACTED_DIR / submission_id
+    # Sanitize submission_id — block path traversal and unsafe characters
+    safe_submission_id = make_safe_id(submission_id)
+    folder = EXTRACTED_DIR / safe_submission_id
+
+    # Extra guard: ensure the resolved path stays inside EXTRACTED_DIR
+    try:
+        folder.resolve().relative_to(EXTRACTED_DIR.resolve())
+    except ValueError:
+        return _finish(
+            safe_submission_id, "dce",
+            [_err("INVALID_SUBMISSION_ID", "Submission ID contains an invalid path.")],
+            [], 0, 0, team_name, contact_email, map_type, notes,
+        )
+
+    submission_id = safe_submission_id  # use sanitized ID for the rest of the function
     errors: List[Dict] = []
     warnings: List[Dict] = []
     normalized_challenge = (challenge_type or "dce").lower()
@@ -275,8 +290,13 @@ def _has_readme(files: List[Path]) -> bool:
 
 
 def _has_docker(files: List[Path]) -> bool:
+    """Return True only when an actual Dockerfile or docker-compose file is present.
+
+    ``.dockerignore`` alone does NOT satisfy this check — it is meaningless
+    without a corresponding Dockerfile.
+    """
     return any(
-        f.name.lower() in {"dockerfile", ".dockerignore"}
+        f.name.lower() == "dockerfile"
         or f.name.lower().startswith("docker-compose")
         for f in files
     )
@@ -347,7 +367,8 @@ def validate_batch(
         results.append(result)
 
     now = datetime.now(timezone.utc).isoformat()
-    batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}"
+    # Include 8-character UUID suffix to prevent second-level timestamp collisions
+    batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
     summary: Dict = {
         "batch_id":         batch_id,

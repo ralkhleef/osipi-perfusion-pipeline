@@ -3,7 +3,10 @@
 import csv
 import io
 import json
+import os
+import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -14,9 +17,15 @@ from pydantic import BaseModel
 
 from services.github_service import import_github_repo
 from services.ingest_service import (
+    EXTRACT_MAX_BYTES,
+    EXTRACT_MAX_FILES,
+    ZIP_MAX_BYTES,
     detect_submission_metadata,
+    finalize_imported_dir,
     save_and_extract,
     save_and_extract_batch,
+    save_and_extract_batch_from_path,
+    save_folder_as_batch,
     save_uploaded_folder,
 )
 from services.path_config import (
@@ -78,30 +87,117 @@ def health():
 
 @app.post("/api/upload-submission")
 async def upload_submission(file: UploadFile = File(...)):
-    """Accept a ZIP, save it, extract it, and return a submission_id."""
+    """Accept a ZIP, save it, extract it, and return a submission_id.
+
+    Streams the upload to disk in 64 KB chunks to avoid loading the entire
+    file into RAM.  The size limit is enforced while streaming.
+    """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
-    contents = await file.read()
-    result = save_and_extract(contents, file.filename)
+    INCOMING_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_name = tempfile.mkstemp(dir=str(INCOMING_DIR), suffix=".tmp")
+    tmp_path = Path(tmp_name)
 
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+    try:
+        total_bytes = 0
+        with os.fdopen(tmp_fd, "wb") as fout:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > ZIP_MAX_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"ZIP file is too large (limit: {ZIP_MAX_BYTES // (1024 * 1024)} MB).",
+                    )
+                fout.write(chunk)
 
-    return result
+        safe_filename = Path(file.filename).name
+        final_path = INCOMING_DIR / safe_filename
+        tmp_path.replace(final_path)
+        tmp_path = Path(tmp_name)  # keep reference for finally; replace() makes it gone
+
+        result = save_and_extract_batch_from_path(final_path, file.filename)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if Path(tmp_name).exists():
+            try:
+                Path(tmp_name).unlink()
+            except OSError:
+                pass
 
 
 @app.post("/api/upload-folder-submission")
 async def upload_folder_submission(files: List[UploadFile] = File(...)):
-    """Accept browser folder-upload files and return a submission_id."""
+    """Accept browser folder-upload files and return a submission_id.
+
+    Enforces file-count and cumulative-size limits before staging.
+    """
     if not files:
         raise HTTPException(status_code=400, detail="No files were uploaded.")
+    if len(files) > EXTRACT_MAX_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
+        )
 
     materialized = []
-    for file in files:
-        materialized.append((file.filename, await file.read()))
+    total_bytes = 0
+    for f in files:
+        contents = await f.read()
+        total_bytes += len(contents)
+        if total_bytes > EXTRACT_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
+            )
+        materialized.append((f.filename, contents))
 
     result = save_uploaded_folder(materialized)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Folder upload failed."))
+
+    return result
+
+
+@app.post("/api/upload-folder-batch")
+async def upload_folder_batch(files: List[UploadFile] = File(...)):
+    """Accept browser folder-upload and auto-detect single vs. batch submissions.
+
+    Preserves ``webkitRelativePath`` relative paths so the backend can detect
+    nested submission folders.  Enforces file-count and cumulative-size limits
+    before staging.  Returns a batch result if multiple top-level directories
+    each contain NIfTI files; otherwise identical to ``/api/upload-folder-submission``.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="No files were uploaded.")
+    if len(files) > EXTRACT_MAX_FILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
+        )
+
+    materialized = []
+    total_bytes = 0
+    for f in files:
+        contents = await f.read()
+        total_bytes += len(contents)
+        if total_bytes > EXTRACT_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
+            )
+        materialized.append((f.filename, contents))
+
+    result = save_folder_as_batch(materialized)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Folder upload failed."))
 
@@ -114,7 +210,11 @@ class SubmissionZenodoRequest(BaseModel):
 
 @app.post("/api/import-submission-zenodo")
 def import_submission_zenodo(req: SubmissionZenodoRequest):
-    """Import participant/team submission files from Zenodo."""
+    """Import participant/team submission files from Zenodo.
+
+    After download, runs the same batch-boundary detection as local ZIP uploads.
+    Returns ``batch: true`` if multiple submission folders are detected.
+    """
     if not req.zenodo_input.strip():
         raise HTTPException(status_code=400, detail="Zenodo input cannot be empty.")
 
@@ -131,15 +231,19 @@ def import_submission_zenodo(req: SubmissionZenodoRequest):
             detail=result["errors"][0] if result.get("errors") else "Zenodo import failed.",
         )
 
-    submission_id = f"zenodo_{result['record_id']}"
-    file_count = len(result.get("downloaded_files", []))
-    return {
-        "success": True,
-        "submission_id": submission_id,
-        "file_count": file_count,
-        **detect_submission_metadata(submission_id),
-        "message": f"Imported {file_count} file(s) from Zenodo.",
-    }
+    record_id    = result["record_id"]
+    title        = result.get("title") or f"Zenodo {record_id}"
+    submission_id = f"zenodo_{record_id}"
+    zenodo_dir   = EXTRACTED_DIR / submission_id
+    display_name = f"{title} (Zenodo)"
+
+    batch_result = finalize_imported_dir(zenodo_dir, submission_id, display_name, "zenodo")
+    if not batch_result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=batch_result.get("error", "Zenodo import failed."),
+        )
+    return batch_result
 
 
 class GitHubSubmissionRequest(BaseModel):
@@ -149,7 +253,11 @@ class GitHubSubmissionRequest(BaseModel):
 
 @app.post("/api/import-submission-github")
 def import_submission_github(req: GitHubSubmissionRequest):
-    """Import a public GitHub repository ZIP archive as a submission."""
+    """Import a public GitHub repository ZIP archive as a submission.
+
+    After download + extraction, runs batch-boundary detection.
+    Returns ``batch: true`` if multiple submission folders are found in the repo.
+    """
     if not req.repo_url.strip():
         raise HTTPException(status_code=400, detail="GitHub repository URL cannot be empty.")
 
@@ -157,17 +265,10 @@ def import_submission_github(req: GitHubSubmissionRequest):
     if not result.get("success"):
         raise HTTPException(
             status_code=400,
-            detail=result["errors"][0] if result.get("errors") else "GitHub import failed.",
+            detail=result.get("errors", [result.get("message", "GitHub import failed.")])[0],
         )
 
-    submission_id = result["submission_id"]
-    return {
-        "success": True,
-        "submission_id": submission_id,
-        "file_count": result["file_count"],
-        **detect_submission_metadata(submission_id),
-        "message": result.get("message", "Imported GitHub repository."),
-    }
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -442,21 +543,52 @@ def get_rankings():
 async def upload_batch(file: UploadFile = File(...)):
     """Accept a ZIP that may contain multiple team submissions.
 
-    If the ZIP's top-level structure contains several directories that each
-    hold NIfTI files, each directory is treated as an independent submission
-    and the response includes a ``submissions`` list.  If only one submission
-    is found the response is identical to ``/api/upload-submission``.
+    Streams the upload to disk in 64 KB chunks — the full file is never held
+    in RAM.  The size limit is enforced while streaming.  If the ZIP's top-level
+    structure contains several directories each holding NIfTI files, each
+    directory is treated as an independent submission and the response includes
+    a ``submissions`` list.
     """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
-    contents = await file.read()
-    result = save_and_extract_batch(contents, file.filename)
+    INCOMING_DIR.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_name = tempfile.mkstemp(dir=str(INCOMING_DIR), suffix=".tmp")
+    tmp_path = Path(tmp_name)
 
-    if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+    try:
+        total_bytes = 0
+        with os.fdopen(tmp_fd, "wb") as fout:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > ZIP_MAX_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"ZIP file is too large (limit: {ZIP_MAX_BYTES // (1024 * 1024)} MB).",
+                    )
+                fout.write(chunk)
 
-    return result
+        safe_filename = Path(file.filename).name
+        final_path = INCOMING_DIR / safe_filename
+        tmp_path.replace(final_path)
+
+        result = save_and_extract_batch_from_path(final_path, file.filename)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if Path(tmp_name).exists():
+            try:
+                Path(tmp_name).unlink()
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
