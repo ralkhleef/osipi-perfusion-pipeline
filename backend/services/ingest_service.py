@@ -356,16 +356,40 @@ def detect_submission_metadata(submission_id: str) -> Dict:
     }
 
 
+def _is_submission_candidate(d: Path) -> bool:
+    """Return True if *d* looks like a submission folder.
+
+    A directory qualifies as a submission candidate if it contains at least one
+    file anywhere in its subtree.  NIfTI files are *not* required — a folder
+    that only contains a README, Dockerfile, metadata.json, or any other file
+    is still a valid (if incomplete) submission.  Validation decides pass/fail.
+
+    Empty directories are not considered submission candidates.
+    """
+    try:
+        for p in d.rglob("*"):
+            if p.is_file():
+                return True
+    except PermissionError:
+        pass
+    return False
+
+
 def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
-    """Return the top-level subdirectories that each contain NIfTI files.
+    """Return the top-level subdirectories that are submission candidates.
+
+    A directory is a candidate if it contains any files (NIfTI or otherwise).
+    NIfTI files are *not* required — invalid/incomplete submissions are included
+    so that validation can mark them as failed rather than silently skipping them.
 
     Handles the wrapper-folder pattern: if exactly one top-level directory
     exists, looks one level deeper for multiple submission directories.
 
     Examples:
-        batch.zip/Team_A/ Team_B/         → [Team_A, Team_B]
-        batch.zip/wrapper/Team_A/ Team_B/ → [Team_A, Team_B]  ← wrapper unwrapped
-        batch.zip/Team_A/                 → None  (single submission)
+        batch.zip/Team_A/ Team_B/              → [Team_A, Team_B]
+        batch.zip/wrapper/Team_A/ Team_B/      → [Team_A, Team_B]  (wrapper unwrapped)
+        batch.zip/Team_A/ Team_B/ Team_C_bad/  → [Team_A, Team_B, Team_C_bad]
+        batch.zip/Team_A/                      → None  (single submission)
 
     Returns None if fewer than 2 qualifying directories are found.
     """
@@ -381,14 +405,7 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
     if len(top_dirs) == 1:
         return _check_inner_batch(top_dirs[0])
 
-    submission_dirs = [
-        d for d in top_dirs
-        if any(
-            f.name.lower().endswith(NIFTI_SUFFIXES)
-            for f in d.rglob("*")
-            if f.is_file()
-        )
-    ]
+    submission_dirs = [d for d in top_dirs if _is_submission_candidate(d)]
 
     return submission_dirs if len(submission_dirs) >= 2 else None
 
@@ -466,6 +483,10 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
 
     Only called when exactly one top-level directory exists.  Does NOT recurse
     further, so three-level nesting is treated as a single submission.
+
+    Includes all inner directories that contain any files — not just those with
+    NIfTI files — so that incomplete submissions are detected and can fail
+    validation rather than being silently skipped.
     """
     try:
         inner_dirs = sorted(d for d in wrapper_dir.iterdir() if d.is_dir())
@@ -475,14 +496,7 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
     if len(inner_dirs) < 2:
         return None
 
-    submission_dirs = [
-        d for d in inner_dirs
-        if any(
-            f.name.lower().endswith(NIFTI_SUFFIXES)
-            for f in d.rglob("*")
-            if f.is_file()
-        )
-    ]
+    submission_dirs = [d for d in inner_dirs if _is_submission_candidate(d)]
 
     return submission_dirs if len(submission_dirs) >= 2 else None
 
