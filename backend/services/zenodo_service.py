@@ -4,8 +4,10 @@ Accepts a Zenodo URL, DOI, or bare record ID.  Calls the Zenodo REST API to
 read the record title and file list, then downloads each file.
 """
 
+import os as _os
 import re
 import shutil
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -17,7 +19,11 @@ try:
 except ImportError:
     _REQUESTS_AVAILABLE = False
 
-from services.path_config import REFERENCE_DATA_DIR
+from services.path_config import REFERENCE_DATA_DIR, safe_relative_path
+
+# Maximum cumulative bytes to download from a single Zenodo record.
+# Matches OSIPI_EXTRACT_MAX_BYTES used by the ZIP extractor (default 2 GB).
+_DOWNLOAD_MAX_BYTES = int(_os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(2 * 1024 * 1024 * 1024)))
 
 ZENODO_API = "https://zenodo.org/api/records"
 
@@ -134,9 +140,20 @@ def _parse_record_id(text: str) -> Optional[str]:
 def _download_files(files: List, record_id: str, target_dir: Path) -> Tuple[List[str], List[str]]:
     """Download each file in the record's file list in parallel.
 
-    Returns (downloaded_filenames, error_messages).
+    Enforces a cumulative size limit (``_DOWNLOAD_MAX_BYTES``) across all
+    concurrent downloads.  When the limit is exceeded the abort event is set
+    and all workers stop writing as soon as they notice it.
+
+    Returns ``(downloaded_filenames, error_messages)``.
     """
+    abort_event  = threading.Event()
+    counter_lock = threading.Lock()
+    total_written = [0]  # list so closures can mutate it
+
     def _fetch_one(file_info: dict) -> Tuple[Optional[str], Optional[str]]:
+        if abort_event.is_set():
+            return None, None  # another worker already tripped the size limit
+
         filename = file_info.get("key") or file_info.get("filename")
         if not filename:
             return None, f"Skipped a file entry with no filename: {file_info}"
@@ -148,11 +165,24 @@ def _download_files(files: List, record_id: str, target_dir: Path) -> Tuple[List
         try:
             file_resp = requests.get(download_url, timeout=120, stream=True)
             file_resp.raise_for_status()
-            rel_path = _safe_relative_path(filename)
+            rel_path = safe_relative_path(filename)
             dest = target_dir / rel_path
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "wb") as fh:
                 for chunk in file_resp.iter_content(chunk_size=65536):
+                    if abort_event.is_set():
+                        file_resp.close()
+                        return None, "Download aborted: total size limit exceeded."
+                    with counter_lock:
+                        total_written[0] += len(chunk)
+                        if total_written[0] > _DOWNLOAD_MAX_BYTES:
+                            abort_event.set()
+                            file_resp.close()
+                            return None, (
+                                f"Zenodo record exceeds the download size limit "
+                                f"({_DOWNLOAD_MAX_BYTES // (1024 ** 3)} GB). "
+                                "Download aborted."
+                            )
                     fh.write(chunk)
             return str(rel_path), None
         except requests.HTTPError as exc:
@@ -186,14 +216,3 @@ def _err(message: str) -> Dict:
         "downloaded_files": [],
         "errors": [message],
     }
-
-
-def _safe_relative_path(raw_path: str) -> Path:
-    path = Path((raw_path or "").replace("\\", "/"))
-    parts = [
-        part for part in path.parts
-        if part not in ("", ".", "/") and part != path.anchor
-    ]
-    if not parts or any(part == ".." for part in parts):
-        raise ValueError("Record contains an unsafe file path.")
-    return Path(*parts)

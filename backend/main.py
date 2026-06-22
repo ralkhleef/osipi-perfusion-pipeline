@@ -22,8 +22,7 @@ from services.ingest_service import (
     ZIP_MAX_BYTES,
     detect_submission_metadata,
     finalize_imported_dir,
-    save_and_extract,
-    save_and_extract_batch,
+    make_safe_id,
     save_and_extract_batch_from_path,
     save_folder_as_batch,
     save_uploaded_folder,
@@ -36,6 +35,7 @@ from services.path_config import (
     REFERENCE_DATA_DIR,
     VALIDATED_DIR,
 )
+from services.execution_service import run_submission
 from services.validation_service import validate_submission
 from services.zenodo_service import download_zenodo_record
 
@@ -747,7 +747,7 @@ NIFTI_SUFFIXES = (".nii", ".nii.gz")
 @app.get("/api/nifti-files/{submission_id}")
 def list_nifti_files(submission_id: str):
     """Return the NIfTI filenames found for a given submission."""
-    safe_id = submission_id.replace("/", "_").replace("\\", "_")
+    safe_id = make_safe_id(submission_id)
     folder = EXTRACTED_DIR / safe_id
     if not folder.exists() or not folder.is_dir():
         return {"files": []}
@@ -762,7 +762,7 @@ def list_nifti_files(submission_id: str):
 @app.get("/api/nifti/{submission_id}/{filepath:path}")
 def serve_nifti(submission_id: str, filepath: str):
     """Serve a NIfTI file from the submission folder for the browser viewer."""
-    safe_id = submission_id.replace("/", "_").replace("\\", "_")
+    safe_id = make_safe_id(submission_id)
     folder = EXTRACTED_DIR / safe_id
     # Resolve and verify the file is inside the submission folder (no path traversal)
     try:
@@ -784,3 +784,54 @@ def serve_nifti(submission_id: str, filepath: str):
         media_type=media_type,
         headers={"Cache-Control": "no-store", "Access-Control-Allow-Origin": "*"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Docker execution — build image and run submission
+# ---------------------------------------------------------------------------
+
+
+class ExecuteRequest(BaseModel):
+    submission_id: str
+    challenge_type: str = "dce"
+    timeout_seconds: int = 300
+
+
+@app.post("/api/execute")
+def execute_submission_endpoint(req: ExecuteRequest):
+    """Build a Docker image for the submission and run it inside a sandboxed container.
+
+    Resolves ``submission_id`` to the extracted folder path, then delegates to
+    :func:`run_submission` which calls :func:`execute_submission` from the pipeline
+    package.  Returns the full :class:`ExecutionResult` dict plus ``stdout_preview``
+    and ``stderr_preview`` (first 8 KB of each log file).
+
+    The container is run with:
+
+    - ``--network none`` — no outbound internet access.
+    - ``--security-opt no-new-privileges`` — no privilege escalation.
+    - ``--memory 4g`` and ``--cpus 2.0`` — resource limits.
+    - Submission mounted at ``/submission:ro``.
+    - Output directory mounted at ``/output:rw``.
+    """
+    if not req.submission_id.strip():
+        raise HTTPException(status_code=400, detail="submission_id is required.")
+    if req.timeout_seconds < 10 or req.timeout_seconds > 3600:
+        raise HTTPException(
+            status_code=400,
+            detail="timeout_seconds must be between 10 and 3600.",
+        )
+
+    result = run_submission(
+        req.submission_id.strip(),
+        challenge_type=req.challenge_type.strip() or "dce",
+        timeout_seconds=req.timeout_seconds,
+    )
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("message", "Docker execution failed."),
+        )
+
+    return result

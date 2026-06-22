@@ -76,6 +76,7 @@ def import_github_repo(repo_url: str, branch: Optional[str] = None) -> Dict:
                 for chunk in resp.iter_content(chunk_size=65536):
                     total_bytes += len(chunk)
                     if total_bytes > ZIP_MAX_BYTES:
+                        resp.close()  # release the streaming connection before returning
                         return _err(
                             f"GitHub repository ZIP is too large "
                             f"(limit: {ZIP_MAX_BYTES // (1024 * 1024)} MB)."

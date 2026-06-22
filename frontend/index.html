@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=6" />
+  <link rel="stylesheet" href="/static/styles.css?v=8" />
 </head>
 <body>
 
@@ -295,6 +295,25 @@
         <ul id="inventory-list" class="inventory-list"></ul>
       </details>
 
+      <!-- Execute in Docker -->
+      <div id="execute-section" class="form-section" style="display:none">
+        <h2 class="section-heading">Execute in Docker</h2>
+        <p class="card-desc" style="margin-bottom:14px;">
+          Run the submission inside a sandboxed Docker container with
+          <code>--network none</code>, 4&nbsp;GB memory, and 2&nbsp;CPUs.
+          Output NIfTI files are collected from <code>/output</code>.
+        </p>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <button type="button" id="execute-btn" class="btn-secondary">Run in Docker</button>
+          <label class="label" style="margin:0">Timeout (s):
+            <input type="number" id="execute-timeout" value="300" min="10" max="3600"
+                   style="width:72px; margin-left:6px;" />
+          </label>
+        </div>
+        <div id="execute-status" class="submit-status" style="display:none; margin-top:10px;"></div>
+        <div id="execute-result" style="display:none; margin-top:14px;"></div>
+      </div>
+
       <!-- Action buttons -->
       <div class="form-actions result-actions">
         <div class="actions-left">
@@ -312,6 +331,6 @@
 
 </main>
 
-<script src="/static/app.js?v=6" defer></script>
+<script src="/static/app.js?v=8" defer></script>
 </body>
 </html>

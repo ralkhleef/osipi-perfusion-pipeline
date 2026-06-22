@@ -727,6 +727,11 @@ function showResults(data) {
     }
   }
 
+  // Store submission context for the execute section.
+  window._currentSubmissionId  = data.submission_id || null;
+  window._currentChallengeType = data.challenge_type || getChallengeType() || "dce";
+  if (typeof window._showExecuteSection === "function") window._showExecuteSection();
+
   showScreen("results-screen");
 }
 
@@ -758,7 +763,7 @@ function buildSuccessChecks(data, errCount, warnCount) {
     checks.push("README / SOP found");
   if (!hasIssue("code file", "dockerfile", "requirements", "no_code"))
     checks.push("Code files present");
-  if (!hasIssue("map type", "auto-detect", "map_type", "parameter map not found")) {
+  if (!hasIssue("map type", "auto-detect", "map_type", "parameter map was not found")) {
     const mt = data.map_type || state.detection.detected_parameter_map_type;
     if (mt && mt !== "Unknown")
       checks.push(`Parameter map type identified: ${mt}`);
@@ -843,6 +848,107 @@ if (newBtn) {
     showScreen("submission-screen");
   });
 }
+
+// ── Docker Execution ──────────────────────────────────────────────────────────
+
+(function initExecuteSection() {
+  const executeBtn    = el("execute-btn");
+  const executeStatus = el("execute-status");
+  const executeResult = el("execute-result");
+  const executeSection = el("execute-section");
+
+  // Show the execute section on the results screen after a successful validation.
+  // Called from showResults() below.
+  window._showExecuteSection = function () {
+    if (executeSection) executeSection.style.display = "";
+    if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
+    if (executeStatus) executeStatus.style.display = "none";
+  };
+
+  if (!executeBtn) return;
+
+  executeBtn.addEventListener("click", async () => {
+    const submissionId = window._currentSubmissionId;
+    const challengeType = window._currentChallengeType || "dce";
+    if (!submissionId) return;
+
+    const timeoutInput = el("execute-timeout");
+    const timeoutSeconds = timeoutInput ? parseInt(timeoutInput.value, 10) || 300 : 300;
+
+    executeBtn.disabled = true;
+    if (executeStatus) {
+      executeStatus.style.display = "";
+      executeStatus.className = "submit-status";
+      executeStatus.textContent = "Building Docker image and running submission… this may take a few minutes.";
+    }
+    if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
+
+    try {
+      const resp = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submission_id: submissionId,
+          challenge_type: challengeType,
+          timeout_seconds: timeoutSeconds,
+        }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok || !data.success) {
+        const msg = (data && (data.detail || data.message)) || "Docker execution failed.";
+        if (executeStatus) {
+          executeStatus.className = "submit-status status-error";
+          executeStatus.textContent = msg;
+        }
+        return;
+      }
+
+      if (executeStatus) executeStatus.style.display = "none";
+
+      const passed   = data.passed;
+      const timedOut = data.timed_out;
+      const badge    = timedOut ? "⏱ Timed Out" : passed ? "✓ Passed" : "✗ Failed";
+      const badgeCls = timedOut ? "badge-warn" : passed ? "badge-pass" : "badge-fail";
+
+      const outputFiles = Array.isArray(data.output_files) ? data.output_files : [];
+      const filesHtml   = outputFiles.length
+        ? `<ul style="margin:6px 0 0 18px; padding:0">${outputFiles.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join("")}</ul>`
+        : "<em style='color:var(--text-muted)'>None</em>";
+
+      const preview = (data.stdout_preview || "").trim() || (data.stderr_preview || "").trim() || "";
+      const previewHtml = preview
+        ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:500">Log preview</summary>
+           <pre style="max-height:200px;overflow:auto;background:var(--bg-muted,#f5f5f5);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap">${escapeHtml(preview.slice(0, 4096))}</pre>
+           </details>`
+        : "";
+
+      if (executeResult) {
+        executeResult.style.display = "";
+        executeResult.innerHTML = `
+          <div style="border:1px solid var(--divider);border-radius:8px;padding:14px 18px;background:var(--bg-card,#fff)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <span class="${escapeHtml(badgeCls)}" style="font-weight:600;padding:3px 10px;border-radius:20px;font-size:13px">${badge}</span>
+              <span style="font-size:13px;color:var(--text-muted)">Exit code: ${data.exit_code}</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6">
+              <strong>Image:</strong> <code>${escapeHtml(data.image_name || "")}</code><br>
+              <strong>Command:</strong> <code>${escapeHtml(data.command || "")}</code><br>
+              <strong>Output NIfTI files:</strong> ${filesHtml}
+            </div>
+            ${previewHtml}
+          </div>`;
+      }
+    } catch (err) {
+      if (executeStatus) {
+        executeStatus.className = "submit-status status-error";
+        executeStatus.textContent = "Network error: " + err.message;
+      }
+    } finally {
+      executeBtn.disabled = false;
+    }
+  });
+})();
 
 // ── Batch Dashboard ───────────────────────────────────────────────────────────
 
@@ -1023,14 +1129,23 @@ async function runBatchValidation(submissionIds) {
   }
 
   try {
+    // Send the shared team name/email from the form as per-submission metadata
+    // so the unblinded CSV export contains meaningful values.
+    const sharedTeam  = getTeamName();
+    const sharedEmail = getEmail();
+    const teamNamesMap  = sharedTeam  ? Object.fromEntries(submissionIds.map((id) => [id, sharedTeam]))  : null;
+    const emailsMap     = sharedEmail ? Object.fromEntries(submissionIds.map((id) => [id, sharedEmail])) : null;
+
     const res  = await fetch(`${API}/api/validate-batch`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
-        submission_ids: submissionIds,
-        challenge_type: getChallengeType(),
-        map_type:       getMapType(),
-        map_type_mode:  getMapTypeMode(),
+        submission_ids:  submissionIds,
+        challenge_type:  getChallengeType(),
+        map_type:        getMapType(),
+        map_type_mode:   getMapTypeMode(),
+        team_names:      teamNamesMap,
+        contact_emails:  emailsMap,
       }),
     });
     const data = await res.json();
@@ -1114,8 +1229,9 @@ function showBatchResults(data) {
   if (list) {
     list.innerHTML = "";
     (data.results || []).forEach((r) => {
-      const errors   = (r.errors   || []).map(msgText);
-      const warnings = (r.warnings || []).map(msgText);
+      const errors   = dedupeMessages((r.errors   || []).map(simplifyMessage));
+      const warnings = dedupeMessages((r.warnings || []).map(simplifyMessage))
+        .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
       const passed   = r.passed;
 
       const statusBadge = passed

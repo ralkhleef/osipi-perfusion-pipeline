@@ -1,6 +1,18 @@
-FROM alpine:3.20
+# OSIPI pipeline — fallback execution image
+#
+# Used when a submission does not include its own Dockerfile.
+# Provides Python 3.11 with nibabel and numpy pre-installed so that
+# most perfusion-imaging scripts work out of the box.
+#
+# The submission folder is mounted read-only at /submission.
+# The container should write output NIfTI files to /output.
+
+FROM python:3.11-slim
+
+# Install scientific computing dependencies
+RUN pip install --no-cache-dir nibabel numpy
 
 WORKDIR /submission
 
-CMD ["sh", "-lc", "echo \"OSIPI fallback Docker image\""]
-
+# Default entrypoint — submissions can override via run_config.json
+CMD ["python3", "run.py"]

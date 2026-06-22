@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from services.path_config import EXTRACTED_DIR, INCOMING_DIR
+from services.path_config import EXTRACTED_DIR, INCOMING_DIR, safe_relative_path
 
 # ── Map type detection ─────────────────────────────────────────────────────────
 
@@ -488,11 +488,15 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
 
 
 def _auto_extract_single_zip(directory: Path) -> None:
-    """If a directory contains exactly one ZIP and no other files, extract it in-place.
+    """Extract ZIP file(s) in a directory if no NIfTI files are present yet.
 
     Used by ``finalize_imported_dir`` to unwrap Zenodo records that consist of
-    a single archive file.  Does nothing if extraction fails or if there are
-    other files present.
+    one or more ZIP archives alongside non-NIfTI content (e.g. README.md).
+
+    Extraction is skipped when:
+    - The directory contains no ZIP files.
+    - NIfTI files are already present (the record may already be unpacked).
+    - A ZIP file is corrupt or would exceed extraction limits (silently skipped).
     """
     try:
         all_items = [f for f in directory.iterdir() if f.is_file()]
@@ -500,19 +504,23 @@ def _auto_extract_single_zip(directory: Path) -> None:
         return
 
     zip_files = [f for f in all_items if f.name.lower().endswith(".zip")]
-    if len(zip_files) != 1 or len(all_items) != 1:
-        return  # Only unwrap when the directory contains exactly one ZIP
+    if not zip_files:
+        return  # Nothing to extract
 
-    zip_path = zip_files[0]
-    try:
-        with zipfile.ZipFile(zip_path) as zf:
-            _safe_extract_zip(zf, directory)
+    # If NIfTI files are already present the record is already unpacked — leave it.
+    if any(f.name.lower().endswith(NIFTI_SUFFIXES) for f in all_items):
+        return
+
+    for zip_path in zip_files:
         try:
-            zip_path.unlink()
-        except OSError:
-            pass
-    except (zipfile.BadZipFile, ValueError):
-        pass  # Leave as-is if extraction fails
+            with zipfile.ZipFile(zip_path) as zf:
+                _safe_extract_zip(zf, directory)
+            try:
+                zip_path.unlink()
+            except OSError:
+                pass
+        except (zipfile.BadZipFile, ValueError):
+            pass  # Leave as-is if this ZIP is corrupt or oversized
 
 
 def _detect_parameter_map_type(files: Iterable[Path]) -> str:
@@ -611,11 +619,5 @@ def _reset_submission_dir(submission_id: str) -> Path:
 
 
 def _safe_relative_path(raw_path: str) -> Path:
-    path = Path((raw_path or "").replace("\\", "/"))
-    parts = [
-        part for part in path.parts
-        if part not in ("", ".", "/") and part != path.anchor
-    ]
-    if not parts or any(part == ".." for part in parts):
-        raise ValueError("Archive contains an unsafe file path.")
-    return Path(*parts)
+    """Thin wrapper around the shared ``safe_relative_path`` utility."""
+    return safe_relative_path(raw_path)

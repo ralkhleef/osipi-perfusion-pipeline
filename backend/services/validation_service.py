@@ -87,6 +87,9 @@ def validate_submission(
     notes: Optional[str] = None,
 ) -> Dict:
     """Validate the submission folder for the given submission_id."""
+    # Normalise challenge type first so it is available for all early-exit paths.
+    normalized_challenge = (challenge_type or "dce").lower()
+
     # Sanitize submission_id — block path traversal and unsafe characters
     safe_submission_id = make_safe_id(submission_id)
     folder = EXTRACTED_DIR / safe_submission_id
@@ -96,7 +99,7 @@ def validate_submission(
         folder.resolve().relative_to(EXTRACTED_DIR.resolve())
     except ValueError:
         return _finish(
-            safe_submission_id, "dce",
+            safe_submission_id, normalized_challenge,
             [_err("INVALID_SUBMISSION_ID", "Submission ID contains an invalid path.")],
             [], 0, 0, team_name, contact_email, map_type, notes,
         )
@@ -104,7 +107,6 @@ def validate_submission(
     submission_id = safe_submission_id  # use sanitized ID for the rest of the function
     errors: List[Dict] = []
     warnings: List[Dict] = []
-    normalized_challenge = (challenge_type or "dce").lower()
 
     if normalized_challenge not in KNOWN_CHALLENGE_TYPES:
         errors.append(_err(

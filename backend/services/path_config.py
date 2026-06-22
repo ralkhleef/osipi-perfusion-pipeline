@@ -26,3 +26,27 @@ VALIDATED_DIR   = SUBMISSIONS_DIR / "validated"     # reserved for future use
 
 # --- frontend ---
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+
+# ---------------------------------------------------------------------------
+# Shared path-safety utility
+# ---------------------------------------------------------------------------
+
+
+def safe_relative_path(raw_path: str) -> Path:
+    """Sanitize an archive or download file path to a safe relative Path.
+
+    Rejects absolute paths and any component that is ``..``.
+    Raises ``ValueError`` if the path is empty or unsafe.
+
+    Used by both the ZIP extractor and the Zenodo downloader so that
+    the traversal-blocking logic is defined in exactly one place.
+    """
+    path = Path((raw_path or "").replace("\\", "/"))
+    parts = [
+        part for part in path.parts
+        if part not in ("", ".", "/") and part != path.anchor
+    ]
+    if not parts or any(part == ".." for part in parts):
+        raise ValueError(f"Unsafe file path rejected: {raw_path!r}")
+    return Path(*parts)
