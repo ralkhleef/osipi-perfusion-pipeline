@@ -88,8 +88,13 @@ function simplifyMessage(item) {
   const text  = msgText(item);
   const lower = text.toLowerCase();
 
-  if (lower.includes("no .nii") || lower.includes("no nifti") ||
-      lower.includes("nifti file appears") || lower.includes("missing nifti"))
+  // Zero-byte NIfTI must be checked BEFORE the generic "no NIfTI" branch —
+  // "NIfTI file appears to be empty" would otherwise match "nifti file appears".
+  if (lower.includes("nifti file appears") || lower.includes("appears to be empty") ||
+      lower.includes("zero-byte") || lower.includes("empty nifti"))
+    return "Zero-byte NIfTI file detected";
+
+  if (lower.includes("no .nii") || lower.includes("no nifti") || lower.includes("missing nifti"))
     return "No NIfTI files found";
 
   // EXPECTED_MAP_MISSING — keep the original message intact so the specific map
@@ -133,6 +138,26 @@ const batchState = {
   batchId:         null,   // returned by /api/validate-batch
   validationData:  null,   // full /api/validate-batch response
 };
+
+// ── Docker availability ───────────────────────────────────────────────────────
+// Cached after the first check; null = not yet checked.
+
+const dockerStatus = { available: null, version: "", message: "" };
+
+async function checkDockerAvailability() {
+  if (dockerStatus.available !== null) return dockerStatus;  // use cache
+  try {
+    const res  = await fetch(`${API}/api/execution-status`);
+    const data = await res.json();
+    dockerStatus.available = !!data.docker_available;
+    dockerStatus.version   = data.docker_version || "";
+    dockerStatus.message   = data.message || "";
+  } catch (err) {
+    dockerStatus.available = false;
+    dockerStatus.message   = "Could not reach backend to check Docker availability.";
+  }
+  return dockerStatus;
+}
 
 // ── Screen switching ──────────────────────────────────────────────────────────
 
@@ -649,8 +674,15 @@ async function handleSubmit() {
 function showResults(data) {
   // Do NOT touch state.mode here — it is managed exclusively by the action buttons.
 
-  const errors   = dedupeMessages((data.errors   || []).map(simplifyMessage));
-  const warnings = dedupeMessages((data.warnings || []).map(simplifyMessage))
+  // If nifti_count > 0, suppress any spurious "No NIfTI files found" that
+  // can appear when a zero-byte NIfTI warning is mis-simplified.
+  const _niftiCount = Number(data.nifti_count ?? 0);
+  const _noNiftiLabel = "No NIfTI files found";
+  const _filterSpurious = (msgs) =>
+    _niftiCount > 0 ? msgs.filter((m) => m !== _noNiftiLabel) : msgs;
+
+  const errors   = _filterSpurious(dedupeMessages((data.errors   || []).map(simplifyMessage)));
+  const warnings = _filterSpurious(dedupeMessages((data.warnings || []).map(simplifyMessage)))
     .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
 
   const errCount  = errors.length;
@@ -730,7 +762,8 @@ function showResults(data) {
   // Store submission context for the execute section.
   window._currentSubmissionId  = data.submission_id || null;
   window._currentChallengeType = data.challenge_type || getChallengeType() || "dce";
-  if (typeof window._showExecuteSection === "function") window._showExecuteSection();
+  // Only show execute section when there are no blocking errors.
+  if (typeof window._showExecuteSection === "function") window._showExecuteSection(errCount);
 
   showScreen("results-screen");
 }
@@ -749,7 +782,7 @@ function renderIssueSection(sectionId, listId, items) {
   }
 }
 
-function buildSuccessChecks(data, errCount, warnCount) {
+function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
   const checks    = [];
   const allIssues = [...(data.errors || []), ...(data.warnings || [])]
     .map(msgText).map((t) => t.toLowerCase());
@@ -764,7 +797,7 @@ function buildSuccessChecks(data, errCount, warnCount) {
   if (!hasIssue("code file", "dockerfile", "requirements", "no_code"))
     checks.push("Code files present");
   if (!hasIssue("map type", "auto-detect", "map_type", "parameter map was not found")) {
-    const mt = data.map_type || state.detection.detected_parameter_map_type;
+    const mt = data.map_type || detectedMapType || state.detection.detected_parameter_map_type;
     if (mt && mt !== "Unknown")
       checks.push(`Parameter map type identified: ${mt}`);
   }
@@ -849,31 +882,82 @@ if (newBtn) {
   });
 }
 
-// ── Docker Execution ──────────────────────────────────────────────────────────
+// ── Docker Execution — shared render helpers ──────────────────────────────────
+
+function _execLogBlock(label, text) {
+  if (!text || !text.trim()) return "";
+  return `<details style="margin-top:8px">
+    <summary style="cursor:pointer;font-weight:500;font-size:13px">${escapeHtml(label)}</summary>
+    <pre style="max-height:240px;overflow:auto;background:var(--bg-muted,#f5f5f5);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;margin-top:6px">${escapeHtml(text.slice(0, 4096))}</pre>
+  </details>`;
+}
+
+function renderExecResult(data) {
+  const passed      = data.passed;
+  const timedOut    = data.timed_out;
+  const buildFailed = data.build_failed;
+  const badgeText   = timedOut    ? "⏱ Timed Out"
+                    : buildFailed ? "✗ Build Failed"
+                    : passed      ? "✓ Passed"
+                                  : "✗ Failed";
+  const badgeCls    = (timedOut || buildFailed || !passed) ? "badge-fail" : "badge-pass";
+  const outputFiles = Array.isArray(data.output_files) ? data.output_files : [];
+  const fileCount   = data.output_file_count ?? outputFiles.length;
+  const filesHtml   = outputFiles.length
+    ? `<ul style="margin:4px 0 0 16px;padding:0">${
+        outputFiles.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join("")
+      }</ul>`
+    : `<em style="color:var(--text-muted)">None</em>`;
+  return `
+    <div style="border:1px solid var(--divider);border-radius:6px;padding:12px 16px;background:var(--bg-card,#fff);font-size:13px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span class="${escapeHtml(badgeCls)}" style="font-weight:600;padding:2px 10px;border-radius:20px;font-size:12px">${badgeText}</span>
+        <span style="color:var(--text-muted)">Exit: <code>${data.exit_code ?? "—"}</code></span>
+      </div>
+      <div style="line-height:1.8">
+        <strong>Image:</strong> <code>${escapeHtml(data.image_name || "—")}</code><br>
+        <strong>Command:</strong> <code>${escapeHtml(data.command || "—")}</code><br>
+        <strong>Output files (${fileCount}):</strong> ${filesHtml}
+      </div>
+      ${_execLogBlock("stdout", data.stdout_preview)}${_execLogBlock("stderr", data.stderr_preview)}
+    </div>`;
+}
+
+function renderExecError(msg) {
+  return `<div style="color:var(--error,#c00);font-size:13px;padding:6px 0">${escapeHtml(msg)}</div>`;
+}
+
+// ── Single-submission execute section ─────────────────────────────────────────
 
 (function initExecuteSection() {
-  const executeBtn    = el("execute-btn");
-  const executeStatus = el("execute-status");
-  const executeResult = el("execute-result");
+  const executeBtn     = el("execute-btn");
+  const executeStatus  = el("execute-status");
+  const executeResult  = el("execute-result");
   const executeSection = el("execute-section");
 
-  // Show the execute section on the results screen after a successful validation.
-  // Called from showResults() below.
-  window._showExecuteSection = function () {
-    if (executeSection) executeSection.style.display = "";
-    if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
-    if (executeStatus) executeStatus.style.display = "none";
+  // Show the execute section only when validation passed (errCount === 0).
+  // Called from showResults() after rendering the banner.
+  window._showExecuteSection = function (errCount) {
+    if (!executeSection) return;
+    if (errCount > 0) {
+      executeSection.style.display = "none";
+      if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
+      if (executeStatus) executeStatus.style.display = "none";
+    } else {
+      executeSection.style.display = "";
+      if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
+      if (executeStatus) executeStatus.style.display = "none";
+    }
   };
 
   if (!executeBtn) return;
 
   executeBtn.addEventListener("click", async () => {
-    const submissionId = window._currentSubmissionId;
+    const submissionId  = window._currentSubmissionId;
     const challengeType = window._currentChallengeType || "dce";
     if (!submissionId) return;
 
-    const timeoutInput = el("execute-timeout");
-    const timeoutSeconds = timeoutInput ? parseInt(timeoutInput.value, 10) || 300 : 300;
+    const timeoutSeconds = parseInt(el("execute-timeout")?.value || "300", 10) || 300;
 
     executeBtn.disabled = true;
     if (executeStatus) {
@@ -887,57 +971,23 @@ if (newBtn) {
       const resp = await fetch("/api/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submission_id: submissionId,
-          challenge_type: challengeType,
-          timeout_seconds: timeoutSeconds,
-        }),
+        body: JSON.stringify({ submission_id: submissionId, challenge_type: challengeType, timeout_seconds: timeoutSeconds }),
       });
       const data = await resp.json();
 
+      // Pre-flight errors (no Dockerfile, bad path, Docker missing) → 4xx
       if (!resp.ok || !data.success) {
-        const msg = (data && (data.detail || data.message)) || "Docker execution failed.";
         if (executeStatus) {
           executeStatus.className = "submit-status status-error";
-          executeStatus.textContent = msg;
+          executeStatus.textContent = (data && (data.detail || data.message)) || "Docker execution failed.";
         }
         return;
       }
 
       if (executeStatus) executeStatus.style.display = "none";
-
-      const passed   = data.passed;
-      const timedOut = data.timed_out;
-      const badge    = timedOut ? "⏱ Timed Out" : passed ? "✓ Passed" : "✗ Failed";
-      const badgeCls = timedOut ? "badge-warn" : passed ? "badge-pass" : "badge-fail";
-
-      const outputFiles = Array.isArray(data.output_files) ? data.output_files : [];
-      const filesHtml   = outputFiles.length
-        ? `<ul style="margin:6px 0 0 18px; padding:0">${outputFiles.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join("")}</ul>`
-        : "<em style='color:var(--text-muted)'>None</em>";
-
-      const preview = (data.stdout_preview || "").trim() || (data.stderr_preview || "").trim() || "";
-      const previewHtml = preview
-        ? `<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:500">Log preview</summary>
-           <pre style="max-height:200px;overflow:auto;background:var(--bg-muted,#f5f5f5);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap">${escapeHtml(preview.slice(0, 4096))}</pre>
-           </details>`
-        : "";
-
       if (executeResult) {
         executeResult.style.display = "";
-        executeResult.innerHTML = `
-          <div style="border:1px solid var(--divider);border-radius:8px;padding:14px 18px;background:var(--bg-card,#fff)">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <span class="${escapeHtml(badgeCls)}" style="font-weight:600;padding:3px 10px;border-radius:20px;font-size:13px">${badge}</span>
-              <span style="font-size:13px;color:var(--text-muted)">Exit code: ${data.exit_code}</span>
-            </div>
-            <div style="font-size:13px;line-height:1.6">
-              <strong>Image:</strong> <code>${escapeHtml(data.image_name || "")}</code><br>
-              <strong>Command:</strong> <code>${escapeHtml(data.command || "")}</code><br>
-              <strong>Output NIfTI files:</strong> ${filesHtml}
-            </div>
-            ${previewHtml}
-          </div>`;
+        executeResult.innerHTML = renderExecResult(data);
       }
     } catch (err) {
       if (executeStatus) {
@@ -947,6 +997,115 @@ if (newBtn) {
     } finally {
       executeBtn.disabled = false;
     }
+  });
+})();
+
+// ── Batch execution — per-card and Execute All Passed ─────────────────────────
+
+async function runBatchExec(btn, section) {
+  const subId     = section.dataset.subId;
+  const challenge = section.dataset.challenge || "dce";
+  const timeout   = parseInt(el("batch-exec-timeout")?.value || "300", 10) || 300;
+
+  // The exec-status badge lives in the parent exec-card <summary>
+  const card      = section.closest("details.exec-card");
+  const execBadge = card ? card.querySelector(".exec-status-badge") : null;
+  const resultDiv = section.querySelector(".batch-exec-result");
+
+  btn.disabled = true;
+  if (card) card.open = true;   // auto-open so progress is visible
+  if (execBadge) {
+    execBadge.className = "batch-badge badge-exec-run exec-status-badge";
+    execBadge.textContent = "Running…";
+  }
+  if (resultDiv) resultDiv.style.display = "none";
+
+  try {
+    const resp = await fetch("/api/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: subId, challenge_type: challenge, timeout_seconds: timeout }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.success) {
+      if (execBadge) {
+        execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
+        execBadge.textContent = "✗ Failed";
+      }
+      if (resultDiv) {
+        resultDiv.style.display = "";
+        resultDiv.innerHTML = renderExecError((data && (data.detail || data.message)) || "Execution failed.");
+      }
+    } else {
+      const passed   = data.passed;
+      const timedOut = data.timed_out;
+      if (execBadge) {
+        if (timedOut) {
+          execBadge.className = "batch-badge badge-exec-warn exec-status-badge";
+          execBadge.textContent = "⏱ Timed out";
+        } else if (passed) {
+          execBadge.className = "batch-badge badge-exec-pass exec-status-badge";
+          execBadge.textContent = "✓ Passed";
+        } else {
+          execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
+          execBadge.textContent = "✗ Failed";
+        }
+      }
+      if (resultDiv) {
+        resultDiv.style.display = "";
+        resultDiv.innerHTML = renderExecResult(data);
+      }
+    }
+  } catch (err) {
+    if (execBadge) {
+      execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
+      execBadge.textContent = "✗ Error";
+    }
+    if (resultDiv) {
+      resultDiv.style.display = "";
+      resultDiv.innerHTML = renderExecError("Network error: " + err.message);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Event delegation: clicks on any .batch-exec-btn inside the exec cards panel
+(function initBatchExecDelegation() {
+  // Listen on the whole document so it works regardless of when exec cards are injected
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".batch-exec-btn");
+    if (!btn) return;
+    const section = btn.closest(".batch-exec-section");
+    if (!section) return;
+    e.stopPropagation();
+    await runBatchExec(btn, section);
+  });
+})();
+
+// "Execute All Passed" button
+(function initBatchExecAll() {
+  const btn      = el("batch-exec-all-btn");
+  const statusEl = el("batch-exec-status");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    // Only run sections that have an execute button (has Dockerfile) and Docker available
+    const sections = [...document.querySelectorAll("#batch-exec-cards .batch-exec-section")]
+      .filter((s) => s.querySelector(".batch-exec-btn"));
+    if (!sections.length) return;
+    btn.disabled = true;
+    if (statusEl) { statusEl.style.display = ""; statusEl.textContent = `Starting ${sections.length} execution(s)…`; }
+    let done = 0;
+    for (const section of sections) {
+      const execBtn = section.querySelector(".batch-exec-btn");
+      if (!execBtn) continue;
+      if (statusEl) statusEl.textContent = `Executing ${done + 1} of ${sections.length}…`;
+      await runBatchExec(execBtn, section);
+      done++;
+    }
+    if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
+    btn.disabled = false;
   });
 })();
 
@@ -1181,98 +1340,238 @@ async function runBatchValidation(submissionIds) {
 
 // ── Batch Results ─────────────────────────────────────────────────────────────
 
-function showBatchResults(data) {
+async function showBatchResults(data) {
+  const results = data.results || [];
+
+  // ── 1. Header desc + overall banner ──────────────────────────────────────
   const desc = el("batch-results-desc");
   if (desc) {
-    const validated = (data.results || []).length;
+    const validated = results.length;
     desc.textContent = `${validated} submission${validated !== 1 ? "s" : ""} validated — ${data.passed_count} passed, ${data.failed_count} failed.`;
   }
 
-  // Banner
   const banner = el("batch-result-banner");
-  const icon   = el("batch-banner-icon");
-  const title  = el("batch-banner-title");
-  const sub    = el("batch-banner-sub");
   if (banner) {
     banner.className = "result-banner";
     const allPassed = data.failed_count === 0;
-    banner.classList.add(allPassed ? "banner-pass" : data.passed_count > 0 ? "banner-warn" : "banner-fail");
-    if (icon)  icon.textContent  = allPassed ? "✓" : data.passed_count > 0 ? "!" : "✕";
-    if (title) title.textContent = allPassed ? "All submissions passed" : data.failed_count > 0 && data.passed_count === 0 ? "All submissions failed" : "Partial pass";
+    const anyPassed = data.passed_count > 0;
+    banner.classList.add(allPassed ? "banner-pass" : anyPassed ? "banner-warn" : "banner-fail");
+    const icon  = el("batch-banner-icon");
+    const title = el("batch-banner-title");
+    const sub   = el("batch-banner-sub");
+    if (icon)  icon.textContent  = allPassed ? "✓" : anyPassed ? "!" : "✕";
+    if (title) title.textContent = allPassed ? "All submissions passed"
+                                 : anyPassed ? "Partial pass"
+                                             : "All submissions failed";
     if (sub) {
-      const total    = (data.results || []).length;
-      const warnings = (data.results || []).reduce((acc, r) => acc + (r.warnings || []).length, 0);
-      sub.textContent = `${total} validated · ${data.passed_count} passed · ${data.failed_count} failed · ${warnings} warning${warnings !== 1 ? "s" : ""}`;
+      const totalWarn = results.reduce((acc, r) => acc + (r.warnings || []).length, 0);
+      sub.textContent = `${results.length} validated · ${data.passed_count} passed · ${data.failed_count} failed · ${totalWarn} warning${totalWarn !== 1 ? "s" : ""}`;
     }
   }
 
-  // Stats grid
-  const grid = el("batch-stats-grid");
-  if (grid) {
-    grid.innerHTML = "";
-    const items = [
-      ["Batch ID",     data.batch_id],
-      ["Total",        (data.results || []).length],
-      ["Passed",       data.passed_count],
-      ["Failed",       data.failed_count],
-      ["Validated At", formatDate(data.validated_at)],
-    ];
-    items.forEach(([k, v]) => {
-      const dt = document.createElement("dt"); dt.textContent = k;
-      const dd = document.createElement("dd"); dd.textContent = v || "—";
-      grid.append(dt, dd);
+  // ── 2. Collapse the exec details section (reset between runs) ────────────
+  const execDetails = el("batch-exec-details");
+  if (execDetails) execDetails.open = false;
+
+  // ── 3. Stats chips ────────────────────────────────────────────────────────
+  const statsRow = el("batch-stats-row");
+  if (statsRow) {
+    statsRow.innerHTML = "";
+    const totalWarn = results.reduce((acc, r) => acc + (r.warnings || []).length, 0);
+    [
+      { num: results.length,    lbl: "Total",    cls: "" },
+      { num: data.passed_count, lbl: "Passed",   cls: "chip-pass" },
+      { num: data.failed_count, lbl: "Failed",   cls: data.failed_count > 0 ? "chip-fail" : "" },
+      { num: totalWarn,         lbl: "Warnings", cls: totalWarn > 0 ? "chip-warn" : "" },
+    ].forEach(({ num, lbl, cls }) => {
+      const chip = document.createElement("div");
+      chip.className = `batch-stat-chip${cls ? " " + cls : ""}`;
+      chip.innerHTML = `<span class="stat-num">${num}</span><span class="stat-lbl">${lbl}</span>`;
+      statsRow.appendChild(chip);
     });
+    if (data.batch_id) {
+      const id = document.createElement("div");
+      id.className = "batch-stat-meta";
+      id.innerHTML = `<span style="font-weight:700">Batch</span><code style="font-size:0.71rem;font-family:monospace">${escapeHtml(data.batch_id)}</code>`;
+      statsRow.appendChild(id);
+    }
+    if (data.validated_at) {
+      const dt = document.createElement("div");
+      dt.className = "batch-stat-meta";
+      dt.innerHTML = `<span style="font-weight:700">At</span><span>${formatDate(data.validated_at)}</span>`;
+      statsRow.appendChild(dt);
+    }
   }
 
-  // Per-submission expandable cards
+  // ── 4. Validation cards — all collapsed by default ────────────────────────
   const list = el("batch-submissions-list");
   if (list) {
     list.innerHTML = "";
-    (data.results || []).forEach((r) => {
-      const errors   = dedupeMessages((r.errors   || []).map(simplifyMessage));
-      const warnings = dedupeMessages((r.warnings || []).map(simplifyMessage))
+    results.forEach((r) => {
+      const rNiftiCount = Number(r.nifti_count ?? 0);
+      const _filterSpur = (msgs) =>
+        rNiftiCount > 0 ? msgs.filter((m) => m !== "No NIfTI files found") : msgs;
+
+      const errors   = _filterSpur(dedupeMessages((r.errors   || []).map(simplifyMessage)));
+      const warnings = _filterSpur(dedupeMessages((r.warnings || []).map(simplifyMessage)))
         .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
+      const checks   = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
       const passed   = r.passed;
+      const hasWarn  = warnings.length > 0;
 
-      const statusBadge = passed
-        ? `<span class="batch-badge badge-pass">Passed</span>`
-        : `<span class="batch-badge badge-fail">Failed</span>`;
+      // Status badge
+      let statusText, statusCls;
+      if (!passed)      { statusText = "Failed";               statusCls = "badge-fail"; }
+      else if (hasWarn) { statusText = "Passed with warnings"; statusCls = "badge-warn"; }
+      else              { statusText = "Passed";               statusCls = "badge-pass"; }
 
-      // Escape all server-supplied strings before innerHTML insertion (XSS prevention)
+      // Mini count chips shown in the collapsed header
+      const errChip  = errors.length > 0
+        ? `<span class="batch-mini-chip batch-mini-error">${errors.length} error${errors.length !== 1 ? "s" : ""}</span>` : "";
+      const warnChip = warnings.length > 0
+        ? `<span class="batch-mini-chip batch-mini-warn">${warnings.length} warning${warnings.length !== 1 ? "s" : ""}</span>` : "";
+      const niftiChip = `<span class="batch-mini-chip">${r.nifti_count ?? "—"} NIfTI</span>`;
+
       const issuesHtml = [
-        ...errors.map((m) => `<li class="is-error">✕ ${escapeHtml(m)}</li>`),
+        ...errors.map((m)   => `<li class="is-error">✕ ${escapeHtml(m)}</li>`),
         ...warnings.map((m) => `<li class="is-warning">! ${escapeHtml(m)}</li>`),
-        ...(errors.length === 0 && warnings.length === 0
-          ? [`<li class="is-pass">✓ All checks passed</li>`]
-          : []),
+        ...checks.map((m)   => `<li class="is-pass">✓ ${escapeHtml(m)}</li>`),
       ].join("");
 
       const safeSubId   = escapeHtml(r.submission_id);
-      const safeMapType = escapeHtml(r.map_type || "—");
-      const safeTeam    = r.team_name ? escapeHtml(r.team_name) : "";
+      const safeMapType = escapeHtml(r.map_type    || "—");
+      const safeTeam    = r.team_name     ? escapeHtml(r.team_name)     : "";
+      const safeFolder  = r.source_folder ? escapeHtml(r.source_folder) : "";
 
       const details = document.createElement("details");
       details.className = "batch-sub-card";
+      // All cards start collapsed — user controls via Expand All / individual click
       details.innerHTML = `
         <summary class="batch-sub-header">
           <span class="batch-sub-toggle">▸</span>
-          <span class="batch-sub-name">${safeSubId}</span>
-          ${statusBadge}
+          <span class="batch-sub-name" title="${safeSubId}">${safeSubId}</span>
+          <div class="batch-sub-header-right">
+            <span class="batch-badge ${escapeHtml(statusCls)}">${escapeHtml(statusText)}</span>
+            ${niftiChip}${errChip}${warnChip}
+          </div>
         </summary>
         <div class="batch-sub-body">
           <div class="batch-sub-meta">
-            NIfTI files: ${r.nifti_count ?? "—"} &nbsp;·&nbsp;
-            Total files: ${r.total_files ?? "—"} &nbsp;·&nbsp;
-            Map type: ${safeMapType}
-            ${safeTeam ? ` &nbsp;·&nbsp; Team: ${safeTeam}` : ""}
+            Total files: ${r.total_files ?? "—"}&nbsp;·&nbsp;Map type: ${safeMapType}
+            ${safeFolder ? `&nbsp;·&nbsp;Source: ${safeFolder}` : ""}
+            ${safeTeam   ? `&nbsp;·&nbsp;Team: ${safeTeam}`     : ""}
           </div>
           <ul class="batch-issue-list">${issuesHtml}</ul>
         </div>
       `;
-      // Auto-expand failed submissions
-      if (!passed) details.open = true;
       list.appendChild(details);
     });
+  }
+
+  // ── 5. Execution tab — Docker check + exec cards ──────────────────────────
+  const docker       = await checkDockerAvailability();
+  const dockerBanner = el("batch-docker-banner");
+  const execControls = el("batch-exec-controls");
+  const execStatus   = el("batch-exec-status");
+  const execCards    = el("batch-exec-cards");
+
+  if (execStatus) execStatus.style.display = "none";
+
+  // Global Docker banner (always shown in execution tab)
+  if (dockerBanner) {
+    if (docker.available) {
+      dockerBanner.className = "docker-avail-row docker-ok";
+      dockerBanner.innerHTML = `<strong>&#x2713; Docker ${escapeHtml(docker.version)} available.</strong>&nbsp;Submissions with a Dockerfile can be executed.`;
+    } else {
+      dockerBanner.className = "docker-avail-row docker-err";
+      dockerBanner.innerHTML = `<strong>&#x26A0; Docker unavailable.</strong>&nbsp;${escapeHtml(docker.message)} All execution buttons are disabled.`;
+    }
+    dockerBanner.style.display = "";
+  }
+
+  // Build exec cards — show ALL submissions so the user can see why each is or isn't executable
+  if (execCards) {
+    execCards.innerHTML = "";
+    let executableCount = 0;
+
+    results.forEach((r) => {
+      const passed        = r.passed;
+      const hasDockerfile = !!r.has_dockerfile;
+      const canExec       = passed && hasDockerfile && docker.available;
+
+      // Reason note for non-executable submissions
+      let execNote = null;
+      if (!passed)             execNote = "Validation failed — submission must pass before it can be executed.";
+      else if (!hasDockerfile) execNote = "Not executable — no Dockerfile found in this submission.";
+      else if (!docker.available) execNote = "Execution disabled — Docker is unavailable on this host.";
+
+      if (canExec) executableCount++;
+
+      const valBadgeCls = passed ? "badge-pass" : "badge-fail";
+      const valBadgeTxt = passed ? "Validated ✓" : "Failed ✗";
+
+      let execBadgeCls, execBadgeTxt;
+      if (!passed || !hasDockerfile)  { execBadgeCls = "badge-exec-na";   execBadgeTxt = "Not executable"; }
+      else if (!docker.available)     { execBadgeCls = "badge-exec-na";   execBadgeTxt = "Docker unavailable"; }
+      else                            { execBadgeCls = "badge-exec-none"; execBadgeTxt = "Not run"; }
+
+      const safeSubId = escapeHtml(r.submission_id);
+
+      const card    = document.createElement("details");
+      card.className = "exec-card";
+
+      const summary = document.createElement("summary");
+      summary.className = "exec-card-header";
+      summary.innerHTML = `
+        <span class="exec-toggle">&#x25B8;</span>
+        <span class="exec-card-name" title="${safeSubId}">${safeSubId}</span>
+        <div class="exec-card-badges">
+          <span class="batch-badge ${escapeHtml(valBadgeCls)}">${escapeHtml(valBadgeTxt)}</span>
+          <span class="batch-badge ${escapeHtml(execBadgeCls)} exec-status-badge">${escapeHtml(execBadgeTxt)}</span>
+        </div>
+      `;
+
+      const body = document.createElement("div");
+      body.className = "exec-card-body";
+
+      if (execNote) {
+        const note = document.createElement("p");
+        note.style.cssText = "font-size:0.78rem;color:var(--muted);font-style:italic;margin:0";
+        note.textContent = execNote;
+        body.appendChild(note);
+      } else {
+        // Executable — build exec section (DOM, not innerHTML — subId safe via dataset)
+        const execSection = document.createElement("div");
+        execSection.className         = "batch-exec-section";
+        execSection.dataset.subId     = r.submission_id;
+        execSection.dataset.challenge = r.challenge_type || getChallengeType() || "dce";
+
+        const btnRow = document.createElement("div");
+        btnRow.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px";
+
+        const execBtn = document.createElement("button");
+        execBtn.type      = "button";
+        execBtn.className = "btn-secondary btn-sm batch-exec-btn";
+        execBtn.textContent = "Execute in Docker";
+
+        btnRow.appendChild(execBtn);
+        execSection.appendChild(btnRow);
+
+        const resultDiv = document.createElement("div");
+        resultDiv.className     = "batch-exec-result";
+        resultDiv.style.display = "none";
+        execSection.appendChild(resultDiv);
+
+        body.appendChild(execSection);
+      }
+
+      card.appendChild(summary);
+      card.appendChild(body);
+      execCards.appendChild(card);
+    });
+
+    if (execControls)
+      execControls.style.display = executableCount > 0 ? "flex" : "none";
   }
 
   showScreen("batch-results-screen");
@@ -1326,6 +1625,21 @@ async function exportBatch(blinded) {
 
 if (batchExportBlindedBtn)   batchExportBlindedBtn.addEventListener("click", () => exportBatch(true));
 if (batchExportUnblindedBtn) batchExportUnblindedBtn.addEventListener("click", () => exportBatch(false));
+
+// ── Expand / Collapse all validation cards ────────────────────────────────────
+
+(function initExpandCollapseAll() {
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#batch-expand-all")) {
+      document.querySelectorAll("#batch-submissions-list details.batch-sub-card")
+        .forEach((d) => { d.open = true; });
+    }
+    if (e.target.closest("#batch-collapse-all")) {
+      document.querySelectorAll("#batch-submissions-list details.batch-sub-card")
+        .forEach((d) => { d.open = false; });
+    }
+  });
+})();
 
 // ── Initialise ────────────────────────────────────────────────────────────────
 

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=8" />
+  <link rel="stylesheet" href="/static/styles.css?v=13" />
 </head>
 <body>
 
@@ -212,7 +212,7 @@
         </div>
       </header>
 
-      <!-- Summary banner -->
+      <!-- Overall pass/fail banner -->
       <div id="batch-result-banner" class="result-banner">
         <span id="batch-banner-icon" class="banner-icon" aria-hidden="true"></span>
         <div>
@@ -221,28 +221,61 @@
         </div>
       </div>
 
-      <!-- Stats grid -->
+      <!-- ── Section 1: Validation Results ── -->
       <div class="form-section">
-        <h2 class="section-heading">Summary</h2>
-        <dl id="batch-stats-grid" class="summary-grid"></dl>
-      </div>
-
-      <!-- Per-submission results (expandable cards) -->
-      <div class="form-section">
-        <h2 class="section-heading">Submission Results</h2>
+        <div class="section-header-row">
+          <h2 class="section-heading">Validation Results</h2>
+          <div class="batch-expand-controls" style="margin-bottom:0">
+            <button type="button" id="batch-expand-all" class="btn-ghost btn-sm">Expand All</button>
+            <button type="button" id="batch-collapse-all" class="btn-ghost btn-sm">Collapse All</button>
+          </div>
+        </div>
+        <div id="batch-stats-row" class="batch-stats-row" style="margin-bottom:16px"></div>
         <div id="batch-submissions-list"></div>
       </div>
 
-      <!-- Actions -->
-      <div class="form-actions result-actions">
-        <div class="actions-left">
-          <button type="button" id="batch-back-to-batch-btn" class="btn-secondary">← Back to Batch</button>
+      <!-- ── Section 2: Docker Execution (optional, collapsed) ── -->
+      <details id="batch-exec-details" class="form-section step-details">
+        <summary class="step-summary">
+          <h2 class="section-heading">Docker Execution <span class="step-optional">(optional)</span></h2>
+          <span class="step-arrow">&#x25B8;</span>
+        </summary>
+        <div>
+          <div id="batch-docker-banner" style="display:none"></div>
+          <div id="batch-exec-controls"
+               style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+            <label class="label" style="margin:0;white-space:nowrap">Timeout (s):
+              <input type="number" id="batch-exec-timeout" value="300" min="10" max="3600"
+                     style="width:70px;margin-left:6px;" />
+            </label>
+            <button type="button" id="batch-exec-all-btn" class="btn-secondary">Execute All Passed</button>
+          </div>
+          <div id="batch-exec-status" class="submit-status" style="display:none;margin-bottom:12px;"></div>
+          <div id="batch-exec-cards"></div>
+        </div>
+      </details>
+
+      <!-- ── Section 3: Export ── -->
+      <div class="form-section">
+        <h2 class="section-heading">Export Results</h2>
+        <p style="font-size:0.78rem;color:var(--muted);line-height:1.6;margin-bottom:14px">
+          <strong>Blinded</strong> removes team/contact identifiers — for peer review or public release.
+          <strong>Unblinded</strong> includes team metadata — for internal records.
+        </p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button type="button" id="batch-export-blinded-btn" class="btn-secondary">Export Blinded CSV</button>
           <button type="button" id="batch-export-unblinded-btn" class="btn-secondary">Export Unblinded CSV</button>
         </div>
+        <div id="batch-export-status" class="submit-status" style="display:none;margin-top:12px;"></div>
+      </div>
+
+      <!-- Action bar -->
+      <div class="form-actions result-actions" style="border-top:1px solid var(--divider)">
+        <div class="actions-left">
+          <button type="button" id="batch-back-to-batch-btn" class="btn-secondary">← Back to Batch</button>
+        </div>
         <button type="button" id="batch-results-new-btn" class="btn-ghost">Start New Submission</button>
       </div>
-      <div id="batch-export-status" class="submit-status" style="display:none; padding: 9px 34px;"></div>
 
     </div>
   </section>
@@ -295,24 +328,28 @@
         <ul id="inventory-list" class="inventory-list"></ul>
       </details>
 
-      <!-- Execute in Docker -->
-      <div id="execute-section" class="form-section" style="display:none">
-        <h2 class="section-heading">Execute in Docker</h2>
-        <p class="card-desc" style="margin-bottom:14px;">
-          Run the submission inside a sandboxed Docker container with
-          <code>--network none</code>, 4&nbsp;GB memory, and 2&nbsp;CPUs.
-          Output NIfTI files are collected from <code>/output</code>.
-        </p>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <button type="button" id="execute-btn" class="btn-secondary">Run in Docker</button>
-          <label class="label" style="margin:0">Timeout (s):
-            <input type="number" id="execute-timeout" value="300" min="10" max="3600"
-                   style="width:72px; margin-left:6px;" />
-          </label>
+      <!-- Execute in Docker (collapsible, shown only on pass) -->
+      <details id="execute-section" class="form-section step-details" style="display:none">
+        <summary class="step-summary">
+          <h2 class="section-heading">Docker Execution <span class="step-optional">(optional)</span></h2>
+          <span class="step-arrow">&#x25B8;</span>
+        </summary>
+        <div>
+          <p class="card-desc" style="margin-bottom:14px;">
+            Run inside a sandboxed Docker container with <code>--network none</code>,
+            4&nbsp;GB memory, 2&nbsp;CPUs. Output NIfTI files are collected from <code>/output</code>.
+          </p>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <button type="button" id="execute-btn" class="btn-secondary">Run in Docker</button>
+            <label class="label" style="margin:0">Timeout (s):
+              <input type="number" id="execute-timeout" value="300" min="10" max="3600"
+                     style="width:72px; margin-left:6px;" />
+            </label>
+          </div>
+          <div id="execute-status" class="submit-status" style="display:none; margin-top:10px;"></div>
+          <div id="execute-result" style="display:none; margin-top:14px;"></div>
         </div>
-        <div id="execute-status" class="submit-status" style="display:none; margin-top:10px;"></div>
-        <div id="execute-result" style="display:none; margin-top:14px;"></div>
-      </div>
+      </details>
 
       <!-- Action buttons -->
       <div class="form-actions result-actions">
@@ -331,6 +368,6 @@
 
 </main>
 
-<script src="/static/app.js?v=8" defer></script>
+<script src="/static/app.js?v=13" defer></script>
 </body>
 </html>
