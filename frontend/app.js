@@ -1517,6 +1517,10 @@ function renderValidateStep(data, isSingleMode) {
     };
   }
 
+  // ── Toolbar visibility: hide for single submission (no search/filter needed)
+  const valToolbar = el("val-toolbar");
+  if (valToolbar) valToolbar.style.display = results.length <= 1 ? "none" : "";
+
   // ── 3. Show-all button ────────────────────────────────────────────────────
   const showAllBtn = el("review-show-all-btn");
   if (showAllBtn) {
@@ -1986,12 +1990,16 @@ async function renderRunStep() {
     dockerBanner.style.display = "";
   }
 
-  // Show toolbar + table only if there are results
+  // Run Settings Card: hide when all submissions are result-only (nothing to run)
+  const settingsCard = el("run-settings-card");
+  if (settingsCard) settingsCard.style.display = allResultOnly ? "none" : "";
+
+  // Show toolbar + table only if there are results and not all-result-only
   const toolbar   = el("run-toolbar");
   const runTable  = el("run-table");
   const runAllBtn = el("batch-exec-all-btn");
-  if (toolbar)  toolbar.style.display  = results.length > 0 ? "" : "none";
-  if (runTable) runTable.style.display = results.length > 0 ? "" : "none";
+  if (toolbar)  toolbar.style.display  = results.length > 0 && !allResultOnly ? "" : "none";
+  if (runTable) runTable.style.display = results.length > 0 && !allResultOnly ? "" : "none";
 
   // Run All button: batch + runnable + docker OK
   if (runAllBtn)
@@ -2577,10 +2585,13 @@ function _syncExportStep() {
   const batchExecWrap = el("batch-export-exec-wrap");
   const singleExecRow = el("exec-export-row");
 
+  const hasExecResults = Object.keys(_execSummaries).length > 0;
+
   if (batchState.isBatch) {
     if (batchValWrap)  batchValWrap.style.display  = "";
     if (singleValWrap) singleValWrap.style.display = "none";
-    if (batchExecWrap) batchExecWrap.style.display = "";
+    // Only show execution export group if at least one submission was actually run
+    if (batchExecWrap) batchExecWrap.style.display = hasExecResults ? "" : "none";
     if (singleExecRow) singleExecRow.style.display = "none";
   } else {
     if (batchValWrap)  batchValWrap.style.display  = "none";
