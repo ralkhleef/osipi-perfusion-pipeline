@@ -1,8 +1,27 @@
+"use strict";
+// ─────────────────────────────────────────────────────────────────────────────
+// OSIPI Perfusion Challenge — Review System
+// app.js  v28
+// ─────────────────────────────────────────────────────────────────────────────
+
 const API = window.location.origin;
 
-// ── State ─────────────────────────────────────────────────────────────────────
-//
-// All mutable state lives here. Never read/write the old scattered `let` vars.
+// ── Map type options per challenge ────────────────────────────────────────────
+
+const MAP_OPTIONS = {
+  asl:   ["CBF", "ATT", "Other"],
+  dce:   ["Ktrans", "Kep", "Vp", "Other"],
+  dsc:   ["CBF", "CBV", "MTT", "Other"],
+  other: ["CBF", "ATT", "Ktrans", "Kep", "Vp", "CBV", "MTT", "Other"],
+};
+
+// ── Workflow state ─────────────────────────────────────────────────────────────
+
+const wf = {
+  step: "upload",  // current active step id
+};
+
+// ── Per-submission state ─────────────────────────────────────────────────────
 
 const state = {
   mode:              "new",    // "new" | "edit" | "replace"
@@ -19,21 +38,43 @@ const state = {
 // Request guard — prevents concurrent submits from double-clicks
 let requestInProgress = false;
 
-// ── Map type options per challenge ────────────────────────────────────────────
+// ── Batch state ───────────────────────────────────────────────────────────────
 
-const MAP_OPTIONS = {
-  asl:   ["CBF", "ATT", "Other"],
-  dce:   ["Ktrans", "Kep", "Vp", "Other"],
-  dsc:   ["CBF", "CBV", "MTT", "Other"],
-  other: ["CBF", "ATT", "Ktrans", "Kep", "Vp", "CBV", "MTT", "Other"],
+const batchState = {
+  uploadData:      null,   // full /api/upload-batch response
+  selectedIds:     new Set(),
+  batchId:         null,   // returned by /api/validate-batch
+  validationData:  null,   // full /api/validate-batch response
+  isBatch:         false,  // true = multi-submission, false = single normalized as batch-of-1
 };
 
-// ── Cached screen references (avoids querySelectorAll on every transition) ────
+// ── Session persistence config ────────────────────────────────────────────────
 
-const submissionScreen    = document.getElementById("submission-screen");
-const resultsScreen       = document.getElementById("results-screen");
-const batchScreen         = document.getElementById("batch-screen");
-const batchResultsScreen  = document.getElementById("batch-results-screen");
+const SESSION_KEY        = "osipi_pipeline_session_v1";
+const SESSION_VERSION    = 1;
+const SESSION_EXPIRY_MS  = 24 * 60 * 60 * 1000;   // 24 hours
+
+// Execution result summaries populated by _updateRunRow() — keyed by submission_id
+const _execSummaries = {};
+
+// ── Docker availability ───────────────────────────────────────────────────────
+
+const dockerStatus = { available: null, version: "", message: "" };
+
+async function checkDockerAvailability() {
+  if (dockerStatus.available !== null) return dockerStatus;
+  try {
+    const res  = await fetch(`${API}/api/execution-status`);
+    const data = await res.json();
+    dockerStatus.available = !!data.docker_available;
+    dockerStatus.version   = data.docker_version || "";
+    dockerStatus.message   = data.message || "";
+  } catch (err) {
+    dockerStatus.available = false;
+    dockerStatus.message   = "Could not reach backend to check Docker availability.";
+  }
+  return dockerStatus;
+}
 
 // ── Tiny helpers ──────────────────────────────────────────────────────────────
 
@@ -63,7 +104,6 @@ function msgText(item) {
   return String(item || "");
 }
 
-/** Escape a string for safe insertion into HTML via innerHTML. */
 function escapeHtml(str) {
   if (str == null) return "";
   return String(str)
@@ -88,30 +128,51 @@ function simplifyMessage(item) {
   const text  = msgText(item);
   const lower = text.toLowerCase();
 
-  // Zero-byte NIfTI must be checked BEFORE the generic "no NIfTI" branch —
-  // "NIfTI file appears to be empty" would otherwise match "nifti file appears".
   if (lower.includes("nifti file appears") || lower.includes("appears to be empty") ||
       lower.includes("zero-byte") || lower.includes("empty nifti"))
     return "Zero-byte NIfTI file detected";
 
   if (lower.includes("no .nii") || lower.includes("no nifti") || lower.includes("missing nifti"))
-    return "No NIfTI files found";
+    return "No output files found";
 
-  // EXPECTED_MAP_MISSING — keep the original message intact so the specific map
-  // name (e.g. "KTRANS") is visible.  Match: "Expected ... parameter map was not found."
-  if (lower.includes("expected") && lower.includes("parameter map") &&
-      lower.includes("not found"))
-    return text.length > 90 ? text.slice(0, 87) + "…" : text;
+  if (lower.includes("expected") && lower.includes("parameter map") && lower.includes("not found")) {
+    const m = text.match(/\b(ktrans|kep|vp|cbf|cbv|mtt|att|ve|vb|adc|t1|t2)\b/i) ||
+              text.match(/expected[^a-z]+([A-Za-z0-9]+)\s+parameter/i);
+    const mapName = m ? m[1].toUpperCase() : null;
+    return mapName ? `Missing expected map: ${mapName}` : "Expected parameter map not found";
+  }
 
   if (lower.includes("readme") || lower.includes("sop"))
-    return "README / SOP file missing";
+    return "README or SOP file missing";
 
-  // MAP_TYPE_UNDETECTED / MAP_TYPE_MIXED — only match when the message is
-  // explicitly about detection failure, NOT about a missing expected map.
+  if (lower.includes("metadata") && (lower.includes("missing") || lower.includes("invalid") ||
+      lower.includes("not found")))
+    return "Metadata file missing or invalid";
+
   if (lower.includes("map type could not") || lower.includes("could not auto-detect") ||
       lower.includes("multiple parameter map types") ||
       (lower.includes("map type") && (lower.includes("auto") || lower.includes("undetect"))))
     return "Parameter map type could not be determined";
+
+  if (lower.includes("count mismatch") || lower.includes("nifti_count_mismatch") ||
+      (lower.includes("were expected") && lower.includes("found")))
+    return "NIfTI count does not match expected";
+
+  if (lower.includes("duplicate") && lower.includes("file"))
+    return "Duplicate filename in submission";
+
+  if (lower.includes("no output maps found") || lower.includes("no existing output maps") ||
+      lower.includes("maps will be generated"))
+    return "No pre-existing output maps (will be generated on run)";
+
+  if (lower.includes("no run instructions") || lower.includes("run instructions not found"))
+    return "No run instructions found";
+
+  if (lower.includes("multiple dockerfiles") || lower.includes("multiple run instructions"))
+    return "Multiple run instruction files found";
+
+  if (lower.includes("dockerfile") && (lower.includes("missing") || lower.includes("not found")))
+    return "Run instructions not found";
 
   if (lower.includes("dockerfile") || lower.includes("code file"))
     return "No code files detected";
@@ -130,44 +191,88 @@ function formatDate(iso) {
   } catch { return iso.slice(0, 16).replace("T", " "); }
 }
 
-// ── Batch state ───────────────────────────────────────────────────────────────
+function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
+  const checks    = [];
+  const allIssues = [...(data.errors || []), ...(data.warnings || [])]
+    .map(msgText).map((t) => t.toLowerCase());
+  const hasIssue  = (...needles) =>
+    allIssues.some((m) => needles.some((n) => m.includes(n)));
 
-const batchState = {
-  uploadData:      null,   // full /api/upload-batch response
-  selectedIds:     new Set(),
-  batchId:         null,   // returned by /api/validate-batch
-  validationData:  null,   // full /api/validate-batch response
+  if (Number(data.nifti_count) > 0 &&
+      !hasIssue("no .nii", "no nifti", "nifti file appears", "missing nifti"))
+    checks.push(`${data.nifti_count} NIfTI file${data.nifti_count !== 1 ? "s" : ""} detected`);
+  if (!hasIssue("readme", "sop", "metadata"))
+    checks.push("README / SOP found");
+  if (!hasIssue("code file", "dockerfile", "requirements", "no_code"))
+    checks.push("Code files present");
+  if (!hasIssue("map type", "auto-detect", "map_type", "parameter map was not found")) {
+    const mt = data.map_type || detectedMapType || state.detection.detected_parameter_map_type;
+    if (mt && mt !== "Unknown")
+      checks.push(`Parameter map type identified: ${mt}`);
+  }
+  if (!hasIssue("were expected", "count mismatch", "nifti_count_mismatch", "expected parameter map"))
+    checks.push("Map count matches expectations");
+  if (errCount === 0 && warnCount === 0)
+    checks.push("All checks passed — submission is ready for scoring");
+
+  return checks;
+}
+
+// ── Workflow navigation ───────────────────────────────────────────────────────
+
+const WF_STEPS = ["upload", "index", "validate", "run", "score", "export"];
+
+const STEP_TITLES = {
+  upload:   { title: "Upload",             sub: "Submit parameter maps for automated validation" },
+  index:    { title: "Index",              sub: "Detected submissions ready to validate" },
+  validate: { title: "Validate",           sub: "Validation results for all submissions" },
+  run:      { title: "Run",                sub: "Execute validated submissions" },
+  score:    { title: "Score",              sub: "Score validated submissions using the OSIPI TF6.2 provider" },
+  export:   { title: "Export",             sub: "Download results as CSV" },
 };
 
-// ── Docker availability ───────────────────────────────────────────────────────
-// Cached after the first check; null = not yet checked.
-
-const dockerStatus = { available: null, version: "", message: "" };
-
-async function checkDockerAvailability() {
-  if (dockerStatus.available !== null) return dockerStatus;  // use cache
-  try {
-    const res  = await fetch(`${API}/api/execution-status`);
-    const data = await res.json();
-    dockerStatus.available = !!data.docker_available;
-    dockerStatus.version   = data.docker_version || "";
-    dockerStatus.message   = data.message || "";
-  } catch (err) {
-    dockerStatus.available = false;
-    dockerStatus.message   = "Could not reach backend to check Docker availability.";
-  }
-  return dockerStatus;
+function goToStep(step) {
+  wf.step = step;
+  WF_STEPS.forEach((s) => {
+    const panel = el(`step-${s}`);
+    if (panel) panel.hidden = (s !== step);
+  });
+  _syncWfNav();
+  // Scroll the content area (sidebar layout), not the window
+  document.querySelector(".content")?.scrollTo({ top: 0, behavior: "instant" });
+  // Update header title
+  const titles = STEP_TITLES[step] || {};
+  const hTitle = el("page-title");
+  const hSub   = el("page-subtitle");
+  if (hTitle) hTitle.textContent  = titles.title || step;
+  if (hSub)   hSub.textContent    = titles.sub   || "";
+  // Persist step to session
+  saveSessionState();
 }
 
-// ── Screen switching ──────────────────────────────────────────────────────────
-
-function showScreen(screenId) {
-  if (submissionScreen)   submissionScreen.hidden   = (screenId !== "submission-screen");
-  if (resultsScreen)      resultsScreen.hidden      = (screenId !== "results-screen");
-  if (batchScreen)        batchScreen.hidden        = (screenId !== "batch-screen");
-  if (batchResultsScreen) batchResultsScreen.hidden = (screenId !== "batch-results-screen");
-  window.scrollTo({ top: 0, behavior: "instant" });
+function unlockStep(step) {
+  const btn = el(`wf-btn-${step}`);
+  if (btn) btn.disabled = false;
 }
+
+function _syncWfNav() {
+  WF_STEPS.forEach((s) => {
+    const btn = el(`wf-btn-${s}`);
+    if (!btn) return;
+    btn.classList.toggle("wf-active", s === wf.step);
+  });
+}
+
+// Wire wf-nav button clicks
+document.querySelectorAll(".wf-step[data-step]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    goToStep(btn.dataset.step);
+    // Refresh step-specific content on nav click
+    if (btn.dataset.step === "run")   _renderRunPanel();
+    if (btn.dataset.step === "score") renderScoreStep().catch(() => {});
+  });
+});
 
 // ── Form getters ──────────────────────────────────────────────────────────────
 
@@ -199,18 +304,15 @@ function getMapTypeMode() { return state.selectedMapType ? "manual" : "auto"; }
 
 function submitLabel() {
   if (state.mode === "edit" && state.submissionId) return "Save Changes and Revalidate";
-  return "Upload and Validate";
+  return "Upload and Detect";
 }
 
-// Always re-enables the button and sets the correct label.
-// Safe to call from action handlers regardless of previous button state.
 function syncSubmitLabel() {
   setLoading(el("submit-btn"), false, submitLabel());
 }
 
-// ── State reset helpers ───────────────────────────────────────────────────────
+// ── State reset ───────────────────────────────────────────────────────────────
 
-// Clear submission-specific data; leave metadata fields (team, email, challenge, map type) intact.
 function clearSubmissionData() {
   state.submissionId      = null;
   state.validationResult  = null;
@@ -229,11 +331,30 @@ function clearSubmissionData() {
   clearSubmitStatus();
 }
 
-// Full reset — clears everything including metadata fields.
 function resetAll() {
   clearSubmissionData();
-  state.mode          = "new";
+  state.mode            = "new";
   state.selectedMapType = null;
+
+  batchState.uploadData      = null;
+  batchState.selectedIds.clear();
+  batchState.batchId         = null;
+  batchState.validationData  = null;
+  batchState.isBatch         = false;
+
+  // Reset nav steps
+  ["index", "validate", "run", "export"].forEach((s) => {
+    const btn = el(`wf-btn-${s}`);
+    if (btn) btn.disabled = true;
+    if (btn) btn.classList.remove("wf-done", "wf-warn", "wf-fail");
+  });
+
+  // Clear persisted session
+  clearSessionState();
+
+  // Session chip
+  const chip = el("session-chip");
+  if (chip) chip.style.display = "none";
 
   ["team-name", "contact-email", "challenge-type-other", "map-type-other"].forEach((id) => {
     const f = el(id); if (f) f.value = "";
@@ -258,7 +379,340 @@ function resetAll() {
   if (ctErr) ctErr.textContent = "";
 }
 
-// ── Parameter Map Type pills ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Session persistence  (localStorage key: osipi_pipeline_session_v1)
+// Rules:
+//   • No auto-restore — banner shown, user must click "Restore"
+//   • 24 h expiry — expired sessions are silently discarded
+//   • No files, logs, CSVs, or large arrays stored — IDs and summaries only
+// ══════════════════════════════════════════════════════════════════════════════
+
+function _generateSessionId() {
+  return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function saveSessionState() {
+  try {
+    const existing = loadSessionState();
+    const now      = new Date().toISOString();
+
+    const submissions = (batchState.uploadData?.submissions || []).map((s) => ({
+      submission_id:               s.submission_id,
+      nifti_count:                 s.nifti_count,
+      detected_parameter_map_type: s.detected_parameter_map_type,
+      has_run_instructions:        s.has_run_instructions,
+      source_folder:               s.source_folder,
+      detection_warning:           s.detection_warning,
+      status:                      s.status,
+    }));
+
+    const validationSummary = batchState.validationData ? {
+      batchId:     batchState.batchId,
+      total:       (batchState.validationData.results || []).length,
+      passedCount: batchState.validationData.passed_count || 0,
+      failedCount: batchState.validationData.failed_count || 0,
+      results:     (batchState.validationData.results || []).map((r) => ({
+        submission_id:      r.submission_id,
+        passed:             r.passed,
+        errorCount:         (r.errors   || []).length,
+        warningCount:       (r.warnings || []).length,
+        mapType:            r.map_type,
+        niftiCount:         r.nifti_count,
+        hasRunInstructions: r.has_run_instructions,
+        runReadiness:       r.run_readiness || null,
+        challengeType:      r.challenge_type,
+        teamName:           r.team_name,
+        contactEmail:       r.contact_email,
+        validatedAt:        r.validated_at,
+        // Store first 3 errors/warnings as short text only — no raw logs
+        topErrors:   (r.errors   || []).slice(0, 3).map((e) => msgText(e).slice(0, 80)),
+        topWarnings: (r.warnings || []).slice(0, 3).map((w) => msgText(w).slice(0, 80)),
+      })),
+    } : null;
+
+    const payload = {
+      version:            SESSION_VERSION,
+      sessionId:          existing?.sessionId || _generateSessionId(),
+      createdAt:          existing?.createdAt || now,
+      updatedAt:          now,
+      step:               wf.step,
+      submissionId:       state.submissionId,
+      batchId:            batchState.batchId,
+      isBatch:            batchState.isBatch,
+      sourceType:         getSourceType(),
+      challengeType:      getChallengeType(),
+      mapType:            state.selectedMapType,
+      teamName:           getTeamName(),
+      contactEmail:       getEmail(),
+      submissions,
+      selectedIds:        [...batchState.selectedIds],
+      validationSummary,
+      executionSummaries: { ..._execSummaries },
+      // Scoring: store provider/status snapshot only — no metric values
+      scoringSnapshot:    _collectScoringSnapshot(),
+    };
+
+    localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+  } catch (_) { /* localStorage unavailable or full — fail silently */ }
+}
+
+function loadSessionState() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.version !== SESSION_VERSION) { clearSessionState(); return null; }
+    // Expiry check
+    const updatedAt = parsed.updatedAt ? new Date(parsed.updatedAt).getTime() : 0;
+    if (Date.now() - updatedAt > SESSION_EXPIRY_MS) {
+      clearSessionState();
+      return null;
+    }
+    return parsed;
+  } catch (_) { return null; }
+}
+
+function clearSessionState() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
+  // Reset exec summaries too
+  Object.keys(_execSummaries).forEach((k) => delete _execSummaries[k]);
+}
+
+// Collect provider status snapshot from the DOM (after score step renders)
+function _collectScoringSnapshot() {
+  const grid = el("score-provider-grid");
+  if (!grid) return [];
+  return [...grid.querySelectorAll(".score-provider-card")].map((card) => ({
+    displayName: card.querySelector(".spc-title")?.textContent?.trim()       || "",
+    status:      card.querySelector(".spc-status-label")?.textContent?.trim() || "",
+  }));
+}
+
+// ── Restore banner ────────────────────────────────────────────────────────────
+
+function showRestoreBanner(saved) {
+  const banner = el("restore-banner");
+  if (!banner) return;
+
+  const infoEl = el("restore-banner-info");
+  if (infoEl) {
+    // Only non-sensitive summary — no team name, email, file paths, or IDs
+    const parts = ["Previous local session found"];
+
+    const subs      = saved.submissions?.length || 0;
+    const typeLabel = saved.isBatch
+      ? `Batch upload · ${subs} submission${subs !== 1 ? "s" : ""}`
+      : "Single submission";
+    parts.push(typeLabel);
+
+    const stepTitle = STEP_TITLES[saved.step]?.title || saved.step || "";
+    if (stepTitle) parts.push(`last step: ${stepTitle}`);
+
+    // Time only — not date, not team, not email
+    if (saved.updatedAt) {
+      try {
+        const timeStr = new Date(saved.updatedAt).toLocaleTimeString("en-US", {
+          hour: "numeric", minute: "2-digit",
+        });
+        parts.push(`saved ${timeStr}`);
+      } catch (_) {}
+    }
+
+    infoEl.textContent = parts.join(" · ") + ".";
+  }
+  banner.style.display = "";
+}
+
+function _hideRestoreBanner() {
+  const banner = el("restore-banner");
+  if (banner) banner.style.display = "none";
+}
+
+// ── Restore logic ─────────────────────────────────────────────────────────────
+
+async function restoreSessionFromStorage() {
+  const saved = loadSessionState();
+  if (!saved) return false;
+
+  // 1. Restore form values
+  const teamField  = el("team-name");
+  const emailField = el("contact-email");
+  if (teamField  && saved.teamName)     teamField.value  = saved.teamName;
+  if (emailField && saved.contactEmail) emailField.value = saved.contactEmail;
+
+  // Restore challenge type radio
+  if (saved.challengeType) {
+    const radio = document.querySelector(
+      `input[name='challenge_type'][value='${saved.challengeType}']`
+    );
+    if (radio) {
+      radio.checked = true;
+      const wrap = el("challenge-other-wrap");
+      if (wrap) wrap.style.display = (saved.challengeType === "other") ? "block" : "none";
+    }
+    updateMapTypePills(saved.challengeType);
+  }
+
+  // Restore map type pill selection
+  if (saved.mapType) {
+    state.selectedMapType = saved.mapType;
+    updateMapTypePills(saved.challengeType || "dce");
+  }
+
+  // Restore source type radio
+  if (saved.sourceType) {
+    const radio = document.querySelector(
+      `input[name='submission_type'][value='${saved.sourceType}']`
+    );
+    if (radio) { radio.checked = true; switchSource(saved.sourceType); }
+  }
+
+  // 2. Restore batch/submission state (no files — backend already has them)
+  state.submissionId  = saved.submissionId || null;
+  batchState.isBatch  = !!saved.isBatch;
+  batchState.batchId  = saved.batchId || null;
+  batchState.selectedIds = new Set(saved.selectedIds || []);
+
+  if (saved.submissions && saved.submissions.length > 0) {
+    batchState.uploadData = {
+      batch:            saved.isBatch,
+      submission_count: saved.submissions.length,
+      submissions:      saved.submissions,
+    };
+  }
+
+  // Restore execution summaries
+  if (saved.executionSummaries) {
+    Object.assign(_execSummaries, saved.executionSummaries);
+  }
+
+  // 3. Unlock steps up to the saved step
+  const stepOrder    = ["upload", "index", "validate", "run", "score", "export"];
+  const savedStepIdx = stepOrder.indexOf(saved.step);
+  if (savedStepIdx >= 1) stepOrder.slice(1, savedStepIdx + 1).forEach((s) => unlockStep(s));
+
+  // 4. Re-render index table
+  if (savedStepIdx >= 1 && batchState.uploadData) {
+    renderBatchTable(batchState.uploadData.submissions);
+  }
+
+  // 5. Re-render validation table from summary
+  if (savedStepIdx >= 2 && saved.validationSummary) {
+    const synthData = _synthValidationData(saved.validationSummary);
+    batchState.validationData = synthData;
+    // renderValidateStep may auto-advance to "run" — we'll override with goToStep after
+    renderValidateStep(synthData);
+  }
+
+  // 6. Apply saved exec summaries to run rows (after run step renders)
+  if (savedStepIdx >= 3 && Object.keys(_execSummaries).length > 0) {
+    renderRunStep().then(() => _applyExecSummariesToRows()).catch(() => {});
+  }
+
+  // 7. Navigate to the saved step (overrides any auto-advance)
+  goToStep(saved.step);
+  _updateSessionChip();
+
+  // 8. Async: verify backend files still exist
+  const firstSubId = saved.submissionId || saved.submissions?.[0]?.submission_id;
+  if (firstSubId && savedStepIdx >= 1) {
+    _verifyBackendFiles(firstSubId);
+  }
+
+  return true;
+}
+
+// Build a synthetic validation data object from a persisted summary (no full error arrays)
+function _synthValidationData(summary) {
+  const results = (summary.results || []).map((r) => ({
+    submission_id:        r.submission_id,
+    passed:               r.passed,
+    errors:               r.topErrors   || [],
+    warnings:             r.topWarnings || [],
+    nifti_count:          r.niftiCount,
+    map_type:             r.mapType,
+    has_run_instructions: r.hasRunInstructions,
+    run_readiness:        r.runReadiness || null,
+    challenge_type:       r.challengeType,
+    team_name:            r.teamName,
+    contact_email:        r.contactEmail,
+    validated_at:         r.validatedAt,
+    _restored:            true,
+  }));
+  return {
+    batch_id:     summary.batchId,
+    results,
+    passed_count: summary.passedCount,
+    failed_count: summary.failedCount,
+    _restored:    true,
+  };
+}
+
+// Apply saved exec summaries to the run table rows (status labels only, no logs)
+function _applyExecSummariesToRows() {
+  Object.entries(_execSummaries).forEach(([subId, summary]) => {
+    const wrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+      .find((w) => w.dataset.subId === subId);
+    if (!wrap) return;
+    const prevStatus = wrap.dataset.execStatus;
+    if (prevStatus && prevStatus !== "not-run") return; // already updated
+    const newStatus = summary.status || "failed";
+    wrap.dataset.execStatus = newStatus;
+    const runnable = wrap.dataset.runnable === "true";
+    const statusCell = wrap.querySelector(".er-run-status-cell");
+    if (statusCell) statusCell.innerHTML = _erRunStatusHtml(newStatus, runnable);
+    const outputsCell = wrap.querySelector(".er-outputs-cell");
+    if (outputsCell && summary.outputFileCount > 0) {
+      const fc = summary.outputFileCount;
+      outputsCell.innerHTML = `<span class="vr-run-ok">${fc} file${fc !== 1 ? "s" : ""}</span>`;
+    }
+    const outCheckCell = wrap.querySelector(".er-outcheck-cell");
+    if (outCheckCell) {
+      outCheckCell.innerHTML = `<span style="font-size:0.72rem;color:var(--muted)">from session</span>`;
+    }
+    // Note in detail area
+    const drawer = wrap.querySelector(".er-row-detail");
+    if (drawer) {
+      drawer.innerHTML = `<p style="font-size:0.73rem;color:var(--muted);margin:0">Session restored — re-run to see full logs.</p>`;
+    }
+  });
+  if (typeof _applyRunFilters === "function") _applyRunFilters();
+}
+
+// Check whether backend files exist for the restored session
+async function _verifyBackendFiles(submissionId) {
+  try {
+    const res  = await fetch(`${API}/api/nifti-files/${encodeURIComponent(submissionId)}`);
+    const data = await res.json();
+    // If directory exists but is empty, files were deleted
+    if (res.ok && Array.isArray(data.files) && data.files.length === 0) {
+      _showRestoreWarning(
+        "Saved session found, but backend files are no longer available. Please upload again."
+      );
+      clearSessionState();
+    }
+  } catch (_) { /* network error during check — silent */ }
+}
+
+function _showRestoreWarning(msg) {
+  const banner = el("restore-banner");
+  if (!banner) return;
+  banner.style.display = "";
+  banner.style.background = "#fff7ed";
+  banner.style.borderColor = "#fed7aa";
+  const infoEl = el("restore-banner-info");
+  if (infoEl) {
+    infoEl.textContent = msg;
+    infoEl.style.color = "#c2410c";
+  }
+  const infoSvg = banner.querySelector("svg");
+  if (infoSvg) infoSvg.style.color = "#f97316";
+  // Hide restore button, keep only Start new
+  const restoreBtn = el("restore-session-btn");
+  if (restoreBtn) restoreBtn.style.display = "none";
+}
+
+// ── Map type pills ────────────────────────────────────────────────────────────
 
 function updateMapTypePills(challengeType) {
   const container = el("map-type-pills");
@@ -266,7 +720,6 @@ function updateMapTypePills(challengeType) {
 
   const options = MAP_OPTIONS[challengeType] || MAP_OPTIONS.other;
 
-  // Deselect if current selection isn't valid for the new challenge type
   if (state.selectedMapType && !options.includes(state.selectedMapType)) {
     state.selectedMapType = null;
     const otherWrap = el("map-type-other-wrap");
@@ -290,7 +743,6 @@ function selectMapPill(value) {
   const container = el("map-type-pills");
   if (!container) return;
 
-  // Toggle off if already selected
   if (state.selectedMapType === value) {
     state.selectedMapType = null;
     const otherWrap = el("map-type-other-wrap");
@@ -471,7 +923,6 @@ function validateForm() {
 
   const srcErr = el("source-error");
   if (srcErr) srcErr.textContent = "";
-  // Skip file/URL check in edit mode — existing submission is reused
   if (!(state.mode === "edit" && state.submissionId)) {
     const source = getSourceType();
     if (source === "zenodo") {
@@ -508,7 +959,6 @@ async function uploadLocalFiles() {
   const isZip = files.length === 1 && files[0].name.toLowerCase().endsWith(".zip");
 
   if (isZip) {
-    // Always use the batch endpoint — it auto-detects single vs. multi-submission
     const fd = new FormData();
     fd.append("file", files[0]);
     const res  = await fetch(`${API}/api/upload-batch`, { method: "POST", body: fd });
@@ -517,7 +967,6 @@ async function uploadLocalFiles() {
     return data;
   }
 
-  // Folder / multi-file upload — use the batch-aware folder endpoint
   const fd = new FormData();
   files.forEach((f) => fd.append("files", f, f.webkitRelativePath || f.name));
   const res  = await fetch(`${API}/api/upload-folder-batch`, { method: "POST", body: fd });
@@ -554,18 +1003,18 @@ async function importGithub() {
   return data;
 }
 
-// ── Validate ──────────────────────────────────────────────────────────────────
+// ── Single-submission validate call ──────────────────────────────────────────
 
 async function runValidation() {
-  const mapType = getMapType();
   const payload = {
     submission_id:  state.submissionId,
     challenge_type: getChallengeType(),
     team_name:      getTeamName()  || null,
     contact_email:  getEmail()     || null,
-    map_type:       mapType,
+    map_type:       getMapType(),
     map_type_mode:  getMapTypeMode(),
     notes:          null,
+    mode:           "auto",
   };
 
   const res  = await fetch(`${API}/api/validate`, {
@@ -578,7 +1027,7 @@ async function runValidation() {
   return data;
 }
 
-// ── Submit handler ────────────────────────────────────────────────────────────
+// ── Submit button status ──────────────────────────────────────────────────────
 
 function showSubmitStatus(type, msg) {
   const s = el("submit-status");
@@ -595,6 +1044,24 @@ function clearSubmitStatus() {
   s.textContent = "";
 }
 
+// ── Session chip ──────────────────────────────────────────────────────────────
+
+function _updateSessionChip() {
+  const chip = el("session-chip");
+  const teamEl = el("session-team");
+  const challEl = el("session-challenge");
+  if (!chip) return;
+  const team  = getTeamName();
+  const chall = getChallengeType().toUpperCase();
+  if (team || chall) {
+    if (teamEl)  teamEl.textContent  = team  || "—";
+    if (challEl) challEl.textContent = chall || "—";
+    chip.style.display = "";
+  }
+}
+
+// ── Submit handler ────────────────────────────────────────────────────────────
+
 const submitBtn = el("submit-btn");
 if (submitBtn) submitBtn.addEventListener("click", handleSubmit);
 
@@ -606,25 +1073,24 @@ async function handleSubmit() {
   const btn = el("submit-btn");
   clearSubmitStatus();
 
-  // ── Edit mode: reuse existing submission, only re-validate ────────────────
+  // ── Edit mode: reuse existing submission, re-validate ────────────────────
   if (state.mode === "edit" && state.submissionId) {
     setLoading(btn, true, "Saving & Revalidating");
     try {
-      state.validationResult = await runValidation();
-      showResults(state.validationResult);
+      const result = await runValidation();
+      state.validationResult = result;
+      // Normalize to batch-of-1 and re-render validate step
+      _renderSingleAsValidate(result);
     } catch (err) {
       showSubmitStatus("error", err.message || "Validation failed.");
     } finally {
       requestInProgress = false;
-      // Always re-enable the button with the correct label, even after showResults.
-      // The button is on the submission screen (now hidden), so this is invisible
-      // but ensures it's ready when the user returns via Edit Details.
       setLoading(btn, false, submitLabel());
     }
     return;
   }
 
-  // ── Upload + validate (new or replace) ───────────────────────────────────
+  // ── Upload + detect ───────────────────────────────────────────────────────
   setLoading(btn, true, "Uploading");
   try {
     const source = getSourceType();
@@ -634,502 +1100,79 @@ async function handleSubmit() {
     else if (source === "zenodo") { showSubmitStatus("info", "Importing from Zenodo…");  importData = await importZenodo();  }
     else if (source === "github") { showSubmitStatus("info", "Importing from GitHub…");  importData = await importGithub();  }
 
-    state.pendingLocalFiles = null;  // Free memory — upload complete
-
-    // ── Batch detected — hand off to batch dashboard ──────────────────────
-    if (importData.batch === true) {
-      clearSubmitStatus();
-      requestInProgress = false;
-      setLoading(btn, false, submitLabel());
-      showBatchDashboard(importData);
-      return;
-    }
-
-    // ── Single submission — continue with normal validation flow ──────────
-    state.submissionId = importData.submission_id;
-    state.detection = {
-      nifti_count: Number.isFinite(Number(importData.nifti_count))
-        ? Number(importData.nifti_count) : null,
-      detected_parameter_map_type: importData.detected_parameter_map_type || "Unknown",
-    };
-
-    if (btn) btn.innerHTML = `<span class="spinner"></span>Validating…`;
-    showSubmitStatus("info", "Running validation…");
-
-    state.validationResult = await runValidation();
+    state.pendingLocalFiles = null;
     clearSubmitStatus();
-    showResults(state.validationResult);
+
+    _updateSessionChip();
+
+    if (importData.batch === true) {
+      // ── Multi-submission batch ─────────────────────────────────────────
+      batchState.isBatch    = true;
+      batchState.uploadData = importData;
+      batchState.selectedIds = new Set(importData.submissions.map((s) => s.submission_id));
+      batchState.batchId    = null;
+      batchState.validationData = null;
+
+      const desc = el("batch-header-desc");
+      if (desc) {
+        const sourceLabel = importData.source_type && importData.source_type !== "local"
+          ? `${importData.source_type.charAt(0).toUpperCase() + importData.source_type.slice(1)}: `
+          : "";
+        const name  = importData.original_filename || "upload";
+        const count = importData.submission_count;
+        desc.textContent = `${sourceLabel}"${name}" contains ${count} submission${count !== 1 ? "s" : ""}.`;
+      }
+
+      renderBatchTable(importData.submissions);
+      unlockStep("index");
+      goToStep("index");
+    } else {
+      // ── Single submission — normalize to index step ────────────────────
+      batchState.isBatch = false;
+      state.submissionId = importData.submission_id;
+      state.detection = {
+        nifti_count: Number.isFinite(Number(importData.nifti_count)) ? Number(importData.nifti_count) : null,
+        detected_parameter_map_type: importData.detected_parameter_map_type || "Unknown",
+      };
+
+      const fakeUpload = {
+        batch: false,
+        original_filename: importData.original_filename || importData.submission_id,
+        submission_count: 1,
+        source_type: source,
+        submissions: [{
+          submission_id: importData.submission_id,
+          nifti_count:   importData.nifti_count ?? null,
+          detected_parameter_map_type: importData.detected_parameter_map_type || "Unknown",
+          has_run_instructions: importData.has_run_instructions ?? importData.has_dockerfile ?? null,
+          source_folder: importData.source_folder || null,
+          detection_warning: importData.detection_warning || null,
+          status: "ready",
+        }],
+      };
+
+      batchState.uploadData = fakeUpload;
+      batchState.selectedIds = new Set([importData.submission_id]);
+
+      const desc = el("batch-header-desc");
+      if (desc) {
+        const name = importData.original_filename || importData.submission_id;
+        desc.textContent = `Detected 1 submission: "${name}".`;
+      }
+
+      renderBatchTable(fakeUpload.submissions);
+      unlockStep("index");
+      goToStep("index");
+    }
   } catch (err) {
-    showSubmitStatus("error", err.message || "Upload or validation failed. Is the server running?");
+    showSubmitStatus("error", err.message || "Upload failed. Is the server running?");
   } finally {
     requestInProgress = false;
-    // Always re-enable the button. On success the user is on the results screen
-    // and won't see this, but the button must be ready when they return to the form.
     setLoading(btn, false, submitLabel());
   }
 }
 
-// ── Render results ────────────────────────────────────────────────────────────
-
-function showResults(data) {
-  // Do NOT touch state.mode here — it is managed exclusively by the action buttons.
-
-  // If nifti_count > 0, suppress any spurious "No NIfTI files found" that
-  // can appear when a zero-byte NIfTI warning is mis-simplified.
-  const _niftiCount = Number(data.nifti_count ?? 0);
-  const _noNiftiLabel = "No NIfTI files found";
-  const _filterSpurious = (msgs) =>
-    _niftiCount > 0 ? msgs.filter((m) => m !== _noNiftiLabel) : msgs;
-
-  const errors   = _filterSpurious(dedupeMessages((data.errors   || []).map(simplifyMessage)));
-  const warnings = _filterSpurious(dedupeMessages((data.warnings || []).map(simplifyMessage)))
-    .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
-
-  const errCount  = errors.length;
-  const warnCount = warnings.length;
-
-  const banner = el("result-banner");
-  if (banner) {
-    banner.className = "result-banner";
-    const icon  = el("banner-icon");
-    const title = el("banner-title");
-    const sub   = el("banner-sub");
-
-    if (errCount > 0) {
-      banner.classList.add("banner-fail");
-      if (icon)  icon.textContent  = "✕";
-      if (title) title.textContent = "Changes required";
-      if (sub)   sub.textContent   = `${errCount} blocking error${errCount !== 1 ? "s" : ""} must be resolved before scoring.`;
-    } else if (warnCount > 0) {
-      banner.classList.add("banner-warn");
-      if (icon)  icon.textContent  = "!";
-      if (title) title.textContent = "Passed with warnings";
-      if (sub)   sub.textContent   = `${warnCount} warning${warnCount !== 1 ? "s" : ""} — submission accepted but review recommended.`;
-    } else {
-      banner.classList.add("banner-pass");
-      if (icon)  icon.textContent  = "✓";
-      if (title) title.textContent = "Ready for scoring";
-      if (sub)   sub.textContent   = "All validation checks passed.";
-    }
-  }
-
-  const mapTypeDisplay = data.map_type || state.detection.detected_parameter_map_type || "Unknown";
-  const niftiCount     = data.nifti_count ?? state.detection.nifti_count ?? "—";
-  const summaryItems   = [
-    ["Team",           data.team_name     || getTeamName() || "—"],
-    ["Email",          data.contact_email || getEmail()    || "—"],
-    ["Challenge Type", (data.challenge_type || getChallengeType() || "—").toUpperCase()],
-    ["Parameter Map",  mapTypeDisplay],
-    ["NIfTI Files",    `${niftiCount} detected`],
-    ["Validated At",   formatDate(data.validated_at || data.checked_at) || "—"],
-  ];
-
-  const grid = el("summary-grid");
-  if (grid) {
-    grid.innerHTML = "";
-    summaryItems.forEach(([key, val]) => {
-      const dt = document.createElement("dt"); dt.textContent = key;
-      const dd = document.createElement("dd"); dd.textContent = val;
-      grid.append(dt, dd);
-    });
-  }
-
-  renderIssueSection("errors-section",   "errors-list",   errors);
-  renderIssueSection("warnings-section", "warnings-list", warnings);
-  renderIssueSection("checks-section",   "checks-list",   buildSuccessChecks(data, errCount, warnCount));
-
-  const files = data.files || data.file_list || [];
-  const invDetails = el("inventory-details");
-  if (invDetails) {
-    if (files.length) {
-      invDetails.style.display = "block";
-      const countEl = el("inventory-count");
-      if (countEl) countEl.textContent = `(${files.length} file${files.length !== 1 ? "s" : ""})`;
-      const ul = el("inventory-list");
-      if (ul) {
-        ul.innerHTML = "";
-        files.forEach((f) => {
-          const li = document.createElement("li");
-          li.textContent = typeof f === "string" ? f : (f.path || f.name || JSON.stringify(f));
-          ul.appendChild(li);
-        });
-      }
-    } else {
-      invDetails.style.display = "none";
-    }
-  }
-
-  // Store submission context for the execute section.
-  window._currentSubmissionId  = data.submission_id || null;
-  window._currentChallengeType = data.challenge_type || getChallengeType() || "dce";
-  // Only show execute section when there are no blocking errors.
-  if (typeof window._showExecuteSection === "function") window._showExecuteSection(errCount);
-
-  showScreen("results-screen");
-}
-
-function renderIssueSection(sectionId, listId, items) {
-  const section = el(sectionId);
-  const list    = el(listId);
-  if (!section) return;
-  if (!items || !items.length) { section.style.display = "none"; return; }
-  section.style.display = "block";
-  if (list) {
-    list.innerHTML = "";
-    items.forEach((msg) => {
-      const li = document.createElement("li"); li.textContent = msg; list.appendChild(li);
-    });
-  }
-}
-
-function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
-  const checks    = [];
-  const allIssues = [...(data.errors || []), ...(data.warnings || [])]
-    .map(msgText).map((t) => t.toLowerCase());
-  const hasIssue  = (...needles) =>
-    allIssues.some((m) => needles.some((n) => m.includes(n)));
-
-  if (Number(data.nifti_count) > 0 &&
-      !hasIssue("no .nii", "no nifti", "nifti file appears", "missing nifti"))
-    checks.push(`${data.nifti_count} NIfTI file${data.nifti_count !== 1 ? "s" : ""} detected`);
-  if (!hasIssue("readme", "sop", "metadata"))
-    checks.push("README / SOP found");
-  if (!hasIssue("code file", "dockerfile", "requirements", "no_code"))
-    checks.push("Code files present");
-  if (!hasIssue("map type", "auto-detect", "map_type", "parameter map was not found")) {
-    const mt = data.map_type || detectedMapType || state.detection.detected_parameter_map_type;
-    if (mt && mt !== "Unknown")
-      checks.push(`Parameter map type identified: ${mt}`);
-  }
-  if (!hasIssue("were expected", "count mismatch", "nifti_count_mismatch", "expected parameter map"))
-    checks.push("Map count matches expectations");
-  if (errCount === 0 && warnCount === 0)
-    checks.push("All checks passed — submission is ready for scoring");
-
-  return checks;
-}
-
-// ── Action buttons (attached once at startup) ─────────────────────────────────
-
-// Edit Details: return to form preserving all metadata + current submission ID
-const editBtn = el("edit-btn");
-if (editBtn) {
-  editBtn.addEventListener("click", () => {
-    state.mode = "edit";
-    clearSubmitStatus();
-    syncSubmitLabel();   // re-enables button + shows "Save Changes and Revalidate"
-    showScreen("submission-screen");
-  });
-}
-
-// Replace Submission: keep metadata, discard files + submission ID
-const replaceBtn = el("replace-btn");
-if (replaceBtn) {
-  replaceBtn.addEventListener("click", () => {
-    state.mode = "replace";
-    clearSubmissionData();   // clears submissionId, files, URL inputs, file label
-    const localRadio = document.querySelector("input[name='submission_type'][value='local']");
-    if (localRadio) localRadio.checked = true;
-    switchSource("local");
-    syncSubmitLabel();   // re-enables button + shows "Upload and Validate"
-    showScreen("submission-screen");
-  });
-}
-
-// Export Validation CSV
-const downloadBtn = el("download-btn");
-if (downloadBtn) {
-  downloadBtn.addEventListener("click", async () => {
-    const statusEl = el("download-status");
-    if (!state.submissionId) {
-      if (statusEl) {
-        statusEl.style.display = "block";
-        statusEl.className = "submit-status status-error";
-        statusEl.textContent = "No submission to export.";
-      }
-      return;
-    }
-    if (requestInProgress) return;
-    requestInProgress = true;
-    setLoading(downloadBtn, true, "Export Validation CSV");
-    if (statusEl) statusEl.style.display = "none";
-    try {
-      const url = `${API}/api/export-validation?submission_id=${encodeURIComponent(state.submissionId)}&format=csv`;
-      const res = await fetch(url);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
-      const blob = await res.blob();
-      triggerDownload(blob, `osipi-validation-${state.submissionId}.csv`);
-    } catch (err) {
-      if (statusEl) {
-        statusEl.style.display = "block";
-        statusEl.className = "submit-status status-error";
-        statusEl.textContent = err.message || "Could not export CSV.";
-      }
-    } finally {
-      requestInProgress = false;
-      setLoading(downloadBtn, false, "Export Validation CSV");
-    }
-  });
-}
-
-// Start New Submission: clear everything
-const newBtn = el("new-btn");
-if (newBtn) {
-  newBtn.addEventListener("click", () => {
-    resetAll();
-    syncSubmitLabel();   // re-enables button + shows "Upload and Validate"
-    showScreen("submission-screen");
-  });
-}
-
-// ── Docker Execution — shared render helpers ──────────────────────────────────
-
-function _execLogBlock(label, text) {
-  if (!text || !text.trim()) return "";
-  return `<details style="margin-top:8px">
-    <summary style="cursor:pointer;font-weight:500;font-size:13px">${escapeHtml(label)}</summary>
-    <pre style="max-height:240px;overflow:auto;background:var(--bg-muted,#f5f5f5);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;margin-top:6px">${escapeHtml(text.slice(0, 4096))}</pre>
-  </details>`;
-}
-
-function renderExecResult(data) {
-  const passed      = data.passed;
-  const timedOut    = data.timed_out;
-  const buildFailed = data.build_failed;
-  const badgeText   = timedOut    ? "⏱ Timed Out"
-                    : buildFailed ? "✗ Build Failed"
-                    : passed      ? "✓ Passed"
-                                  : "✗ Failed";
-  const badgeCls    = (timedOut || buildFailed || !passed) ? "badge-fail" : "badge-pass";
-  const outputFiles = Array.isArray(data.output_files) ? data.output_files : [];
-  const fileCount   = data.output_file_count ?? outputFiles.length;
-  const filesHtml   = outputFiles.length
-    ? `<ul style="margin:4px 0 0 16px;padding:0">${
-        outputFiles.map((f) => `<li><code>${escapeHtml(f)}</code></li>`).join("")
-      }</ul>`
-    : `<em style="color:var(--text-muted)">None</em>`;
-  return `
-    <div style="border:1px solid var(--divider);border-radius:6px;padding:12px 16px;background:var(--bg-card,#fff);font-size:13px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span class="${escapeHtml(badgeCls)}" style="font-weight:600;padding:2px 10px;border-radius:20px;font-size:12px">${badgeText}</span>
-        <span style="color:var(--text-muted)">Exit: <code>${data.exit_code ?? "—"}</code></span>
-      </div>
-      <div style="line-height:1.8">
-        <strong>Image:</strong> <code>${escapeHtml(data.image_name || "—")}</code><br>
-        <strong>Command:</strong> <code>${escapeHtml(data.command || "—")}</code><br>
-        <strong>Output files (${fileCount}):</strong> ${filesHtml}
-      </div>
-      ${_execLogBlock("stdout", data.stdout_preview)}${_execLogBlock("stderr", data.stderr_preview)}
-    </div>`;
-}
-
-function renderExecError(msg) {
-  return `<div style="color:var(--error,#c00);font-size:13px;padding:6px 0">${escapeHtml(msg)}</div>`;
-}
-
-// ── Single-submission execute section ─────────────────────────────────────────
-
-(function initExecuteSection() {
-  const executeBtn     = el("execute-btn");
-  const executeStatus  = el("execute-status");
-  const executeResult  = el("execute-result");
-  const executeSection = el("execute-section");
-
-  // Show the execute section only when validation passed (errCount === 0).
-  // Called from showResults() after rendering the banner.
-  window._showExecuteSection = function (errCount) {
-    if (!executeSection) return;
-    if (errCount > 0) {
-      executeSection.style.display = "none";
-      if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
-      if (executeStatus) executeStatus.style.display = "none";
-    } else {
-      executeSection.style.display = "";
-      if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
-      if (executeStatus) executeStatus.style.display = "none";
-    }
-  };
-
-  if (!executeBtn) return;
-
-  executeBtn.addEventListener("click", async () => {
-    const submissionId  = window._currentSubmissionId;
-    const challengeType = window._currentChallengeType || "dce";
-    if (!submissionId) return;
-
-    const timeoutSeconds = parseInt(el("execute-timeout")?.value || "300", 10) || 300;
-
-    executeBtn.disabled = true;
-    if (executeStatus) {
-      executeStatus.style.display = "";
-      executeStatus.className = "submit-status";
-      executeStatus.textContent = "Building Docker image and running submission… this may take a few minutes.";
-    }
-    if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
-
-    try {
-      const resp = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submission_id: submissionId, challenge_type: challengeType, timeout_seconds: timeoutSeconds }),
-      });
-      const data = await resp.json();
-
-      // Pre-flight errors (no Dockerfile, bad path, Docker missing) → 4xx
-      if (!resp.ok || !data.success) {
-        if (executeStatus) {
-          executeStatus.className = "submit-status status-error";
-          executeStatus.textContent = (data && (data.detail || data.message)) || "Docker execution failed.";
-        }
-        return;
-      }
-
-      if (executeStatus) executeStatus.style.display = "none";
-      if (executeResult) {
-        executeResult.style.display = "";
-        executeResult.innerHTML = renderExecResult(data);
-      }
-    } catch (err) {
-      if (executeStatus) {
-        executeStatus.className = "submit-status status-error";
-        executeStatus.textContent = "Network error: " + err.message;
-      }
-    } finally {
-      executeBtn.disabled = false;
-    }
-  });
-})();
-
-// ── Batch execution — per-card and Execute All Passed ─────────────────────────
-
-async function runBatchExec(btn, section) {
-  const subId     = section.dataset.subId;
-  const challenge = section.dataset.challenge || "dce";
-  const timeout   = parseInt(el("batch-exec-timeout")?.value || "300", 10) || 300;
-
-  // The exec-status badge lives in the parent exec-card <summary>
-  const card      = section.closest("details.exec-card");
-  const execBadge = card ? card.querySelector(".exec-status-badge") : null;
-  const resultDiv = section.querySelector(".batch-exec-result");
-
-  btn.disabled = true;
-  if (card) card.open = true;   // auto-open so progress is visible
-  if (execBadge) {
-    execBadge.className = "batch-badge badge-exec-run exec-status-badge";
-    execBadge.textContent = "Running…";
-  }
-  if (resultDiv) resultDiv.style.display = "none";
-
-  try {
-    const resp = await fetch("/api/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ submission_id: subId, challenge_type: challenge, timeout_seconds: timeout }),
-    });
-    const data = await resp.json();
-
-    if (!resp.ok || !data.success) {
-      if (execBadge) {
-        execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
-        execBadge.textContent = "✗ Failed";
-      }
-      if (resultDiv) {
-        resultDiv.style.display = "";
-        resultDiv.innerHTML = renderExecError((data && (data.detail || data.message)) || "Execution failed.");
-      }
-    } else {
-      const passed   = data.passed;
-      const timedOut = data.timed_out;
-      if (execBadge) {
-        if (timedOut) {
-          execBadge.className = "batch-badge badge-exec-warn exec-status-badge";
-          execBadge.textContent = "⏱ Timed out";
-        } else if (passed) {
-          execBadge.className = "batch-badge badge-exec-pass exec-status-badge";
-          execBadge.textContent = "✓ Passed";
-        } else {
-          execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
-          execBadge.textContent = "✗ Failed";
-        }
-      }
-      if (resultDiv) {
-        resultDiv.style.display = "";
-        resultDiv.innerHTML = renderExecResult(data);
-      }
-    }
-  } catch (err) {
-    if (execBadge) {
-      execBadge.className = "batch-badge badge-exec-fail exec-status-badge";
-      execBadge.textContent = "✗ Error";
-    }
-    if (resultDiv) {
-      resultDiv.style.display = "";
-      resultDiv.innerHTML = renderExecError("Network error: " + err.message);
-    }
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-// Event delegation: clicks on any .batch-exec-btn inside the exec cards panel
-(function initBatchExecDelegation() {
-  // Listen on the whole document so it works regardless of when exec cards are injected
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".batch-exec-btn");
-    if (!btn) return;
-    const section = btn.closest(".batch-exec-section");
-    if (!section) return;
-    e.stopPropagation();
-    await runBatchExec(btn, section);
-  });
-})();
-
-// "Execute All Passed" button
-(function initBatchExecAll() {
-  const btn      = el("batch-exec-all-btn");
-  const statusEl = el("batch-exec-status");
-  if (!btn) return;
-  btn.addEventListener("click", async () => {
-    // Only run sections that have an execute button (has Dockerfile) and Docker available
-    const sections = [...document.querySelectorAll("#batch-exec-cards .batch-exec-section")]
-      .filter((s) => s.querySelector(".batch-exec-btn"));
-    if (!sections.length) return;
-    btn.disabled = true;
-    if (statusEl) { statusEl.style.display = ""; statusEl.textContent = `Starting ${sections.length} execution(s)…`; }
-    let done = 0;
-    for (const section of sections) {
-      const execBtn = section.querySelector(".batch-exec-btn");
-      if (!execBtn) continue;
-      if (statusEl) statusEl.textContent = `Executing ${done + 1} of ${sections.length}…`;
-      await runBatchExec(execBtn, section);
-      done++;
-    }
-    if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
-    btn.disabled = false;
-  });
-})();
-
-// ── Batch Dashboard ───────────────────────────────────────────────────────────
-
-function showBatchDashboard(uploadData) {
-  batchState.uploadData     = uploadData;
-  batchState.selectedIds    = new Set(uploadData.submissions.map((s) => s.submission_id));
-  batchState.batchId        = null;
-  batchState.validationData = null;
-
-  const desc = el("batch-header-desc");
-  if (desc) {
-    const sourceLabel = uploadData.source_type && uploadData.source_type !== "local"
-      ? `${uploadData.source_type.charAt(0).toUpperCase() + uploadData.source_type.slice(1)}: `
-      : "";
-    const name  = uploadData.original_filename || "upload";
-    const count = uploadData.submission_count;
-    desc.textContent = `${sourceLabel}"${name}" contains ${count} submission${count !== 1 ? "s" : ""}.`;
-  }
-
-  renderBatchTable(uploadData.submissions);
-  showScreen("batch-screen");
-}
+// ── Step 2: Index — render the detected submissions table ─────────────────────
 
 function renderBatchTable(submissions) {
   const wrap = el("batch-table-wrap");
@@ -1146,6 +1189,7 @@ function renderBatchTable(submissions) {
         <th>Submission ID</th>
         <th>NIfTI</th>
         <th>Detected Map</th>
+        <th>Run Instructions</th>
         <th>Status</th>
       </tr>
     </thead>
@@ -1161,14 +1205,20 @@ function renderBatchTable(submissions) {
     const tr = document.createElement("tr");
     if (isSelected) tr.classList.add("selected-row");
 
-    // Escape all server-supplied strings before innerHTML insertion (XSS prevention)
-    const safeMapLabel  = escapeHtml(sub.detected_parameter_map_type || "Unknown");
-    const safeWarning   = escapeHtml(sub.detection_warning || "");
-    const safeFolder    = escapeHtml(sub.source_folder || "—");
-    const safeSubId     = escapeHtml(sub.submission_id);
+    const safeMapLabel = escapeHtml(sub.detected_parameter_map_type || "Unknown");
+    const safeWarning  = escapeHtml(sub.detection_warning || "");
+    const safeFolder   = escapeHtml(sub.source_folder || "—");
+    const safeSubId    = escapeHtml(sub.submission_id);
     const mapCell = safeWarning
       ? `${safeMapLabel}<div class="batch-warn-text">${safeWarning}</div>`
       : safeMapLabel;
+
+    const hasRun = sub.has_run_instructions ?? sub.has_dockerfile;
+    const runCell = hasRun === null || hasRun === undefined
+      ? `<span style="color:var(--subtle)">—</span>`
+      : hasRun
+        ? `<span style="color:var(--success);font-weight:600">Yes</span>`
+        : `<span style="color:var(--subtle)">No</span>`;
 
     const statusBadge = sub.status === "passed"
       ? `<span class="batch-badge badge-pass">Passed</span>`
@@ -1176,8 +1226,6 @@ function renderBatchTable(submissions) {
         ? `<span class="batch-badge badge-fail">Failed</span>`
         : `<span class="batch-badge badge-ready">Ready</span>`;
 
-    // submission_id is guaranteed alphanumeric+hyphens/underscores by _safe_id
-    // so it's safe to use directly in data- attributes and title without escaping.
     tr.innerHTML = `
       <td class="td-check">
         <input type="checkbox" data-id="${sub.submission_id}" ${isSelected ? "checked" : ""} />
@@ -1186,6 +1234,7 @@ function renderBatchTable(submissions) {
       <td class="td-id" title="${sub.submission_id}">${safeSubId}</td>
       <td>${sub.nifti_count ?? "—"}</td>
       <td>${mapCell}</td>
+      <td>${runCell}</td>
       <td>${statusBadge}</td>
     `;
 
@@ -1198,14 +1247,14 @@ function renderBatchTable(submissions) {
         batchState.selectedIds.delete(sub.submission_id);
         tr.classList.remove("selected-row");
       }
-      syncBatchHeaderCheckbox();
-      syncBatchValidateBtn();
+      _syncBatchHeaderCheckbox();
+      _syncBatchValidateBtn();
+      saveSessionState();
     });
 
     tbody.appendChild(tr);
   });
 
-  // Header checkbox
   const checkAll = table.querySelector("#batch-check-all");
   checkAll.checked = batchState.selectedIds.size === submissions.length;
   checkAll.addEventListener("change", () => {
@@ -1218,29 +1267,29 @@ function renderBatchTable(submissions) {
       cb.checked = batchState.selectedIds.has(cb.dataset.id);
       cb.closest("tr").classList.toggle("selected-row", cb.checked);
     });
-    syncBatchValidateBtn();
+    _syncBatchValidateBtn();
   });
 
-  syncBatchValidateBtn();
+  _syncBatchValidateBtn();
 }
 
-function syncBatchHeaderCheckbox() {
+function _syncBatchHeaderCheckbox() {
   const checkAll = document.querySelector("#batch-check-all");
   if (!checkAll || !batchState.uploadData) return;
   checkAll.checked = batchState.selectedIds.size === batchState.uploadData.submissions.length;
 }
 
-function syncBatchValidateBtn() {
+function _syncBatchValidateBtn() {
   const btn = el("batch-validate-selected-btn");
   if (!btn) return;
   btn.disabled = batchState.selectedIds.size === 0;
 }
 
-// Batch controls
-const batchSelectAllBtn    = el("batch-select-all-btn");
-const batchDeselectAllBtn  = el("batch-deselect-all-btn");
-const batchValSelBtn       = el("batch-validate-selected-btn");
-const batchValAllBtn       = el("batch-validate-all-btn");
+// Batch index controls
+const batchSelectAllBtn   = el("batch-select-all-btn");
+const batchDeselectAllBtn = el("batch-deselect-all-btn");
+const batchValSelBtn      = el("batch-validate-selected-btn");
+const batchValAllBtn      = el("batch-validate-all-btn");
 
 if (batchSelectAllBtn) {
   batchSelectAllBtn.addEventListener("click", () => {
@@ -1270,15 +1319,19 @@ if (batchValAllBtn) {
 
 const batchNewBtn = el("batch-new-btn");
 if (batchNewBtn) {
-  batchNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); showScreen("submission-screen"); });
+  batchNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); goToStep("upload"); });
 }
+
+// ── Step 2→3: Validate ────────────────────────────────────────────────────────
 
 async function runBatchValidation(submissionIds) {
   if (!submissionIds.length) return;
   const statusEl = el("batch-validate-status");
 
   const disableBtns = (v) => {
-    [batchValSelBtn, batchValAllBtn, batchSelectAllBtn, batchDeselectAllBtn].forEach((b) => { if (b) b.disabled = v; });
+    [batchValSelBtn, batchValAllBtn, batchSelectAllBtn, batchDeselectAllBtn].forEach((b) => {
+      if (b) b.disabled = v;
+    });
   };
   disableBtns(true);
   if (statusEl) {
@@ -1288,8 +1341,17 @@ async function runBatchValidation(submissionIds) {
   }
 
   try {
-    // Send the shared team name/email from the form as per-submission metadata
-    // so the unblinded CSV export contains meaningful values.
+    // ── Single submission path ────────────────────────────────────────────
+    if (!batchState.isBatch && submissionIds.length === 1) {
+      // Run single validate then normalize
+      const singleResult = await runValidation();
+      state.validationResult = singleResult;
+      if (statusEl) statusEl.style.display = "none";
+      _renderSingleAsValidate(singleResult);
+      return;
+    }
+
+    // ── Batch path ────────────────────────────────────────────────────────
     const sharedTeam  = getTeamName();
     const sharedEmail = getEmail();
     const teamNamesMap  = sharedTeam  ? Object.fromEntries(submissionIds.map((id) => [id, sharedTeam]))  : null;
@@ -1305,6 +1367,7 @@ async function runBatchValidation(submissionIds) {
         map_type_mode:   getMapTypeMode(),
         team_names:      teamNamesMap,
         contact_emails:  emailsMap,
+        mode:            "auto",
       }),
     });
     const data = await res.json();
@@ -1313,7 +1376,7 @@ async function runBatchValidation(submissionIds) {
     batchState.batchId        = data.batch_id;
     batchState.validationData = data;
 
-    // Update submission statuses in table
+    // Update status badges in index table
     if (batchState.uploadData) {
       const resultMap = {};
       (data.results || []).forEach((r) => { resultMap[r.submission_id] = r; });
@@ -1325,284 +1388,1221 @@ async function runBatchValidation(submissionIds) {
     }
 
     if (statusEl) statusEl.style.display = "none";
-    showBatchResults(data);
+    renderValidateStep(data);
+    saveSessionState();
   } catch (err) {
     if (statusEl) {
       statusEl.style.display = "block";
       statusEl.className = "submit-status status-error";
-      statusEl.textContent = err.message || "Batch validation failed.";
+      statusEl.textContent = err.message || "Validation failed.";
     }
   } finally {
     disableBtns(false);
-    syncBatchValidateBtn();
+    _syncBatchValidateBtn();
   }
 }
 
-// ── Batch Results ─────────────────────────────────────────────────────────────
+// ── Single result: normalize to batch-of-1 and render validate step ───────────
 
-async function showBatchResults(data) {
+function _renderSingleAsValidate(data) {
+  // Build a pseudo-batch response from a single validation result
+  const errCount  = (data.errors   || []).length;
+  const warnCount = (data.warnings || []).length;
+  const normalized = {
+    results: [{
+      submission_id:        data.submission_id || state.submissionId,
+      passed:               data.passed,
+      errors:               data.errors  || [],
+      warnings:             data.warnings || [],
+      nifti_count:          data.nifti_count ?? state.detection.nifti_count,
+      map_type:             data.map_type || state.detection.detected_parameter_map_type,
+      has_run_instructions: data.has_run_instructions ?? data.has_dockerfile ?? null,
+      source_folder:        data.source_folder || null,
+      challenge_type:       data.challenge_type || getChallengeType(),
+      team_name:            data.team_name || getTeamName() || null,
+      contact_email:        data.contact_email || getEmail() || null,
+      validated_at:         data.validated_at || data.checked_at || null,
+    }],
+    batch_id:    null,
+    passed_count:  data.passed ? 1 : 0,
+    failed_count:  data.passed ? 0 : 1,
+    validated_at:  data.validated_at || data.checked_at || null,
+  };
+  batchState.batchId        = null;
+  batchState.validationData = normalized;
+  renderValidateStep(normalized, /*single=*/true);
+  saveSessionState();
+}
+
+// ── Step 3: Validate — render the review table ────────────────────────────────
+
+const _reviewFilter = { filter: "all", search: "", sort: "status", showAll: false };
+
+// ── Issue summary helper — one brief text (not a list) ───────────────────────
+function _issueSummary(errors, warnings) {
+  function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+  if (errors.length === 0 && warnings.length === 0)
+    return { html: `<span class="vr-issue-ok">No issues</span>` };
+  if (errors.length > 0) {
+    const main = errors.length === 1 ? trunc(errors[0], 32) : `${errors.length} errors`;
+    const extra = warnings.length > 0 ? ` · ${warnings.length}w` : "";
+    return { html: `<span class="vr-issue-err" title="${escapeHtml(errors.join("; "))}">${escapeHtml(main + extra)}</span>` };
+  }
+  const main = warnings.length === 1 ? trunc(warnings[0], 32) : `${warnings.length} warnings`;
+  return { html: `<span class="vr-issue-warn" title="${escapeHtml(warnings.join("; "))}">${escapeHtml(main)}</span>` };
+}
+
+function renderValidateStep(data, isSingleMode) {
   const results = data.results || [];
+  const single  = isSingleMode === true || !batchState.isBatch;
 
-  // ── 1. Header desc + overall banner ──────────────────────────────────────
+  // Pre-compute counts (used for summary + auto-advance)
+  const runnableCount    = results.filter((r) => r.run_readiness === "runnable"
+                                               || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
+  const resultOnlyCount  = results.filter((r) => r.run_readiness === "result_only"
+                                               || (r.passed && !r.has_run_instructions && r.nifti_count > 0)).length;
+  const needsReviewCount = results.filter((r) => !r.passed || (r.warnings || []).length > 0).length;
+
+  // Reset filter state
+  _reviewFilter.filter  = "all";
+  _reviewFilter.search  = "";
+  _reviewFilter.sort    = "status";
+  _reviewFilter.showAll = false;
+  const searchEl  = el("batch-search");
+  const sortEl    = el("batch-sort");
+  const viewSelEl = el("batch-view-select");
+  if (searchEl)  searchEl.value  = "";
+  if (sortEl)    sortEl.value    = "status";
+  if (viewSelEl) viewSelEl.value = "all";
+
+  // ── 1. One-line summary in step header desc ───────────────────────────────
   const desc = el("batch-results-desc");
   if (desc) {
-    const validated = results.length;
-    desc.textContent = `${validated} submission${validated !== 1 ? "s" : ""} validated — ${data.passed_count} passed, ${data.failed_count} failed.`;
-  }
-
-  const banner = el("batch-result-banner");
-  if (banner) {
-    banner.className = "result-banner";
-    const allPassed = data.failed_count === 0;
-    const anyPassed = data.passed_count > 0;
-    banner.classList.add(allPassed ? "banner-pass" : anyPassed ? "banner-warn" : "banner-fail");
-    const icon  = el("batch-banner-icon");
-    const title = el("batch-banner-title");
-    const sub   = el("batch-banner-sub");
-    if (icon)  icon.textContent  = allPassed ? "✓" : anyPassed ? "!" : "✕";
-    if (title) title.textContent = allPassed ? "All submissions passed"
-                                 : anyPassed ? "Partial pass"
-                                             : "All submissions failed";
-    if (sub) {
-      const totalWarn = results.reduce((acc, r) => acc + (r.warnings || []).length, 0);
-      sub.textContent = `${results.length} validated · ${data.passed_count} passed · ${data.failed_count} failed · ${totalWarn} warning${totalWarn !== 1 ? "s" : ""}`;
+    if (single) {
+      const r0 = results[0] || {};
+      const ec = (r0.errors   || []).length;
+      const wc = (r0.warnings || []).length;
+      desc.textContent = ec > 0
+        ? `${ec} error${ec !== 1 ? "s" : ""}${wc > 0 ? `, ${wc} warning${wc !== 1 ? "s" : ""}` : ""}`
+        : wc > 0 ? `${wc} warning${wc !== 1 ? "s" : ""} · review recommended`
+                 : "All checks passed";
+    } else {
+      const parts = [`${results.length} validated`];
+      if (runnableCount > 0) parts.push(`${runnableCount} ready to run`);
+      if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only`);
+      if (needsReviewCount > 0) parts.push(`${needsReviewCount} need review`);
+      desc.textContent = parts.join(" · ");
     }
   }
 
-  // ── 2. Collapse the exec details section (reset between runs) ────────────
-  const execDetails = el("batch-exec-details");
-  if (execDetails) execDetails.open = false;
-
-  // ── 3. Stats chips ────────────────────────────────────────────────────────
-  const statsRow = el("batch-stats-row");
-  if (statsRow) {
-    statsRow.innerHTML = "";
-    const totalWarn = results.reduce((acc, r) => acc + (r.warnings || []).length, 0);
-    [
-      { num: results.length,    lbl: "Total",    cls: "" },
-      { num: data.passed_count, lbl: "Passed",   cls: "chip-pass" },
-      { num: data.failed_count, lbl: "Failed",   cls: data.failed_count > 0 ? "chip-fail" : "" },
-      { num: totalWarn,         lbl: "Warnings", cls: totalWarn > 0 ? "chip-warn" : "" },
-    ].forEach(({ num, lbl, cls }) => {
-      const chip = document.createElement("div");
-      chip.className = `batch-stat-chip${cls ? " " + cls : ""}`;
-      chip.innerHTML = `<span class="stat-num">${num}</span><span class="stat-lbl">${lbl}</span>`;
-      statsRow.appendChild(chip);
-    });
-    if (data.batch_id) {
-      const id = document.createElement("div");
-      id.className = "batch-stat-meta";
-      id.innerHTML = `<span style="font-weight:700">Batch</span><code style="font-size:0.71rem;font-family:monospace">${escapeHtml(data.batch_id)}</code>`;
-      statsRow.appendChild(id);
-    }
-    if (data.validated_at) {
-      const dt = document.createElement("div");
-      dt.className = "batch-stat-meta";
-      dt.innerHTML = `<span style="font-weight:700">At</span><span>${formatDate(data.validated_at)}</span>`;
-      statsRow.appendChild(dt);
-    }
+  // ── 2. View dropdown + search + sort handlers ─────────────────────────────
+  if (viewSelEl) {
+    viewSelEl.onchange = () => {
+      _reviewFilter.filter  = viewSelEl.value;
+      _reviewFilter.showAll = false;
+      _applyReviewFilters();
+    };
+  }
+  if (searchEl) {
+    searchEl.oninput = () => {
+      _reviewFilter.search  = searchEl.value;
+      _reviewFilter.showAll = false;
+      _applyReviewFilters();
+    };
+  }
+  if (sortEl) {
+    sortEl.onchange = () => {
+      _reviewFilter.sort = sortEl.value;
+      _applyReviewFilters();
+    };
   }
 
-  // ── 4. Validation cards — all collapsed by default ────────────────────────
+  // ── 3. Show-all button ────────────────────────────────────────────────────
+  const showAllBtn = el("review-show-all-btn");
+  if (showAllBtn) {
+    showAllBtn.onclick = () => {
+      _reviewFilter.showAll = !_reviewFilter.showAll;
+      _applyReviewFilters();
+    };
+  }
+
+  // ── 4. Review table rows ──────────────────────────────────────────────────
   const list = el("batch-submissions-list");
   if (list) {
     list.innerHTML = "";
     results.forEach((r) => {
       const rNiftiCount = Number(r.nifti_count ?? 0);
-      const _filterSpur = (msgs) =>
-        rNiftiCount > 0 ? msgs.filter((m) => m !== "No NIfTI files found") : msgs;
+      const _spur = (msgs) =>
+        rNiftiCount > 0 ? msgs.filter((m) => m !== "No output files found") : msgs;
 
-      const errors   = _filterSpur(dedupeMessages((r.errors   || []).map(simplifyMessage)));
-      const warnings = _filterSpur(dedupeMessages((r.warnings || []).map(simplifyMessage)))
+      const errors   = _spur(dedupeMessages((r.errors   || []).map(simplifyMessage)));
+      const warnings = _spur(dedupeMessages((r.warnings || []).map(simplifyMessage)))
         .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
       const checks   = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
       const passed   = r.passed;
       const hasWarn  = warnings.length > 0;
+      const hasRunInstructions = !!(r.has_run_instructions ?? r.has_dockerfile);
+      const runReadiness = r.run_readiness
+        || (passed && hasRunInstructions ? "runnable"
+            : passed && !hasRunInstructions ? "result_only"
+            : "not_runnable");
+      const runnable = runReadiness === "runnable";
+      const isResultOnly = runReadiness === "result_only";
 
-      // Status badge
-      let statusText, statusCls;
-      if (!passed)      { statusText = "Failed";               statusCls = "badge-fail"; }
-      else if (hasWarn) { statusText = "Passed with warnings"; statusCls = "badge-warn"; }
-      else              { statusText = "Passed";               statusCls = "badge-pass"; }
+      // Status badge — 3 states only
+      let valStatus, vsBadgeCss, vsBadgeTxt;
+      if (!passed)      { valStatus = "failed";  vsBadgeCss = "vs-fail";   vsBadgeTxt = "Failed"; }
+      else if (hasWarn) { valStatus = "warning"; vsBadgeCss = "vs-review"; vsBadgeTxt = "Needs review"; }
+      else              { valStatus = "passed";  vsBadgeCss = "vs-pass";   vsBadgeTxt = "Passed"; }
 
-      // Mini count chips shown in the collapsed header
-      const errChip  = errors.length > 0
-        ? `<span class="batch-mini-chip batch-mini-error">${errors.length} error${errors.length !== 1 ? "s" : ""}</span>` : "";
-      const warnChip = warnings.length > 0
-        ? `<span class="batch-mini-chip batch-mini-warn">${warnings.length} warning${warnings.length !== 1 ? "s" : ""}</span>` : "";
-      const niftiChip = `<span class="batch-mini-chip">${r.nifti_count ?? "—"} NIfTI</span>`;
+      // Run state — plain text, no badge
+      let runClass, runTxt;
+      if (!passed)        { runClass = "vr-run-na";        runTxt = "Cannot run"; }
+      else if (isResultOnly) { runClass = "vr-run-result-only"; runTxt = "Result-only"; }
+      else if (runnable)  { runClass = "vr-run-ready";     runTxt = "Ready"; }
+      else                { runClass = "vr-run-na";        runTxt = "—"; }
 
-      const issuesHtml = [
-        ...errors.map((m)   => `<li class="is-error">✕ ${escapeHtml(m)}</li>`),
-        ...warnings.map((m) => `<li class="is-warning">! ${escapeHtml(m)}</li>`),
-        ...checks.map((m)   => `<li class="is-pass">✓ ${escapeHtml(m)}</li>`),
-      ].join("");
+      const execInitStatus = runnable ? "not-run" : "cannot-run";
 
-      const safeSubId   = escapeHtml(r.submission_id);
-      const safeMapType = escapeHtml(r.map_type    || "—");
-      const safeTeam    = r.team_name     ? escapeHtml(r.team_name)     : "";
-      const safeFolder  = r.source_folder ? escapeHtml(r.source_folder) : "";
+      const safeSubId     = escapeHtml(r.submission_id);
+      const safeFolder    = r.source_folder ? escapeHtml(r.source_folder) : "";
+      const safeChallenge = escapeHtml(r.challenge_type || getChallengeType() || "dce");
 
-      const details = document.createElement("details");
-      details.className = "batch-sub-card";
-      // All cards start collapsed — user controls via Expand All / individual click
-      details.innerHTML = `
-        <summary class="batch-sub-header">
-          <span class="batch-sub-toggle">▸</span>
-          <span class="batch-sub-name" title="${safeSubId}">${safeSubId}</span>
-          <div class="batch-sub-header-right">
-            <span class="batch-badge ${escapeHtml(statusCls)}">${escapeHtml(statusText)}</span>
-            ${niftiChip}${errChip}${warnChip}
+      const { html: issueHtml } = _issueSummary(errors, warnings);
+
+      // Detail content
+      const niftiLine = rNiftiCount > 0
+        ? `<div class="vr-detail-nifti">NIfTI files: <strong>${rNiftiCount}</strong></div>` : "";
+      const errHtml  = errors.length > 0
+        ? `<div class="vp-section error-section" style="margin-top:8px">
+             <div class="vp-section-heading">Errors</div>
+             <ul class="issue-list">${errors.map((m) => `<li class="is-error">✕ ${escapeHtml(m)}</li>`).join("")}</ul>
+           </div>` : "";
+      const warnHtml = warnings.length > 0
+        ? `<div class="vp-section warn-section" style="margin-top:8px">
+             <div class="vp-section-heading">Warnings</div>
+             <ul class="issue-list">${warnings.map((m) => `<li class="is-warning">! ${escapeHtml(m)}</li>`).join("")}</ul>
+           </div>` : "";
+      const techHtml = checks.length > 0
+        ? `<details class="tech-checks-toggle" style="margin-top:8px">
+             <summary>Technical checks (${checks.length} passed)</summary>
+             <ul class="issue-list" style="margin-top:6px">${checks.map((m) => `<li class="is-pass">✓ ${escapeHtml(m)}</li>`).join("")}</ul>
+           </details>` : "";
+      const resultOnlyNote = isResultOnly
+        ? `<p class="vr-result-only-note">This submission contains result maps only and cannot be run automatically.</p>`
+        : "";
+      const noIssueHtml = (!errHtml && !warnHtml)
+        ? `<p style="font-size:0.73rem;color:var(--subtle);margin:0">No errors or warnings.</p>` : "";
+
+      // No inline exec section on Validate — execution happens in Run step only
+      const execHtml = "";
+
+      const wrap = document.createElement("div");
+      wrap.className = "br-row-wrap";
+      wrap.dataset.valStatus  = valStatus;
+      wrap.dataset.runnable   = String(runnable);
+      wrap.dataset.execStatus = execInitStatus;
+      wrap.dataset.subId      = r.submission_id;
+      wrap.dataset.name       = (r.submission_id + " " + (r.source_folder || "")).toLowerCase();
+      wrap.dataset.errCount   = String(errors.length);
+      wrap.dataset.warnCount  = String(warnings.length);
+
+      // 5-column row: Submission | Status | Issue | Run | Action
+      wrap.innerHTML = `
+        <div class="br-row">
+          <div style="min-width:0">
+            <div class="br-sub-name" title="${safeSubId}">${safeSubId}</div>
+            ${safeFolder ? `<div class="br-sub-folder">${safeFolder}</div>` : ""}
           </div>
-        </summary>
-        <div class="batch-sub-body">
-          <div class="batch-sub-meta">
-            Total files: ${r.total_files ?? "—"}&nbsp;·&nbsp;Map type: ${safeMapType}
-            ${safeFolder ? `&nbsp;·&nbsp;Source: ${safeFolder}` : ""}
-            ${safeTeam   ? `&nbsp;·&nbsp;Team: ${safeTeam}`     : ""}
+          <div><span class="vs-badge ${vsBadgeCss}">${vsBadgeTxt}</span></div>
+          <div>${issueHtml}</div>
+          <div>
+            <span class="${runClass}">${runTxt}</span>
+            <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem;margin-left:4px"></span>
           </div>
-          <ul class="batch-issue-list">${issuesHtml}</ul>
+          <div>
+            <button type="button" class="vr-action-btn vr-details-btn">Details</button>
+          </div>
         </div>
-      `;
-      list.appendChild(details);
+        <div class="vr-row-detail" style="display:none">
+          ${resultOnlyNote}${niftiLine}${noIssueHtml}${errHtml}${warnHtml}${techHtml}${execHtml}
+        </div>`;
+
+      list.appendChild(wrap);
     });
+
+    _applyReviewFilters();
   }
 
-  // ── 5. Execution tab — Docker check + exec cards ──────────────────────────
+  // ── 5. Unlock nav steps + navigate ───────────────────────────────────────
+  unlockStep("validate");
+  unlockStep("run");
+  unlockStep("export");
+
+  const singleActions = el("single-result-actions");
+  if (singleActions) singleActions.style.display = single ? "" : "none";
+
+  const backBtn = el("batch-back-to-batch-btn");
+  if (backBtn) backBtn.style.display = batchState.isBatch ? "" : "none";
+
+  // Show/hide "no runnable" message — only show when there are truly no valid submissions
+  const noRunnableMsg = el("validate-no-runnable-msg");
+  const hasAnyPassed  = runnableCount > 0 || resultOnlyCount > 0;
+  if (noRunnableMsg)
+    noRunnableMsg.style.display = !hasAnyPassed && results.length > 0 ? "" : "none";
+
+  // Continue button — enabled for both runnable and result-only; label reflects destination
+  const continueBtn = el("validate-continue-btn");
+  if (continueBtn) {
+    continueBtn.disabled  = !hasAnyPassed;
+    continueBtn.textContent = runnableCount > 0
+      ? "Continue to Run →"
+      : resultOnlyCount > 0 ? "Continue →" : "Continue to Run →";
+  }
+
+  _syncExportStep();
+
+  // Auto-advance: go to Run step for both runnable and result-only cases.
+  // Run step handles both: shows execution queue for runnable, "Skipped" notice for result-only.
+  if (hasAnyPassed) {
+    renderRunStep().catch(() => {});
+    goToStep("run");
+  } else {
+    goToStep("validate");
+  }
+}
+
+// ── Review filter / sort / search ─────────────────────────────────────────────
+
+function _applyReviewFilters() {
+  const { filter, search, sort, showAll } = _reviewFilter;
+  const list = el("batch-submissions-list");
+  if (!list) return;
+
+  const rows = [...list.querySelectorAll(".br-row-wrap")];
+
+  const ORDER = { failed: 0, warning: 1, passed: 2 };
+  rows.sort((a, b) => {
+    if (sort === "name")     return (a.dataset.name || "").localeCompare(b.dataset.name || "");
+    if (sort === "errors")   return (Number(b.dataset.errCount) || 0) - (Number(a.dataset.errCount) || 0);
+    if (sort === "warnings") return (Number(b.dataset.warnCount) || 0) - (Number(a.dataset.warnCount) || 0);
+    if (sort === "runnable") {
+      const ra = a.dataset.runnable === "true" ? 0 : 1;
+      const rb = b.dataset.runnable === "true" ? 0 : 1;
+      return ra !== rb ? ra - rb : (ORDER[a.dataset.valStatus] ?? 3) - (ORDER[b.dataset.valStatus] ?? 3);
+    }
+    return (ORDER[a.dataset.valStatus] ?? 3) - (ORDER[b.dataset.valStatus] ?? 3);
+  });
+  rows.forEach((r) => list.appendChild(r));
+
+  // Apply filter + search — collect matching rows
+  const q = search.toLowerCase();
+  const matchingRows = [];
+  rows.forEach((row) => {
+    const vs       = row.dataset.valStatus;
+    const runnable = row.dataset.runnable === "true";
+    const es       = row.dataset.execStatus;
+    const name     = (row.dataset.name || "").toLowerCase();
+
+    let show = true;
+    switch (filter) {
+      case "needs-review": show = vs === "warning"; break;
+      case "failed":       show = vs === "failed"; break;
+      case "ready":        show = runnable && es === "not-run"; break;
+      // legacy values kept for safety
+      case "passed":       show = vs === "passed"; break;
+      case "cannot-run":   show = !runnable; break;
+      case "executed":     show = es === "passed" || es === "failed"; break;
+      case "exec-failed":  show = es === "failed"; break;
+      default:             show = true;
+    }
+    if (show && q) show = name.includes(q);
+
+    if (show) matchingRows.push(row);
+    else      row.style.display = "none";
+  });
+
+  // Show-first-5 / show-all logic
+  const LIMIT = 5;
+  const total = matchingRows.length;
+  if (!showAll && total > LIMIT) {
+    matchingRows.forEach((row, i) => { row.style.display = i < LIMIT ? "" : "none"; });
+  } else {
+    matchingRows.forEach((row) => { row.style.display = ""; });
+  }
+
+  // Update show-all button
+  const showAllWrap = el("review-show-all-wrap");
+  const showAllBtn  = el("review-show-all-btn");
+  if (showAllWrap && showAllBtn) {
+    if (total > LIMIT) {
+      showAllWrap.style.display = "";
+      showAllBtn.textContent = showAll
+        ? "Show less"
+        : `Show all ${total} submissions`;
+    } else {
+      showAllWrap.style.display = "none";
+    }
+  }
+
+  const empty = el("batch-empty-state");
+  if (empty) empty.style.display = total === 0 ? "" : "none";
+}
+
+function _syncFilterChips() {
+  // Sync the view select dropdown (v23 toolbar)
+  const viewSel = el("batch-view-select");
+  if (viewSel) viewSel.value = _reviewFilter.filter;
+  // Also sync any legacy chips still present
+  document.querySelectorAll(".filter-chip[data-filter-val]").forEach((c) => {
+    c.classList.toggle("fc-active", c.dataset.filterVal === _reviewFilter.filter);
+  });
+}
+
+// ── Row expand/collapse helpers ───────────────────────────────────────────────
+
+function _toggleRowDetail(wrap, forceOpen) {
+  // Support both v22 (.br-row-detail) and v23 (.vr-row-detail) drawer class names
+  const detail = wrap.querySelector(".vr-row-detail") || wrap.querySelector(".br-row-detail");
+  const toggleBtn = wrap.querySelector(".br-toggle-btn");
+  if (!detail) return;
+  const open = forceOpen !== undefined ? forceOpen : detail.style.display === "none";
+  detail.style.display = open ? "" : "none";
+  if (toggleBtn) {
+    toggleBtn.textContent = open ? "▾" : "▸";
+    toggleBtn.setAttribute("aria-expanded", String(open));
+  }
+  // Update .vr-details-btn label if present
+  const detailsBtn = wrap.querySelector(".vr-details-btn");
+  if (detailsBtn) detailsBtn.textContent = open ? "Close" : "Details";
+}
+
+// Row expand — legacy toggle button (.br-toggle-btn) click
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".br-toggle-btn");
+  if (!btn) return;
+  const wrap = btn.closest(".br-row-wrap");
+  if (!wrap) return;
+  e.stopPropagation();
+  _toggleRowDetail(wrap);
+});
+
+// Row expand — Details button (.vr-details-btn) click
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".vr-details-btn");
+  if (!btn) return;
+  const wrap = btn.closest(".br-row-wrap");
+  if (!wrap) return;
+  e.stopPropagation();
+  _toggleRowDetail(wrap);
+});
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".br-run-btn");
+  if (!btn) return;
+  const wrap = btn.closest(".br-row-wrap");
+  if (!wrap) return;
+  e.stopPropagation();
+  _toggleRowDetail(wrap, true);
+  // Show exec section (hidden by default — only revealed when Run is clicked)
+  const execSection = wrap.querySelector(".batch-exec-section");
+  if (execSection) execSection.classList.add("exec-visible");
+  const execBtn = wrap.querySelector(".batch-exec-btn");
+  if (execBtn && !execBtn.disabled) execBtn.click();
+});
+
+(function initExpandCollapseAll() {
+  const rows = () => document.querySelectorAll("#batch-submissions-list .br-row-wrap");
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#batch-expand-all"))      rows().forEach((w) => _toggleRowDetail(w, true));
+    if (e.target.closest("#batch-collapse-all"))    rows().forEach((w) => _toggleRowDetail(w, false));
+    if (e.target.closest("#batch-expand-failed"))   rows().forEach((w) => _toggleRowDetail(w, w.dataset.valStatus === "failed"));
+    if (e.target.closest("#batch-expand-runnable")) rows().forEach((w) => _toggleRowDetail(w, w.dataset.runnable === "true"));
+  });
+})();
+
+// ── Validate step action buttons ──────────────────────────────────────────────
+
+const batchBackToBatchBtn = el("batch-back-to-batch-btn");
+if (batchBackToBatchBtn) {
+  batchBackToBatchBtn.addEventListener("click", () => goToStep("index"));
+}
+
+const validateContinueBtn = el("validate-continue-btn");
+if (validateContinueBtn) {
+  validateContinueBtn.addEventListener("click", () => {
+    renderRunStep().catch(() => {});
+    goToStep("run");
+  });
+}
+
+const batchResultsNewBtn = el("batch-results-new-btn");
+if (batchResultsNewBtn) {
+  batchResultsNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); goToStep("upload"); });
+}
+
+const editBtn = el("edit-btn");
+if (editBtn) {
+  editBtn.addEventListener("click", () => {
+    state.mode = "edit";
+    clearSubmitStatus();
+    syncSubmitLabel();
+    goToStep("upload");
+  });
+}
+
+const replaceBtn = el("replace-btn");
+if (replaceBtn) {
+  replaceBtn.addEventListener("click", () => {
+    state.mode = "replace";
+    clearSubmissionData();
+    const localRadio = document.querySelector("input[name='submission_type'][value='local']");
+    if (localRadio) localRadio.checked = true;
+    switchSource("local");
+    syncSubmitLabel();
+    goToStep("upload");
+  });
+}
+
+const newBtn = el("new-btn");
+if (newBtn) {
+  newBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); goToStep("upload"); });
+}
+
+// ── Step 4: Run ───────────────────────────────────────────────────────────────
+
+const _runFilter = { view: "ready", showAll: false };
+
+// ── Run progress tracking ─────────────────────────────────────────────────────
+const _runProgress = { total: 0, completed: 0, failed: 0, outputs: 0 };
+
+function _initRunProgress(total) {
+  _runProgress.total     = total;
+  _runProgress.completed = 0;
+  _runProgress.failed    = 0;
+  _runProgress.outputs   = 0;
+  const panel = el("run-progress-panel");
+  if (panel) {
+    panel.style.display = "";
+    panel.className = "run-progress-panel";
+  }
+  _refreshRunProgress();
+}
+
+function _tickRunProgress(passed, outputCount) {
+  _runProgress.completed++;
+  if (!passed) _runProgress.failed++;
+  _runProgress.outputs += (outputCount || 0);
+  _refreshRunProgress();
+}
+
+function _refreshRunProgress() {
+  const { total, completed, failed, outputs } = _runProgress;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const fill  = el("run-prog-fill");
+  const panel = el("run-progress-panel");
+  const tEl   = el("rp-total");
+  const cEl   = el("rp-completed");
+  const fEl   = el("rp-failed");
+  const oEl   = el("rp-outputs");
+  const txt   = el("run-progress-text");
+  const eta   = el("run-progress-eta");
+  if (fill)  fill.style.width = `${pct}%`;
+  if (tEl)   tEl.textContent  = String(total);
+  if (cEl)   cEl.textContent  = String(completed);
+  if (fEl)   fEl.textContent  = String(failed);
+  if (oEl)   oEl.textContent  = String(outputs);
+  if (completed >= total && total > 0) {
+    if (panel) panel.classList.add("state-done");
+    if (txt)   txt.textContent = "All submissions complete";
+    if (eta)   eta.textContent = `${completed - failed} passed · ${failed} failed`;
+    // Unlock Score step now that execution outputs exist
+    unlockStep("score");
+    renderScoreStep().catch(() => {});
+  } else {
+    if (txt) txt.textContent = `Running submissions… ${completed} of ${total}`;
+    if (eta) eta.textContent = "";
+  }
+}
+
+// Build/refresh the entire run step table from batchState.validationData
+async function renderRunStep() {
+  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+  const single  = !batchState.isBatch;
+
+  // Reset filter
+  _runFilter.view    = "ready";
+  _runFilter.showAll = false;
+  const viewSel = el("run-view-select");
+  if (viewSel) viewSel.value = "ready";
+
+  // Count runnable and result-only
+  const runnableResults  = results.filter((r) =>
+    (r.run_readiness === "runnable") || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile)));
+  const resultOnlyResult = results.filter((r) =>
+    (r.run_readiness === "result_only") || (r.passed && !r.has_run_instructions && (r.nifti_count || 0) > 0));
+  const runnableCount   = runnableResults.length;
+  const resultOnlyCount = resultOnlyResult.length;
+  const allResultOnly   = runnableCount === 0 && resultOnlyCount > 0;
+
+  // One-line summary
+  const desc = el("run-results-desc");
+  if (desc) {
+    if (results.length === 0) {
+      desc.textContent = "No validated submissions. Run validation first.";
+    } else if (allResultOnly) {
+      desc.textContent = `${resultOnlyCount} result-only submission${resultOnlyCount !== 1 ? "s" : ""} — execution not needed.`;
+    } else if (runnableCount === 0) {
+      desc.textContent = "No submissions ready to run — review validation issues.";
+    } else {
+      const parts = [`${runnableCount} ready to run`];
+      if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only (skipped)`);
+      const cannotRun = results.length - runnableCount - resultOnlyCount;
+      if (cannotRun > 0) parts.push(`${cannotRun} cannot run`);
+      desc.textContent = parts.join(" · ");
+    }
+  }
+
+  // Skipped notice (shown when all result-only)
+  const skippedNotice = el("run-skipped-notice");
+  if (skippedNotice) skippedNotice.style.display = allResultOnly ? "" : "none";
+  const skippedContinueBtn = el("run-skipped-continue-btn");
+  if (skippedContinueBtn) {
+    const newBtn = skippedContinueBtn.cloneNode(true);
+    skippedContinueBtn.replaceWith(newBtn);
+    newBtn.addEventListener("click", () => goToStep("export"));
+  }
+
+  // Docker availability
   const docker       = await checkDockerAvailability();
   const dockerBanner = el("batch-docker-banner");
-  const execControls = el("batch-exec-controls");
-  const execStatus   = el("batch-exec-status");
-  const execCards    = el("batch-exec-cards");
-
-  if (execStatus) execStatus.style.display = "none";
-
-  // Global Docker banner (always shown in execution tab)
   if (dockerBanner) {
-    if (docker.available) {
-      dockerBanner.className = "docker-avail-row docker-ok";
-      dockerBanner.innerHTML = `<strong>&#x2713; Docker ${escapeHtml(docker.version)} available.</strong>&nbsp;Submissions with a Dockerfile can be executed.`;
-    } else {
-      dockerBanner.className = "docker-avail-row docker-err";
-      dockerBanner.innerHTML = `<strong>&#x26A0; Docker unavailable.</strong>&nbsp;${escapeHtml(docker.message)} All execution buttons are disabled.`;
-    }
+    const cls  = docker.available ? "ok"  : "err";
+    const dot  = `<span class="rsc-docker-dot"></span>`;
+    const label = docker.available
+      ? `${dot} Docker ready${docker.version ? ` · ${escapeHtml(docker.version)}` : ""}`
+      : `${dot} Docker unavailable`;
+    dockerBanner.innerHTML = `<span class="rsc-docker-badge ${cls}">${label}</span>`;
     dockerBanner.style.display = "";
   }
 
-  // Build exec cards — show ALL submissions so the user can see why each is or isn't executable
-  if (execCards) {
-    execCards.innerHTML = "";
-    let executableCount = 0;
+  // Show toolbar + table only if there are results
+  const toolbar   = el("run-toolbar");
+  const runTable  = el("run-table");
+  const runAllBtn = el("batch-exec-all-btn");
+  if (toolbar)  toolbar.style.display  = results.length > 0 ? "" : "none";
+  if (runTable) runTable.style.display = results.length > 0 ? "" : "none";
 
-    results.forEach((r) => {
-      const passed        = r.passed;
-      const hasDockerfile = !!r.has_dockerfile;
-      const canExec       = passed && hasDockerfile && docker.available;
+  // Run All button: batch + runnable + docker OK
+  if (runAllBtn)
+    runAllBtn.style.display = batchState.isBatch && runnableCount > 0 && docker.available ? "" : "none";
 
-      // Reason note for non-executable submissions
-      let execNote = null;
-      if (!passed)             execNote = "Validation failed — submission must pass before it can be executed.";
-      else if (!hasDockerfile) execNote = "Not executable — no Dockerfile found in this submission.";
-      else if (!docker.available) execNote = "Execution disabled — Docker is unavailable on this host.";
-
-      if (canExec) executableCount++;
-
-      const valBadgeCls = passed ? "badge-pass" : "badge-fail";
-      const valBadgeTxt = passed ? "Validated ✓" : "Failed ✗";
-
-      let execBadgeCls, execBadgeTxt;
-      if (!passed || !hasDockerfile)  { execBadgeCls = "badge-exec-na";   execBadgeTxt = "Not executable"; }
-      else if (!docker.available)     { execBadgeCls = "badge-exec-na";   execBadgeTxt = "Docker unavailable"; }
-      else                            { execBadgeCls = "badge-exec-none"; execBadgeTxt = "Not run"; }
-
-      const safeSubId = escapeHtml(r.submission_id);
-
-      const card    = document.createElement("details");
-      card.className = "exec-card";
-
-      const summary = document.createElement("summary");
-      summary.className = "exec-card-header";
-      summary.innerHTML = `
-        <span class="exec-toggle">&#x25B8;</span>
-        <span class="exec-card-name" title="${safeSubId}">${safeSubId}</span>
-        <div class="exec-card-badges">
-          <span class="batch-badge ${escapeHtml(valBadgeCls)}">${escapeHtml(valBadgeTxt)}</span>
-          <span class="batch-badge ${escapeHtml(execBadgeCls)} exec-status-badge">${escapeHtml(execBadgeTxt)}</span>
-        </div>
-      `;
-
-      const body = document.createElement("div");
-      body.className = "exec-card-body";
-
-      if (execNote) {
-        const note = document.createElement("p");
-        note.style.cssText = "font-size:0.78rem;color:var(--muted);font-style:italic;margin:0";
-        note.textContent = execNote;
-        body.appendChild(note);
-      } else {
-        // Executable — build exec section (DOM, not innerHTML — subId safe via dataset)
-        const execSection = document.createElement("div");
-        execSection.className         = "batch-exec-section";
-        execSection.dataset.subId     = r.submission_id;
-        execSection.dataset.challenge = r.challenge_type || getChallengeType() || "dce";
-
-        const btnRow = document.createElement("div");
-        btnRow.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px";
-
-        const execBtn = document.createElement("button");
-        execBtn.type      = "button";
-        execBtn.className = "btn-secondary btn-sm batch-exec-btn";
-        execBtn.textContent = "Execute in Docker";
-
-        btnRow.appendChild(execBtn);
-        execSection.appendChild(btnRow);
-
-        const resultDiv = document.createElement("div");
-        resultDiv.className     = "batch-exec-result";
-        resultDiv.style.display = "none";
-        execSection.appendChild(resultDiv);
-
-        body.appendChild(execSection);
-      }
-
-      card.appendChild(summary);
-      card.appendChild(body);
-      execCards.appendChild(card);
-    });
-
-    if (execControls)
-      execControls.style.display = executableCount > 0 ? "flex" : "none";
+  // Wire view-select
+  if (viewSel) {
+    viewSel.onchange = () => {
+      _runFilter.view    = viewSel.value;
+      _runFilter.showAll = false;
+      _applyRunFilters();
+    };
   }
 
-  showScreen("batch-results-screen");
+  // Show-all button
+  const showAllBtn = el("run-show-all-btn");
+  if (showAllBtn) {
+    showAllBtn.onclick = () => {
+      _runFilter.showAll = !_runFilter.showAll;
+      _applyRunFilters();
+    };
+  }
+
+  // Build rows
+  const list = el("run-submissions-list");
+  if (!list) return;
+  list.innerHTML = "";
+
+  results.forEach((r) => {
+    const runReadiness = r.run_readiness
+      || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile) ? "runnable"
+          : r.passed && !r.has_run_instructions && (r.nifti_count || 0) > 0 ? "result_only"
+          : "not_runnable");
+    const runnable     = runReadiness === "runnable";
+    const isResultOnly = runReadiness === "result_only";
+    const safeSubId    = escapeHtml(r.submission_id);
+    const safeChall    = escapeHtml(r.challenge_type || getChallengeType() || "dce");
+
+    let initExecStatus;
+    if (runnable)     initExecStatus = "not-run";
+    else if (isResultOnly) initExecStatus = "result-only";
+    else              initExecStatus = "cannot-run";
+
+    const wrap = document.createElement("div");
+    wrap.className       = "br-row-wrap er-row-wrap";
+    wrap.dataset.subId   = r.submission_id;
+    wrap.dataset.challenge = r.challenge_type || getChallengeType() || "dce";
+    wrap.dataset.runnable = String(runnable);
+    wrap.dataset.execStatus = initExecStatus;
+    wrap.dataset.name    = r.submission_id.toLowerCase();
+
+    // Initial display values
+    const runStatusHtml = _erRunStatusHtml(initExecStatus, runnable);
+    const outputsHtml   = isResultOnly
+      ? `<span class="rs-na" title="Submitted maps used">Submitted maps</span>`
+      : `<span class="rs-na">—</span>`;
+    const outCheckHtml  = isResultOnly
+      ? `<span class="oc-skipped">—</span>`
+      : `<span class="oc-pending">Pending</span>`;
+
+    // Details-only action — no per-row Run button
+    const actionHtml = `<button type="button" class="vr-action-btn er-detail-btn">Details</button>`;
+
+    // Folder line (if present)
+    const safeFolder = r.source_folder ? escapeHtml(r.source_folder) : "";
+    const subNameHtml = `<div class="br-sub-name" title="${safeSubId}">${safeSubId}</div>
+      ${safeFolder ? `<div class="br-sub-folder">${safeFolder}</div>` : ""}`;
+
+    wrap.innerHTML = `
+      <div class="br-row er-row">
+        <div style="min-width:0">${subNameHtml}</div>
+        <div class="er-run-status-cell">${runStatusHtml}</div>
+        <div class="er-outputs-cell">${outputsHtml}</div>
+        <div class="er-outcheck-cell">${outCheckHtml}</div>
+        <div>${actionHtml}</div>
+      </div>
+      <div class="er-row-detail" style="display:none">
+        ${isResultOnly
+          ? `<p class="vr-result-only-note" style="margin:0">This submission contains result maps only — automatic execution is not needed. The submitted maps are used directly.</p>`
+          : `<p class="vr-issue-ok" style="margin:0 0 8px">Run this submission to see details.</p>`
+        }
+      </div>`;
+
+    list.appendChild(wrap);
+  });
+
+  _applyRunFilters();
 }
 
-// Batch result action buttons
-const batchBackToBatchBtn   = el("batch-back-to-batch-btn");
-const batchExportBlindedBtn = el("batch-export-blinded-btn");
+// Render the run-status cell content for a given execStatus + runnable
+function _erRunStatusHtml(execStatus, runnable) {
+  switch (execStatus) {
+    case "not-run":     return runnable
+                          ? `<span class="rs-badge rs-ready">Ready</span>`
+                          : `<span class="rs-na">Not run</span>`;
+    case "cannot-run":  return `<span class="rs-na">Cannot run</span>`;
+    case "result-only": return `<span class="rs-badge rs-skipped">Skipped — result-only</span>`;
+    case "running":     return `<span class="rs-badge rs-running">Running…</span>`;
+    case "passed":      return `<span class="rs-badge rs-pass">Passed</span>`;
+    case "failed":      return `<span class="rs-badge rs-fail">Failed</span>`;
+    case "timed-out":   return `<span class="rs-badge rs-timeout">Timed out</span>`;
+    default:            return `<span class="rs-na">—</span>`;
+  }
+}
+
+function _applyRunFilters() {
+  const { view, showAll } = _runFilter;
+  const list = el("run-submissions-list");
+  if (!list) return;
+  const rows = [...list.querySelectorAll(".er-row-wrap")];
+
+  const matchingRows = [];
+  rows.forEach((row) => {
+    const es       = row.dataset.execStatus;
+    const runnable = row.dataset.runnable === "true";
+    let show = true;
+    switch (view) {
+      // "ready" view shows runnable-not-run and result-only rows together
+      case "ready":     show = (runnable && es === "not-run") || es === "result-only"; break;
+      case "not-run":   show = es === "not-run"; break;
+      case "passed":    show = es === "passed"; break;
+      case "failed":    show = es === "failed"; break;
+      case "timed-out": show = es === "timed-out"; break;
+      default:          show = true;
+    }
+    if (show) matchingRows.push(row);
+    else row.style.display = "none";
+  });
+
+  const LIMIT = 5;
+  const total = matchingRows.length;
+  if (!showAll && total > LIMIT) {
+    matchingRows.forEach((row, i) => { row.style.display = i < LIMIT ? "" : "none"; });
+  } else {
+    matchingRows.forEach((row) => { row.style.display = ""; });
+  }
+
+  const showAllWrap = el("run-show-all-wrap");
+  const showAllBtn  = el("run-show-all-btn");
+  if (showAllWrap && showAllBtn) {
+    if (total > LIMIT) {
+      showAllWrap.style.display = "";
+      showAllBtn.textContent = showAll ? "Show less" : `Show all ${total} submissions`;
+    } else {
+      showAllWrap.style.display = "none";
+    }
+  }
+
+  const empty = el("run-empty-state");
+  if (empty) empty.style.display = total === 0 ? "" : "none";
+}
+
+// Update a run row after execution completes
+function _updateRunRow(subId, execData, isError) {
+  const wrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+    .find((w) => w.dataset.subId === subId);
+  if (!wrap) return;
+
+  let newExecStatus;
+  if (isError) {
+    newExecStatus = "failed";
+  } else if (execData.timed_out) {
+    newExecStatus = "timed-out";
+  } else if (execData.passed) {
+    newExecStatus = "passed";
+  } else {
+    newExecStatus = "failed";
+  }
+  wrap.dataset.execStatus = newExecStatus;
+
+  // Persist execution summary (no logs — IDs and counts only)
+  if (isError) {
+    _execSummaries[subId] = { status: "failed", passed: false, outputFileCount: 0 };
+  } else if (execData) {
+    _execSummaries[subId] = {
+      status:          newExecStatus,
+      passed:          !!execData.passed,
+      exitCode:        execData.exit_code ?? null,
+      outputFileCount: execData.output_file_count ?? (Array.isArray(execData.output_files) ? execData.output_files.length : 0),
+      executedAt:      execData.executed_at || execData.finished_at || null,
+      timedOut:        !!execData.timed_out,
+      buildFailed:     !!execData.build_failed,
+    };
+  }
+  saveSessionState();
+
+  const runnable = wrap.dataset.runnable === "true";
+
+  // Update run-status cell
+  const statusCell = wrap.querySelector(".er-run-status-cell");
+  if (statusCell) statusCell.innerHTML = _erRunStatusHtml(newExecStatus, runnable);
+
+  // Update outputs cell
+  const outputsCell = wrap.querySelector(".er-outputs-cell");
+  if (outputsCell && !isError) {
+    const fc = execData.output_file_count ?? (Array.isArray(execData.output_files) ? execData.output_files.length : 0);
+    outputsCell.innerHTML = fc > 0
+      ? `<span class="vr-run-ok">${fc} file${fc !== 1 ? "s" : ""}</span>`
+      : `<span class="vr-issue-warn">0 files</span>`;
+  }
+
+  // Update output-check cell
+  const outCheckCell = wrap.querySelector(".er-outcheck-cell");
+  if (outCheckCell) {
+    if (isError || !execData.output_validation) {
+      outCheckCell.innerHTML = `<span class="oc-skipped">Skipped</span>`;
+    } else {
+      const ov = execData.output_validation;
+      outCheckCell.innerHTML = ov.passed
+        ? `<span class="oc-valid">Valid</span>`
+        : `<span class="oc-issues">${(ov.errors || []).length} issue${(ov.errors || []).length !== 1 ? "s" : ""}</span>`;
+    }
+  }
+
+  // Populate the detail drawer with full exec breakdown and auto-open it
+  const drawer = wrap.querySelector(".er-row-detail");
+  if (drawer) {
+    if (isError) {
+      drawer.innerHTML = `<p class="vr-issue-err" style="margin:0">${escapeHtml(typeof isError === "string" ? isError : "Execution failed.")}</p>`;
+    } else {
+      drawer.innerHTML = `<details open><summary style="font-size:0.76rem;font-weight:600;cursor:pointer;color:var(--muted);margin-bottom:8px">Execution details</summary>${renderExecResult(execData)}</details>`;
+    }
+    drawer.style.display = "";
+    // Update the Details button label since the drawer is now open
+    const detailBtn = wrap.querySelector(".er-detail-btn");
+    if (detailBtn) detailBtn.textContent = "Close";
+  }
+
+  // Refresh run filter visibility
+  _applyRunFilters();
+}
+
+async function _renderRunPanel() {
+  // Called when user clicks Run nav item — just refresh the step
+  await renderRunStep();
+}
+
+// ── Execution render helpers ──────────────────────────────────────────────────
+
+function _execLogBlock(label, text) {
+  if (!text || !text.trim()) return "";
+  return `<details style="margin-top:8px">
+    <summary style="cursor:pointer;font-weight:500;font-size:13px">${escapeHtml(label)}</summary>
+    <pre style="max-height:240px;overflow:auto;background:var(--bg-muted,#f5f5f5);padding:10px;border-radius:6px;font-size:12px;white-space:pre-wrap;margin-top:6px">${escapeHtml(text.slice(0, 4096))}</pre>
+  </details>`;
+}
+
+function renderExecResult(data) {
+  const passed          = data.passed;
+  const timedOut        = data.timed_out;
+  const buildFailed     = data.build_failed;
+  const containerFailed = !!data.container_start_failed;
+  const exitCode        = data.exit_code;
+  const outputFiles     = Array.isArray(data.output_files) ? data.output_files : [];
+  const fileCount       = data.output_file_count ?? outputFiles.length;
+  const ov              = data.output_validation;
+  const earlyFail       = buildFailed || containerFailed;
+
+  function _step(iconCls, iconChar, label, statusCls, statusTxt, body) {
+    return `
+      <div class="exec-step${iconCls === "si-skip" ? " exec-step-skipped" : ""}">
+        <div class="exec-step-header">
+          <span class="exec-step-icon ${iconCls}">${iconChar}</span>
+          <span class="exec-step-title">${escapeHtml(label)}</span>
+          <span class="exec-step-badge exec-step-status-label ${statusCls}">${statusTxt}</span>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  // Step 1: Build run instructions
+  let s1Icon, s1Char, s1StatusCls, s1StatusTxt, s1Body = "";
+  if (buildFailed) {
+    s1Icon = "si-fail"; s1Char = "✗"; s1StatusCls = "sl-fail"; s1StatusTxt = "Build failed";
+    s1Body = `<p class="exec-step-note">Run instructions could not be built. Check technical logs below.</p>`;
+  } else if (containerFailed) {
+    s1Icon = "si-fail"; s1Char = "✗"; s1StatusCls = "sl-fail"; s1StatusTxt = "Could not start";
+    s1Body = `<p class="exec-step-note">Container failed to start (exit 125) — this is typically a host configuration issue, not a problem with the submission itself.</p>`;
+  } else {
+    s1Icon = "si-pass"; s1Char = "✓"; s1StatusCls = "sl-pass"; s1StatusTxt = "Ready";
+  }
+  const s1Logs = `
+    <details class="exec-logs">
+      <summary>Technical logs</summary>
+      <div class="exec-log-pre" style="font-size:0.68rem;color:var(--muted);margin-top:6px">Exit code: ${exitCode ?? "—"}${data.command ? ` · Command: ${escapeHtml(data.command)}` : ""}</div>
+      ${_execLogBlock("stderr / run errors", data.stderr_preview)}
+      ${_execLogBlock("stdout / run output", data.stdout_preview)}
+    </details>`;
+  const step1 = _step(s1Icon, s1Char, "Build run instructions", s1StatusCls, s1StatusTxt, s1Body + s1Logs);
+
+  // Step 2: Run package
+  let s2Icon, s2Char, s2StatusCls, s2StatusTxt, s2Body = "";
+  if (earlyFail) {
+    s2Icon = "si-skip"; s2Char = "–"; s2StatusCls = "sl-skip"; s2StatusTxt = "Skipped";
+  } else if (timedOut) {
+    s2Icon = "si-warn"; s2Char = "⏱"; s2StatusCls = "sl-warn"; s2StatusTxt = "Timed out";
+    s2Body = `<p class="exec-step-note">Submission exceeded the time limit and was stopped.</p>`;
+  } else if (!passed) {
+    s2Icon = "si-fail"; s2Char = "✗"; s2StatusCls = "sl-fail"; s2StatusTxt = `Exit ${exitCode ?? "?"}`;
+  } else {
+    s2Icon = "si-pass"; s2Char = "✓"; s2StatusCls = "sl-pass"; s2StatusTxt = "Exit 0";
+  }
+  const step2 = _step(s2Icon, s2Char, "Run package", s2StatusCls, s2StatusTxt, s2Body);
+
+  // Step 3: Collect generated outputs
+  let s3Icon, s3Char, s3StatusCls, s3StatusTxt, s3Body = "";
+  if (earlyFail) {
+    s3Icon = "si-skip"; s3Char = "–"; s3StatusCls = "sl-skip"; s3StatusTxt = "Skipped";
+  } else if (fileCount === 0) {
+    s3Icon = "si-warn"; s3Char = "!"; s3StatusCls = "sl-warn"; s3StatusTxt = "No files";
+    s3Body = `<p class="exec-step-note">No files were written to <code>/output</code>.</p>`;
+  } else {
+    s3Icon = "si-pass"; s3Char = "✓"; s3StatusCls = "sl-pass"; s3StatusTxt = `${fileCount} file${fileCount !== 1 ? "s" : ""}`;
+    if (outputFiles.length > 0) {
+      const chips = outputFiles.slice(0, 12).map((f) => `<span class="exec-file-chip">${escapeHtml(f)}</span>`).join("");
+      const more  = outputFiles.length > 12 ? `<span style="font-size:0.68rem;color:var(--subtle)">+${outputFiles.length - 12} more</span>` : "";
+      s3Body = `<div class="exec-file-list">${chips}${more}</div>`;
+    }
+  }
+  const step3 = _step(s3Icon, s3Char, "Collect generated outputs", s3StatusCls, s3StatusTxt, s3Body);
+
+  // Step 4: Validate generated outputs
+  let s4Icon, s4Char, s4StatusCls, s4StatusTxt, s4Body = "";
+  if (earlyFail || fileCount === 0 || !ov) {
+    s4Icon = "si-skip"; s4Char = "–"; s4StatusCls = "sl-skip"; s4StatusTxt = "Skipped";
+  } else {
+    const ovErrs  = (ov.errors   || []).map((e) => e.message || String(e));
+    const ovWarns = (ov.warnings || []).map((w) => w.message || String(w));
+    if (ov.passed) {
+      s4Icon = "si-pass"; s4Char = "✓"; s4StatusCls = "sl-pass"; s4StatusTxt = "Valid";
+      if (ov.nifti_count != null) s4Body = `<p class="exec-step-note">${ov.nifti_count} NIfTI file${ov.nifti_count !== 1 ? "s" : ""} detected in output.</p>`;
+    } else {
+      s4Icon = "si-fail"; s4Char = "✗"; s4StatusCls = "sl-fail"; s4StatusTxt = `${ovErrs.length} error${ovErrs.length !== 1 ? "s" : ""}`;
+      const errHtml  = ovErrs.map((m)  => `<li class="is-error">✕ ${escapeHtml(m)}</li>`).join("");
+      const warnHtml = ovWarns.map((m) => `<li class="is-warning">! ${escapeHtml(m)}</li>`).join("");
+      s4Body = `<ul class="batch-issue-list" style="margin-top:6px">${errHtml}${warnHtml}</ul>`;
+    }
+  }
+  const step4 = _step(s4Icon, s4Char, "Validate generated outputs", s4StatusCls, s4StatusTxt, s4Body);
+
+  return `<div class="exec-steps">${step1}${step2}${step3}${step4}</div>`;
+}
+
+function renderExecError(msg) {
+  return `<div style="color:var(--error,#c00);font-size:13px;padding:6px 0">${escapeHtml(msg)}</div>`;
+}
+
+// ── Core execution function (used by both validate-row buttons and run-step buttons) ──
+
+async function runBatchExec(btn, subId, challenge) {
+  const timeout = parseInt(el("batch-exec-timeout")?.value || "300", 10) || 300;
+  if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
+
+  // Mark row as running
+  const runWrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+    .find((w) => w.dataset.subId === subId);
+  if (runWrap) {
+    runWrap.dataset.execStatus = "running";
+    const sc = runWrap.querySelector(".er-run-status-cell");
+    if (sc) sc.innerHTML = _erRunStatusHtml("running", true);
+  }
+
+  try {
+    const resp = await fetch("/api/execute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: subId, challenge_type: challenge, timeout_seconds: timeout }),
+    });
+    const data = await resp.json();
+
+    if (!resp.ok || !data.success) {
+      const msg = (data && (data.detail || data.message)) || "Execution failed.";
+      _updateRunRow(subId, null, msg);
+      _tickRunProgress(false, 0);
+    } else {
+      _updateRunRow(subId, data, false);
+      const fc = data.output_file_count ?? (Array.isArray(data.output_files) ? data.output_files.length : 0);
+      _tickRunProgress(data.passed && !data.timed_out, fc);
+    }
+  } catch (err) {
+    _updateRunRow(subId, null, "Network error: " + err.message);
+    _tickRunProgress(false, 0);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Run"; }
+  }
+}
+
+function _updateValCardExecBadge(subId, newStatus) {
+  const wraps = [...document.querySelectorAll("#batch-submissions-list .br-row-wrap")]
+    .filter((w) => w.dataset.subId === subId);
+  wraps.forEach((wrap) => {
+    wrap.dataset.execStatus = newStatus;
+    // Update all .val-card-exec-badge inside this row (both row cell and detail)
+    wrap.querySelectorAll(".val-card-exec-badge").forEach((badge) => {
+      badge.style.display = "";
+      if (newStatus === "passed") {
+        badge.className = "br-badge badge-exec-pass val-card-exec-badge";
+        badge.textContent = "Ran ✓";
+      } else {
+        badge.className = "br-badge badge-exec-fail val-card-exec-badge";
+        badge.textContent = "Ran ✗";
+      }
+    });
+  });
+}
+
+// Delegation: Run buttons in validate-step inline exec panels (.batch-exec-btn)
+(function initBatchExecDelegation() {
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".batch-exec-btn");
+    if (!btn) return;
+    const section = btn.closest(".batch-exec-section");
+    if (!section) return;
+    e.stopPropagation();
+    await runBatchExec(btn, section.dataset.subId, section.dataset.challenge || "dce");
+  });
+})();
+
+// Delegation: Run buttons in the Run step table (.er-run-btn)
+(function initRunStepBtnDelegation() {
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".er-run-btn");
+    if (!btn) return;
+    e.stopPropagation();
+    const subId     = btn.dataset.subId;
+    const challenge = btn.dataset.challenge || "dce";
+    if (!subId) return;
+    await runBatchExec(btn, subId, challenge);
+  });
+})();
+
+// Delegation: Details button in run step (.er-detail-btn)
+(function initRunDetailBtnDelegation() {
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".er-detail-btn");
+    if (!btn) return;
+    const wrap = btn.closest(".er-row-wrap");
+    if (!wrap) return;
+    e.stopPropagation();
+    const drawer = wrap.querySelector(".er-row-detail");
+    if (!drawer) return;
+    const open = drawer.style.display === "none" || drawer.style.display === "";
+    // toggle based on current visibility
+    const isHidden = drawer.style.display === "none";
+    drawer.style.display = isHidden ? "" : "none";
+    btn.textContent = isHidden ? "Close" : "Details";
+  });
+})();
+
+// "Run All" button in run step
+(function initBatchExecAll() {
+  const btn      = el("batch-exec-all-btn");
+  const statusEl = el("batch-exec-status");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    // Collect all runnable rows that haven't been executed yet
+    const runnableRows = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+      .filter((w) => w.dataset.runnable === "true" && w.dataset.execStatus === "not-run");
+    if (!runnableRows.length) return;
+    btn.disabled = true;
+    _initRunProgress(runnableRows.length);
+    if (statusEl) { statusEl.style.display = ""; statusEl.textContent = `Starting ${runnableRows.length} execution(s)…`; }
+    let done = 0;
+    for (const row of runnableRows) {
+      if (statusEl) statusEl.textContent = `Running ${done + 1} of ${runnableRows.length}…`;
+      await runBatchExec(null, row.dataset.subId, row.dataset.challenge || "dce");
+      done++;
+    }
+    if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
+    btn.disabled = false;
+  });
+})();
+
+// Single submission execute section (kept for compatibility; unused in main flow)
+(function initExecuteSection() {
+  const executeBtn     = el("execute-btn");
+  const executeStatus  = el("execute-status");
+  const executeResult  = el("execute-result");
+  const executeSection = el("execute-section");
+
+  window._showExecuteSection = function (errCount, hasRunInstructions) {
+    if (!executeSection) return;
+    if (errCount > 0) { executeSection.style.display = "none"; return; }
+    executeSection.style.display = "";
+    const cannotNote  = el("run-cannot-note");
+    const runControls = el("run-controls");
+    const rps         = el("run-panel-status");
+    if (hasRunInstructions === false) {
+      if (cannotNote) { cannotNote.style.display = ""; cannotNote.textContent = "No run instructions found — this submission can be validated as result-only but cannot be run automatically."; }
+      if (runControls) runControls.style.display = "none";
+      if (rps) { rps.className = "run-panel-status rps-na"; rps.textContent = "Cannot run"; }
+    } else {
+      if (cannotNote) cannotNote.style.display = "none";
+      if (runControls) runControls.style.display = "flex";
+      if (rps) { rps.className = "run-panel-status rps-pending"; rps.textContent = "Not run"; }
+    }
+  };
+
+  if (!executeBtn) return;
+
+  executeBtn.addEventListener("click", async () => {
+    const submissionId  = window._currentSubmissionId || state.submissionId;
+    const challengeType = window._currentChallengeType || getChallengeType() || "dce";
+    if (!submissionId) return;
+
+    const timeoutSeconds = parseInt(el("execute-timeout")?.value || "300", 10) || 300;
+    executeBtn.disabled = true;
+    if (executeStatus) { executeStatus.style.display = ""; executeStatus.className = "submit-status"; executeStatus.textContent = "Building and running package…"; }
+    if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
+
+    try {
+      const resp = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId, challenge_type: challengeType, timeout_seconds: timeoutSeconds }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok || !data.success) {
+        if (executeStatus) { executeStatus.className = "submit-status status-error"; executeStatus.textContent = (data && (data.detail || data.message)) || "Execution failed."; }
+        const rps = el("run-panel-status");
+        if (rps) { rps.className = "run-panel-status rps-fail"; rps.textContent = "✗ Failed"; }
+        return;
+      }
+
+      const rps = el("run-panel-status");
+      if (rps) {
+        if (data.timed_out)   { rps.className = "run-panel-status rps-warn"; rps.textContent = "⏱ Timed out"; }
+        else if (data.passed) { rps.className = "run-panel-status rps-pass"; rps.textContent = "✓ Passed"; }
+        else                  { rps.className = "run-panel-status rps-fail"; rps.textContent = "✗ Failed"; }
+      }
+
+      if (executeStatus) executeStatus.style.display = "none";
+      if (executeResult) { executeResult.style.display = ""; executeResult.innerHTML = renderExecResult(data); }
+      _showExecExportRow(submissionId);
+    } catch (err) {
+      if (executeStatus) { executeStatus.className = "submit-status status-error"; executeStatus.textContent = "Network error: " + err.message; }
+    } finally {
+      executeBtn.disabled = false;
+    }
+  });
+
+  function _showExecExportRow(submissionId) {
+    const row = el("exec-export-row");
+    if (!row || !submissionId) return;
+    row.style.display = "";
+    const blindedBtn   = el("exec-export-blinded-btn");
+    const unblindedBtn = el("exec-export-unblinded-btn");
+    const statusEl     = el("exec-export-status");
+
+    async function doExport(blinded) {
+      const btn = blinded ? blindedBtn : unblindedBtn;
+      const label = blinded ? "Export Blinded Execution CSV" : "Export Unblinded Execution CSV";
+      if (!btn) return;
+      setLoading(btn, true, label);
+      if (statusEl) statusEl.style.display = "none";
+      try {
+        const url = `${API}/api/export-execution?submission_id=${encodeURIComponent(submissionId)}&blinded=${blinded}`;
+        const r = await fetch(url);
+        if (!r.ok) { const err = await r.json().catch(() => ({})); if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.detail || "Export failed."; } return; }
+        const blob = await r.blob();
+        const cd   = r.headers.get("Content-Disposition") || "";
+        const fname = cd.match(/filename="([^"]+)"/)?.[1] || `execution_${blinded ? "blinded" : "unblinded"}.csv`;
+        triggerDownload(blob, fname);
+      } catch (err) {
+        if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "Network error: " + err.message; }
+      } finally {
+        setLoading(btn, false, label);
+      }
+    }
+
+    if (blindedBtn)   blindedBtn.onclick   = () => doExport(true);
+    if (unblindedBtn) unblindedBtn.onclick = () => doExport(false);
+  }
+})();
+
+// ── Step 6: Export ────────────────────────────────────────────────────────────
+
+function _syncExportStep() {
+  // Show single or batch validation export buttons based on mode
+  const batchValWrap  = el("batch-export-val-wrap");
+  const singleValWrap = el("single-export-val");
+  const batchExecWrap = el("batch-export-exec-wrap");
+  const singleExecRow = el("exec-export-row");
+
+  if (batchState.isBatch) {
+    if (batchValWrap)  batchValWrap.style.display  = "";
+    if (singleValWrap) singleValWrap.style.display = "none";
+    if (batchExecWrap) batchExecWrap.style.display = "";
+    if (singleExecRow) singleExecRow.style.display = "none";
+  } else {
+    if (batchValWrap)  batchValWrap.style.display  = "none";
+    if (singleValWrap) singleValWrap.style.display = "";
+    if (batchExecWrap) batchExecWrap.style.display = "none";
+    // singleExecRow shown by _showExecExportRow after exec runs
+  }
+}
+
+// ── Batch validation export ───────────────────────────────────────────────────
+
+const batchExportBlindedBtn   = el("batch-export-blinded-btn");
 const batchExportUnblindedBtn = el("batch-export-unblinded-btn");
-const batchResultsNewBtn    = el("batch-results-new-btn");
-
-if (batchBackToBatchBtn) {
-  batchBackToBatchBtn.addEventListener("click", () => showScreen("batch-screen"));
-}
-
-if (batchResultsNewBtn) {
-  batchResultsNewBtn.addEventListener("click", () => { resetAll(); syncSubmitLabel(); showScreen("submission-screen"); });
-}
 
 async function exportBatch(blinded) {
   const statusEl = el("batch-export-status");
   if (!batchState.batchId) {
-    if (statusEl) {
-      statusEl.style.display = "block";
-      statusEl.className = "submit-status status-error";
-      statusEl.textContent = "No batch to export. Run validation first.";
-    }
+    if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = "No batch to export. Run validation first."; }
     return;
   }
-  const btn    = blinded ? batchExportBlindedBtn : batchExportUnblindedBtn;
-  const label  = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  const btn   = blinded ? batchExportBlindedBtn : batchExportUnblindedBtn;
+  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
   if (btn) setLoading(btn, true, label);
   if (statusEl) statusEl.style.display = "none";
   try {
@@ -1610,38 +2610,607 @@ async function exportBatch(blinded) {
     const res = await fetch(url);
     if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
     const blob = await res.blob();
-    const suffix = blinded ? "blinded" : "unblinded";
-    triggerDownload(blob, `osipi-batch-${batchState.batchId}-${suffix}.csv`);
+    triggerDownload(blob, `osipi-batch-${batchState.batchId}-${blinded ? "blinded" : "unblinded"}.csv`);
   } catch (err) {
-    if (statusEl) {
-      statusEl.style.display = "block";
-      statusEl.className = "submit-status status-error";
-      statusEl.textContent = err.message || "Export failed.";
-    }
+    if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "Export failed."; }
   } finally {
     if (btn) setLoading(btn, false, label);
   }
 }
 
-if (batchExportBlindedBtn)   batchExportBlindedBtn.addEventListener("click", () => exportBatch(true));
+if (batchExportBlindedBtn)   batchExportBlindedBtn.addEventListener("click",   () => exportBatch(true));
 if (batchExportUnblindedBtn) batchExportUnblindedBtn.addEventListener("click", () => exportBatch(false));
 
-// ── Expand / Collapse all validation cards ────────────────────────────────────
+// ── Single validation export ──────────────────────────────────────────────────
 
-(function initExpandCollapseAll() {
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("#batch-expand-all")) {
-      document.querySelectorAll("#batch-submissions-list details.batch-sub-card")
-        .forEach((d) => { d.open = true; });
+function _makeValExportHandler(btn, blinded) {
+  if (!btn) return;
+  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  btn.addEventListener("click", async () => {
+    const statusEl = el("download-status");
+    if (!state.submissionId) {
+      if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission to export."; }
+      return;
     }
-    if (e.target.closest("#batch-collapse-all")) {
-      document.querySelectorAll("#batch-submissions-list details.batch-sub-card")
-        .forEach((d) => { d.open = false; });
+    if (requestInProgress) return;
+    requestInProgress = true;
+    setLoading(btn, true, label);
+    if (statusEl) statusEl.style.display = "none";
+    try {
+      const url = `${API}/api/export-validation?submission_id=${encodeURIComponent(state.submissionId)}&format=csv&blinded=${blinded}`;
+      const res = await fetch(url);
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+      const blob = await res.blob();
+      triggerDownload(blob, `osipi-validation-${blinded ? "blinded" : "unblinded"}-${state.submissionId}.csv`);
+    } catch (err) {
+      if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "Could not export CSV."; }
+    } finally {
+      requestInProgress = false;
+      setLoading(btn, false, label);
     }
   });
-})();
+}
+_makeValExportHandler(el("export-val-blinded-btn"),   true);
+_makeValExportHandler(el("export-val-unblinded-btn"), false);
 
-// ── Initialise ────────────────────────────────────────────────────────────────
+// ── Batch execution export ─────────────────────────────────────────────────────
+
+const batchExportExecBlindedBtn   = el("batch-export-exec-blinded-btn");
+const batchExportExecUnblindedBtn = el("batch-export-exec-unblinded-btn");
+
+async function exportBatchExecution(blinded) {
+  const statusEl = el("batch-export-status");
+  if (!batchState.batchId) {
+    if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = "No batch to export. Run validation and execution first."; }
+    return;
+  }
+  const btn   = blinded ? batchExportExecBlindedBtn : batchExportExecUnblindedBtn;
+  const label = blinded ? "Export Blinded Execution CSV" : "Export Unblinded Execution CSV";
+  if (btn) setLoading(btn, true, label);
+  if (statusEl) statusEl.style.display = "none";
+  try {
+    const url = `${API}/api/export-batch-execution?batch_id=${encodeURIComponent(batchState.batchId)}&blinded=${blinded}`;
+    const res = await fetch(url);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+    const blob = await res.blob();
+    triggerDownload(blob, `osipi-batch-execution-${batchState.batchId}-${blinded ? "blinded" : "unblinded"}.csv`);
+  } catch (err) {
+    if (statusEl) { statusEl.style.display = "block"; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "Export failed."; }
+  } finally {
+    if (btn) setLoading(btn, false, label);
+  }
+}
+
+if (batchExportExecBlindedBtn)   batchExportExecBlindedBtn.addEventListener("click",   () => exportBatchExecution(true));
+if (batchExportExecUnblindedBtn) batchExportExecUnblindedBtn.addEventListener("click", () => exportBatchExecution(false));
+
+// ── Step 5: Score ─────────────────────────────────────────────────────────────
+
+// ── Score progress tracking ───────────────────────────────────────────────────
+const _scoreProgress = { total: 0, scored: 0, failed: 0, notConf: 0 };
+
+function _initScoreProgress(total) {
+  _scoreProgress.total   = total;
+  _scoreProgress.scored  = 0;
+  _scoreProgress.failed  = 0;
+  _scoreProgress.notConf = 0;
+  const panel = el("score-progress-panel");
+  if (panel) { panel.style.display = ""; panel.className = "run-progress-panel"; }
+  _refreshScoreProgress();
+}
+
+function _tickScoreProgress(scored, notConf) {
+  if (scored)   _scoreProgress.scored++;
+  else if (notConf) _scoreProgress.notConf++;
+  else          _scoreProgress.failed++;
+  _refreshScoreProgress();
+}
+
+function _refreshScoreProgress() {
+  const { total, scored, failed, notConf } = _scoreProgress;
+  const completed = scored + failed + notConf;
+  const pct   = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const fill  = el("score-prog-fill");
+  const panel = el("score-progress-panel");
+  const tEl   = el("sp-total");
+  const sEl   = el("sp-scored");
+  const fEl   = el("sp-failed");
+  const nEl   = el("sp-not-conf");
+  const txt   = el("score-progress-text");
+  const eta   = el("score-progress-eta");
+  if (fill) fill.style.width = `${pct}%`;
+  if (tEl)  tEl.textContent  = String(total);
+  if (sEl)  sEl.textContent  = String(scored);
+  if (fEl)  fEl.textContent  = String(failed);
+  if (nEl)  nEl.textContent  = String(notConf);
+  if (completed >= total && total > 0) {
+    if (panel) panel.classList.add("state-done");
+    if (txt)   txt.textContent = "Scoring complete";
+    if (eta)   eta.textContent = `${scored} scored · ${failed + notConf} not scored`;
+    _enableScoringExport();
+  } else {
+    if (txt) txt.textContent = `Scoring submissions… ${completed} of ${total}`;
+    if (eta) eta.textContent = "";
+  }
+}
+
+// ── renderScoreStep() ─────────────────────────────────────────────────────────
+
+const _SC_METRIC_KEYS   = ["accuracy", "repeatability", "reproducibility", "osipi_silver_score", "osipi_gold_score"];
+const _SC_METRIC_LABELS = {
+  accuracy:           "Accuracy",
+  repeatability:      "Repeatability",
+  reproducibility:    "Reproducibility",
+  osipi_silver_score: "Silver Score",
+  osipi_gold_score:   "Gold Score",
+};
+
+// Build HTML for a provider card inside the collapsed details section.
+function _renderProviderCard(p) {
+  const isOfficial = p.category === "official";
+  const isDev      = p.category === "development";
+  const isReady    = p.status === "ready" || p.status === "dev_data_available";
+
+  const cardCls    = `score-provider-card ${isOfficial ? "spc-official" : "spc-dev"}`;
+  const badgeCls   = isOfficial ? "spc-badge-official" : "spc-badge-dev";
+  const badgeLabel = isDev ? "Development only" : "Official";
+  const dotCls     = isReady && isOfficial ? "spc-dot-ready"
+                   : isReady && isDev      ? "spc-dot-dev"
+                   : "spc-dot-not-conf";
+
+  const statusLabel = isReady ? (isDev ? "Test data available" : "Ready to score") : "Not configured";
+  const labelCls    = isReady ? "spc-status-label" : "spc-status-label nc";
+
+  const devNote = isDev
+    ? `<p class="spc-warning" style="margin:4px 0 0">Development only · Not official challenge scoring</p>`
+    : "";
+
+  // Checklist: fixed required items, matched against missing list from backend
+  const checkItems = [
+    { label: "challengeScoring.py", matchKey: "script" },
+    { label: "Reference data",      matchKey: "reference" },
+    { label: "Mask files",          matchKey: "mask" },
+    { label: "Generated Ktrans outputs", matchKey: "output" },
+  ];
+  const missingStr = (p.missing || []).join(" ").toLowerCase();
+  const checkHtml = `<ul class="score-checklist" style="margin-top:8px">` +
+    checkItems.map(({ label, matchKey }) => {
+      const isMissing = missingStr.includes(matchKey);
+      const iconCls   = isMissing ? "chk-icon chk-missing" : "chk-icon chk-ok";
+      const rowCls    = isMissing ? "chk-row-missing" : "";
+      return `<li class="${rowCls}"><span class="${iconCls}">${isMissing ? "✕" : "✓"}</span>`
+           + `<span class="chk-label">${escapeHtml(label)}</span></li>`;
+    }).join("") + `</ul>`;
+
+  return `<div class="${cardCls}">
+    <div class="spc-header">
+      <div class="spc-title">${escapeHtml(p.provider_name)}</div>
+      <span class="spc-category-badge ${badgeCls}">${badgeLabel}</span>
+    </div>
+    <div class="spc-status-row">
+      <span class="spc-status-dot ${dotCls}"></span>
+      <span class="${labelCls}">${statusLabel}</span>
+    </div>
+    ${devNote}
+    ${checkHtml}
+  </div>`;
+}
+
+// Update the main user-facing status card based on provider status.
+function _updateScoreStatusCard(provs) {
+  const titleEl = el("score-status-title");
+  const subEl   = el("score-status-sub");
+  const badgeEl = el("score-status-badge");
+  const hintEl  = el("score-status-hint");
+  const btnAll  = el("btn-score-all");
+
+  const officialReady = provs.some((p) => p.category === "official" && p.status === "ready");
+  const hasSubs       = _getKnownSubmissions().length > 0;
+
+  if (officialReady) {
+    if (titleEl) titleEl.textContent = "Scoring ready";
+    if (subEl)   subEl.textContent   = "The official scoring provider is configured. Select submissions below and run scoring.";
+    if (badgeEl) { badgeEl.textContent = "Configured"; badgeEl.className = "score-status-badge badge-ready"; }
+    if (hintEl)  hintEl.textContent  = "Score your Ktrans outputs. Exports include scoring results once complete.";
+    if (btnAll)  btnAll.disabled     = !hasSubs;
+  } else {
+    if (titleEl) titleEl.textContent = "Scoring not configured yet";
+    if (subEl)   subEl.textContent   = "Scoring will be available after the official scoring script, reference data, and masks are configured.";
+    if (badgeEl) { badgeEl.textContent = "Not configured"; badgeEl.className = "score-status-badge"; }
+    if (hintEl)  hintEl.textContent  = "Generated outputs can be validated and exported now. Scoring is the next provider-based step.";
+    if (btnAll)  btnAll.disabled     = true;
+  }
+
+  // Re-wire button (clone clears old listeners)
+  if (btnAll && officialReady && hasSubs) {
+    const fresh = btnAll.cloneNode(true);
+    fresh.disabled    = false;
+    fresh.textContent = "Score outputs";
+    btnAll.replaceWith(fresh);
+    fresh.addEventListener("click", async () => {
+      const readyRows = [...document.querySelectorAll(".sc-row-wrap")]
+        .filter((w) => w.dataset.scoreStatus === "ready" || w.dataset.scoreStatus === "not_checked");
+      if (!readyRows.length) return;
+      fresh.disabled    = true;
+      fresh.textContent = "Scoring…";
+      _initScoreProgress(readyRows.length);
+      for (const row of readyRows) {
+        await _runSingleScore(null, row.dataset.subId, row.dataset.challenge || "dce", row.dataset.mapType || "Ktrans");
+      }
+      fresh.disabled    = false;
+      fresh.textContent = "Score outputs";
+    });
+  }
+}
+
+async function renderScoreStep() {
+  unlockStep("score");
+
+  // ── 1. Fetch providers, update status card + collapsed details ───────────────
+  const grid = el("score-provider-grid");
+  if (grid) grid.innerHTML = `<p style="font-size:0.78rem;color:var(--muted);margin:0">Loading…</p>`;
+
+  let provs = [];
+  try {
+    const r = await fetch(`${API}/api/scoring-status`);
+    const d = await r.json();
+    provs   = d.providers || [];
+  } catch (_) {
+    // Provider fetch failed — status card stays in "not configured" state
+  }
+
+  _updateScoreStatusCard(provs);
+
+  if (grid) {
+    grid.innerHTML = provs.length
+      ? provs.map(_renderProviderCard).join("")
+      : `<p style="font-size:0.78rem;color:var(--muted);margin:0">No providers found.</p>`;
+  }
+
+  saveSessionState();
+
+  // ── 2. Submission scoring table ─────────────────────────────────────────────
+  const tableCard = el("score-table-card");
+  const tbody     = el("score-table-body");
+  if (!tableCard || !tbody) return;
+
+  const subs = _getKnownSubmissions();
+  if (!subs.length) return;
+
+  tableCard.style.display = "";
+  tbody.innerHTML = "";
+
+  for (const sub of subs) {
+    const sid  = sub.submission_id || sub;
+    const name = sub.display_name  || sid;
+    tbody.insertAdjacentHTML("beforeend", _buildScoreRow(sid, name));
+  }
+
+  for (const sub of subs) {
+    _fetchAndUpdateScoreStatus(sub.submission_id || sub);
+  }
+}
+
+// Build an HTML score table row for a given submission.
+function _buildScoreRow(sid, displayName) {
+  return `
+  <tr class="sc-row-wrap" data-sub-id="${escapeHtml(sid)}"
+      data-score-status="not_checked"
+      data-challenge="dce" data-map-type="Ktrans">
+    <td class="sc-col-sub">${escapeHtml(displayName || sid)}</td>
+    <td class="sc-col-status">
+      <span class="ss-badge ss-not-conf">Checking…</span>
+    </td>
+    <td class="sc-col-metrics">
+      <div class="sc-metrics-row">
+        ${_SC_METRIC_KEYS.map((k) =>
+          `<span class="sc-metric-pill">${escapeHtml(_SC_METRIC_LABELS[k])}</span>`
+        ).join("")}
+      </div>
+    </td>
+    <td class="sc-col-artifacts" id="sc-artifacts-${escapeHtml(sid)}">—</td>
+    <td class="sc-col-action">
+      <button type="button" class="sc-score-btn btn-sm"
+              data-sub-id="${escapeHtml(sid)}"
+              data-challenge="dce" data-map-type="Ktrans"
+              disabled>Score</button>
+    </td>
+  </tr>
+  <tr class="sc-row-detail-row" style="display:none">
+    <td colspan="5">
+      <div class="sc-row-detail" id="sc-detail-${escapeHtml(sid)}"></div>
+    </td>
+  </tr>`;
+}
+
+// Fetch /api/scoring-status for one submission and update its row.
+async function _fetchAndUpdateScoreStatus(sid) {
+  try {
+    const r    = await fetch(`${API}/api/scoring-status?submission_id=${encodeURIComponent(sid)}&challenge_type=dce&map_type=Ktrans`);
+    const data = await r.json();
+    _applyScoreStatus(sid, data);
+  } catch (err) {
+    _applyScoreStatus(sid, { status: "not_configured", message: "Could not fetch status: " + err.message });
+  }
+}
+
+// Apply a status response to a row — sets badge text, enables/disables Score button.
+function _applyScoreStatus(sid, data) {
+  const row = [...document.querySelectorAll(".sc-row-wrap")]
+    .find((r) => r.dataset.subId === sid);
+  if (!row) return;
+
+  const status = data.status || "not_configured";
+  row.dataset.scoreStatus = status;
+
+  let badgeCls, badgeTxt;
+  switch (status) {
+    case "ready":        badgeCls = "ss-ready";    badgeTxt = "Ready"; break;
+    case "scored":       badgeCls = "ss-scored";   badgeTxt = "Scored"; break;
+    case "failed":       badgeCls = "ss-failed";   badgeTxt = "Failed"; break;
+    default:             badgeCls = "ss-not-conf"; badgeTxt = "Not configured"; break;
+  }
+
+  const badge = row.querySelector(".ss-badge");
+  if (badge) { badge.className = `ss-badge ${badgeCls}`; badge.textContent = badgeTxt; }
+
+  // Enable Score button only when ready or already scored (retry)
+  const scoreBtn = row.querySelector(".sc-score-btn");
+  if (scoreBtn) {
+    scoreBtn.disabled = !(status === "ready" || status === "scored" || status === "failed");
+  }
+
+  // If already scored, populate metrics
+  if (status === "scored" && data.score_result) {
+    _applyMetrics(sid, data.score_result.metrics || {});
+    _applyArtifacts(sid, data.score_result.artifacts || []);
+    _enableScoringExport();
+  }
+
+  // Populate detail drawer if there's a message or missing list
+  const detail = el(`sc-detail-${sid}`);
+  const detailRow = detail?.closest("tr.sc-row-detail-row");
+  if (detail) {
+    const missing = data.missing || [];
+    const msg     = data.message || "";
+    const misHtml = missing.length
+      ? `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul>` : "";
+    detail.innerHTML = `<p style="font-size:0.73rem;margin:0 0 4px">${escapeHtml(msg)}</p>${misHtml}`;
+    if (detailRow && (missing.length > 0 || status === "scored" || status === "failed")) {
+      detailRow.style.display = "";
+    }
+  }
+}
+
+function _applyMetrics(sid, metrics) {
+  const row = [...document.querySelectorAll(".sc-row-wrap")]
+    .find((r) => r.dataset.subId === sid);
+  if (!row) return;
+  const metRow = row.querySelector(".sc-metrics-row");
+  if (!metRow) return;
+  metRow.innerHTML = _SC_METRIC_KEYS.map((k) => {
+    const val    = metrics[k];
+    const hasVal = val !== undefined && val !== null && val !== "";
+    return `<span class="sc-metric-pill${hasVal ? " has-value" : ""}">`
+         + escapeHtml(_SC_METRIC_LABELS[k])
+         + (hasVal ? `: ${escapeHtml(String(val))}` : "")
+         + `</span>`;
+  }).join("");
+}
+
+function _applyArtifacts(sid, artifacts) {
+  const cell = el(`sc-artifacts-${sid}`);
+  if (!cell) return;
+  if (!artifacts || artifacts.length === 0) { cell.textContent = "—"; return; }
+  cell.textContent = `${artifacts.length} file${artifacts.length > 1 ? "s" : ""}`;
+}
+
+// Return the list of known submissions for the current session.
+// Falls back to batchState.validationData, then state.submissionId.
+function _getKnownSubmissions() {
+  if (batchState.validationData && batchState.validationData.length > 0) {
+    return batchState.validationData.map((r) => ({
+      submission_id: r.submission_id,
+      display_name:  r.submission_id,
+    }));
+  }
+  if (state.submissionId) {
+    return [{ submission_id: state.submissionId, display_name: state.submissionId }];
+  }
+  return [];
+}
+
+// ── Score row update after scoring ───────────────────────────────────────────
+
+function _updateScoreRow(subId, data) {
+  // Use the unified status applier, then additionally handle artifacts
+  _applyScoreStatus(subId, data);
+  if (data.status === "scored") {
+    _applyMetrics(subId, data.metrics || {});
+    _applyArtifacts(subId, data.artifacts || []);
+    _enableScoringExport();
+  }
+}
+
+// ── Single score execution ────────────────────────────────────────────────────
+
+async function _runSingleScore(btn, subId, challenge, mapType) {
+  if (btn) { btn.disabled = true; btn.textContent = "Scoring…"; }
+
+  const wrap = [...document.querySelectorAll(".sc-row-wrap")]
+    .find((w) => w.dataset.subId === subId);
+  if (wrap) {
+    wrap.dataset.scoreStatus = "scoring";
+    const badge = wrap.querySelector(".ss-badge");
+    if (badge) { badge.className = "ss-badge ss-scoring"; badge.textContent = "Scoring…"; }
+  }
+
+  try {
+    const resp = await fetch(`${API}/api/score`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: subId, challenge_type: challenge, map_type: mapType }),
+    });
+    const data = await resp.json();
+    _updateScoreRow(subId, data);
+    _tickScoreProgress(data.status === "scored", data.status === "not_configured");
+  } catch (err) {
+    _updateScoreRow(subId, { status: "failed", message: "Network error: " + err.message, metrics: {} });
+    _tickScoreProgress(false, false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Delegation: Score button (.sc-score-btn) ──────────────────────────────────
+
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".sc-score-btn");
+  if (!btn) return;
+  e.stopPropagation();
+  const subId   = btn.dataset.subId;
+  const chall   = btn.dataset.challenge || "dce";
+  const mapType = btn.dataset.mapType   || "Ktrans";
+  if (!subId) return;
+  await _runSingleScore(btn, subId, chall, mapType);
+});
+
+// ── Delegation: Details toggle in score rows (.sc-detail-btn) ─────────────────
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".sc-detail-btn");
+  if (!btn) return;
+  const wrap = btn.closest(".sc-row-wrap");
+  if (!wrap) return;
+  e.stopPropagation();
+  const drawer   = wrap.querySelector(".sc-row-detail");
+  if (!drawer) return;
+  const isHidden = drawer.style.display === "none";
+  drawer.style.display = isHidden ? "" : "none";
+  btn.textContent = isHidden ? "Close" : "Details";
+});
+
+// "Score All" button is wired dynamically inside renderScoreStep().
+
+// ── Scoring export helpers ────────────────────────────────────────────────────
+
+function _enableScoringExport() {
+  const blindedBtn   = el("export-scoring-blinded-btn");
+  const unblindedBtn = el("export-scoring-unblinded-btn");
+  const sub          = el("export-scoring-sub");
+  if (blindedBtn)   blindedBtn.disabled   = false;
+  if (unblindedBtn) unblindedBtn.disabled = false;
+  if (sub) sub.textContent = "Scoring results available for export";
+}
+
+function _makeScoringExportHandler(btn, blinded) {
+  if (!btn) return;
+  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  btn.addEventListener("click", async () => {
+    const statusEl = el("export-scoring-status");
+    setLoading(btn, true, label);
+    if (statusEl) statusEl.style.display = "none";
+    try {
+      let url;
+      if (batchState.batchId) {
+        url = `${API}/api/export-scoring?batch_id=${encodeURIComponent(batchState.batchId)}&blinded=${blinded}`;
+      } else if (state.submissionId) {
+        url = `${API}/api/export-scoring?submission_id=${encodeURIComponent(state.submissionId)}&blinded=${blinded}`;
+      } else {
+        throw new Error("No submission or batch to export.");
+      }
+      const res = await fetch(url);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || "Export failed.");
+      }
+      const blob  = await res.blob();
+      const cd    = res.headers.get("Content-Disposition") || "";
+      const fname = cd.match(/filename="([^"]+)"/)?.[1]
+                 || `scoring_${blinded ? "blinded" : "unblinded"}.csv`;
+      triggerDownload(blob, fname);
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.display = "";
+        statusEl.className     = "submit-status status-error";
+        statusEl.textContent   = err.message || "Export failed.";
+      }
+    } finally {
+      setLoading(btn, false, label);
+    }
+  });
+}
+
+_makeScoringExportHandler(el("export-scoring-blinded-btn"),   true);
+_makeScoringExportHandler(el("export-scoring-unblinded-btn"), false);
+
+// ── Init ───────────────────────────────────────────────────────────────────────
 
 updateMapTypePills(getRadio("challenge_type") || "dce");
 syncSubmitLabel();
+
+// ── Sidebar collapse toggle ────────────────────────────────────────────────────
+(function initSidebarCollapse() {
+  const sidebar     = document.getElementById("sidebar");
+  const collapseBtn = document.getElementById("collapse-btn");
+  if (!sidebar || !collapseBtn) return;
+
+  if (localStorage.getItem("sidebar-collapsed") === "1") {
+    sidebar.classList.add("collapsed");
+  }
+
+  collapseBtn.addEventListener("click", () => {
+    const isNowCollapsed = sidebar.classList.toggle("collapsed");
+    try { localStorage.setItem("sidebar-collapsed", isNowCollapsed ? "1" : "0"); } catch(_) {}
+  });
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Session restore — startup check (no auto-restore; banner only)
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initSessionBanner() {
+  const saved = loadSessionState();
+  if (!saved) return;   // nothing saved or expired — normal fresh start
+
+  // Show banner — do NOT restore automatically
+  showRestoreBanner(saved);
+
+  // "Restore" button
+  const restoreBtn = el("restore-session-btn");
+  if (restoreBtn) {
+    restoreBtn.addEventListener("click", async () => {
+      _hideRestoreBanner();
+      const ok = await restoreSessionFromStorage();
+      if (!ok) {
+        // Session data was cleared (expired or corrupt) between banner display and click
+        clearSessionState();
+      }
+    });
+  }
+
+  // "Start new" button in banner
+  const startNewBtn = el("start-new-session-btn");
+  if (startNewBtn) {
+    startNewBtn.addEventListener("click", () => {
+      clearSessionState();
+      _hideRestoreBanner();
+      resetAll();
+      syncSubmitLabel();
+      goToStep("upload");
+    });
+  }
+})();
+
+// ── "Start New" button in sidebar ─────────────────────────────────────────────
+(function initSidebarNewSession() {
+  const btn = el("sidebar-new-session-btn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    clearSessionState();
+    _hideRestoreBanner();
+    resetAll();
+    syncSubmitLabel();
+    goToStep("upload");
+  });
+})();

@@ -16,9 +16,9 @@ from services.path_config import EXTRACTED_DIR, INCOMING_DIR, safe_relative_path
 NIFTI_SUFFIXES = (".nii", ".nii.gz")
 
 MAP_TYPE_PATTERNS = {
-    "CBF":    ("cbf", "cerebral_blood_flow"),
+    "CBF":    ("cbf", "cerebral_blood_flow", "perfmap", "perfusion", "perf"),
     "Ktrans": ("ktrans", "k_trans", "transfer_constant"),
-    "ATT":    ("att", "arterial_transit_time"),
+    "ATT":    ("att", "arterial_transit_time", "attmap"),
     "Kep":    ("kep", "k_ep", "rate_constant"),
     "Vp":     ("vp", "v_p", "plasma_volume"),
     "CBV":    ("cbv", "cerebral_blood_volume"),
