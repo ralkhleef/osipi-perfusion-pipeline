@@ -1,2 +1,0 @@
-submission_id,challenge_type,original_path,extracted_path,file_count,nifti_files,metadata_files,code_files,docker_files,readme_files,timestamp
-dce_team_alpha,dce,/Users/ralkhleef/Desktop/osipi-perfusion-pipeline/data/sample_submissions/dce_team_alpha,/Users/ralkhleef/Desktop/osipi-perfusion-pipeline/submissions/extracted/dce/dce_team_alpha,2,Ktrans.nii.gz,,,,README.md,2026-05-16T18:43:40.459160+00:00

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -37,8 +38,10 @@ from services.path_config import (
     OSIPI_TF62_DIR,
     OUTPUTS_DIR,
     REFERENCE_DATA_DIR,
+    SCORING_ACTIVE_CONFIG,
     SCORING_DIR,
     SCORING_OUTPUTS_DIR,
+    SCORING_PACKAGES_DIR,
     SCORING_RESULTS_DIR,  # backward-compat alias
     VALIDATED_DIR,
 )
@@ -50,8 +53,17 @@ from services.validation_service import (
     validate_submission,
 )
 from services.zenodo_service import download_zenodo_record
+from services.scoring_package_service import (
+    get_active_entry,
+    install_package,
+    list_packages,
+    load_active_config,
+    remove_package,
+    set_active_entry,
+)
 from scoring import (
     all_providers_status,
+    analyze_submission_niftis,
     batch_scoring_status,
     load_scoring_result,
     score_batch,
@@ -75,6 +87,7 @@ async def lifespan(app):
         VALIDATED_DIR,
         SCORING_DIR,
         SCORING_OUTPUTS_DIR,
+        SCORING_PACKAGES_DIR,
         OSIPI_TF62_DIR,
         CODECOLLECTION_DIR,
     ]:
@@ -215,19 +228,30 @@ async def upload_folder_submission(files: List[UploadFile] = File(...)):
             detail=f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
         )
 
-    materialized = []
-    total_bytes = 0
-    for f in files:
-        contents = await f.read()
-        total_bytes += len(contents)
-        if total_bytes > EXTRACT_MAX_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
-            )
-        materialized.append((f.filename, contents))
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        file_refs: List[tuple] = []
+        total_bytes = 0
+        for f in files:
+            tmp_file = tmp_dir / str(len(file_refs))
+            with tmp_file.open("wb") as fp:
+                while True:
+                    chunk = await f.read(65536)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > EXTRACT_MAX_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
+                        )
+                    fp.write(chunk)
+            file_refs.append((f.filename, tmp_file))
 
-    result = save_uploaded_folder(materialized)
+        result = save_uploaded_folder(file_refs)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Folder upload failed."))
 
@@ -251,19 +275,30 @@ async def upload_folder_batch(files: List[UploadFile] = File(...)):
             detail=f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
         )
 
-    materialized = []
-    total_bytes = 0
-    for f in files:
-        contents = await f.read()
-        total_bytes += len(contents)
-        if total_bytes > EXTRACT_MAX_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
-            )
-        materialized.append((f.filename, contents))
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        file_refs: List[tuple] = []
+        total_bytes = 0
+        for f in files:
+            tmp_file = tmp_dir / str(len(file_refs))
+            with tmp_file.open("wb") as fp:
+                while True:
+                    chunk = await f.read(65536)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > EXTRACT_MAX_BYTES:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"Folder upload exceeds size limit ({EXTRACT_MAX_BYTES // (1024 ** 3)} GB).",
+                        )
+                    fp.write(chunk)
+            file_refs.append((f.filename, tmp_file))
 
-    result = save_folder_as_batch(materialized)
+        result = save_folder_as_batch(file_refs)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Folder upload failed."))
 
@@ -1251,6 +1286,30 @@ def get_scoring_status(
     )
 
 
+class ScoringStatusRequest(BaseModel):
+    submission_id:  Optional[str] = None
+    provider_id:    Optional[str] = None
+    challenge_type: str           = "dce"
+    map_type:       str           = "Ktrans"
+    batch_id:       Optional[str] = None
+
+
+@app.post("/api/scoring-status")
+def post_scoring_status(req: ScoringStatusRequest):
+    """POST variant of :func:`get_scoring_status` accepting a JSON body.
+
+    Convenience for clients that prefer POST + JSON over query parameters.
+    Delegates to the exact same logic so behaviour is identical.
+    """
+    return get_scoring_status(
+        submission_id=req.submission_id,
+        provider_id=req.provider_id,
+        challenge_type=req.challenge_type,
+        map_type=req.map_type,
+        batch_id=req.batch_id,
+    )
+
+
 @app.post("/api/score")
 def score_single(req: ScoreRequest):
     """Run scoring for a single submission.
@@ -1287,6 +1346,128 @@ def score_batch_endpoint(req: ScoreBatchRequest):
     }
 
 
+@app.get("/api/leaderboard")
+def get_leaderboard():
+    """Return a list of all scored submissions (simple summary — no ranking).
+
+    Reads every ``*_score.json`` file from the scoring outputs directory and
+    returns them sorted by ``scored_at`` descending (most recent first).
+    """
+    from services.path_config import SCORING_OUTPUTS_DIR
+    entries = []
+    if SCORING_OUTPUTS_DIR.exists():
+        for p in sorted(SCORING_OUTPUTS_DIR.glob("*_score.json")):
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                entries.append({
+                    "submission_id": data.get("submission_id", p.stem.replace("_score", "")),
+                    "provider_id":   data.get("provider_id"),
+                    "status":        data.get("status", "unknown"),
+                    "scored_at":     data.get("scored_at"),
+                    "metrics":       data.get("metrics") or {},
+                    "artifact_count": data.get("artifact_count", 0),
+                    "message":       data.get("message", ""),
+                })
+            except Exception:
+                continue
+    # Sort most-recent first
+    entries.sort(key=lambda e: e.get("scored_at") or "", reverse=True)
+    return {"count": len(entries), "entries": entries}
+
+
+# ---------------------------------------------------------------------------
+# Scoring Package Management — admin/reviewer endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/scoring/packages")
+def scoring_packages_list():
+    """List all installed scoring packages with their manifests and readiness."""
+    packages = list_packages()
+    return {"count": len(packages), "packages": packages}
+
+
+@app.post("/api/scoring/packages/upload")
+async def scoring_package_upload(file: UploadFile = File(...)):
+    """Upload and install a scoring package ZIP.
+
+    The ZIP must contain manifest.json and a scoring entry-point script.
+    See backend/services/scoring_package_service.py for the manifest schema.
+    Returns the installed package manifest on success.
+    """
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
+
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".zip")
+    tmp_path = Path(tmp_name)
+    try:
+        total_bytes = 0
+        with os.fdopen(tmp_fd, "wb") as fout:
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > 500 * 1024 * 1024:  # 500 MB limit
+                    raise HTTPException(status_code=413, detail="Scoring package ZIP exceeds 500 MB limit.")
+                fout.write(chunk)
+
+        result = install_package(tmp_path)
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Package installation failed."))
+        return result
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+
+@app.delete("/api/scoring/packages/{package_id}")
+def scoring_package_remove(package_id: str):
+    """Remove an installed scoring package.
+
+    Also clears any active-config entries pointing to this package.
+    """
+    if not package_id or not package_id.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid package_id.")
+    result = remove_package(package_id)
+    if not result.get("success"):
+        raise HTTPException(status_code=404, detail=result.get("error", "Package not found."))
+    return result
+
+
+@app.get("/api/scoring/active-config")
+def scoring_active_config():
+    """Return the current active scoring configuration for all challenge types."""
+    return {"active_config": load_active_config(), "packages": list_packages()}
+
+
+class ScoringSetActiveRequest(BaseModel):
+    challenge_type: str          # "dce" | "asl" | "dsc"
+    mode: str                    # "none" | "builtin" | "custom"
+    package_id: Optional[str] = None  # required when mode="custom"
+
+
+@app.post("/api/scoring/set-active")
+def scoring_set_active(req: ScoringSetActiveRequest):
+    """Set the active scoring mode for a challenge type.
+
+    mode="none"    — scoring disabled; app shows "Scoring not configured"
+    mode="builtin" — use the built-in OSIPI TF6.2 provider
+    mode="custom"  — use an uploaded package (package_id required)
+    """
+    ct = req.challenge_type.strip().lower()
+    if ct not in ("dce", "asl", "dsc"):
+        raise HTTPException(status_code=400, detail="challenge_type must be 'dce', 'asl', or 'dsc'.")
+    try:
+        entry = set_active_entry(ct, req.mode, req.package_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"success": True, "challenge_type": ct, "active": entry}
+
+
 @app.get("/api/export-scoring")
 def export_scoring(
     submission_id:  Optional[str] = Query(None),
@@ -1298,6 +1479,11 @@ def export_scoring(
     Fields (blinded):
         submission_id, provider_id, challenge_type, map_type,
         scoring_status, score_available, metrics_json,
+        reference_based_scoring_available, reference_scoring_status,
+        reference_map_count, reference_compared_map_count,
+        reference_mean_rmse, reference_mean_mae, reference_mean_bias,
+        reference_mean_coefficient_of_variation, reference_metrics_json,
+        overall_qc_summary_json, per_map_metadata_json, per_map_stats_json,
         artifact_count, artifacts, errors, warnings, scored_at
 
     Unblinded adds: team_name, contact_email
@@ -1309,6 +1495,11 @@ def export_scoring(
     _SCORING_HEADER_BLINDED = [
         "submission_id", "provider_id", "challenge_type", "map_type",
         "scoring_status", "score_available", "metrics_json",
+        "reference_based_scoring_available", "reference_scoring_status",
+        "reference_map_count", "reference_compared_map_count",
+        "reference_mean_rmse", "reference_mean_mae", "reference_mean_bias",
+        "reference_mean_coefficient_of_variation", "reference_metrics_json",
+        "overall_qc_summary_json", "per_map_metadata_json", "per_map_stats_json",
         "artifact_count", "artifacts", "errors", "warnings", "scored_at",
     ]
     _SCORING_HEADER_UNBLINDED = ["team_name", "contact_email"] + _SCORING_HEADER_BLINDED
@@ -1319,6 +1510,8 @@ def export_scoring(
         status    = r.get("status", "")
         errors    = r.get("stderr") or r.get("errors") or []
         warnings  = r.get("warnings") or []
+        analysis = _analysis_for_summary(sid, r.get("challenge_type", ""), r)
+        analysis_fields = _analysis_summary_fields(analysis)
 
         # Normalize error/warning to pipe-delimited strings
         if isinstance(errors, list):
@@ -1350,6 +1543,18 @@ def export_scoring(
             status,
             "yes" if (status == "scored" and metrics) else ("partial" if status == "scored" else "no"),
             json.dumps(metrics) if metrics else "",
+            "yes" if analysis_fields.get("reference_based_scoring_available") else "no",
+            analysis_fields.get("reference_scoring_status", ""),
+            analysis_fields.get("reference_map_count", 0),
+            analysis_fields.get("reference_compared_map_count", 0),
+            analysis_fields.get("reference_mean_rmse"),
+            analysis_fields.get("reference_mean_mae"),
+            analysis_fields.get("reference_mean_bias"),
+            analysis_fields.get("reference_mean_coefficient_of_variation"),
+            json.dumps(analysis_fields.get("reference_metric_rows") or []),
+            json.dumps(analysis_fields.get("overall_qc_summary") or {}),
+            json.dumps(analysis_fields.get("per_map_metadata") or []),
+            json.dumps(analysis_fields.get("per_map_stats") or []),
             len(artifacts),
             " | ".join(str(a) for a in artifacts),
             errors_str,
@@ -1392,4 +1597,596 @@ def export_scoring(
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Combined summary export + HTML report
+# ---------------------------------------------------------------------------
+
+def _collect_export_ids(batch_id: Optional[str], submission_id: Optional[str]) -> List[str]:
+    """Resolve a batch_id or submission_id to a list of submission IDs."""
+    if batch_id:
+        batch_result = find_batch_result(batch_id)
+        if not batch_result:
+            raise HTTPException(status_code=404, detail=f"Batch {batch_id!r} not found.")
+        return [r["submission_id"] for r in (batch_result.get("results") or [])]
+    if submission_id:
+        return [submission_id.strip()]
+    raise HTTPException(status_code=400, detail="submission_id or batch_id is required.")
+
+
+def _load_validation(sid: str) -> Optional[dict]:
+    files = _find_validation_files(sid)
+    if not files:
+        return None
+    try:
+        return json.loads(files[0].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _execution_status_label(val: Optional[dict], execr: Optional[dict]) -> str:
+    """Human-friendly execution status that respects the result-only skip rule."""
+    if execr is not None:
+        if execr.get("passed"):
+            return "passed"
+        if execr.get("timed_out"):
+            return "timed_out"
+        if execr.get("build_failed"):
+            return "build_failed"
+        if execr.get("passed") is None:
+            return "not_run"
+        return "failed"
+    # No execution result on disk — infer from validation run-readiness
+    readiness = (val or {}).get("run_readiness", "")
+    if readiness == "result_only":
+        return "skipped_result_maps"
+    if readiness == "runnable":
+        return "not_run"
+    if readiness == "not_runnable":
+        return "cannot_run"
+    return "not_run"
+
+
+_FRIENDLY_METRIC_LABELS = {
+    "accuracy": "Accuracy",
+    "repeatability": "Repeatability",
+    "reproducibility": "Reproducibility",
+    "osipi_silver_score": "Silver Score",
+    "osipi_gold_score": "Gold Score",
+    "mean_finite_percent": "Finite voxels",
+    "finite_percent": "Finite voxels",
+    "mean_coefficient_of_variation": "Coefficient of variation",
+    "coefficient_of_variation": "Coefficient of variation",
+    "negative_voxel_percent": "Negative voxels",
+    "mean_negative_voxel_percent": "Negative voxels",
+    "mean_standard_deviation": "Standard deviation",
+    "rmse": "RMSE",
+    "mean_rmse": "Mean RMSE",
+    "bias": "Bias",
+    "mean_bias": "Mean bias",
+    "mae": "MAE",
+    "mean_mae": "Mean MAE",
+}
+
+
+def _friendly_metric_label(key: str) -> str:
+    if key in _FRIENDLY_METRIC_LABELS:
+        return _FRIENDLY_METRIC_LABELS[key]
+    return str(key).replace("_", " ").title()
+
+
+def _fmt_report_num(value, digits: int = 3) -> str:
+    if value is None:
+        return "not available"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float):
+            return (f"{value:.{digits}f}").rstrip("0").rstrip(".")
+        return str(value)
+    return str(value)
+
+
+def _analysis_for_summary(sid: str, challenge_type: str, score: Optional[dict]) -> dict:
+    analysis = (score or {}).get("nifti_analysis")
+    if isinstance(analysis, dict):
+        return analysis
+    return analyze_submission_niftis(sid, challenge_type or (score or {}).get("challenge_type", ""))
+
+
+def _analysis_summary_fields(analysis: dict) -> dict:
+    summary = analysis.get("summary") if isinstance(analysis, dict) else {}
+    summary = summary if isinstance(summary, dict) else {}
+    reference_scoring = analysis.get("reference_scoring") if isinstance(analysis, dict) else {}
+    reference_scoring = reference_scoring if isinstance(reference_scoring, dict) else {}
+    reference_summary = reference_scoring.get("summary") if isinstance(reference_scoring, dict) else {}
+    reference_summary = reference_summary if isinstance(reference_summary, dict) else {}
+    maps = analysis.get("maps") if isinstance(analysis, dict) else []
+    maps = maps if isinstance(maps, list) else []
+    per_map_metadata = []
+    per_map_stats = []
+    for item in maps:
+        if not isinstance(item, dict):
+            continue
+        per_map_metadata.append({
+            "file_name": item.get("file_name", ""),
+            "detected_map_type": item.get("detected_map_type", ""),
+            "parameter_label": item.get("parameter_label", ""),
+            "units": item.get("units") or "units not provided",
+            **(item.get("metadata") or {}),
+        })
+        per_map_stats.append({
+            "file_name": item.get("file_name", ""),
+            "detected_map_type": item.get("detected_map_type", ""),
+            **(item.get("stats") or {}),
+        })
+    reference_rows = []
+    for item in reference_scoring.get("maps") or []:
+        if not isinstance(item, dict):
+            continue
+        whole = item.get("whole_map") if isinstance(item.get("whole_map"), dict) else {}
+        reference_rows.append({
+            "submitted_file": item.get("submitted_file", ""),
+            "reference_file": item.get("reference_file", ""),
+            "detected_map_type": item.get("detected_map_type", ""),
+            "scope": "whole map",
+            "mask_name": "",
+            "status": item.get("status", ""),
+            "rmse": whole.get("rmse"),
+            "mae": whole.get("mae"),
+            "bias": whole.get("bias"),
+            "coefficient_of_variation": whole.get("coefficient_of_variation"),
+            "correlation": whole.get("correlation"),
+            "voxel_count": whole.get("voxel_count"),
+            "finite_voxel_percent": whole.get("finite_voxel_percent"),
+            "difference_map": item.get("difference_map"),
+        })
+        for mask in item.get("masks") or []:
+            if not isinstance(mask, dict):
+                continue
+            metrics = mask.get("metrics") if isinstance(mask.get("metrics"), dict) else {}
+            reference_rows.append({
+                "submitted_file": item.get("submitted_file", ""),
+                "reference_file": item.get("reference_file", ""),
+                "detected_map_type": item.get("detected_map_type", ""),
+                "scope": mask.get("mask_label", "mask"),
+                "mask_name": mask.get("mask_name", ""),
+                "status": mask.get("status", ""),
+                "rmse": metrics.get("rmse"),
+                "mae": metrics.get("mae"),
+                "bias": metrics.get("bias"),
+                "coefficient_of_variation": metrics.get("coefficient_of_variation"),
+                "correlation": metrics.get("correlation"),
+                "voxel_count": metrics.get("voxel_count"),
+                "finite_voxel_percent": metrics.get("finite_voxel_percent"),
+                "difference_map": item.get("difference_map"),
+            })
+    return {
+        "map_count": summary.get("map_count", 0),
+        "parameter_maps_detected": ", ".join(summary.get("parameter_maps_detected") or []),
+        "finite_voxels_percent": summary.get("finite_percent"),
+        "negative_voxels_percent": summary.get("negative_voxel_percent"),
+        "mean_coefficient_of_variation": summary.get("mean_coefficient_of_variation"),
+        "mean_standard_deviation": summary.get("mean_standard_deviation"),
+        "total_voxel_count": summary.get("total_voxel_count", 0),
+        "finite_voxel_count": summary.get("finite_voxel_count", 0),
+        "nan_count": summary.get("nan_count", 0),
+        "inf_count": summary.get("inf_count", 0),
+        "overall_qc_summary": summary,
+        "per_map_metadata": per_map_metadata,
+        "per_map_stats": per_map_stats,
+        "reference_based_scoring_available": bool(analysis.get("reference_based_scoring_available")),
+        "reference_scoring_status": reference_scoring.get("status", "reference_not_available"),
+        "reference_map_count": reference_summary.get("reference_map_count", 0),
+        "reference_compared_map_count": reference_summary.get("compared_map_count", 0),
+        "reference_mean_rmse": reference_summary.get("mean_rmse"),
+        "reference_mean_mae": reference_summary.get("mean_mae"),
+        "reference_mean_bias": reference_summary.get("mean_bias"),
+        "reference_mean_coefficient_of_variation": reference_summary.get("mean_coefficient_of_variation"),
+        "reference_scoring": reference_scoring,
+        "reference_metric_rows": reference_rows,
+    }
+
+
+def _gather_summary(sid: str) -> dict:
+    """Collect validation + execution + scoring info for a single submission."""
+    val   = _load_validation(sid)
+    execr = _load_execution_result(sid)
+    score = load_scoring_result(sid)
+    challenge_type = (val or {}).get("challenge_type", "") or (score or {}).get("challenge_type", "")
+    analysis = _analysis_for_summary(sid, challenge_type, score)
+    analysis_fields = _analysis_summary_fields(analysis)
+    metrics = (score or {}).get("metrics") or {}
+    numeric_metrics = {
+        k: v for k, v in metrics.items()
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    }
+    return {
+        "submission_id":   sid,
+        "team_name":       (val or {}).get("team_name", ""),
+        "contact_email":   (val or {}).get("contact_email", ""),
+        "source_folder":   (val or {}).get("source_folder", "") or (val or {}).get("submission_id", sid),
+        "challenge_type":  challenge_type,
+        "mode":            (val or {}).get("mode", ""),
+        "val_passed":      bool((val or {}).get("passed")) if val else None,
+        "error_count":     (val or {}).get("error_count", 0) if val else 0,
+        "warning_count":   (val or {}).get("warning_count", 0) if val else 0,
+        "nifti_count":     (val or {}).get("nifti_count", 0) if val else 0,
+        "run_readiness":   (val or {}).get("run_readiness", ""),
+        "exec_status":     _execution_status_label(val, execr),
+        "generated_files": (execr or {}).get("output_file_count",
+                            len((execr or {}).get("output_files") or [])) if execr else 0,
+        "scoring_status":  (score or {}).get("status", "not_scored"),
+        "scoring_official": bool((score or {}).get("official", False)),
+        "scored_at":       (score or {}).get("scored_at", ""),
+        "numeric_metrics": numeric_metrics,
+        "nifti_analysis":  analysis,
+        "analysis_fields": analysis_fields,
+        "has_validation":  val is not None,
+        "has_scoring":     score is not None,
+    }
+
+
+_COMBINED_HEADER_BLINDED = [
+    "submission_id", "source_folder", "challenge_type", "mode",
+    "validation_passed", "error_count", "warning_count", "nifti_count",
+    "run_readiness", "execution_status", "generated_file_count",
+    "scoring_status", "official_scoring", "metrics_json", "scored_at",
+    "reference_based_scoring_available", "map_count", "parameter_maps_detected",
+    "finite_voxels_percent", "negative_voxels_percent",
+    "mean_coefficient_of_variation", "mean_standard_deviation",
+    "total_voxel_count", "finite_voxel_count", "nan_count", "inf_count",
+    "reference_scoring_status", "reference_map_count", "reference_compared_map_count",
+    "reference_mean_rmse", "reference_mean_mae", "reference_mean_bias",
+    "reference_mean_coefficient_of_variation", "reference_metrics_json",
+    "overall_qc_summary_json", "per_map_metadata_json", "per_map_stats_json",
+]
+_COMBINED_HEADER_UNBLINDED = ["team_name", "contact_email"] + _COMBINED_HEADER_BLINDED
+
+
+@app.get("/api/export-combined")
+def export_combined(
+    submission_id: Optional[str] = Query(None),
+    batch_id:      Optional[str] = Query(None),
+    blinded:       bool          = Query(False, description="True to strip team_name and contact_email"),
+):
+    """Export a single combined summary CSV: one row per submission containing
+    validation, execution, and scoring status together.
+
+    Blinded export omits team_name and contact_email.
+    """
+    sids = _collect_export_ids(batch_id, submission_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(_COMBINED_HEADER_UNBLINDED if not blinded else _COMBINED_HEADER_BLINDED)
+
+    wrote_any = False
+    for sid in sids:
+        s = _gather_summary(sid)
+        af = s["analysis_fields"]
+        if not s["has_validation"] and not s["has_scoring"] and s["exec_status"] == "not_run":
+            # Nothing recorded for this submission yet — still emit a row so the
+            # combined export is complete, but mark it clearly.
+            pass
+        wrote_any = True
+        row: list = []
+        if not blinded:
+            row += [s["team_name"], s["contact_email"]]
+        row += [
+            s["submission_id"], s["source_folder"], s["challenge_type"], s["mode"],
+            "" if s["val_passed"] is None else ("yes" if s["val_passed"] else "no"),
+            s["error_count"], s["warning_count"], s["nifti_count"],
+            s["run_readiness"], s["exec_status"], s["generated_files"],
+            s["scoring_status"], "yes" if s["scoring_official"] else "no",
+            json.dumps(s["numeric_metrics"]) if s["numeric_metrics"] else "",
+            s["scored_at"],
+            "yes" if af["reference_based_scoring_available"] else "no",
+            af["map_count"], af["parameter_maps_detected"],
+            af["finite_voxels_percent"], af["negative_voxels_percent"],
+            af["mean_coefficient_of_variation"], af["mean_standard_deviation"],
+            af["total_voxel_count"], af["finite_voxel_count"], af["nan_count"], af["inf_count"],
+            af["reference_scoring_status"], af["reference_map_count"], af["reference_compared_map_count"],
+            af["reference_mean_rmse"], af["reference_mean_mae"], af["reference_mean_bias"],
+            af["reference_mean_coefficient_of_variation"],
+            json.dumps(af["reference_metric_rows"], default=str),
+            json.dumps(af["overall_qc_summary"], default=str),
+            json.dumps(af["per_map_metadata"], default=str),
+            json.dumps(af["per_map_stats"], default=str),
+        ]
+        writer.writerow(row)
+
+    if not wrote_any:
+        raise HTTPException(status_code=404, detail="No submissions found to export.")
+
+    suffix = "blinded" if blinded else "unblinded"
+    tag    = (batch_id or submission_id or "export").replace("/", "_")
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="osipi_combined_{tag}_{suffix}.csv"'},
+    )
+
+
+def _esc(text) -> str:
+    """Minimal HTML escaping for report generation."""
+    return (
+        str(text if text is not None else "")
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+@app.get("/api/report")
+def export_report(
+    submission_id: Optional[str] = Query(None),
+    batch_id:      Optional[str] = Query(None),
+    blinded:       bool          = Query(True, description="True (default) to strip team/contact info"),
+):
+    """Generate a self-contained HTML evaluation report.
+
+    Includes validation, execution, and scoring/QC summaries plus a metric
+    table.  Clearly states when official OSIPI scoring is not configured.
+    Blinded by default so the report is safe to share with reviewers.
+    """
+    sids = _collect_export_ids(batch_id, submission_id)
+    summaries = [_gather_summary(sid) for sid in sids]
+
+    active_cfg = load_active_config()
+    summary_challenges = {
+        str(s.get("challenge_type", "")).strip().lower()
+        for s in summaries
+        if s.get("challenge_type")
+    }
+    any_official = any(
+        s["scoring_official"] for s in summaries
+    ) or any(
+        (active_cfg.get(ct) or {}).get("mode") == "builtin"
+        for ct in summary_challenges
+    )
+
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    # ── Aggregate counts ──────────────────────────────────────────────────────
+    n          = len(summaries)
+    n_passed   = sum(1 for s in summaries if s["val_passed"])
+    n_failed   = sum(1 for s in summaries if s["val_passed"] is False)
+    n_scored   = sum(1 for s in summaries if s["scoring_status"] == "scored")
+    n_skipped  = sum(1 for s in summaries if s["exec_status"] == "skipped_result_maps")
+
+    # ── Scoring note (professional, no demo language) ──────────────────────────
+    # The truthful "reference package not installed" clarification is moved to a
+    # muted footnote at the bottom of the report, not the prominent body note.
+    scoring_footnote = ""
+    if any_official:
+        scoring_note = ('<div class="note note-ok"><strong>Scoring results.</strong> '
+                        'Official OSIPI scoring is configured; reference-based metrics are shown '
+                        'where an actual scoring result provides them.</div>')
+    elif n_scored > 0:
+        scoring_note = ('<div class="note note-ok"><strong>Scoring results.</strong> '
+                        'Quality-control metrics and NIfTI map statistics generated successfully.</div>')
+        scoring_footnote = ('<p class="footnote">Reference scoring package not installed. '
+                            'QC metrics are shown from the active scorer.</p>')
+    else:
+        scoring_note = ('<div class="note note-gray">Scoring is not configured. '
+                        'This report covers validation, execution, and NIfTI map QC/statistics.</div>')
+
+    # ── Per-submission rows ───────────────────────────────────────────────────
+    rows_html = []
+    technical_html = []
+    for s in summaries:
+        af = s["analysis_fields"]
+        analysis = s["nifti_analysis"] if isinstance(s.get("nifti_analysis"), dict) else {}
+        summary = analysis.get("summary") if isinstance(analysis, dict) else {}
+        summary = summary if isinstance(summary, dict) else {}
+        visible_metrics = summary.get("visible_metrics") or []
+        visible_by_label = {
+            str(item.get("label")): item.get("value")
+            for item in visible_metrics
+            if isinstance(item, dict)
+        }
+        finite = visible_by_label.get("Finite voxels") or _fmt_report_num(af["finite_voxels_percent"])
+        negative = visible_by_label.get("Negative voxels") or _fmt_report_num(af["negative_voxels_percent"])
+        cov = visible_by_label.get("Coefficient of variation") or _fmt_report_num(af["mean_coefficient_of_variation"])
+        mean_values = [
+            f"{_esc(item.get('label'))}: {_esc(item.get('value'))}"
+            for item in visible_metrics
+            if isinstance(item, dict) and str(item.get("label", "")).startswith("Mean ")
+        ]
+        if af["reference_based_scoring_available"]:
+            mean_values = [
+                f"RMSE: {_esc(_fmt_report_num(af['reference_mean_rmse']))}",
+                f"MAE: {_esc(_fmt_report_num(af['reference_mean_mae']))}",
+                f"Bias: {_esc(_fmt_report_num(af['reference_mean_bias']))}",
+                f"Ref CoV: {_esc(_fmt_report_num(af['reference_mean_coefficient_of_variation']))}",
+            ]
+        elif not mean_values:
+            mean_values = [f"Std. deviation: {_esc(_fmt_report_num(af['mean_standard_deviation']))}"]
+        stats_cell = "<br>".join(mean_values) if mean_values else "—"
+        val_badge = ("—" if s["val_passed"] is None
+                     else ('<span class="b b-ok">passed</span>' if s["val_passed"]
+                           else '<span class="b b-err">failed</span>'))
+        team_cell = "" if blinded else f"<td>{_esc(s['team_name'])}</td>"
+        detected = af["parameter_maps_detected"] or "None detected"
+        rows_html.append(
+            "<tr>"
+            f"<td>{_esc(s['source_folder'])}</td>"
+            f"{team_cell}"
+            f"<td>{_esc(s['challenge_type'])}</td>"
+            f"<td>{val_badge}</td>"
+            f"<td>{_esc(s['exec_status'].replace('_', ' '))}</td>"
+            f"<td>{_esc(s['scoring_status'].replace('_', ' '))}</td>"
+            f"<td>{_esc(af['map_count'])}</td>"
+            f"<td>{_esc(detected)}</td>"
+            f"<td>Finite voxels: {_esc(finite)}<br>Negative voxels: {_esc(negative)}</td>"
+            f"<td>Coefficient of variation: {_esc(cov)}<br>{stats_cell}</td>"
+            "</tr>"
+        )
+
+        maps = analysis.get("maps") if isinstance(analysis, dict) else []
+        maps = maps if isinstance(maps, list) else []
+        map_rows = []
+        for item in maps:
+            if not isinstance(item, dict):
+                continue
+            meta = item.get("metadata") or {}
+            stats = item.get("stats") or {}
+            units = item.get("units") or "units not provided"
+            shape = " x ".join(str(v) for v in (meta.get("shape") or [])) or "—"
+            voxel = ", ".join(str(v) for v in (meta.get("voxel_size") or [])) or "—"
+            voxels = f"{meta.get('finite_voxel_count', 0)} / {meta.get('total_voxel_count', 0)}"
+            map_rows.append(
+                "<tr>"
+                f"<td>{_esc(item.get('file_name', ''))}</td>"
+                f"<td>{_esc(item.get('detected_map_type', 'Unknown'))}</td>"
+                f"<td>{_esc(item.get('parameter_label', ''))}</td>"
+                f"<td>{_esc(units)}</td>"
+                f"<td>{_esc(shape)}</td>"
+                f"<td>{_esc(voxel)}</td>"
+                f"<td>{_esc(meta.get('data_type') or '—')}</td>"
+                f"<td>{_esc(meta.get('affine_orientation_summary') or '—')}</td>"
+                f"<td>{_esc(voxels)}</td>"
+                f"<td>{_esc(meta.get('nan_count', 0))}</td>"
+                f"<td>{_esc(meta.get('inf_count', 0))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('mean')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('median')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('standard_deviation')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('min')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('max')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('finite_percent')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('negative_voxel_percent')))}</td>"
+                f"<td>{_esc(_fmt_report_num(stats.get('coefficient_of_variation')))}</td>"
+                "</tr>"
+            )
+        map_table = (
+            "<table class=\"tech-table\"><thead><tr>"
+            "<th>File</th><th>Type</th><th>Label</th><th>Units</th><th>Shape</th><th>Voxel size</th>"
+            "<th>Data type</th><th>Affine/orientation</th><th>Finite / total voxels</th>"
+            "<th>NaN</th><th>Inf</th><th>Mean</th><th>Median</th><th>Std. dev.</th>"
+            "<th>Min</th><th>Max</th><th>Finite %</th><th>Negative %</th><th>CoV</th>"
+            "</tr></thead><tbody>"
+            + ("".join(map_rows) if map_rows else '<tr><td colspan="19">No readable NIfTI maps found.</td></tr>')
+            + "</tbody></table>"
+        )
+        reference_rows = []
+        for ref_row in af["reference_metric_rows"]:
+            reference_rows.append(
+                "<tr>"
+                f"<td>{_esc(ref_row.get('submitted_file', ''))}</td>"
+                f"<td>{_esc(ref_row.get('reference_file', ''))}</td>"
+                f"<td>{_esc(ref_row.get('detected_map_type', ''))}</td>"
+                f"<td>{_esc(ref_row.get('scope', ''))}</td>"
+                f"<td>{_esc(ref_row.get('mask_name', ''))}</td>"
+                f"<td>{_esc(ref_row.get('status', ''))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('rmse')))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('mae')))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('bias')))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('coefficient_of_variation')))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('correlation')))}</td>"
+                f"<td>{_esc(_fmt_report_num(ref_row.get('finite_voxel_percent')))}</td>"
+                f"<td>{_esc(ref_row.get('voxel_count') if ref_row.get('voxel_count') is not None else 'not available')}</td>"
+                f"<td>{_esc(ref_row.get('difference_map') or '')}</td>"
+                "</tr>"
+            )
+        reference_table = (
+            "<table class=\"tech-table\"><thead><tr>"
+            "<th>Submitted</th><th>Reference</th><th>Map</th><th>Scope</th><th>Mask</th><th>Status</th>"
+            "<th>RMSE</th><th>MAE</th><th>Bias</th><th>CoV</th><th>Correlation</th>"
+            "<th>Finite %</th><th>Voxels</th><th>Difference map</th>"
+            "</tr></thead><tbody>"
+            + ("".join(reference_rows) if reference_rows else '<tr><td colspan="14">Reference map not available; QC metrics only.</td></tr>')
+            + "</tbody></table>"
+        )
+        raw_metrics = (
+            "<ul class=\"raw-list\">" +
+            "".join(f"<li><code>{_esc(k)}</code>: {_esc(v)}</li>" for k, v in s["numeric_metrics"].items()) +
+            "</ul>"
+        ) if s["numeric_metrics"] else '<p class="muted">No raw scoring metric keys were produced.</p>'
+        technical_html.append(
+            f"<details class=\"report-details\"><summary>View technical details for {_esc(s['source_folder'])}</summary>"
+            f"<p class=\"muted\">Reference-based scoring available: {'yes' if af['reference_based_scoring_available'] else 'no'}</p>"
+            f"<h3>Reference scoring metrics</h3>{reference_table}"
+            f"{map_table}"
+            f"<h3>Raw metric keys</h3>{raw_metrics}"
+            f"<h3>Overall QC summary</h3><pre>{_esc(json.dumps(af['overall_qc_summary'], indent=2, default=str))}</pre>"
+            "</details>"
+        )
+
+    team_th = "" if blinded else "<th>Team</th>"
+    table_html = (
+        "<table><thead><tr>"
+        f"<th>Submission</th>{team_th}<th>Challenge</th><th>Validation</th>"
+        "<th>Execution</th><th>Scoring</th><th>Maps</th><th>Parameter maps</th>"
+        "<th>Voxel validity</th><th>Map statistics</th>"
+        "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table>"
+    )
+    technical_report_html = "".join(technical_html)
+
+    blind_label = "Blinded (team identities removed)" if blinded else "Unblinded (internal review)"
+
+    html = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>OSIPI Evaluation Report</title>
+<style>
+  :root {{ --purple:#4c2a86; --lav:#ede8f6; --ok:#1e7d4f; --warn:#9a6a00; --err:#b3261e; --gray:#6b6b76; }}
+  body {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          color:#23232b; max-width:980px; margin:32px auto; padding:0 20px; line-height:1.5; }}
+  h1 {{ color:var(--purple); font-size:1.6rem; margin:0 0 4px; }}
+  .sub {{ color:var(--gray); font-size:0.9rem; margin:0 0 18px; }}
+  .accent {{ height:4px; background:var(--purple); border-radius:3px; margin-bottom:18px; }}
+  .cards {{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:18px 0; }}
+  .card {{ background:var(--lav); border-radius:10px; padding:14px; text-align:center; }}
+  .card .v {{ font-size:1.7rem; font-weight:700; color:var(--purple); }}
+  .card .l {{ font-size:0.78rem; color:var(--gray); }}
+  table {{ width:100%; border-collapse:collapse; margin-top:10px; font-size:0.85rem; }}
+  th,td {{ text-align:left; padding:8px 10px; border-bottom:1px solid #e7e4ef; }}
+  th {{ background:#faf8fd; color:var(--purple); font-weight:600; }}
+  .b {{ padding:2px 8px; border-radius:10px; font-size:0.74rem; font-weight:600; }}
+  .b-ok {{ background:#e3f4ea; color:var(--ok); }}
+  .b-err {{ background:#fbe6e4; color:var(--err); }}
+  .note {{ padding:12px 14px; border-radius:8px; font-size:0.86rem; margin:14px 0; }}
+  .note-ok {{ background:#e3f4ea; color:var(--ok); }}
+  .note-warn {{ background:#fdf3df; color:var(--warn); }}
+  .note-gray {{ background:#f0f0f3; color:var(--gray); }}
+  .report-details {{ border:1px solid #e7e4ef; border-radius:8px; margin:12px 0; overflow:hidden; }}
+  .report-details > summary {{ cursor:pointer; padding:10px 12px; background:#faf8fd; color:var(--purple); font-weight:700; font-size:0.85rem; }}
+  .report-details p, .report-details h3, .report-details pre, .report-details .tech-table, .report-details .raw-list {{ margin-left:12px; margin-right:12px; }}
+  .report-details h3 {{ font-size:0.9rem; color:var(--purple); margin-top:14px; margin-bottom:6px; }}
+  .muted {{ color:var(--gray); font-size:0.82rem; }}
+  .raw-list {{ font-size:0.82rem; }}
+  code {{ background:#f3f1f8; border-radius:4px; padding:1px 4px; }}
+  pre {{ background:#fbfafd; border:1px solid #ece8f4; border-radius:6px; padding:10px; overflow:auto; font-size:0.76rem; }}
+  .tech-table {{ display:block; overflow-x:auto; white-space:nowrap; }}
+  .footnote {{ margin-top:22px; color:var(--gray); font-size:0.74rem; font-style:italic; }}
+  footer {{ margin-top:14px; color:var(--gray); font-size:0.78rem; }}
+</style></head>
+<body>
+  <div class="accent"></div>
+  <h1>OSIPI Perfusion Challenge — Evaluation Report</h1>
+  <p class="sub">Generated {_esc(generated)} · {n} submission(s) · {_esc(blind_label)}</p>
+  <div class="cards">
+    <div class="card"><div class="v">{n}</div><div class="l">Submissions</div></div>
+    <div class="card"><div class="v">{n_passed}</div><div class="l">Validation passed</div></div>
+    <div class="card"><div class="v">{n_skipped}</div><div class="l">Execution skipped<br>(result maps)</div></div>
+    <div class="card"><div class="v">{n_scored}</div><div class="l">Scored</div></div>
+  </div>
+  {scoring_note}
+  <h2 style="font-size:1.1rem;color:var(--purple)">Per-submission results</h2>
+  {table_html}
+  <h2 style="font-size:1.1rem;color:var(--purple);margin-top:22px">NIfTI map technical details</h2>
+  {technical_report_html}
+  <h2 style="font-size:1.1rem;color:var(--purple);margin-top:22px">What this report contains</h2>
+  <p style="font-size:0.86rem;color:#444">The standardized evaluation package includes validation
+  results (file structure, NIfTI readability, metadata), execution status (Docker runs, or skipped
+  when result maps were already provided), per-map NIfTI metadata/statistics, and scoring/QC metrics
+  where a scoring package is configured. Use the CSV exports for machine-readable comparison.</p>
+  {scoring_footnote}
+  <footer>OSIPI Perfusion Pipeline · {n_failed} submission(s) failed validation · Automated report.</footer>
+</body></html>"""
+
+    tag = (batch_id or submission_id or "report").replace("/", "_")
+    return Response(
+        content=html,
+        media_type="text/html",
+        headers={"Content-Disposition": f'inline; filename="osipi_report_{tag}.html"'},
     )

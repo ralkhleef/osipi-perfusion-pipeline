@@ -1,0 +1,256 @@
+#!/usr/bin/env node
+/**
+ * DOM smoke test for frontend/index.html
+ * Uses only Node.js stdlib — no external packages required.
+ * Run: node tests/frontend_smoke_test.js
+ */
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+
+const htmlPath = path.resolve(__dirname, "../frontend/index.html");
+const jsPath = path.resolve(__dirname, "../frontend/app.js");
+const cssPath = path.resolve(__dirname, "../frontend/styles.css");
+const html = fs.readFileSync(htmlPath, "utf8");
+const appJs = fs.readFileSync(jsPath, "utf8");
+const css = fs.readFileSync(cssPath, "utf8");
+let mainPy = "";
+try { mainPy = fs.readFileSync(path.resolve(__dirname, "../backend/main.py"), "utf8"); } catch (_) {}
+
+let passed = 0;
+let failed = 0;
+
+function hasId(id) {
+  // Match id="..." or id='...' with possible surrounding whitespace
+  return new RegExp(`id=["']${id}["']`).test(html);
+}
+
+function hasClass(cls) {
+  return new RegExp(`class=["'][^"']*${cls}[^"']*["']`).test(html);
+}
+
+function check(desc, id) {
+  if (hasId(id)) {
+    console.log(`  ✓  ${desc}  (#${id})`);
+    passed++;
+  } else {
+    console.error(`  ✗  MISSING: ${desc}  (#${id})`);
+    failed++;
+  }
+}
+
+function checkCls(desc, cls) {
+  if (hasClass(cls)) {
+    console.log(`  ✓  ${desc}  (.${cls})`);
+    passed++;
+  } else {
+    console.error(`  ✗  MISSING: ${desc}  (.${cls})`);
+    failed++;
+  }
+}
+
+function checkContains(desc, haystack, needle) {
+  if (haystack.includes(needle)) {
+    console.log(`  ✓  ${desc}`);
+    passed++;
+  } else {
+    console.error(`  ✗  MISSING: ${desc}`);
+    failed++;
+  }
+}
+
+function checkNotContains(desc, haystack, needle) {
+  if (!haystack.includes(needle)) {
+    console.log(`  ✓  ${desc}`);
+    passed++;
+  } else {
+    console.error(`  ✗  UNEXPECTED: ${desc}`);
+    failed++;
+  }
+}
+
+function section(id) {
+  const start = html.indexOf(`<section id="${id}"`);
+  if (start < 0) return "";
+  const next = html.indexOf("<section id=", start + 1);
+  return html.slice(start, next < 0 ? html.length : next);
+}
+
+console.log("\n=== OSIPI Frontend DOM Smoke Test ===\n");
+
+console.log("[ Step panels ]");
+check("Upload step panel",          "step-upload");
+check("Index step panel",           "step-index");
+check("Validate step panel",        "step-validate");
+check("Run step panel",             "step-run");
+check("Score step panel",           "step-score");
+check("Results Summary step panel", "step-summary");
+check("Export step panel",          "step-export");
+
+console.log("\n[ Upload form ]");
+check("Submit button",       "submit-btn");
+check("Team name input",     "team-name");
+check("Contact email input", "contact-email");
+check("Source tab: local",   "tab-local");
+check("Source tab: zenodo",  "tab-zenodo");
+check("Source tab: github",  "tab-github");
+check("Drop zone",           "drop-zone");
+
+console.log("\n[ Wizard navigation ]");
+check("Wizard footer",       "wizard-footer");
+check("Wizard back button",  "wf-back-btn");
+check("Wizard next button",  "wf-next-btn");
+if (!hasId("compact-progress")) {
+  console.log("  ✓  compact-progress nav absent (removed by request)");
+  passed++;
+} else {
+  console.error("  ✗  compact-progress nav still present — should have been removed");
+  failed++;
+}
+checkCls("Mirrored step shell", "step-shell");
+checkContains("Upload step hides footer", css, 'body[data-step="upload"] .wizard-footer');
+checkContains("Later steps show footer", css, 'body:not([data-step="upload"]) .wizard-footer:not([hidden])');
+checkContains("Footer uses blur treatment", css, "backdrop-filter: blur");
+checkContains("Footer disabled tooltip", css, "data-disabled-reason");
+checkContains("Footer Review label", appJs, 'nextLabel: "Validate Submission"');
+checkContains("Footer Validate label", appJs, 'nextLabel: "Continue to Run"');
+checkContains("Footer Run label", appJs, 'nextLabel: "Continue to Score"');
+checkContains("Footer Score label", appJs, 'nextLabel: "Continue to Summary"');
+checkContains("Footer Summary label", appJs, 'nextLabel: "Continue to Export"');
+checkContains("Footer Export label", appJs, 'nextLabel: "Finish"');
+checkContains("Blocked-step reason helper", appJs, "function _stepBlockedReason");
+checkContains("Progress sync helper", appJs, "function _syncCompactProgress");
+checkContains("Step shell card styling", css, ".step-shell {");
+checkContains("Step shell header styling", css, ".step-shell-header");
+
+console.log("\n[ Hidden state-holder buttons ]");
+check("WF state holder",     "wf-state-holder");
+check("WF btn: upload",      "wf-btn-upload");
+check("WF btn: index",       "wf-btn-index");
+check("WF btn: validate",    "wf-btn-validate");
+check("WF btn: run",         "wf-btn-run");
+check("WF btn: score",       "wf-btn-score");
+check("WF btn: summary",     "wf-btn-summary");
+check("WF btn: export",      "wf-btn-export");
+
+console.log("\n[ Index step ]");
+check("Batch validate all",  "batch-validate-all-btn");
+checkContains("Review title is singular-capable", html, 'id="batch-index-title"');
+checkContains("Review renders submission cards", appJs, 'guided-sub-card');
+checkContains("Single-submission review card mode", appJs, 'sub-card--single');
+checkNotContains("Index step has no old table markup", section("step-index"), "<table");
+checkContains("Continue validates selected submissions", appJs, "runBatchValidation(selected)");
+
+console.log("\n[ Run step ]");
+check("Run submissions list","run-submissions-list");
+check("Batch exec all btn",  "batch-exec-all-btn");
+checkContains("Result-only run shows skipped card", html, "Execution skipped");
+checkContains("Result-only run hides per-submission list", appJs, 'list.innerHTML = ""');
+checkContains("Run button says Docker", html, "Run code in Docker");
+
+console.log("\n[ Score step ]");
+check("Score not-configured card", "score-not-configured-card");
+check("Score status card",         "score-status-card");
+check("Score table card",          "score-table-card");
+check("Run Scoring button",        "btn-score-all");
+checkContains("Score configured shows Run Scoring", html, "Run Scoring");
+checkContains("Score not configured is one card", appJs, "if (notConfiguredCard) notConfiguredCard.style.display = \"\"");
+checkContains("Score table hidden until useful", appJs, 'tableCard.style.display = "none"');
+checkContains("Score metric preview present", html, 'id="score-metric-preview"');
+
+console.log("\n[ Results Summary step ]");
+check("Summary report container",   "summary-cards");
+checkContains("Summary has numeric metric filter", appJs, "function _numericMetricEntries");
+checkContains("Summary Continue is always enabled once reached", appJs, 'case "summary": return true;');
+checkContains("Summary footer routes to Export", appJs, 'summary:  { back: "score",    next: "export"');
+checkContains("Summary renders mini-report", appJs, 'container.className = "summary-report"');
+checkContains("Summary has hero panel", appJs, "summary-hero");
+checkContains("Summary has status rail", appJs, "summary-rail");
+checkContains("Summary has map quality card", appJs, "Map quality");
+checkContains("Summary has parameter maps card", appJs, "Parameter maps detected");
+checkContains("Summary has voxel validity card", appJs, "Voxel validity");
+checkContains("Summary has map statistics card", appJs, "Map statistics");
+checkContains("Summary has NIfTI technical table", appJs, "summary-nifti-table");
+checkContains("Summary has reference technical table", appJs, "summary-reference-table");
+checkContains("Summary shows RMSE when reference available", appJs, "RMSE");
+checkContains("Summary has export checklist", appJs, "summary-export-checklist");
+checkContains("Summary execution skipped wording is intentional", appJs, "Docker execution was not needed");
+checkContains("Summary shows finite voxels label", appJs, "Finite voxels");
+checkContains("Summary shows coefficient of variation label", appJs, "Coefficient of variation");
+checkContains("Summary caches NIfTI analysis", appJs, "niftiAnalysis");
+checkContains("Summary details collapsed", appJs, 'class="summary-details"');
+checkNotContains("Summary does not show package line as metric", appJs, "summary-pkg-line");
+checkNotContains("Summary no longer uses old four-card output", appJs, "valCard + execCard + scoreCard + exportCard");
+checkNotContains("Summary has no visible demo footnote", appJs, "demo/QC, not official OSIPI scoring");
+checkNotContains("Report has no visible demo-only banner", mainPy, "Demo / QC scoring only");
+
+console.log("\n[ Export step ]");
+check("Batch export blinded btn",    "batch-export-blinded-btn");
+check("Batch export unblinded btn",  "batch-export-unblinded-btn");
+check("Exec export blinded btn",     "batch-export-exec-blinded-btn");
+check("Scoring export blinded btn",  "export-scoring-blinded-btn");
+check("Combined export blinded btn", "export-combined-blinded-btn");
+check("Combined export unblinded btn","export-combined-unblinded-btn");
+check("HTML report button",          "export-report-btn");
+checkContains("Export has Combined CSV label", html, "Combined CSV");
+checkContains("Export has Validation CSV button", html, "Download Validation CSV");
+checkContains("Export has Execution CSV button", html, "Download Execution CSV");
+checkContains("Export has Scoring CSV button", html, "Download Scoring CSV");
+checkContains("Export has Combined CSV button", html, "Download Combined CSV");
+checkContains("Export has HTML report button", html, "Open HTML Report");
+checkContains("Export has Blinded Export label", html, "Download Blinded Export");
+checkContains("Export has Unblinded Export buttons", html, "Download Unblinded Export");
+
+console.log("\n[ Validate step cards ]");
+checkContains("Validate title is status-driven", html, 'id="validate-card-title"');
+checkContains("Validate totals strip exists", html, 'id="validate-summary-stats"');
+checkContains("Validate renders cards", appJs, 'validation-card');
+checkContains("Validate details collapsed by default", appJs, 'class="vr-row-detail" style="display:none"');
+
+console.log("\n[ Tooltips for key terms ]");
+function countMatches(re) { return (html.match(re) || []).length; }
+const tooltipCount = countMatches(/class=["'][^"']*help-tooltip[^"']*["']/g);
+if (tooltipCount >= 3) {
+  console.log(`  ✓  Help tooltips present (${tooltipCount} found)`);
+  passed++;
+} else {
+  console.error(`  ✗  Expected >=3 help tooltips, found ${tooltipCount}`);
+  failed++;
+}
+checkCls("Tooltip text spans", "tooltip-text");
+
+console.log("\n[ Topbar / session ]");
+check("Topbar new-session btn",    "sidebar-new-session-btn");
+check("Session chip",              "session-chip");
+check("Restore banner",            "restore-banner");
+
+console.log("\n[ CSS class presence ]");
+// .app-topbar intentionally removed (topbar removed in v53)
+checkCls("Upload form card",  "upload-form-card");
+checkContains("Button base class", css, ".btn,");
+checkContains("Button primary class", css, ".btn-primary");
+checkContains("Button secondary class", css, ".btn-secondary");
+checkContains("Button ghost class", css, ".btn-ghost");
+checkContains("Button danger class", css, ".btn-danger");
+checkContains("Button success class", css, ".btn-success");
+checkContains("Button icon class", css, ".btn-icon");
+checkContains("Button loading class", css, ".btn-loading");
+checkContains("Button full-width class", css, ".btn-full");
+checkContains("Button small class", css, ".btn-sm");
+checkContains("Focus-visible styles", css, ":focus-visible");
+checkContains("Loading class toggled in JS", appJs, "classList.add(\"btn-loading\")");
+
+console.log("\n[ Top step nav must be absent ]");
+// The top step nav was removed — verify it is NOT in the HTML
+if (!hasId("top-step-nav")) {
+  console.log("  ✓  top-step-nav absent (correct — removed by design)");
+  passed++;
+} else {
+  console.error("  ✗  top-step-nav found in HTML — should have been removed");
+  failed++;
+}
+checkNotContains("Old sidebar container absent", html, 'id="sidebar"');
+
+console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
+if (failed > 0) process.exit(1);

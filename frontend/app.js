@@ -57,6 +57,9 @@ const SESSION_EXPIRY_MS  = 24 * 60 * 60 * 1000;   // 24 hours
 // Execution result summaries populated by _updateRunRow() — keyed by submission_id
 const _execSummaries = {};
 
+// Scoring result cache populated by _applyScoreStatus() — keyed by submission_id
+const _scoreCache = {};
+
 // ── Docker availability ───────────────────────────────────────────────────────
 
 const dockerStatus = { available: null, version: "", message: "" };
@@ -87,8 +90,27 @@ function getRadio(name) {
 
 function setLoading(btn, loading, label) {
   if (!btn) return;
-  btn.disabled = loading;
-  btn.innerHTML = loading ? `<span class="spinner"></span>${label}…` : label;
+  const nextLabel = label || btn.dataset.idleLabel || btn.textContent.trim();
+  if (loading) {
+    if (!btn.dataset.idleHtml) btn.dataset.idleHtml = btn.innerHTML;
+    btn.dataset.idleLabel = nextLabel;
+    btn.disabled = true;
+    btn.classList.add("btn-loading");
+    btn.setAttribute("aria-busy", "true");
+    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${escapeHtml(nextLabel)}…`;
+    return;
+  }
+
+  btn.disabled = false;
+  btn.classList.remove("btn-loading");
+  btn.removeAttribute("aria-busy");
+  if (btn.dataset.idleHtml && (!label || label === btn.dataset.idleLabel)) {
+    btn.innerHTML = btn.dataset.idleHtml;
+  } else if (nextLabel) {
+    btn.textContent = nextLabel;
+  }
+  delete btn.dataset.idleHtml;
+  delete btn.dataset.idleLabel;
 }
 
 function triggerDownload(blob, filename) {
@@ -112,6 +134,67 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+
+function basenameOnly(value) {
+  if (!value) return "";
+  const parts = String(value).split(/[\\/]/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : String(value);
+}
+
+function cleanSubmissionName(value, fallback) {
+  const raw = basenameOnly(value || fallback || "Submission");
+  const noArchive = raw.replace(/\.(zip|tar|gz|tgz)$/i, "");
+  return noArchive || "Submission";
+}
+
+function submissionDisplayName(sub, fallback) {
+  return cleanSubmissionName(
+    sub?.display_name || sub?.name || sub?.original_filename || sub?.source_folder,
+    fallback || sub?.submission_id || "Submission"
+  );
+}
+
+function challengeLabel(value) {
+  return String(value || getChallengeType() || "dce").toUpperCase();
+}
+
+function hasRunInstructions(item) {
+  return !!(item?.has_run_instructions ?? item?.has_dockerfile);
+}
+
+function hasResultMaps(item) {
+  return !!item?.has_result_maps || Number(item?.nifti_count || 0) > 0 || item?.run_readiness === "result_only";
+}
+
+function inferredRunReadiness(item) {
+  if (!item) return "not_runnable";
+  if (item.run_readiness) return item.run_readiness;
+  if (item.passed && hasRunInstructions(item)) return "runnable";
+  if (item.passed && hasResultMaps(item)) return "result_only";
+  if (!hasRunInstructions(item) && hasResultMaps(item)) return "result_only";
+  return "not_runnable";
+}
+
+function submissionTypeInfo(item) {
+  if (hasRunInstructions(item)) {
+    return { label: "Reproducible code provided", state: "ready" };
+  }
+  if (hasResultMaps(item)) {
+    return { label: "Result maps provided", state: "skipped" };
+  }
+  return { label: "Needs attention", state: "warning" };
+}
+
+function statusPill(label, state) {
+  return `<span class="status-pill status-${escapeHtml(state || "pending")}">${escapeHtml(label)}</span>`;
+}
+
+function issueCount(result, field) {
+  if (!result) return 0;
+  if (Array.isArray(result[field])) return result[field].length;
+  const countField = field === "warnings" ? "warning_count" : "error_count";
+  return Number(result[countField] || 0);
 }
 
 function dedupeMessages(items) {
@@ -220,46 +303,378 @@ function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
 
 // ── Workflow navigation ───────────────────────────────────────────────────────
 
-const WF_STEPS = ["upload", "index", "validate", "run", "score", "export"];
+const WF_STEPS = ["upload", "index", "validate", "run", "score", "summary", "export"];
 
 const STEP_TITLES = {
   upload:   { title: "Upload",             sub: "Submit parameter maps for automated validation" },
-  index:    { title: "Index",              sub: "Detected submissions ready to validate" },
+  index:    { title: "Review",             sub: "Detected submissions ready to validate" },
   validate: { title: "Validate",           sub: "Validation results for all submissions" },
   run:      { title: "Run",                sub: "Execute validated submissions" },
   score:    { title: "Score",              sub: "Score validated submissions using the OSIPI TF6.2 provider" },
+  summary:  { title: "Results Summary",    sub: "Summary of validation, execution, and scoring results" },
   export:   { title: "Export",             sub: "Download results as CSV" },
 };
 
+const COMPACT_PROGRESS_STEPS = [
+  { id: "upload",   label: "Upload" },
+  { id: "index",    label: "Review" },
+  { id: "validate", label: "Validate" },
+  { id: "run",      label: "Run" },
+  { id: "score",    label: "Score" },
+  { id: "summary",  label: "Summary" },
+  { id: "export",   label: "Export" },
+];
+
 function goToStep(step) {
   wf.step = step;
+  document.body.dataset.step = step;   // CSS hook: body[data-step="upload"] hides footer
   WF_STEPS.forEach((s) => {
     const panel = el(`step-${s}`);
     if (panel) panel.hidden = (s !== step);
   });
   _syncWfNav();
-  // Scroll the content area (sidebar layout), not the window
+  // Scroll the content area to top on step change
   document.querySelector(".content")?.scrollTo({ top: 0, behavior: "instant" });
-  // Update header title
+  window.scrollTo({ top: 0, behavior: "instant" });
+  // Update header title (page-title / page-subtitle may not exist in topbar layout — no-op if missing)
   const titles = STEP_TITLES[step] || {};
   const hTitle = el("page-title");
   const hSub   = el("page-subtitle");
   if (hTitle) hTitle.textContent  = titles.title || step;
   if (hSub)   hSub.textContent    = titles.sub   || "";
+  // Update wizard footer
+  _updateWizardFooter(step);
   // Persist step to session
   saveSessionState();
+}
+
+// ── Wizard Footer ─────────────────────────────────────────────────────────────
+
+const _WF_FOOTER_CONFIG = {
+  upload:   { back: null,       next: null,       nextLabel: "Upload and Continue",     hint: "Fill in team details and choose a submission file below" },
+  index:    { back: "upload",   next: "validate", nextLabel: "Validate Submission",     hint: "" },
+  validate: { back: "index",    next: "run",       nextLabel: "Continue to Run",        hint: "" },
+  run:      { back: "validate", next: "score",     nextLabel: "Continue to Score",      hint: "" },
+  score:    { back: "run",      next: "summary",  nextLabel: "Continue to Summary",     hint: "" },
+  summary:  { back: "score",    next: "export",   nextLabel: "Continue to Export",      hint: "" },
+  export:   { back: "summary",  next: null,        nextLabel: "Finish",                  hint: "" },
+};
+
+function _selectedSubmissionCount() {
+  return batchState.selectedIds.size || batchState.uploadData?.submissions?.length || 0;
+}
+
+function _allValidationResultsAreResultOnly() {
+  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+  return results.length > 0 && results.every((r) => inferredRunReadiness(r) === "result_only");
+}
+
+function _updateWizardFooter(step) {
+  const cfg     = _WF_FOOTER_CONFIG[step];
+  const footer  = el("wizard-footer");
+  const backBtn = el("wf-back-btn");
+  const nextBtn = el("wf-next-btn");
+  if (!footer || !cfg) return;
+
+  // Upload step: footer hidden — the card's own "Upload and Detect" button is the sole action
+  if (step === "upload") {
+    footer.hidden = true;
+    footer.style.display = "none";
+    const gnBar = el("global-start-new");
+    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }
+    return;
+  }
+
+  footer.hidden = false;
+  footer.style.display = "flex";
+  delete footer.dataset.disabledReason;
+  footer.removeAttribute("title");
+
+  // Show global Start New bar on non-upload steps
+  const gnBar = el("global-start-new");
+  if (gnBar) { gnBar.hidden = false; gnBar.style.display = ""; }
+
+  // Back button
+  if (backBtn) {
+    if (cfg.back) {
+      backBtn.style.display = "";
+      backBtn.onclick = () => goToStep(cfg.back);
+    } else {
+      backBtn.style.display = "none";
+    }
+  }
+
+  // Next / Continue button
+  if (nextBtn) {
+    let nextLabel = cfg.nextLabel || "Continue →";
+    if (step === "run" && _allValidationResultsAreResultOnly()) {
+      nextLabel = "Continue to Score";
+    }
+    nextBtn.textContent   = nextLabel;
+    nextBtn.style.opacity = "";
+    nextBtn.title         = "";
+    nextBtn.removeAttribute("aria-describedby");
+    nextBtn.removeAttribute("aria-label");
+    delete nextBtn.dataset.disabledReason;
+
+    // (upload case handled above — never reaches here)
+
+    const canProceed  = _isStepReady(step);
+    nextBtn.disabled  = !canProceed;
+    const blockedReason = canProceed ? "" : _stepBlockedReason(step);
+    if (blockedReason) {
+      nextBtn.title = blockedReason;
+      nextBtn.dataset.disabledReason = blockedReason;
+      nextBtn.setAttribute("aria-label", `${nextLabel}. ${blockedReason}`);
+      footer.dataset.disabledReason = blockedReason;
+      footer.title = blockedReason;
+    }
+
+    // Index step: "Validate All →" triggers the validate-all handler
+    if (step === "index") {
+      nextBtn.onclick = () => {
+        if (nextBtn.disabled) return;
+        const selected = batchState.selectedIds.size
+          ? [...batchState.selectedIds]
+          : (batchState.uploadData?.submissions || []).map((s) => s.submission_id);
+        if (selected.length > 0) {
+          runBatchValidation(selected);
+        } else {
+          unlockStep("validate");
+          goToStep("validate");
+        }
+      };
+    } else if (cfg.next) {
+      nextBtn.onclick = () => {
+        if (nextBtn.disabled) return;
+        unlockStep(cfg.next);
+        if (cfg.next === "run")     { renderRunStep().catch(() => {}); }
+        if (cfg.next === "score")   { renderScoreStep().catch(() => {}); }
+        if (cfg.next === "summary") { renderSummaryStep(); }
+        if (cfg.next === "export")  { _syncExportStep(); }
+        goToStep(cfg.next);
+      };
+    } else if (step === "export") {
+      nextBtn.disabled      = false;
+      nextBtn.onclick       = null;
+      nextBtn.style.opacity = "0.6";
+      nextBtn.title         = "All done — start a new session anytime.";
+      delete footer.dataset.disabledReason;
+      footer.removeAttribute("title");
+    }
+  }
+}
+
+// Whether the current step allows proceeding to next
+function _isStepReady(step) {
+  switch (step) {
+    case "upload":  return true; // always enabled — handleSubmit does its own validation
+    // Index: ready as soon as upload data exists (user can run validation)
+    case "index":
+      return !!(batchState.uploadData || batchState.validationData || state.submissionId);
+    case "validate": {
+      const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+      return results.length > 0 && results.some((r) =>
+        r.passed && ["runnable", "result_only"].includes(inferredRunReadiness(r))
+      );
+    }
+    case "run":    return true;  // always allow continue — non-blocking
+    case "score":  return true;  // always allow continue to export
+    // Summary is a read-only review: never trap the user. Once they reach it,
+    // Continue → Export must always be available (validation/execution exports
+    // are useful even when scoring is not configured).
+    case "summary": return true;
+    case "export": return false; // no "next" after export
+    default: return false;
+  }
+}
+
+function _stepBlockedReason(step) {
+  switch (step) {
+    case "index":
+      if (!(batchState.uploadData || batchState.validationData || state.submissionId)) {
+        return "Upload a submission before validating.";
+      }
+      if (batchState.uploadData && batchState.isBatch && batchState.selectedIds.size === 0) {
+        return "Select at least one submission to validate.";
+      }
+      return "Review the detected submission before validating.";
+    case "validate": {
+      const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+      if (!results.length) return "Run validation before continuing.";
+      return "Validation found no runnable or result-only submissions to continue with.";
+    }
+    default:
+      return "Complete the current step before continuing.";
+  }
+}
+
+// Refresh wizard footer without changing step (e.g. after validation finishes)
+function _refreshWizardFooter() {
+  _updateWizardFooter(wf.step);
+  _syncCompactProgress();
+}
+
+// Show a step completion banner (id: either "validate-completion-banner" or "run-completion-banner")
+function _showCompletionBanner(bannerId, html, type) {
+  const banner = el(bannerId);
+  if (!banner) return;
+  banner.innerHTML    = html;
+  banner.className    = `step-completion-banner ${type || "info"}`;
+  banner.style.display = "";
 }
 
 function unlockStep(step) {
   const btn = el(`wf-btn-${step}`);
   if (btn) btn.disabled = false;
+  // Also unlock the visible top progress item
+  const tsn = el(`tsn-${step}`);
+  if (tsn && !tsn.classList.contains("tsn-active")) {
+    tsn.classList.remove("tsn-locked");
+    tsn.classList.add("tsn-unlocked");
+  }
+  _syncCompactProgress();
 }
 
 function _syncWfNav() {
   WF_STEPS.forEach((s) => {
+    // Hidden state-holder buttons
     const btn = el(`wf-btn-${s}`);
+    if (btn) btn.classList.toggle("wf-active", s === wf.step);
+    // Visible top step progress items
+    const tsn = el(`tsn-${s}`);
+    if (!tsn) return;
+    tsn.classList.remove("tsn-active", "tsn-unlocked", "tsn-locked");
+    const stateBtn = el(`wf-btn-${s}`);
+    if (s === wf.step) {
+      tsn.classList.add("tsn-active");
+    } else if (stateBtn && !stateBtn.disabled) {
+      tsn.classList.add("tsn-unlocked");
+    } else {
+      tsn.classList.add("tsn-locked");
+    }
+  });
+  _syncCompactProgress();
+}
+
+function _stepUnlocked(step) {
+  if (step === "upload") return true;
+  const btn = el(`wf-btn-${step}`);
+  return !!btn && !btn.disabled;
+}
+
+function _validationProgressStatus() {
+  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+  if (!results.length) return null;
+  const hasError = results.some((r) => (issueCount(r, "errors") > 0) || !r.passed);
+  const hasWarning = results.some((r) => issueCount(r, "warnings") > 0);
+  const actionable = results.some((r) =>
+    r.passed && ["runnable", "result_only"].includes(inferredRunReadiness(r))
+  );
+  if (hasError && !actionable) return { state: "error", label: "Blocked" };
+  if (hasError || hasWarning) return { state: "warning", label: "Needs review" };
+  return { state: "complete", label: "Complete" };
+}
+
+function _runProgressStatus() {
+  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+  if (!results.length) return null;
+  if (_allValidationResultsAreResultOnly()) return { state: "warning", label: "Skipped" };
+  const execs = Object.values(_execSummaries);
+  if (execs.some((r) => r.status === "failed" || r.status === "timed-out" || r.timedOut)) {
+    return { state: "error", label: "Needs review" };
+  }
+  if (execs.length > 0) return { state: "complete", label: "Complete" };
+  return { state: "ready", label: "Ready" };
+}
+
+function _scoreProgressStatus() {
+  const scores = Object.values(_scoreCache);
+  if (scores.some((s) => s.status === "failed")) return { state: "error", label: "Needs review" };
+  if (scores.some((s) => s.status === "scored")) return { state: "complete", label: "Complete" };
+  const ncCard = el("score-not-configured-card");
+  if (ncCard && ncCard.style.display !== "none" && _stepUnlocked("score")) {
+    return { state: "warning", label: "Optional" };
+  }
+  return null;
+}
+
+function _compactStatusForStep(step) {
+  const unlocked = _stepUnlocked(step);
+  if (!unlocked) return { state: "locked", label: "Locked" };
+
+  if (step === "upload") {
+    return (batchState.uploadData || batchState.validationData || state.submissionId)
+      ? { state: "complete", label: "Complete" }
+      : { state: "ready", label: "Ready" };
+  }
+  if (step === "index") {
+    return batchState.validationData
+      ? { state: "complete", label: "Complete" }
+      : { state: "ready", label: "Ready" };
+  }
+  if (step === "validate") return _validationProgressStatus() || { state: "ready", label: "Ready" };
+  if (step === "run")      return _runProgressStatus() || { state: "ready", label: "Ready" };
+  if (step === "score")    return _scoreProgressStatus() || { state: "ready", label: "Ready" };
+  if (step === "summary")  return _stepUnlocked("export") ? { state: "complete", label: "Complete" } : { state: "ready", label: "Ready" };
+  if (step === "export")   return { state: "ready", label: "Ready" };
+  return { state: "pending", label: "Pending" };
+}
+
+function _ensureCompactProgress() {
+  const nav = el("compact-progress");
+  if (!nav || nav.dataset.ready === "1") return nav;
+  nav.innerHTML = COMPACT_PROGRESS_STEPS.map((step, idx) => `
+    <button type="button" id="cp-${step.id}" class="compact-progress-item" data-step="${step.id}">
+      <span class="compact-progress-dot" aria-hidden="true">${idx + 1}</span>
+      <span class="compact-progress-label">${escapeHtml(step.label)}</span>
+    </button>
+  `).join("");
+  nav.addEventListener("click", (e) => {
+    const btn = e.target.closest(".compact-progress-item");
+    if (!btn || btn.disabled) return;
+    const targetStep = btn.dataset.step;
+    if (!targetStep || targetStep === wf.step) return;
+    if (targetStep === "run") renderRunStep().catch(() => {});
+    if (targetStep === "score") renderScoreStep().catch(() => {});
+    if (targetStep === "summary") renderSummaryStep();
+    if (targetStep === "export") _syncExportStep();
+    goToStep(targetStep);
+  });
+  nav.dataset.ready = "1";
+  return nav;
+}
+
+function _syncCompactProgress() {
+  const nav = _ensureCompactProgress();
+  if (!nav) return;
+  const currentIdx = WF_STEPS.indexOf(wf.step);
+  COMPACT_PROGRESS_STEPS.forEach((step) => {
+    const btn = el(`cp-${step.id}`);
     if (!btn) return;
-    btn.classList.toggle("wf-active", s === wf.step);
+    const idx = WF_STEPS.indexOf(step.id);
+    const status = _compactStatusForStep(step.id);
+    const isCurrent = step.id === wf.step;
+    const clickableBack = idx < currentIdx && _stepUnlocked(step.id);
+    const disabled = !clickableBack;
+
+    btn.className = [
+      "compact-progress-item",
+      `is-${status.state}`,
+      isCurrent ? "is-current" : "",
+      clickableBack ? "is-clickable" : "is-disabled",
+    ].filter(Boolean).join(" ");
+    btn.disabled = disabled;
+    btn.setAttribute("aria-disabled", String(disabled));
+    if (isCurrent) btn.setAttribute("aria-current", "step");
+    else btn.removeAttribute("aria-current");
+
+    const future = idx > currentIdx;
+    btn.title = clickableBack
+      ? `Go back to ${step.label}`
+      : isCurrent ? `${step.label}: current step`
+      : future ? `${step.label}: complete previous steps first`
+      : `${step.label}: ${status.label}`;
   });
 }
 
@@ -342,8 +757,8 @@ function resetAll() {
   batchState.validationData  = null;
   batchState.isBatch         = false;
 
-  // Reset nav steps
-  ["index", "validate", "run", "export"].forEach((s) => {
+  // Reset nav steps (all steps except upload)
+  ["index", "validate", "run", "score", "summary", "export"].forEach((s) => {
     const btn = el(`wf-btn-${s}`);
     if (btn) btn.disabled = true;
     if (btn) btn.classList.remove("wf-done", "wf-warn", "wf-fail");
@@ -419,6 +834,7 @@ function saveSessionState() {
         mapType:            r.map_type,
         niftiCount:         r.nifti_count,
         hasRunInstructions: r.has_run_instructions,
+        hasResultMaps:      r.has_result_maps || false,
         runReadiness:       r.run_readiness || null,
         challengeType:      r.challenge_type,
         teamName:           r.team_name,
@@ -474,8 +890,9 @@ function loadSessionState() {
 
 function clearSessionState() {
   try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
-  // Reset exec summaries too
+  // Reset exec + score summaries
   Object.keys(_execSummaries).forEach((k) => delete _execSummaries[k]);
+  Object.keys(_scoreCache).forEach((k) => delete _scoreCache[k]);
 }
 
 // Collect provider status snapshot from the DOM (after score step renders)
@@ -488,42 +905,46 @@ function _collectScoringSnapshot() {
   }));
 }
 
-// ── Restore banner ────────────────────────────────────────────────────────────
+// ── Restore chip (replaces the old full-width banner) ────────────────────────
+// The old #restore-banner is kept in the DOM for smoke-test compatibility but
+// is NEVER shown. All restore UI goes through #restore-chip-btn in the topbar.
 
 function showRestoreBanner(saved) {
-  const banner = el("restore-banner");
-  if (!banner) return;
+  // Build a human-readable summary for the notice text
+  const parts = [];
+  const subs      = saved.submissions?.length || 0;
+  const typeLabel = saved.isBatch
+    ? `batch · ${subs} submission${subs !== 1 ? "s" : ""}`
+    : "single submission";
+  parts.push(typeLabel);
+  const stepTitle = STEP_TITLES[saved.step]?.title || saved.step || "";
+  if (stepTitle) parts.push(`last step: ${stepTitle}`);
 
-  const infoEl = el("restore-banner-info");
-  if (infoEl) {
-    // Only non-sensitive summary — no team name, email, file paths, or IDs
-    const parts = ["Previous local session found"];
-
-    const subs      = saved.submissions?.length || 0;
-    const typeLabel = saved.isBatch
-      ? `Batch upload · ${subs} submission${subs !== 1 ? "s" : ""}`
-      : "Single submission";
-    parts.push(typeLabel);
-
-    const stepTitle = STEP_TITLES[saved.step]?.title || saved.step || "";
-    if (stepTitle) parts.push(`last step: ${stepTitle}`);
-
-    // Time only — not date, not team, not email
-    if (saved.updatedAt) {
-      try {
-        const timeStr = new Date(saved.updatedAt).toLocaleTimeString("en-US", {
-          hour: "numeric", minute: "2-digit",
-        });
-        parts.push(`saved ${timeStr}`);
-      } catch (_) {}
-    }
-
-    infoEl.textContent = parts.join(" · ") + ".";
+  // Show inline notice inside the Upload card
+  const notice = el("upload-restore-notice");
+  const msgEl  = el("upload-restore-msg");
+  if (notice) {
+    if (msgEl) msgEl.textContent = `Previous session found (${parts.join(", ")}).`;
+    notice.classList.remove("upload-restore-notice--warn");
+    notice.style.display = "";
   }
-  banner.style.display = "";
+
+  // Keep hidden chip in sync so its click handler still works
+  const chip = el("restore-chip-btn");
+  if (chip) {
+    chip.classList.remove("topbar-restore-chip--warn");
+    chip.style.display = "";
+  }
 }
 
 function _hideRestoreBanner() {
+  // Hide upload-card restore notice
+  const notice = el("upload-restore-notice");
+  if (notice) notice.style.display = "none";
+  // Hide hidden chip
+  const chip = el("restore-chip-btn");
+  if (chip) chip.style.display = "none";
+  // Ensure legacy banner stays hidden
   const banner = el("restore-banner");
   if (banner) banner.style.display = "none";
 }
@@ -587,7 +1008,7 @@ async function restoreSessionFromStorage() {
   }
 
   // 3. Unlock steps up to the saved step
-  const stepOrder    = ["upload", "index", "validate", "run", "score", "export"];
+  const stepOrder    = ["upload", "index", "validate", "run", "score", "summary", "export"];
   const savedStepIdx = stepOrder.indexOf(saved.step);
   if (savedStepIdx >= 1) stepOrder.slice(1, savedStepIdx + 1).forEach((s) => unlockStep(s));
 
@@ -632,6 +1053,7 @@ function _synthValidationData(summary) {
     nifti_count:          r.niftiCount,
     map_type:             r.mapType,
     has_run_instructions: r.hasRunInstructions,
+    has_result_maps:      r.hasResultMaps || false,
     run_readiness:        r.runReadiness || null,
     challenge_type:       r.challengeType,
     team_name:            r.teamName,
@@ -648,20 +1070,25 @@ function _synthValidationData(summary) {
   };
 }
 
-// Apply saved exec summaries to the run table rows (status labels only, no logs)
+// Apply saved exec summaries to run cards/rows (status labels only, no logs)
 function _applyExecSummariesToRows() {
   Object.entries(_execSummaries).forEach(([subId, summary]) => {
-    const wrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
-      .find((w) => w.dataset.subId === subId);
+    const wrap = _findRunCard(subId);
     if (!wrap) return;
     const prevStatus = wrap.dataset.execStatus;
     if (prevStatus && prevStatus !== "not-run") return; // already updated
     const newStatus = summary.status || "failed";
     wrap.dataset.execStatus = newStatus;
     const runnable = wrap.dataset.runnable === "true";
-    const statusCell = wrap.querySelector(".er-run-status-cell");
-    if (statusCell) statusCell.innerHTML = _erRunStatusHtml(newStatus, runnable);
-    const outputsCell = wrap.querySelector(".er-outputs-cell");
+
+    // Update status display (card or table)
+    const statusCell = wrap.querySelector(".er-run-status-cell, .run-card-status-row");
+    if (statusCell) {
+      const reasonEl   = statusCell.querySelector(".run-card-reason, .run-card-reason-warn");
+      const reasonHtml = reasonEl ? reasonEl.outerHTML : "";
+      statusCell.innerHTML = _erRunStatusHtml(newStatus, runnable) + reasonHtml;
+    }
+    const outputsCell = wrap.querySelector(".er-outputs-cell, .run-card-outputs");
     if (outputsCell && summary.outputFileCount > 0) {
       const fc = summary.outputFileCount;
       outputsCell.innerHTML = `<span class="vr-run-ok">${fc} file${fc !== 1 ? "s" : ""}</span>`;
@@ -670,8 +1097,7 @@ function _applyExecSummariesToRows() {
     if (outCheckCell) {
       outCheckCell.innerHTML = `<span style="font-size:0.72rem;color:var(--muted)">from session</span>`;
     }
-    // Note in detail area
-    const drawer = wrap.querySelector(".er-row-detail");
+    const drawer = wrap.querySelector(".er-row-detail, .run-card-detail");
     if (drawer) {
       drawer.innerHTML = `<p style="font-size:0.73rem;color:var(--muted);margin:0">Session restored — re-run to see full logs.</p>`;
     }
@@ -695,21 +1121,29 @@ async function _verifyBackendFiles(submissionId) {
 }
 
 function _showRestoreWarning(msg) {
-  const banner = el("restore-banner");
-  if (!banner) return;
-  banner.style.display = "";
-  banner.style.background = "#fff7ed";
-  banner.style.borderColor = "#fed7aa";
-  const infoEl = el("restore-banner-info");
-  if (infoEl) {
-    infoEl.textContent = msg;
-    infoEl.style.color = "#c2410c";
+  // Show the upload-card notice in warn state
+  const notice = el("upload-restore-notice");
+  const msgEl  = el("upload-restore-msg");
+  if (notice) {
+    if (msgEl) msgEl.textContent = "⚠ " + msg;
+    notice.classList.add("upload-restore-notice--warn");
+    notice.style.display = "";
   }
-  const infoSvg = banner.querySelector("svg");
-  if (infoSvg) infoSvg.style.color = "#f97316";
-  // Hide restore button, keep only Start new
-  const restoreBtn = el("restore-session-btn");
-  if (restoreBtn) restoreBtn.style.display = "none";
+  // Keep hidden chip in sync
+  const chip = el("restore-chip-btn");
+  if (chip) {
+    chip.classList.add("topbar-restore-chip--warn");
+    chip.style.display = "";
+  }
+  // Clicking the restore button in the notice should clear state and dismiss
+  const restoreBtn = el("upload-restore-btn");
+  if (restoreBtn) {
+    restoreBtn.textContent = "Dismiss";
+    restoreBtn.onclick = function () {
+      clearSessionState();
+      _hideRestoreBanner();
+    };
+  }
 }
 
 // ── Map type pills ────────────────────────────────────────────────────────────
@@ -1115,12 +1549,8 @@ async function handleSubmit() {
 
       const desc = el("batch-header-desc");
       if (desc) {
-        const sourceLabel = importData.source_type && importData.source_type !== "local"
-          ? `${importData.source_type.charAt(0).toUpperCase() + importData.source_type.slice(1)}: `
-          : "";
-        const name  = importData.original_filename || "upload";
         const count = importData.submission_count;
-        desc.textContent = `${sourceLabel}"${name}" contains ${count} submission${count !== 1 ? "s" : ""}.`;
+        desc.textContent = `${count} submission${count !== 1 ? "s" : ""} detected.`;
       }
 
       renderBatchTable(importData.submissions);
@@ -1142,9 +1572,11 @@ async function handleSubmit() {
         source_type: source,
         submissions: [{
           submission_id: importData.submission_id,
+          display_name: cleanSubmissionName(importData.original_filename || importData.submission_id),
           nifti_count:   importData.nifti_count ?? null,
           detected_parameter_map_type: importData.detected_parameter_map_type || "Unknown",
           has_run_instructions: importData.has_run_instructions ?? importData.has_dockerfile ?? null,
+          has_result_maps: importData.has_result_maps ?? (Number(importData.nifti_count || 0) > 0),
           source_folder: importData.source_folder || null,
           detection_warning: importData.detection_warning || null,
           status: "ready",
@@ -1156,8 +1588,7 @@ async function handleSubmit() {
 
       const desc = el("batch-header-desc");
       if (desc) {
-        const name = importData.original_filename || importData.submission_id;
-        desc.textContent = `Detected 1 submission: "${name}".`;
+        desc.textContent = "1 submission detected.";
       }
 
       renderBatchTable(fakeUpload.submissions);
@@ -1172,105 +1603,122 @@ async function handleSubmit() {
   }
 }
 
-// ── Step 2: Index — render the detected submissions table ─────────────────────
+// ── Step 2: Review detected submissions ───────────────────────────────────────
 
+// Render detected submissions as clean cards. Selection state and footer-driven
+// validation both work through batchState.selectedIds.
 function renderBatchTable(submissions) {
   const wrap = el("batch-table-wrap");
   if (!wrap) return;
-
-  const table = document.createElement("table");
-  table.className = "batch-table";
-
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th class="td-check"><input type="checkbox" id="batch-check-all" title="Toggle all" /></th>
-        <th>Source Folder</th>
-        <th>Submission ID</th>
-        <th>NIfTI</th>
-        <th>Detected Map</th>
-        <th>Run Instructions</th>
-        <th>Status</th>
-      </tr>
-    </thead>
-    <tbody id="batch-tbody"></tbody>
-  `;
   wrap.innerHTML = "";
-  wrap.appendChild(table);
 
-  const tbody = table.querySelector("#batch-tbody");
+  const safeSubmissions = submissions || [];
+  const isSingle = safeSubmissions.length <= 1;
+  if (isSingle && safeSubmissions[0]?.submission_id) {
+    batchState.selectedIds = new Set([safeSubmissions[0].submission_id]);
+  }
 
-  submissions.forEach((sub) => {
+  const title = el("batch-index-title");
+  if (title) title.textContent = isSingle ? "Review Detected Submission" : "Review Detected Submissions";
+  const desc = el("batch-header-desc");
+  if (desc && safeSubmissions.length > 0) {
+    desc.textContent = `${safeSubmissions.length} submission${safeSubmissions.length !== 1 ? "s" : ""} detected.`;
+  }
+  const hintCopy = el("index-hint-copy");
+  if (hintCopy) {
+    hintCopy.textContent = safeSubmissions.length <= 1
+      ? "Review detected submission."
+      : "Select submissions to validate.";
+  }
+
+  const controls = document.querySelector("#step-index .batch-controls");
+  const controlsLeft = controls?.querySelector(".batch-controls-left");
+  const controlsRight = controls?.querySelector(".batch-controls-right");
+  if (controls) controls.style.display = isSingle ? "none" : "";
+  if (controlsLeft) controlsLeft.style.display = isSingle ? "none" : "";
+  if (controlsRight) controlsRight.style.display = "none";
+
+  const list = document.createElement("div");
+  list.className = "sub-card-list" + (isSingle ? " sub-card-list--single" : "");
+
+  safeSubmissions.forEach((sub, idx) => {
     const isSelected = batchState.selectedIds.has(sub.submission_id);
-    const tr = document.createElement("tr");
-    if (isSelected) tr.classList.add("selected-row");
+    const typeInfo = submissionTypeInfo(sub);
+    const statusState = sub.status === "failed" ? "error"
+      : typeInfo.state === "warning" || sub.detection_warning ? "warning"
+      : sub.status === "passed" ? "complete"
+      : "ready";
+    const statusLabel = sub.status === "failed" ? "Needs attention"
+      : sub.status === "passed" ? "Validated"
+      : statusState === "warning" ? "Needs attention"
+      : "Ready";
 
-    const safeMapLabel = escapeHtml(sub.detected_parameter_map_type || "Unknown");
-    const safeWarning  = escapeHtml(sub.detection_warning || "");
-    const safeFolder   = escapeHtml(sub.source_folder || "—");
-    const safeSubId    = escapeHtml(sub.submission_id);
-    const mapCell = safeWarning
-      ? `${safeMapLabel}<div class="batch-warn-text">${safeWarning}</div>`
-      : safeMapLabel;
+    const card = document.createElement("div");
+    card.className = "sub-card guided-sub-card"
+      + (isSingle ? " sub-card--single" : "")
+      + (isSelected ? " is-selected" : "");
+    card.dataset.subCard = sub.submission_id;
 
-    const hasRun = sub.has_run_instructions ?? sub.has_dockerfile;
-    const runCell = hasRun === null || hasRun === undefined
-      ? `<span style="color:var(--subtle)">—</span>`
-      : hasRun
-        ? `<span style="color:var(--success);font-weight:600">Yes</span>`
-        : `<span style="color:var(--subtle)">No</span>`;
+    const safeMapLabel = escapeHtml(sub.detected_parameter_map_type || sub.map_type || "Not detected");
+    const safeName = escapeHtml(submissionDisplayName(sub, `Submission ${idx + 1}`));
+    const safeChallenge = escapeHtml(challengeLabel(sub.challenge_type));
+    const safeType = escapeHtml(typeInfo.label);
+    const niftiCount   = sub.nifti_count ?? "—";
 
-    const statusBadge = sub.status === "passed"
-      ? `<span class="batch-badge badge-pass">Passed</span>`
-      : sub.status === "failed"
-        ? `<span class="batch-badge badge-fail">Failed</span>`
-        : `<span class="batch-badge badge-ready">Ready</span>`;
-
-    tr.innerHTML = `
-      <td class="td-check">
-        <input type="checkbox" data-id="${sub.submission_id}" ${isSelected ? "checked" : ""} />
-      </td>
-      <td class="td-folder">${safeFolder}</td>
-      <td class="td-id" title="${sub.submission_id}">${safeSubId}</td>
-      <td>${sub.nifti_count ?? "—"}</td>
-      <td>${mapCell}</td>
-      <td>${runCell}</td>
-      <td>${statusBadge}</td>
+    card.innerHTML = `
+      ${isSingle ? "" : `<input type="checkbox" class="sub-card-check" data-id="${escapeHtml(sub.submission_id)}" ${isSelected ? "checked" : ""} aria-label="Select ${safeName}" />`}
+      <div class="sub-card-body">
+        <div class="sub-card-top">
+          <span class="sub-card-name">${safeName}</span>
+          ${statusPill(statusLabel, statusState)}
+        </div>
+        <div class="sub-card-fields">
+          <div class="sub-field">
+            <span class="sub-field-label">Challenge type</span>
+            <span class="sub-field-value">${safeChallenge}</span>
+          </div>
+          <div class="sub-field">
+            <span class="sub-field-label">Map type</span>
+            <span class="sub-field-value">${safeMapLabel}</span>
+          </div>
+          <div class="sub-field">
+            <span class="sub-field-label">Submission type</span>
+            <span class="sub-field-value">${safeType}</span>
+          </div>
+          <div class="sub-field">
+            <span class="sub-field-label">NIfTI count</span>
+            <span class="sub-field-value">${escapeHtml(niftiCount)}</span>
+          </div>
+        </div>
+      </div>
     `;
 
-    const cb = tr.querySelector(`input[data-id="${sub.submission_id}"]`);
-    cb.addEventListener("change", () => {
-      if (cb.checked) {
-        batchState.selectedIds.add(sub.submission_id);
-        tr.classList.add("selected-row");
-      } else {
-        batchState.selectedIds.delete(sub.submission_id);
-        tr.classList.remove("selected-row");
-      }
+    const cb = card.querySelector("input.sub-card-check");
+    const setSelected = (on) => {
+      if (cb) cb.checked = on;
+      if (on) batchState.selectedIds.add(sub.submission_id);
+      else    batchState.selectedIds.delete(sub.submission_id);
+      card.classList.toggle("is-selected", on);
       _syncBatchHeaderCheckbox();
       _syncBatchValidateBtn();
       saveSessionState();
+      _refreshWizardFooter();
+    };
+    if (cb) cb.addEventListener("change", () => setSelected(cb.checked));
+    // Clicking anywhere on the card toggles selection, except on a tooltip.
+    card.addEventListener("click", (e) => {
+      if (isSingle) return;
+      if (e.target.closest(".help-tooltip")) return;
+      if (e.target === cb) return;  // checkbox handles its own change
+      setSelected(!cb?.checked);
     });
 
-    tbody.appendChild(tr);
+    list.appendChild(card);
   });
 
-  const checkAll = table.querySelector("#batch-check-all");
-  checkAll.checked = batchState.selectedIds.size === submissions.length;
-  checkAll.addEventListener("change", () => {
-    if (checkAll.checked) {
-      submissions.forEach((s) => batchState.selectedIds.add(s.submission_id));
-    } else {
-      batchState.selectedIds.clear();
-    }
-    tbody.querySelectorAll("input[data-id]").forEach((cb) => {
-      cb.checked = batchState.selectedIds.has(cb.dataset.id);
-      cb.closest("tr").classList.toggle("selected-row", cb.checked);
-    });
-    _syncBatchValidateBtn();
-  });
-
+  wrap.appendChild(list);
   _syncBatchValidateBtn();
+  _refreshWizardFooter();
 }
 
 function _syncBatchHeaderCheckbox() {
@@ -1327,6 +1775,8 @@ if (batchNewBtn) {
 async function runBatchValidation(submissionIds) {
   if (!submissionIds.length) return;
   const statusEl = el("batch-validate-status");
+  const footerNext = wf.step === "index" ? el("wf-next-btn") : null;
+  const footerLabel = footerNext ? footerNext.textContent.trim() : "Validate Submission";
 
   const disableBtns = (v) => {
     [batchValSelBtn, batchValAllBtn, batchSelectAllBtn, batchDeselectAllBtn].forEach((b) => {
@@ -1334,6 +1784,7 @@ async function runBatchValidation(submissionIds) {
     });
   };
   disableBtns(true);
+  if (footerNext) setLoading(footerNext, true, "Validating");
   if (statusEl) {
     statusEl.style.display = "block";
     statusEl.className = "submit-status status-info";
@@ -1397,8 +1848,10 @@ async function runBatchValidation(submissionIds) {
       statusEl.textContent = err.message || "Validation failed.";
     }
   } finally {
+    if (footerNext) setLoading(footerNext, false, footerLabel);
     disableBtns(false);
     _syncBatchValidateBtn();
+    _refreshWizardFooter();
   }
 }
 
@@ -1434,7 +1887,7 @@ function _renderSingleAsValidate(data) {
   saveSessionState();
 }
 
-// ── Step 3: Validate — render the review table ────────────────────────────────
+// ── Step 3: Validate — render validation cards ────────────────────────────────
 
 const _reviewFilter = { filter: "all", search: "", sort: "status", showAll: false };
 
@@ -1452,15 +1905,41 @@ function _issueSummary(errors, warnings) {
   return { html: `<span class="vr-issue-warn" title="${escapeHtml(warnings.join("; "))}">${escapeHtml(main)}</span>` };
 }
 
+function _validationIssueDetails(r) {
+  const rNiftiCount = Number(r.nifti_count ?? 0);
+  const withoutSpuriousNoOutput = (msgs) =>
+    rNiftiCount > 0 ? msgs.filter((m) => m !== "No output files found") : msgs;
+
+  const errors = withoutSpuriousNoOutput(dedupeMessages((r.errors || []).map(simplifyMessage)));
+  const warnings = withoutSpuriousNoOutput(dedupeMessages((r.warnings || []).map(simplifyMessage)))
+    .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
+  const checks = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
+  return { errors, warnings, checks, niftiCount: rNiftiCount };
+}
+
+function _validationReason(errors, warnings) {
+  if (errors.length > 0) return errors[0];
+  if (warnings.length > 0) return warnings[0];
+  return "No issues found.";
+}
+
 function renderValidateStep(data, isSingleMode) {
   const results = data.results || [];
   const single  = isSingleMode === true || !batchState.isBatch;
+  const issueDetails = new Map(results.map((r) => [r.submission_id, _validationIssueDetails(r)]));
+  const checkedCount = results.length;
+  const passedCount = results.filter((r) => r.passed).length;
+  const totalWarnings = results.reduce((sum, r) => sum + (issueDetails.get(r.submission_id)?.warnings.length || 0), 0);
+  const totalErrors = results.reduce((sum, r) => sum + (issueDetails.get(r.submission_id)?.errors.length || 0), 0);
+  const validationTitle = totalErrors > 0
+    ? "Validation failed"
+    : totalWarnings > 0 ? "Validation needs attention" : "Validation complete";
 
-  // Pre-compute counts (used for summary + auto-advance)
+  // Pre-compute counts for summary and footer readiness.
   const runnableCount    = results.filter((r) => r.run_readiness === "runnable"
                                                || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
   const resultOnlyCount  = results.filter((r) => r.run_readiness === "result_only"
-                                               || (r.passed && !r.has_run_instructions && r.nifti_count > 0)).length;
+                                               || (r.passed && !r.has_run_instructions && (r.nifti_count > 0 || r.has_result_maps))).length;
   const needsReviewCount = results.filter((r) => !r.passed || (r.warnings || []).length > 0).length;
 
   // Reset filter state
@@ -1476,23 +1955,28 @@ function renderValidateStep(data, isSingleMode) {
   if (viewSelEl) viewSelEl.value = "all";
 
   // ── 1. One-line summary in step header desc ───────────────────────────────
+  const titleEl = el("validate-card-title");
+  if (titleEl) titleEl.textContent = validationTitle;
+
+  const statsEl = el("validate-summary-stats");
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="validation-stat"><span>${checkedCount}</span><small>Checked</small></div>
+      <div class="validation-stat"><span>${passedCount}</span><small>Passed</small></div>
+      <div class="validation-stat ${totalWarnings > 0 ? "is-warning" : ""}"><span>${totalWarnings}</span><small>Warnings</small></div>
+      <div class="validation-stat ${totalErrors > 0 ? "is-error" : ""}"><span>${totalErrors}</span><small>Errors</small></div>
+    `;
+  }
+
   const desc = el("batch-results-desc");
   if (desc) {
-    if (single) {
-      const r0 = results[0] || {};
-      const ec = (r0.errors   || []).length;
-      const wc = (r0.warnings || []).length;
-      desc.textContent = ec > 0
-        ? `${ec} error${ec !== 1 ? "s" : ""}${wc > 0 ? `, ${wc} warning${wc !== 1 ? "s" : ""}` : ""}`
-        : wc > 0 ? `${wc} warning${wc !== 1 ? "s" : ""} · review recommended`
-                 : "All checks passed";
-    } else {
-      const parts = [`${results.length} validated`];
-      if (runnableCount > 0) parts.push(`${runnableCount} ready to run`);
-      if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only`);
-      if (needsReviewCount > 0) parts.push(`${needsReviewCount} need review`);
-      desc.textContent = parts.join(" · ");
-    }
+    const parts = [`${checkedCount} checked`];
+    if (totalErrors > 0) parts.push(`${totalErrors} error${totalErrors !== 1 ? "s" : ""}`);
+    if (totalWarnings > 0) parts.push(`${totalWarnings} warning${totalWarnings !== 1 ? "s" : ""}`);
+    if (runnableCount > 0) parts.push(`${runnableCount} ready to run`);
+    if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only`);
+    if (needsReviewCount > 0 && totalErrors === 0 && totalWarnings === 0) parts.push(`${needsReviewCount} need review`);
+    desc.textContent = parts.join(" · ");
   }
 
   // ── 2. View dropdown + search + sort handlers ─────────────────────────────
@@ -1534,45 +2018,38 @@ function renderValidateStep(data, isSingleMode) {
   const list = el("batch-submissions-list");
   if (list) {
     list.innerHTML = "";
-    results.forEach((r) => {
-      const rNiftiCount = Number(r.nifti_count ?? 0);
-      const _spur = (msgs) =>
-        rNiftiCount > 0 ? msgs.filter((m) => m !== "No output files found") : msgs;
-
-      const errors   = _spur(dedupeMessages((r.errors   || []).map(simplifyMessage)));
-      const warnings = _spur(dedupeMessages((r.warnings || []).map(simplifyMessage)))
-        .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
-      const checks   = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
+    results.forEach((r, idx) => {
+      const { errors, warnings, checks, niftiCount: rNiftiCount } = issueDetails.get(r.submission_id) || _validationIssueDetails(r);
       const passed   = r.passed;
       const hasWarn  = warnings.length > 0;
       const hasRunInstructions = !!(r.has_run_instructions ?? r.has_dockerfile);
       const runReadiness = r.run_readiness
         || (passed && hasRunInstructions ? "runnable"
-            : passed && !hasRunInstructions ? "result_only"
+            : passed && !hasRunInstructions && ((r.nifti_count || 0) > 0 || r.has_result_maps) ? "result_only"
+            : passed && !hasRunInstructions ? "result_only"   // passed w/ no code = result-only
             : "not_runnable");
       const runnable = runReadiness === "runnable";
       const isResultOnly = runReadiness === "result_only";
 
-      // Status badge — 3 states only
-      let valStatus, vsBadgeCss, vsBadgeTxt;
-      if (!passed)      { valStatus = "failed";  vsBadgeCss = "vs-fail";   vsBadgeTxt = "Failed"; }
-      else if (hasWarn) { valStatus = "warning"; vsBadgeCss = "vs-review"; vsBadgeTxt = "Needs review"; }
-      else              { valStatus = "passed";  vsBadgeCss = "vs-pass";   vsBadgeTxt = "Passed"; }
+      let valStatus, pillState, pillText;
+      if (!passed)      { valStatus = "failed";  pillState = "error";    pillText = "Error"; }
+      else if (hasWarn) { valStatus = "warning"; pillState = "warning";  pillText = "Warning"; }
+      else              { valStatus = "passed";  pillState = "complete"; pillText = "Complete"; }
 
-      // Run state — plain text, no badge
-      let runClass, runTxt;
-      if (!passed)        { runClass = "vr-run-na";        runTxt = "Cannot run"; }
-      else if (isResultOnly) { runClass = "vr-run-result-only"; runTxt = "Result-only"; }
-      else if (runnable)  { runClass = "vr-run-ready";     runTxt = "Ready"; }
-      else                { runClass = "vr-run-na";        runTxt = "—"; }
+      let runTxt, runState;
+      if (!passed)        { runTxt = "Cannot run"; runState = "error"; }
+      else if (isResultOnly) { runTxt = "Result maps provided"; runState = "skipped"; }
+      else if (runnable)  { runTxt = "Ready to run"; runState = "ready"; }
+      else                { runTxt = "Cannot run"; runState = "warning"; }
 
       const execInitStatus = runnable ? "not-run" : "cannot-run";
 
       const safeSubId     = escapeHtml(r.submission_id);
-      const safeFolder    = r.source_folder ? escapeHtml(r.source_folder) : "";
+      const safeName      = escapeHtml(submissionDisplayName(r, `Submission ${idx + 1}`));
       const safeChallenge = escapeHtml(r.challenge_type || getChallengeType() || "dce");
-
-      const { html: issueHtml } = _issueSummary(errors, warnings);
+      const safeMap       = escapeHtml(r.map_type || "Not detected");
+      const reason        = escapeHtml(_validationReason(errors, warnings));
+      const subType       = submissionTypeInfo(r);
 
       // Detail content
       const niftiLine = rNiftiCount > 0
@@ -1593,7 +2070,7 @@ function renderValidateStep(data, isSingleMode) {
              <ul class="issue-list" style="margin-top:6px">${checks.map((m) => `<li class="is-pass">✓ ${escapeHtml(m)}</li>`).join("")}</ul>
            </details>` : "";
       const resultOnlyNote = isResultOnly
-        ? `<p class="vr-result-only-note">This submission contains result maps only and cannot be run automatically.</p>`
+        ? `<p class="vr-result-only-note">This submission already includes output maps. Code execution is not needed.</p>`
         : "";
       const noIssueHtml = (!errHtml && !warnHtml)
         ? `<p style="font-size:0.73rem;color:var(--subtle);margin:0">No errors or warnings.</p>` : "";
@@ -1602,34 +2079,42 @@ function renderValidateStep(data, isSingleMode) {
       const execHtml = "";
 
       const wrap = document.createElement("div");
-      wrap.className = "br-row-wrap";
+      wrap.className = "br-row-wrap validation-card";
       wrap.dataset.valStatus  = valStatus;
       wrap.dataset.runnable   = String(runnable);
       wrap.dataset.execStatus = execInitStatus;
       wrap.dataset.subId      = r.submission_id;
-      wrap.dataset.name       = (r.submission_id + " " + (r.source_folder || "")).toLowerCase();
+      wrap.dataset.name       = (r.submission_id + " " + (r.source_folder || "") + " " + safeName).toLowerCase();
       wrap.dataset.errCount   = String(errors.length);
       wrap.dataset.warnCount  = String(warnings.length);
 
-      // 5-column row: Submission | Status | Issue | Run | Action
       wrap.innerHTML = `
-        <div class="br-row">
-          <div style="min-width:0">
-            <div class="br-sub-name" title="${safeSubId}">${safeSubId}</div>
-            ${safeFolder ? `<div class="br-sub-folder">${safeFolder}</div>` : ""}
+        <div class="validation-card-main">
+          <div class="validation-card-heading">
+            <div class="validation-card-title">${safeName}</div>
+            ${statusPill(pillText, pillState)}
           </div>
-          <div><span class="vs-badge ${vsBadgeCss}">${vsBadgeTxt}</span></div>
-          <div>${issueHtml}</div>
-          <div>
-            <span class="${runClass}">${runTxt}</span>
-            <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem;margin-left:4px"></span>
+          <p class="validation-card-reason">${reason}</p>
+          <div class="validation-card-meta">
+            <span>Challenge: ${safeChallenge}</span>
+            <span>Map: ${safeMap}</span>
+            <span>NIfTI: ${escapeHtml(rNiftiCount)}</span>
+            <span>${escapeHtml(subType.label)}</span>
+            ${statusPill(runTxt, runState)}
+            <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem"></span>
           </div>
-          <div>
-            <button type="button" class="vr-action-btn vr-details-btn">Details</button>
+          <div class="validation-card-actions">
+            <button type="button" class="btn btn-ghost vr-action-btn vr-details-btn" aria-expanded="false">Details</button>
           </div>
         </div>
         <div class="vr-row-detail" style="display:none">
-          ${resultOnlyNote}${niftiLine}${noIssueHtml}${errHtml}${warnHtml}${techHtml}${execHtml}
+          <div class="validation-detail-inner">
+            ${resultOnlyNote}${niftiLine}${noIssueHtml}${errHtml}${warnHtml}${techHtml}${execHtml}
+            <details class="validation-technical-detail">
+              <summary>Technical reference</summary>
+              <p>Submission ID: ${safeSubId}</p>
+            </details>
+          </div>
         </div>`;
 
       list.appendChild(wrap);
@@ -1642,6 +2127,10 @@ function renderValidateStep(data, isSingleMode) {
   unlockStep("validate");
   unlockStep("run");
   unlockStep("export");
+
+  const banner = el("validate-completion-banner");
+  if (banner) banner.style.display = "none";
+  _refreshWizardFooter();
 
   const singleActions = el("single-result-actions");
   if (singleActions) singleActions.style.display = single ? "" : "none";
@@ -1666,14 +2155,7 @@ function renderValidateStep(data, isSingleMode) {
 
   _syncExportStep();
 
-  // Auto-advance: go to Run step for both runnable and result-only cases.
-  // Run step handles both: shows execution queue for runnable, "Skipped" notice for result-only.
-  if (hasAnyPassed) {
-    renderRunStep().catch(() => {});
-    goToStep("run");
-  } else {
-    goToStep("validate");
-  }
+  goToStep("validate");
 }
 
 // ── Review filter / sort / search ─────────────────────────────────────────────
@@ -1778,7 +2260,10 @@ function _toggleRowDetail(wrap, forceOpen) {
   }
   // Update .vr-details-btn label if present
   const detailsBtn = wrap.querySelector(".vr-details-btn");
-  if (detailsBtn) detailsBtn.textContent = open ? "Close" : "Details";
+  if (detailsBtn) {
+    detailsBtn.textContent = open ? "Close" : "Details";
+    detailsBtn.setAttribute("aria-expanded", String(open));
+  }
 }
 
 // Row expand — legacy toggle button (.br-toggle-btn) click
@@ -1902,7 +2387,7 @@ function _tickRunProgress(passed, outputCount) {
 
 function _refreshRunProgress() {
   const { total, completed, failed, outputs } = _runProgress;
-  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const pct   = total > 0 ? Math.round((completed / total) * 100) : 0;
   const fill  = el("run-prog-fill");
   const panel = el("run-progress-panel");
   const tEl   = el("rp-total");
@@ -1916,68 +2401,124 @@ function _refreshRunProgress() {
   if (cEl)   cEl.textContent  = String(completed);
   if (fEl)   fEl.textContent  = String(failed);
   if (oEl)   oEl.textContent  = String(outputs);
+
   if (completed >= total && total > 0) {
     if (panel) panel.classList.add("state-done");
-    if (txt)   txt.textContent = "All submissions complete";
-    if (eta)   eta.textContent = `${completed - failed} passed · ${failed} failed`;
-    // Unlock Score step now that execution outputs exist
+    if (txt)   txt.textContent = "Execution complete";
+    if (eta)   eta.textContent = "";
+
+    // Count result-only and cannot-run from card list
+    const allCards = [...document.querySelectorAll("#run-submissions-list .run-sub-card, #run-submissions-list .er-row-wrap")];
+    const skipped  = allCards.filter((c) => c.dataset.execStatus === "result-only" || c.dataset.execStatus === "cannot-run").length;
+    const passed   = completed - failed;
+    const parts    = [];
+    if (passed > 0)  parts.push(`${passed} passed`);
+    if (failed > 0)  parts.push(`${failed} failed`);
+    if (skipped > 0) parts.push(`${skipped} skipped`);
+
+    // Show completion banner
+    const bannerType = failed > 0 ? "warn" : "success";
+    const bannerHtml = `<span class="scb-icon">${failed > 0 ? "⚠" : "✓"}</span>`
+      + `<span class="scb-text">Execution complete — ${parts.join(" · ")}</span>`;
+    _showCompletionBanner("run-completion-banner", bannerHtml, bannerType);
+
+    // Unlock Score step and refresh footer
     unlockStep("score");
+    _refreshWizardFooter();
     renderScoreStep().catch(() => {});
   } else {
     if (txt) txt.textContent = `Running submissions… ${completed} of ${total}`;
-    if (eta) eta.textContent = "";
+    if (eta) eta.textContent = `${pct}%`;
   }
 }
 
 // Build/refresh the entire run step table from batchState.validationData
 async function renderRunStep() {
   const results = batchState.validationData ? (batchState.validationData.results || []) : [];
-  const single  = !batchState.isBatch;
 
   // Reset filter
-  _runFilter.view    = "ready";
+  _runFilter.view    = "all";
   _runFilter.showAll = false;
   const viewSel = el("run-view-select");
-  if (viewSel) viewSel.value = "ready";
+  if (viewSel) viewSel.value = "all";
 
   // Count runnable and result-only
   const runnableResults  = results.filter((r) =>
     (r.run_readiness === "runnable") || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile)));
+  // result_only: any submission with result maps (includes ASL results/maps/ structure)
   const resultOnlyResult = results.filter((r) =>
-    (r.run_readiness === "result_only") || (r.passed && !r.has_run_instructions && (r.nifti_count || 0) > 0));
+    (r.run_readiness === "result_only") || (r.passed && !r.has_run_instructions && ((r.nifti_count || 0) > 0 || r.has_result_maps)));
+  const cannotRunResults = results.filter((r) => {
+    const rr = r.run_readiness
+      || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile) ? "runnable"
+          : r.passed && !r.has_run_instructions && ((r.nifti_count || 0) > 0 || r.has_result_maps) ? "result_only"
+          : "not_runnable");
+    return rr === "not_runnable" || (!r.passed && rr !== "result_only");
+  });
   const runnableCount   = runnableResults.length;
   const resultOnlyCount = resultOnlyResult.length;
+  const cannotRunCount  = cannotRunResults.length;
   const allResultOnly   = runnableCount === 0 && resultOnlyCount > 0;
 
-  // One-line summary
-  const desc = el("run-results-desc");
-  if (desc) {
-    if (results.length === 0) {
-      desc.textContent = "No validated submissions. Run validation first.";
-    } else if (allResultOnly) {
-      desc.textContent = `${resultOnlyCount} result-only submission${resultOnlyCount !== 1 ? "s" : ""} — execution not needed.`;
-    } else if (runnableCount === 0) {
-      desc.textContent = "No submissions ready to run — review validation issues.";
-    } else {
-      const parts = [`${runnableCount} ready to run`];
-      if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only (skipped)`);
-      const cannotRun = results.length - runnableCount - resultOnlyCount;
-      if (cannotRun > 0) parts.push(`${cannotRun} cannot run`);
-      desc.textContent = parts.join(" · ");
-    }
-  }
-
-  // Skipped notice (shown when all result-only)
+  // ── Skipped notice (all result-only) ──────────────────────────────────────
   const skippedNotice = el("run-skipped-notice");
   if (skippedNotice) skippedNotice.style.display = allResultOnly ? "" : "none";
+  const list = el("run-submissions-list");
+  if (list) list.style.display = allResultOnly ? "none" : "";
   const skippedContinueBtn = el("run-skipped-continue-btn");
   if (skippedContinueBtn) {
     const newBtn = skippedContinueBtn.cloneNode(true);
     skippedContinueBtn.replaceWith(newBtn);
-    newBtn.addEventListener("click", () => goToStep("export"));
+    newBtn.addEventListener("click", () => {
+      unlockStep("score");
+      unlockStep("export");
+      goToStep("score");
+      renderScoreStep().catch(() => {});
+    });
   }
 
-  // Docker availability
+  // ── Settings card (hide when all result-only) ──────────────────────────────
+  const settingsCard = el("run-settings-card");
+  if (settingsCard) settingsCard.style.display = allResultOnly ? "none" : "";
+
+  // ── Summary text ───────────────────────────────────────────────────────────
+  const desc = el("run-results-desc");
+  const cannotReasonEl = el("run-cannot-reason");
+  if (desc) {
+    if (results.length === 0) {
+      desc.textContent = "No validated submissions. Complete the Validate step first.";
+    } else if (allResultOnly) {
+      desc.textContent = "Execution skipped.";
+    } else if (runnableCount === 0 && cannotRunCount > 0) {
+      desc.textContent = `${cannotRunCount} submission${cannotRunCount !== 1 ? "s" : ""} cannot be run.`;
+      if (cannotReasonEl) {
+        cannotReasonEl.textContent = "No runnable code or result maps were found in these submissions.";
+        cannotReasonEl.style.display = "";
+      }
+    } else {
+      const parts = [];
+      if (runnableCount > 0) parts.push(`${runnableCount} ready to run`);
+      if (resultOnlyCount > 0) parts.push(`${resultOnlyCount} result-only (skipped)`);
+      if (cannotRunCount > 0)  parts.push(`${cannotRunCount} cannot run`);
+      desc.textContent = parts.join(" · ");
+      if (cannotReasonEl) cannotReasonEl.style.display = "none";
+    }
+  }
+
+  if (allResultOnly) {
+    if (list) list.innerHTML = "";
+    ["batch-docker-banner", "run-toolbar", "run-empty-state", "run-show-all-wrap", "batch-exec-status", "run-progress-panel", "run-completion-banner"].forEach((id) => {
+      const node = el(id);
+      if (node) node.style.display = "none";
+    });
+    unlockStep("score");
+    unlockStep("export");
+    _refreshWizardFooter();
+    saveSessionState();
+    return;
+  }
+
+  // ── Docker availability ────────────────────────────────────────────────────
   const docker       = await checkDockerAvailability();
   const dockerBanner = el("batch-docker-banner");
   if (dockerBanner) {
@@ -1985,27 +2526,20 @@ async function renderRunStep() {
     const dot  = `<span class="rsc-docker-dot"></span>`;
     const label = docker.available
       ? `${dot} Docker ready${docker.version ? ` · ${escapeHtml(docker.version)}` : ""}`
-      : `${dot} Docker unavailable`;
+      : `${dot} Docker not available — run step disabled`;
     dockerBanner.innerHTML = `<span class="rsc-docker-badge ${cls}">${label}</span>`;
     dockerBanner.style.display = "";
   }
 
-  // Run Settings Card: hide when all submissions are result-only (nothing to run)
-  const settingsCard = el("run-settings-card");
-  if (settingsCard) settingsCard.style.display = allResultOnly ? "none" : "";
-
-  // Show toolbar + table only if there are results and not all-result-only
-  const toolbar   = el("run-toolbar");
-  const runTable  = el("run-table");
+  // ── Run All button ─────────────────────────────────────────────────────────
   const runAllBtn = el("batch-exec-all-btn");
-  if (toolbar)  toolbar.style.display  = results.length > 0 && !allResultOnly ? "" : "none";
-  if (runTable) runTable.style.display = results.length > 0 && !allResultOnly ? "" : "none";
-
-  // Run All button: batch + runnable + docker OK
   if (runAllBtn)
     runAllBtn.style.display = batchState.isBatch && runnableCount > 0 && docker.available ? "" : "none";
 
-  // Wire view-select
+  // ── Toolbar visibility ─────────────────────────────────────────────────────
+  const toolbar = el("run-toolbar");
+  if (toolbar) toolbar.style.display = results.length > 1 && !allResultOnly ? "" : "none";
+
   if (viewSel) {
     viewSel.onchange = () => {
       _runFilter.view    = viewSel.value;
@@ -2014,7 +2548,6 @@ async function renderRunStep() {
     };
   }
 
-  // Show-all button
   const showAllBtn = el("run-show-all-btn");
   if (showAllBtn) {
     showAllBtn.onclick = () => {
@@ -2023,63 +2556,77 @@ async function renderRunStep() {
     };
   }
 
-  // Build rows
-  const list = el("run-submissions-list");
+  // ── Build submission cards ─────────────────────────────────────────────────
   if (!list) return;
+  list.style.display = "";
   list.innerHTML = "";
 
   results.forEach((r) => {
     const runReadiness = r.run_readiness
       || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile) ? "runnable"
-          : r.passed && !r.has_run_instructions && (r.nifti_count || 0) > 0 ? "result_only"
+          : r.passed && !r.has_run_instructions && ((r.nifti_count || 0) > 0 || r.has_result_maps) ? "result_only"
           : "not_runnable");
     const runnable     = runReadiness === "runnable";
     const isResultOnly = runReadiness === "result_only";
     const safeSubId    = escapeHtml(r.submission_id);
-    const safeChall    = escapeHtml(r.challenge_type || getChallengeType() || "dce");
+    const chall        = r.challenge_type || getChallengeType() || "dce";
 
     let initExecStatus;
-    if (runnable)     initExecStatus = "not-run";
+    if (runnable)          initExecStatus = "not-run";
     else if (isResultOnly) initExecStatus = "result-only";
-    else              initExecStatus = "cannot-run";
+    else                   initExecStatus = "cannot-run";
 
     const wrap = document.createElement("div");
-    wrap.className       = "br-row-wrap er-row-wrap";
-    wrap.dataset.subId   = r.submission_id;
-    wrap.dataset.challenge = r.challenge_type || getChallengeType() || "dce";
-    wrap.dataset.runnable = String(runnable);
+    wrap.className         = "run-sub-card";
+    wrap.dataset.subId     = r.submission_id;
+    wrap.dataset.challenge = chall;
+    wrap.dataset.runnable  = String(runnable);
     wrap.dataset.execStatus = initExecStatus;
-    wrap.dataset.name    = r.submission_id.toLowerCase();
+    wrap.dataset.name      = r.submission_id.toLowerCase();
 
-    // Initial display values
-    const runStatusHtml = _erRunStatusHtml(initExecStatus, runnable);
-    const outputsHtml   = isResultOnly
-      ? `<span class="rs-na" title="Submitted maps used">Submitted maps</span>`
-      : `<span class="rs-na">—</span>`;
-    const outCheckHtml  = isResultOnly
-      ? `<span class="oc-skipped">—</span>`
-      : `<span class="oc-pending">Pending</span>`;
+    // Status badge
+    const statusHtml = _erRunStatusHtml(initExecStatus, runnable);
 
-    // Details-only action — no per-row Run button
-    const actionHtml = `<button type="button" class="vr-action-btn er-detail-btn">Details</button>`;
+    // Plain-English reason line
+    let reasonHtml = "";
+    if (isResultOnly) {
+      reasonHtml = `<span class="run-card-reason">Output maps already included — no Docker execution needed.</span>`;
+    } else if (!runnable) {
+      reasonHtml = `<span class="run-card-reason run-card-reason-warn">No runnable code or result maps were found in this submission.</span>`;
+    }
 
-    // Folder line (if present)
-    const safeFolder = r.source_folder ? escapeHtml(r.source_folder) : "";
-    const subNameHtml = `<div class="br-sub-name" title="${safeSubId}">${safeSubId}</div>
-      ${safeFolder ? `<div class="br-sub-folder">${safeFolder}</div>` : ""}`;
+    // Action buttons
+    const actionsHtml = runnable
+      ? `<div class="run-card-actions">
+           <button type="button" class="btn btn-primary btn-sm er-run-btn"
+                   data-sub-id="${safeSubId}"
+                   data-challenge="${escapeHtml(chall)}">Run code in Docker</button>
+           <button type="button" class="btn btn-ghost btn-sm er-detail-btn">Details</button>
+         </div>`
+      : `<div class="run-card-actions">
+           <button type="button" class="btn btn-ghost btn-sm er-detail-btn">Details</button>
+         </div>`;
+
+    const safeName = r.source_folder ? escapeHtml(r.source_folder) : safeSubId;
 
     wrap.innerHTML = `
-      <div class="br-row er-row">
-        <div style="min-width:0">${subNameHtml}</div>
-        <div class="er-run-status-cell">${runStatusHtml}</div>
-        <div class="er-outputs-cell">${outputsHtml}</div>
-        <div class="er-outcheck-cell">${outCheckHtml}</div>
-        <div>${actionHtml}</div>
+      <div class="run-card-main">
+        <div class="run-card-info">
+          <div class="run-card-name" title="${safeSubId}">${safeName}</div>
+          <div class="run-card-status-row">
+            ${statusHtml}
+            ${reasonHtml}
+          </div>
+        </div>
+        <div class="run-card-right">
+          <div class="run-card-outputs er-outputs-cell"><span class="rs-na">—</span></div>
+          ${actionsHtml}
+        </div>
       </div>
-      <div class="er-row-detail" style="display:none">
+      <div class="er-row-detail run-card-detail" style="display:none">
         ${isResultOnly
-          ? `<p class="vr-result-only-note" style="margin:0">This submission contains result maps only — automatic execution is not needed. The submitted maps are used directly.</p>`
-          : `<p class="vr-issue-ok" style="margin:0 0 8px">Run this submission to see details.</p>`
+          ? `<p class="vr-result-only-note" style="margin:0">This submission already includes output maps. Code execution is not needed — the submitted maps will be used directly for scoring and export.</p>`
+          : `<p class="vr-issue-ok" style="margin:0 0 8px">Run this submission to see execution details.</p>`
         }
       </div>`;
 
@@ -2093,10 +2640,10 @@ async function renderRunStep() {
 function _erRunStatusHtml(execStatus, runnable) {
   switch (execStatus) {
     case "not-run":     return runnable
-                          ? `<span class="rs-badge rs-ready">Ready</span>`
-                          : `<span class="rs-na">Not run</span>`;
-    case "cannot-run":  return `<span class="rs-na">Cannot run</span>`;
-    case "result-only": return `<span class="rs-badge rs-skipped">Skipped — result-only</span>`;
+                          ? `<span class="rs-badge rs-ready">Ready to run</span>`
+                          : `<span class="rs-na">—</span>`;
+    case "cannot-run":  return `<span class="rs-badge rs-cannot">Cannot run</span>`;
+    case "result-only": return `<span class="rs-badge rs-skipped">Skipped</span>`;
     case "running":     return `<span class="rs-badge rs-running">Running…</span>`;
     case "passed":      return `<span class="rs-badge rs-pass">Passed</span>`;
     case "failed":      return `<span class="rs-badge rs-fail">Failed</span>`;
@@ -2109,7 +2656,8 @@ function _applyRunFilters() {
   const { view, showAll } = _runFilter;
   const list = el("run-submissions-list");
   if (!list) return;
-  const rows = [...list.querySelectorAll(".er-row-wrap")];
+  // Works for both old .er-row-wrap (legacy) and new .run-sub-card elements
+  const rows = [...list.querySelectorAll(".er-row-wrap, .run-sub-card")];
 
   const matchingRows = [];
   rows.forEach((row) => {
@@ -2117,19 +2665,18 @@ function _applyRunFilters() {
     const runnable = row.dataset.runnable === "true";
     let show = true;
     switch (view) {
-      // "ready" view shows runnable-not-run and result-only rows together
       case "ready":     show = (runnable && es === "not-run") || es === "result-only"; break;
       case "not-run":   show = es === "not-run"; break;
       case "passed":    show = es === "passed"; break;
       case "failed":    show = es === "failed"; break;
       case "timed-out": show = es === "timed-out"; break;
-      default:          show = true;
+      default:          show = true; // "all"
     }
     if (show) matchingRows.push(row);
     else row.style.display = "none";
   });
 
-  const LIMIT = 5;
+  const LIMIT = 6;
   const total = matchingRows.length;
   if (!showAll && total > LIMIT) {
     matchingRows.forEach((row, i) => { row.style.display = i < LIMIT ? "" : "none"; });
@@ -2152,9 +2699,9 @@ function _applyRunFilters() {
   if (empty) empty.style.display = total === 0 ? "" : "none";
 }
 
-// Update a run row after execution completes
+// Update a run card/row after execution completes
 function _updateRunRow(subId, execData, isError) {
-  const wrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+  const wrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap, #run-submissions-list .run-sub-card")]
     .find((w) => w.dataset.subId === subId);
   if (!wrap) return;
 
@@ -2188,12 +2735,23 @@ function _updateRunRow(subId, execData, isError) {
 
   const runnable = wrap.dataset.runnable === "true";
 
-  // Update run-status cell
-  const statusCell = wrap.querySelector(".er-run-status-cell");
-  if (statusCell) statusCell.innerHTML = _erRunStatusHtml(newExecStatus, runnable);
+  // Update status badge — works for both card (.run-card-status-row) and legacy table (.er-run-status-cell)
+  const statusCell = wrap.querySelector(".er-run-status-cell, .run-card-status-row");
+  if (statusCell) {
+    // Preserve reason text in card layout; only replace the badge portion
+    const reasonEl = statusCell.querySelector(".run-card-reason, .run-card-reason-warn");
+    const reasonHtml = reasonEl ? reasonEl.outerHTML : "";
+    if (isError || newExecStatus === "failed") {
+      const errMsg = typeof isError === "string" ? isError : (execData?.error_message || "Execution failed");
+      statusCell.innerHTML = _erRunStatusHtml(newExecStatus, runnable)
+        + `<span class="run-card-reason run-card-reason-warn">${escapeHtml(errMsg.slice(0, 120))}</span>`;
+    } else {
+      statusCell.innerHTML = _erRunStatusHtml(newExecStatus, runnable) + reasonHtml;
+    }
+  }
 
-  // Update outputs cell
-  const outputsCell = wrap.querySelector(".er-outputs-cell");
+  // Update outputs (card: .run-card-outputs, table: .er-outputs-cell)
+  const outputsCell = wrap.querySelector(".er-outputs-cell, .run-card-outputs");
   if (outputsCell && !isError) {
     const fc = execData.output_file_count ?? (Array.isArray(execData.output_files) ? execData.output_files.length : 0);
     outputsCell.innerHTML = fc > 0
@@ -2201,7 +2759,7 @@ function _updateRunRow(subId, execData, isError) {
       : `<span class="vr-issue-warn">0 files</span>`;
   }
 
-  // Update output-check cell
+  // Update output-check cell (table only — card skips this column)
   const outCheckCell = wrap.querySelector(".er-outcheck-cell");
   if (outCheckCell) {
     if (isError || !execData.output_validation) {
@@ -2214,8 +2772,8 @@ function _updateRunRow(subId, execData, isError) {
     }
   }
 
-  // Populate the detail drawer with full exec breakdown and auto-open it
-  const drawer = wrap.querySelector(".er-row-detail");
+  // Populate the detail drawer and auto-open it
+  const drawer = wrap.querySelector(".er-row-detail, .run-card-detail");
   if (drawer) {
     if (isError) {
       drawer.innerHTML = `<p class="vr-issue-err" style="margin:0">${escapeHtml(typeof isError === "string" ? isError : "Execution failed.")}</p>`;
@@ -2230,6 +2788,7 @@ function _updateRunRow(subId, execData, isError) {
 
   // Refresh run filter visibility
   _applyRunFilters();
+  _syncCompactProgress();
 }
 
 async function _renderRunPanel() {
@@ -2349,17 +2908,27 @@ function renderExecError(msg) {
 
 // ── Core execution function (used by both validate-row buttons and run-step buttons) ──
 
+// Helper: find a run card by submission ID (works for both .run-sub-card and legacy .er-row-wrap)
+function _findRunCard(subId) {
+  return [...document.querySelectorAll("#run-submissions-list .run-sub-card, #run-submissions-list .er-row-wrap")]
+    .find((w) => w.dataset.subId === subId) || null;
+}
+
 async function runBatchExec(btn, subId, challenge) {
   const timeout = parseInt(el("batch-exec-timeout")?.value || "300", 10) || 300;
-  if (btn) { btn.disabled = true; btn.textContent = "Running…"; }
+  const idleLabel = btn ? (btn.textContent.trim() || "Run code in Docker") : "";
+  if (btn) setLoading(btn, true, "Running");
 
-  // Mark row as running
-  const runWrap = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
-    .find((w) => w.dataset.subId === subId);
+  // Mark card as running
+  const runWrap = _findRunCard(subId);
   if (runWrap) {
     runWrap.dataset.execStatus = "running";
-    const sc = runWrap.querySelector(".er-run-status-cell");
-    if (sc) sc.innerHTML = _erRunStatusHtml("running", true);
+    const sc = runWrap.querySelector(".er-run-status-cell, .run-card-status-row");
+    if (sc) {
+      const reasonEl = sc.querySelector(".run-card-reason, .run-card-reason-warn");
+      const reasonHtml = reasonEl ? reasonEl.outerHTML : "";
+      sc.innerHTML = _erRunStatusHtml("running", true) + reasonHtml;
+    }
   }
 
   try {
@@ -2383,7 +2952,8 @@ async function runBatchExec(btn, subId, challenge) {
     _updateRunRow(subId, null, "Network error: " + err.message);
     _tickRunProgress(false, 0);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Run"; }
+    if (btn) setLoading(btn, false, idleLabel || "Run code in Docker");
+    _syncCompactProgress();
   }
 }
 
@@ -2431,18 +3001,17 @@ function _updateValCardExecBadge(subId, newStatus) {
   });
 })();
 
-// Delegation: Details button in run step (.er-detail-btn)
+// Delegation: Details button in run step (.er-detail-btn) — works for table rows + new cards
 (function initRunDetailBtnDelegation() {
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".er-detail-btn");
     if (!btn) return;
-    const wrap = btn.closest(".er-row-wrap");
+    // Support both old .er-row-wrap and new .run-sub-card
+    const wrap = btn.closest(".er-row-wrap, .run-sub-card");
     if (!wrap) return;
     e.stopPropagation();
-    const drawer = wrap.querySelector(".er-row-detail");
+    const drawer = wrap.querySelector(".er-row-detail, .run-card-detail");
     if (!drawer) return;
-    const open = drawer.style.display === "none" || drawer.style.display === "";
-    // toggle based on current visibility
     const isHidden = drawer.style.display === "none";
     drawer.style.display = isHidden ? "" : "none";
     btn.textContent = isHidden ? "Close" : "Details";
@@ -2455,21 +3024,26 @@ function _updateValCardExecBadge(subId, newStatus) {
   const statusEl = el("batch-exec-status");
   if (!btn) return;
   btn.addEventListener("click", async () => {
-    // Collect all runnable rows that haven't been executed yet
-    const runnableRows = [...document.querySelectorAll("#run-submissions-list .er-row-wrap")]
+    // Collect all runnable cards/rows that haven't been executed yet
+    const runnableRows = [...document.querySelectorAll("#run-submissions-list .run-sub-card, #run-submissions-list .er-row-wrap")]
       .filter((w) => w.dataset.runnable === "true" && w.dataset.execStatus === "not-run");
     if (!runnableRows.length) return;
-    btn.disabled = true;
+    const idleLabel = btn.textContent.trim() || "Run code in Docker";
+    setLoading(btn, true, "Running");
     _initRunProgress(runnableRows.length);
     if (statusEl) { statusEl.style.display = ""; statusEl.textContent = `Starting ${runnableRows.length} execution(s)…`; }
     let done = 0;
-    for (const row of runnableRows) {
-      if (statusEl) statusEl.textContent = `Running ${done + 1} of ${runnableRows.length}…`;
-      await runBatchExec(null, row.dataset.subId, row.dataset.challenge || "dce");
-      done++;
+    try {
+      for (const row of runnableRows) {
+        if (statusEl) statusEl.textContent = `Running ${done + 1} of ${runnableRows.length}…`;
+        await runBatchExec(null, row.dataset.subId, row.dataset.challenge || "dce");
+        done++;
+      }
+      if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
+    } finally {
+      setLoading(btn, false, idleLabel);
+      _syncCompactProgress();
     }
-    if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
-    btn.disabled = false;
   });
 })();
 
@@ -2552,7 +3126,7 @@ function _updateValCardExecBadge(subId, newStatus) {
 
     async function doExport(blinded) {
       const btn = blinded ? blindedBtn : unblindedBtn;
-      const label = blinded ? "Export Blinded Execution CSV" : "Export Unblinded Execution CSV";
+      const label = btn.textContent.trim() || (blinded ? "Download Execution CSV" : "Download Unblinded Export");
       if (!btn) return;
       setLoading(btn, true, label);
       if (statusEl) statusEl.style.display = "none";
@@ -2576,6 +3150,59 @@ function _updateValCardExecBadge(subId, newStatus) {
   }
 })();
 
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+
+async function loadLeaderboard() {
+  const card   = el("leaderboard-card");
+  const tbody  = el("leaderboard-table-body");
+  const sub    = el("leaderboard-sub");
+  if (!card || !tbody) return;
+
+  try {
+    const res  = await fetch(`${API}/api/leaderboard`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const entries = data.entries || [];
+
+    if (entries.length === 0) {
+      card.style.display = "none";
+      return;
+    }
+
+    card.style.display = "";
+    if (sub) sub.textContent = `${entries.length} submission${entries.length !== 1 ? "s" : ""} scored`;
+
+    tbody.innerHTML = entries.map((e) => {
+      const m       = e.metrics || {};
+      const acc     = m.accuracy        != null ? String(m.accuracy)        : "—";
+      const rep     = m.repeatability   != null ? String(m.repeatability)   : "—";
+      const silver  = m.osipi_score_silver != null ? `${m.osipi_score_silver}%`
+                    : m.osipi_silver_score != null  ? `${m.osipi_silver_score}%`
+                    : "—";
+      const statusCls = e.status === "scored" ? "sc-badge-scored"
+                      : e.status === "failed"  ? "sc-badge-failed"
+                      : "sc-badge-nc";
+      const ts = e.scored_at ? new Date(e.scored_at).toLocaleString() : "—";
+      return `<tr>
+        <td style="font-family:monospace;font-size:0.78rem">${escapeHtml(e.submission_id)}</td>
+        <td><span class="rs-badge ${statusCls}">${escapeHtml(e.status)}</span></td>
+        <td style="font-size:0.78rem;color:var(--text-secondary)">${escapeHtml(ts)}</td>
+        <td>${escapeHtml(acc)}</td>
+        <td>${escapeHtml(rep)}</td>
+        <td>${escapeHtml(silver)}</td>
+      </tr>`;
+    }).join("");
+
+  } catch (_) {
+    // Silently skip — leaderboard is non-critical
+  }
+}
+
+(function _wireLeaderboard() {
+  const btn = el("leaderboard-refresh-btn");
+  if (btn) btn.addEventListener("click", loadLeaderboard);
+})();
+
 // ── Step 6: Export ────────────────────────────────────────────────────────────
 
 function _syncExportStep() {
@@ -2585,7 +3212,10 @@ function _syncExportStep() {
   const batchExecWrap = el("batch-export-exec-wrap");
   const singleExecRow = el("exec-export-row");
 
-  const hasExecResults = Object.keys(_execSummaries).length > 0;
+  const hasExecResults  = Object.keys(_execSummaries).length > 0;
+  // Scoring export group: hidden until _enableScoringExport() is called after scoring
+  const scoringGroup = el("export-scoring-group");
+  if (scoringGroup) scoringGroup.style.display = "none";
 
   if (batchState.isBatch) {
     if (batchValWrap)  batchValWrap.style.display  = "";
@@ -2613,7 +3243,7 @@ async function exportBatch(blinded) {
     return;
   }
   const btn   = blinded ? batchExportBlindedBtn : batchExportUnblindedBtn;
-  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  const label = btn ? (btn.textContent.trim() || (blinded ? "Download Validation CSV" : "Download Unblinded Export")) : "";
   if (btn) setLoading(btn, true, label);
   if (statusEl) statusEl.style.display = "none";
   try {
@@ -2636,7 +3266,7 @@ if (batchExportUnblindedBtn) batchExportUnblindedBtn.addEventListener("click", (
 
 function _makeValExportHandler(btn, blinded) {
   if (!btn) return;
-  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  const label = btn.textContent.trim() || (blinded ? "Download Validation CSV" : "Download Unblinded Export");
   btn.addEventListener("click", async () => {
     const statusEl = el("download-status");
     if (!state.submissionId) {
@@ -2676,7 +3306,7 @@ async function exportBatchExecution(blinded) {
     return;
   }
   const btn   = blinded ? batchExportExecBlindedBtn : batchExportExecUnblindedBtn;
-  const label = blinded ? "Export Blinded Execution CSV" : "Export Unblinded Execution CSV";
+  const label = btn ? (btn.textContent.trim() || (blinded ? "Download Execution CSV" : "Download Unblinded Export")) : "";
   if (btn) setLoading(btn, true, label);
   if (statusEl) statusEl.style.display = "none";
   try {
@@ -2738,10 +3368,23 @@ function _refreshScoreProgress() {
     if (panel) panel.classList.add("state-done");
     if (txt)   txt.textContent = "Scoring complete";
     if (eta)   eta.textContent = `${scored} scored · ${failed + notConf} not scored`;
+    const titleEl = el("score-status-title");
+    const subEl = el("score-status-sub");
+    const previewEl = el("score-metric-preview");
+    if (titleEl) titleEl.textContent = failed + notConf > 0 ? "Scoring needs attention" : "Scoring complete";
+    if (subEl) subEl.textContent = scored > 0 ? `${scored} submission${scored !== 1 ? "s" : ""} scored.` : "No submissions were scored.";
+    if (previewEl) {
+      const preview = _scoreMetricPreviewHtml();
+      previewEl.innerHTML = preview;
+      previewEl.style.display = preview ? "" : "none";
+    }
     _enableScoringExport();
+    loadLeaderboard();
+    _syncCompactProgress();
   } else {
     if (txt) txt.textContent = `Scoring submissions… ${completed} of ${total}`;
     if (eta) eta.textContent = "";
+    _syncCompactProgress();
   }
 }
 
@@ -2754,7 +3397,252 @@ const _SC_METRIC_LABELS = {
   reproducibility:    "Reproducibility",
   osipi_silver_score: "Silver Score",
   osipi_gold_score:   "Gold Score",
+  // QC / demo metrics (ASL QC demo package and similar)
+  file_count:                    "Files",
+  ok_file_count:                 "Readable files",
+  failed_file_count:             "Failed files",
+  mean_finite_percent:           "Mean finite %",
+  mean_coefficient_of_variation: "Mean CoV",
+  reference_comparisons:         "Ref. comparisons",
+  mean_rmse:                     "Mean RMSE",
+  mean_bias:                     "Mean bias",
 };
+
+// Human label for an arbitrary metric key (falls back to a tidy Title Case).
+function _metricLabel(key) {
+  if (_SC_METRIC_LABELS[key]) return _SC_METRIC_LABELS[key];
+  return String(key).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Format a numeric metric value compactly (no spurious trailing decimals).
+function _fmtMetricVal(v) {
+  if (typeof v !== "number" || !isFinite(v)) return String(v);
+  if (Number.isInteger(v)) return String(v);
+  return (Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3)).replace(/\.?0+$/, "");
+}
+
+// Return only the numeric metric entries from a (possibly mixed) metrics object,
+// skipping strings, booleans, and nested objects/arrays. This keeps string
+// metadata (e.g. "package") out of the metrics table per OSIPI requirements.
+function _numericMetricEntries(metrics) {
+  if (!metrics || typeof metrics !== "object") return [];
+  return Object.entries(metrics).filter(
+    ([, v]) => typeof v === "number" && isFinite(v)
+  );
+}
+
+function _scoreMetricPreviewHtml(limit = 4) {
+  const entries = Object.values(_scoreCache).filter((s) => s.status === "scored");
+  const numeric = [];
+  entries.forEach((entry) => {
+    _numericMetricEntries(entry.metrics || {}).forEach(([key, value]) => {
+      numeric.push([key, value]);
+    });
+  });
+  if (!numeric.length) return "";
+  return numeric.slice(0, limit).map(([key, value]) =>
+    `<span class="score-preview-pill">${escapeHtml(_metricLabel(key))}: ${escapeHtml(_fmtMetricVal(value))}</span>`
+  ).join("");
+}
+
+function _fmtPercentValue(v) {
+  if (typeof v !== "number" || !isFinite(v)) return "not available";
+  return `${_fmtMetricVal(v)}%`;
+}
+
+function _scorePayload(data) {
+  return (data && data.score_result) ? data.score_result : (data || {});
+}
+
+function _cacheScoreStatus(sid, data, row) {
+  const result = _scorePayload(data);
+  const status = data?.status || result.status || "not_configured";
+  const analysis = result.nifti_analysis || data?.nifti_analysis || null;
+  if (!(status === "scored" || status === "failed" || analysis)) return;
+  _scoreCache[sid] = {
+    status,
+    displayName: row ? row.querySelector(".sc-col-sub")?.textContent?.trim() : sid,
+    metrics: result.metrics || data?.metrics || {},
+    metricsDetail: result.metrics_detail || data?.metrics_detail || {},
+    niftiAnalysis: analysis,
+    message: data?.message || result.message || "",
+    official: result.official === true,
+    referenceBasedScoringAvailable: result.reference_based_scoring_available === true
+      || data?.reference_based_scoring_available === true,
+  };
+}
+
+function _niftiAnalysisEntries() {
+  return Object.values(_scoreCache)
+    .map((entry) => entry.niftiAnalysis)
+    .filter((analysis) => analysis && typeof analysis === "object");
+}
+
+function _aggregateNiftiAnalyses(analyses) {
+  const maps = analyses.flatMap((analysis) => Array.isArray(analysis.maps) ? analysis.maps : []);
+  const summaries = analyses.map((analysis) => analysis.summary || {}).filter((s) => s && typeof s === "object");
+  const refObjects = analyses
+    .map((analysis) => analysis.reference_scoring || {})
+    .filter((ref) => ref && typeof ref === "object");
+  const sum = (key) => summaries.reduce((acc, s) => acc + (Number(s[key]) || 0), 0);
+  const avg = (key) => {
+    const vals = summaries.map((s) => Number(s[key])).filter((v) => isFinite(v));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const refAvg = (key) => {
+    const vals = refObjects
+      .map((ref) => ref.summary && Number(ref.summary[key]))
+      .filter((v) => isFinite(v));
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const referenceRows = [];
+  refObjects.forEach((ref) => {
+    (ref.maps || []).forEach((item) => {
+      const whole = item.whole_map || {};
+      referenceRows.push({ ...whole, ...item, scope: "whole map", mask_name: "" });
+      (item.masks || []).forEach((mask) => {
+        referenceRows.push({
+          ...(mask.metrics || {}),
+          submitted_file: item.submitted_file,
+          reference_file: item.reference_file,
+          detected_map_type: item.detected_map_type,
+          scope: mask.mask_label || "mask",
+          mask_name: mask.mask_name || "",
+          status: mask.status,
+          difference_map: item.difference_map,
+        });
+      });
+    });
+  });
+  const totalVoxelCount = sum("total_voxel_count");
+  const finiteVoxelCount = sum("finite_voxel_count");
+  const negativeVoxelCount = sum("negative_voxel_count");
+  const detected = [];
+  summaries.forEach((s) => (s.parameter_maps_detected || []).forEach((m) => {
+    if (m && !detected.includes(m)) detected.push(m);
+  }));
+  const meansByType = {};
+  ["CBF", "ATT", "Ktrans"].forEach((type) => {
+    const vals = summaries
+      .map((s) => s.means_by_map_type && Number(s.means_by_map_type[type]))
+      .filter((v) => isFinite(v));
+    if (vals.length) meansByType[type] = vals.reduce((a, b) => a + b, 0) / vals.length;
+  });
+  return {
+    mapCount: maps.length || sum("map_count"),
+    maps,
+    detected,
+    totalVoxelCount,
+    finiteVoxelCount,
+    nanCount: sum("nan_count"),
+    infCount: sum("inf_count"),
+    negativeVoxelCount,
+    finitePercent: totalVoxelCount ? (finiteVoxelCount / totalVoxelCount) * 100 : null,
+    negativePercent: finiteVoxelCount ? (negativeVoxelCount / finiteVoxelCount) * 100 : null,
+    coefficientOfVariation: avg("mean_coefficient_of_variation"),
+    standardDeviation: avg("mean_standard_deviation"),
+    meansByType,
+    referenceBasedScoringAvailable: analyses.some((a) => a.reference_based_scoring_available === true)
+      || refObjects.some((ref) => ref.available === true),
+    referenceStatus: refObjects.find((ref) => ref.status)?.status || "reference_not_available",
+    referenceRows,
+    referenceMetrics: {
+      rmse: refAvg("mean_rmse"),
+      mae: refAvg("mean_mae"),
+      bias: refAvg("mean_bias"),
+      coefficientOfVariation: refAvg("mean_coefficient_of_variation"),
+    },
+  };
+}
+
+function _summaryMetric(label, value, tone = "") {
+  return `<div class="summary-kv${tone ? ` is-${tone}` : ""}">
+    <span class="summary-kv-label">${escapeHtml(label)}</span>
+    <span class="summary-kv-value">${escapeHtml(value)}</span>
+  </div>`;
+}
+
+function _summaryPanel(title, bodyHtml) {
+  return `<section class="summary-nifti-card">
+    <div class="summary-nifti-title">${escapeHtml(title)}</div>
+    <div class="summary-nifti-body">${bodyHtml}</div>
+  </section>`;
+}
+
+function _shapeText(shape) {
+  return Array.isArray(shape) && shape.length ? shape.join(" x ") : "not available";
+}
+
+function _listText(values) {
+  return Array.isArray(values) && values.length ? values.join(", ") : "None detected";
+}
+
+function _renderNiftiTechnicalTable(analyses) {
+  const rows = analyses.flatMap((analysis) => Array.isArray(analysis.maps) ? analysis.maps : []);
+  if (!rows.length) return `<p class="summary-muted">No NIfTI map metadata is available yet.</p>`;
+  return `<div class="summary-tech-scroll"><table class="summary-metric-table summary-nifti-table">
+    <thead><tr>
+      <th>File</th><th>Map</th><th>Label</th><th>Units</th><th>Shape</th><th>Voxel size</th>
+      <th>Data type</th><th>Affine/orientation</th><th>Total voxels</th><th>Finite voxels</th>
+      <th>NaN</th><th>Inf</th><th>Mean</th><th>Median</th><th>Std. deviation</th>
+      <th>Min</th><th>Max</th><th>Finite %</th><th>Negative %</th><th>CoV</th>
+    </tr></thead>
+    <tbody>${rows.map((item) => {
+      const meta = item.metadata || {};
+      const stats = item.stats || {};
+      return `<tr>
+        <td>${escapeHtml(item.file_name || "")}</td>
+        <td>${escapeHtml(item.detected_map_type || "Unknown")}</td>
+        <td>${escapeHtml(item.parameter_label || "")}</td>
+        <td>${escapeHtml(item.units || "units not provided")}</td>
+        <td>${escapeHtml(_shapeText(meta.shape))}</td>
+        <td>${escapeHtml(Array.isArray(meta.voxel_size) ? meta.voxel_size.join(", ") : "not available")}</td>
+        <td>${escapeHtml(meta.data_type || "not available")}</td>
+        <td>${escapeHtml(meta.affine_orientation_summary || "not available")}</td>
+        <td>${escapeHtml(meta.total_voxel_count ?? "not available")}</td>
+        <td>${escapeHtml(meta.finite_voxel_count ?? "not available")}</td>
+        <td>${escapeHtml(meta.nan_count ?? "not available")}</td>
+        <td>${escapeHtml(meta.inf_count ?? "not available")}</td>
+        <td>${escapeHtml(stats.mean == null ? "not available" : _fmtMetricVal(stats.mean))}</td>
+        <td>${escapeHtml(stats.median == null ? "not available" : _fmtMetricVal(stats.median))}</td>
+        <td>${escapeHtml(stats.standard_deviation == null ? "not available" : _fmtMetricVal(stats.standard_deviation))}</td>
+        <td>${escapeHtml(stats.min == null ? "not available" : _fmtMetricVal(stats.min))}</td>
+        <td>${escapeHtml(stats.max == null ? "not available" : _fmtMetricVal(stats.max))}</td>
+        <td>${escapeHtml(stats.finite_percent == null ? "not available" : _fmtPercentValue(stats.finite_percent))}</td>
+        <td>${escapeHtml(stats.negative_voxel_percent == null ? "not available" : _fmtPercentValue(stats.negative_voxel_percent))}</td>
+        <td>${escapeHtml(stats.coefficient_of_variation == null ? "not available" : _fmtMetricVal(stats.coefficient_of_variation))}</td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table></div>`;
+}
+
+function _renderReferenceTechnicalTable(analyses) {
+  const rows = _aggregateNiftiAnalyses(analyses).referenceRows;
+  if (!rows.length) return `<p class="summary-muted">Reference map not available; QC metrics only.</p>`;
+  return `<div class="summary-tech-scroll"><table class="summary-metric-table summary-reference-table">
+    <thead><tr>
+      <th>Submitted</th><th>Reference</th><th>Map</th><th>Scope</th><th>Mask</th><th>Status</th>
+      <th>RMSE</th><th>MAE</th><th>Bias</th><th>CoV</th><th>Correlation</th>
+      <th>Finite %</th><th>Voxels</th><th>Difference map</th>
+    </tr></thead>
+    <tbody>${rows.map((row) => `<tr>
+      <td>${escapeHtml(row.submitted_file || "")}</td>
+      <td>${escapeHtml(row.reference_file || "")}</td>
+      <td>${escapeHtml(row.detected_map_type || "")}</td>
+      <td>${escapeHtml(row.scope || "")}</td>
+      <td>${escapeHtml(row.mask_name || "")}</td>
+      <td>${escapeHtml(row.status || "")}</td>
+      <td>${escapeHtml(row.rmse == null ? "not available" : _fmtMetricVal(row.rmse))}</td>
+      <td>${escapeHtml(row.mae == null ? "not available" : _fmtMetricVal(row.mae))}</td>
+      <td>${escapeHtml(row.bias == null ? "not available" : _fmtMetricVal(row.bias))}</td>
+      <td>${escapeHtml(row.coefficient_of_variation == null ? "not available" : _fmtMetricVal(row.coefficient_of_variation))}</td>
+      <td>${escapeHtml(row.correlation == null ? "not available" : _fmtMetricVal(row.correlation))}</td>
+      <td>${escapeHtml(row.finite_voxel_percent == null ? "not available" : _fmtPercentValue(row.finite_voxel_percent))}</td>
+      <td>${escapeHtml(row.voxel_count ?? "not available")}</td>
+      <td>${escapeHtml(row.difference_map || "")}</td>
+    </tr>`).join("")}</tbody>
+  </table></div>`;
+}
 
 // Build HTML for a provider card inside the collapsed details section.
 function _renderProviderCard(p) {
@@ -2808,56 +3696,377 @@ function _renderProviderCard(p) {
 }
 
 // Update the main user-facing status card based on provider status.
-function _updateScoreStatusCard(provs) {
+// activeMode: "none" | "builtin" | "custom"
+// packageName: display name of active custom package, or null
+function _updateScoreStatusCard(provs, activeMode, packageName) {
   const titleEl = el("score-status-title");
   const subEl   = el("score-status-sub");
   const badgeEl = el("score-status-badge");
   const hintEl  = el("score-status-hint");
   const btnAll  = el("btn-score-all");
+  const previewEl = el("score-metric-preview");
 
-  const officialReady = provs.some((p) => p.category === "official" && p.status === "ready");
-  const hasSubs       = _getKnownSubmissions().length > 0;
+  const isConfigured = !!(activeMode && activeMode !== "none");
 
-  if (officialReady) {
-    if (titleEl) titleEl.textContent = "Scoring ready";
-    if (subEl)   subEl.textContent   = "The official scoring provider is configured. Select submissions below and run scoring.";
-    if (badgeEl) { badgeEl.textContent = "Configured"; badgeEl.className = "score-status-badge badge-ready"; }
-    if (hintEl)  hintEl.textContent  = "Score your Ktrans outputs. Exports include scoring results once complete.";
-    if (btnAll)  btnAll.disabled     = !hasSubs;
+  if (isConfigured) {
+    const existingPreview = _scoreMetricPreviewHtml();
+    if (titleEl) titleEl.textContent = existingPreview ? "Scoring complete" : "Scoring is ready";
+    if (previewEl) {
+      previewEl.innerHTML = existingPreview;
+      previewEl.style.display = existingPreview ? "" : "none";
+    }
+
+    const scorerName = packageName
+      || (activeMode === "builtin" ? "Default OSIPI scoring" : "Custom scoring package");
+    const pkgLabel = existingPreview
+      ? "Metrics generated successfully."
+      : `${scorerName} is active.`;
+    if (subEl)   subEl.textContent  = pkgLabel;
+
+    const badgeTxt = "Ready";
+    if (badgeEl) { badgeEl.textContent = badgeTxt; badgeEl.className = "smc-badge smc-badge--ready"; }
+    if (hintEl)  hintEl.textContent   = "";
+    if (btnAll)  btnAll.disabled      = false;
   } else {
-    if (titleEl) titleEl.textContent = "Scoring not configured yet";
-    if (subEl)   subEl.textContent   = "Scoring will be available after the official scoring script, reference data, and masks are configured.";
-    if (badgeEl) { badgeEl.textContent = "Not configured"; badgeEl.className = "score-status-badge"; }
-    if (hintEl)  hintEl.textContent  = "Generated outputs can be validated and exported now. Scoring is the next provider-based step.";
-    if (btnAll)  btnAll.disabled     = true;
+    if (btnAll)  btnAll.disabled      = true;
   }
 
-  // Re-wire button (clone clears old listeners)
-  if (btnAll && officialReady && hasSubs) {
+  // Re-wire "Run Scoring" button (clone clears old listeners)
+  if (btnAll && isConfigured) {
     const fresh = btnAll.cloneNode(true);
     fresh.disabled    = false;
-    fresh.textContent = "Score outputs";
+    fresh.textContent = "Run Scoring";
     btnAll.replaceWith(fresh);
     fresh.addEventListener("click", async () => {
-      const readyRows = [...document.querySelectorAll(".sc-row-wrap")]
-        .filter((w) => w.dataset.scoreStatus === "ready" || w.dataset.scoreStatus === "not_checked");
-      if (!readyRows.length) return;
-      fresh.disabled    = true;
-      fresh.textContent = "Scoring…";
-      _initScoreProgress(readyRows.length);
-      for (const row of readyRows) {
-        await _runSingleScore(null, row.dataset.subId, row.dataset.challenge || "dce", row.dataset.mapType || "Ktrans");
+      const subs = _getKnownSubmissions();
+      // Ensure table is visible
+      const tc = el("score-table-card");
+      if (tc) tc.style.display = "";
+      if (!subs.length) return;
+      setLoading(fresh, true, "Scoring");
+      _initScoreProgress(subs.length);
+      try {
+        for (const sub of subs) {
+          const sid       = sub.submission_id || sub;
+          const challenge = sub.challenge_type || _getSessionChallengeType() || "dce";
+          const mapType   = "Ktrans";
+          await _runSingleScore(null, sid, challenge, mapType);
+        }
+      } finally {
+        setLoading(fresh, false, "Run Scoring");
+        _syncCompactProgress();
       }
-      fresh.disabled    = false;
-      fresh.textContent = "Score outputs";
     });
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Admin Scoring Setup Panel
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Detect challenge type from the current session state.
+function _getSessionChallengeType() {
+  if (batchState.validationData && batchState.validationData.results) {
+    const first = batchState.validationData.results[0];
+    if (first && first.challenge_type) return first.challenge_type.toLowerCase();
+  }
+  return "dce"; // default
+}
+
+// Load active config from backend and sync radio buttons + badge.
+async function _loadScoringSetup() {
+  const badgeEl = el("scoring-admin-badge");
+  try {
+    const r = await fetch(`${API}/api/scoring/active-config`);
+    if (!r.ok) return;
+    const data = await r.json();
+    const ct   = _getSessionChallengeType();
+    const entry = (data.active_config || {})[ct] || { mode: "none" };
+    const mode  = entry.mode || "none";
+
+    // Set radio
+    const radio = document.querySelector(`input[name="scoring-mode"][value="${mode}"]`);
+    if (radio) radio.checked = true;
+
+    // Show/hide custom section
+    _onScoringModeChange(mode);
+
+    // If custom, populate package list and selector
+    if (mode === "custom") {
+      await _loadInstalledPackages(ct, entry.package_id || null);
+    }
+
+    // Update badge
+    if (badgeEl) {
+      if (mode === "none") {
+        badgeEl.textContent = "Not configured";
+        badgeEl.className   = "scoring-admin-badge";
+      } else if (mode === "builtin") {
+        badgeEl.textContent = "Default OSIPI";
+        badgeEl.className   = "scoring-admin-badge badge-ready";
+      } else {
+        const pkgs   = data.packages || [];
+        const active = pkgs.find((p) => p.package_id === entry.package_id);
+        badgeEl.textContent = active ? `${active.name} v${active.version}` : "Custom";
+        badgeEl.className   = "scoring-admin-badge badge-custom";
+      }
+    }
+
+    // Update builtin status line
+    await _updateBuiltinStatus();
+  } catch (_) { /* silently ignore */ }
+}
+
+// Show/hide the custom package section based on selected mode.
+function _onScoringModeChange(mode) {
+  const customSec = el("scoring-custom-section");
+  if (!customSec) return;
+  customSec.style.display = mode === "custom" ? "" : "none";
+}
+
+// Check built-in TF6.2 provider readiness and update mode description.
+async function _updateBuiltinStatus() {
+  const statusEl = el("scoring-builtin-status");
+  if (!statusEl) return;
+  try {
+    const r = await fetch(`${API}/api/scoring-status`);
+    const d = await r.json();
+    const prov = (d.providers || []).find(
+      (p) => p.provider_id === "osipi_tf62_dce_ktrans"
+    );
+    if (prov) {
+      if (prov.status === "ready") {
+        statusEl.textContent  = "✓ Reference data found — ready to score";
+        statusEl.className    = "scoring-mode-status ok";
+      } else {
+        const missing = (prov.missing || []).join(", ");
+        statusEl.textContent  = `Missing: ${missing || "reference data not configured"}`;
+        statusEl.className    = "scoring-mode-status err";
+      }
+    }
+  } catch (_) { /* silently ignore */ }
+}
+
+// Load and render the installed packages list.
+async function _loadInstalledPackages(challengeType, activePackageId) {
+  const listEl   = el("scoring-pkg-list");
+  const selectEl = el("scoring-pkg-select");
+  const wrapEl   = el("scoring-pkg-select-wrap");
+  if (!listEl) return;
+
+  let packages = [];
+  try {
+    const r = await fetch(`${API}/api/scoring/packages`);
+    const d = await r.json();
+    packages = d.packages || [];
+  } catch (_) {
+    listEl.innerHTML = `<p style="font-size:0.75rem;color:var(--muted)">Could not load packages.</p>`;
+    return;
+  }
+
+  if (packages.length === 0) {
+    listEl.innerHTML = `<p style="font-size:0.75rem;color:var(--muted);margin:4px 0">No packages installed yet. Upload a scoring package ZIP above.</p>`;
+    if (wrapEl) wrapEl.style.display = "none";
+    return;
+  }
+
+  // Render package cards
+  listEl.innerHTML = packages.map((pkg) => {
+    const ready    = pkg.status && pkg.status.ready;
+    const badgeCls = ready ? "scoring-pkg-badge" : "scoring-pkg-badge not-ready";
+    const badgeTxt = ready ? "Ready" : "Incomplete";
+    const isSel    = pkg.package_id === activePackageId;
+    return `
+    <div class="scoring-pkg-item${isSel ? " pkg-selected" : ""}" data-pkg-id="${escapeHtml(pkg.package_id)}">
+      <div class="scoring-pkg-info">
+        <div class="scoring-pkg-name">${escapeHtml(pkg.name)}</div>
+        <div class="scoring-pkg-meta">
+          v${escapeHtml(pkg.version)} · ${escapeHtml(pkg.challenge_type.toUpperCase())}
+          ${pkg.map_type ? " · " + escapeHtml(pkg.map_type) : ""}
+          ${pkg.description ? " — " + escapeHtml(pkg.description.slice(0, 80)) : ""}
+        </div>
+      </div>
+      <div class="scoring-pkg-actions">
+        <span class="${badgeCls}">${badgeTxt}</span>
+        <button type="button" class="btn btn-danger scoring-pkg-remove-btn" data-pkg-id="${escapeHtml(pkg.package_id)}">Remove</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Populate select
+  if (selectEl) {
+    selectEl.innerHTML = packages.map((pkg) =>
+      `<option value="${escapeHtml(pkg.package_id)}"${pkg.package_id === activePackageId ? " selected" : ""}>
+        ${escapeHtml(pkg.name)} v${escapeHtml(pkg.version)} (${escapeHtml(pkg.challenge_type.toUpperCase())})
+      </option>`
+    ).join("");
+    if (wrapEl) wrapEl.style.display = "";
+  }
+}
+
+// Save the current scoring setup selection to the backend.
+async function _saveScoringSetup() {
+  const btn    = el("scoring-setup-save-btn");
+  const msgEl  = el("scoring-setup-msg");
+  const radio  = document.querySelector('input[name="scoring-mode"]:checked');
+  const mode   = radio ? radio.value : "none";
+  const ct     = _getSessionChallengeType();
+
+  let packageId = null;
+  if (mode === "custom") {
+    const sel = el("scoring-pkg-select");
+    packageId = sel ? sel.value : null;
+    if (!packageId) {
+      if (msgEl) { msgEl.textContent = "Select a package first."; msgEl.className = "scoring-setup-msg err"; msgEl.style.display = ""; }
+      return;
+    }
+  }
+
+  if (btn) setLoading(btn, true, "Applying");
+
+  try {
+    const r = await fetch(`${API}/api/scoring/set-active`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ challenge_type: ct, mode, package_id: packageId }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "Request failed");
+
+    if (msgEl) {
+      const label = mode === "none" ? "Scoring disabled" : mode === "builtin" ? "Default OSIPI scoring configured" : "Custom package configured";
+      msgEl.textContent = `✓ ${label}`;
+      msgEl.className   = "scoring-setup-msg ok";
+      msgEl.style.display = "";
+    }
+
+    // Refresh the status card and badge
+    await _loadScoringSetup();
+    await renderScoreStep();
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = `Error: ${err.message}`; msgEl.className = "scoring-setup-msg err"; msgEl.style.display = ""; }
+  } finally {
+    if (btn) setLoading(btn, false, "Apply Configuration");
+    _syncCompactProgress();
+  }
+}
+
+// Wire up radio change, file upload, package remove, and save button.
+(function _wireScoringSetup() {
+  // Radio buttons — show/hide custom section
+  document.querySelectorAll('input[name="scoring-mode"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      _onScoringModeChange(radio.value);
+      if (radio.value === "custom") {
+        _loadInstalledPackages(_getSessionChallengeType(), null);
+      }
+    });
+  });
+
+  // Package file upload
+  const fileInput = el("scoring-pkg-input");
+  if (fileInput) {
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const statusEl = el("scoring-pkg-upload-status");
+      if (statusEl) { statusEl.textContent = "Uploading…"; statusEl.className = "scoring-upload-status"; }
+
+      const fd = new FormData();
+      fd.append("file", file);
+      try {
+        const r = await fetch(`${API}/api/scoring/packages/upload`, { method: "POST", body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || "Upload failed");
+        if (statusEl) { statusEl.textContent = `✓ Installed: ${d.manifest?.name || d.package_id}`; statusEl.className = "scoring-upload-status ok"; }
+        await _loadInstalledPackages(_getSessionChallengeType(), d.package_id);
+        fileInput.value = "";
+      } catch (err) {
+        if (statusEl) { statusEl.textContent = `Error: ${err.message}`; statusEl.className = "scoring-upload-status err"; }
+      }
+    });
+  }
+
+  // Package remove (delegated)
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".scoring-pkg-remove-btn");
+    if (!btn) return;
+    const pkgId = btn.dataset.pkgId;
+    if (!pkgId) return;
+    if (!confirm(`Remove scoring package "${pkgId}"?`)) return;
+    try {
+      const r = await fetch(`${API}/api/scoring/packages/${encodeURIComponent(pkgId)}`, { method: "DELETE" });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Remove failed"); }
+      await _loadInstalledPackages(_getSessionChallengeType(), null);
+    } catch (err) {
+      alert(`Failed to remove package: ${err.message}`);
+    }
+  });
+
+  // Save button
+  const saveBtn = el("scoring-setup-save-btn");
+  if (saveBtn) saveBtn.addEventListener("click", _saveScoringSetup);
+})();
+
+// ── renderScoreStep() ─────────────────────────────────────────────────────────
+
 async function renderScoreStep() {
   unlockStep("score");
+  loadLeaderboard();
 
-  // ── 1. Fetch providers, update status card + collapsed details ───────────────
+  // Load admin scoring setup first (determines active mode)
+  await _loadScoringSetup();
+
+  // ── 1. Determine active scoring mode + package name ──────────────────────────
+  let activeMode      = "none";
+  let activePackageName = null;
+  try {
+    const r = await fetch(`${API}/api/scoring/active-config`);
+    if (r.ok) {
+      const d   = await r.json();
+      const ct  = _getSessionChallengeType();
+      const entry = (d.active_config || {})[ct] || {};
+      activeMode  = entry.mode || "none";
+      // Resolve human-readable package name for custom mode
+      if (activeMode === "custom" && entry.package_id) {
+        const pkgs = d.packages || [];
+        const pkg  = pkgs.find((p) => p.package_id === entry.package_id);
+        if (pkg) activePackageName = pkg.name + (pkg.version ? ` v${pkg.version}` : "");
+      }
+    }
+  } catch (_) { /* default to none */ }
+
+  const notConfiguredCard = el("score-not-configured-card");
+  const statusCard        = el("score-status-card");
+  const tableCard         = el("score-table-card");
+
+  if (activeMode === "none") {
+    // ── Not configured view ───────────────────────────────────────────────────
+    if (notConfiguredCard) notConfiguredCard.style.display = "";
+    if (statusCard)        statusCard.style.display        = "none";
+    if (tableCard)         tableCard.style.display         = "none";
+    const subs = _getKnownSubmissions();
+    await Promise.all(subs.map(async (sub) => {
+      const sid = sub.submission_id || sub;
+      const ct  = sub.challenge_type || getChallengeType() || "dce";
+      try {
+        const r = await fetch(`${API}/api/scoring-status?submission_id=${encodeURIComponent(sid)}&challenge_type=${encodeURIComponent(ct)}&map_type=Ktrans`);
+        const d = await r.json();
+        _applyScoreStatus(sid, d);
+      } catch (_) { /* Summary can still render validation/export state. */ }
+    }));
+    saveSessionState();
+    _syncCompactProgress();
+    return;
+  }
+
+  // ── 2. Scoring is configured — show ready card ───────────────────────────────
+  if (notConfiguredCard) notConfiguredCard.style.display = "none";
+  if (statusCard)        statusCard.style.display        = "";
+  // Note: score-provider-details is now inside the admin <details> panel —
+  // it stays hidden unless the user opens the admin section.
+
+  // Fetch providers for the advanced details panel (populated lazily)
   const grid = el("score-provider-grid");
   if (grid) grid.innerHTML = `<p style="font-size:0.78rem;color:var(--muted);margin:0">Loading…</p>`;
 
@@ -2866,11 +4075,9 @@ async function renderScoreStep() {
     const r = await fetch(`${API}/api/scoring-status`);
     const d = await r.json();
     provs   = d.providers || [];
-  } catch (_) {
-    // Provider fetch failed — status card stays in "not configured" state
-  }
+  } catch (_) { /* ignore */ }
 
-  _updateScoreStatusCard(provs);
+  _updateScoreStatusCard(provs, activeMode, activePackageName);
 
   if (grid) {
     grid.innerHTML = provs.length
@@ -2879,65 +4086,70 @@ async function renderScoreStep() {
   }
 
   saveSessionState();
+  _syncCompactProgress();
 
-  // ── 2. Submission scoring table ─────────────────────────────────────────────
-  const tableCard = el("score-table-card");
-  const tbody     = el("score-table-body");
+  // ── 3. Submission scoring rows (hidden until scoring runs) ──────────────────
+  const tbody = el("score-table-body");
   if (!tableCard || !tbody) return;
 
   const subs = _getKnownSubmissions();
   if (!subs.length) return;
 
-  tableCard.style.display = "";
+  tableCard.style.display = "none";
   tbody.innerHTML = "";
 
   for (const sub of subs) {
     const sid  = sub.submission_id || sub;
     const name = sub.display_name  || sid;
-    tbody.insertAdjacentHTML("beforeend", _buildScoreRow(sid, name));
+    const ct   = sub.challenge_type || getChallengeType() || "dce";
+    tbody.insertAdjacentHTML("beforeend", _buildScoreRow(sid, name, ct));
   }
 
   for (const sub of subs) {
-    _fetchAndUpdateScoreStatus(sub.submission_id || sub);
+    const sid = sub.submission_id || sub;
+    const ct  = sub.challenge_type || getChallengeType() || "dce";
+    _fetchAndUpdateScoreStatus(sid, ct);
   }
 }
 
 // Build an HTML score table row for a given submission.
-function _buildScoreRow(sid, displayName) {
+// Metric pills are hidden until actual scored values are available.
+function _buildScoreRow(sid, displayName, challengeType) {
+  const safeSid  = escapeHtml(sid);
+  const safeChCt = escapeHtml(challengeType || "dce");
   return `
-  <tr class="sc-row-wrap" data-sub-id="${escapeHtml(sid)}"
+  <tr class="sc-row-wrap" data-sub-id="${safeSid}"
       data-score-status="not_checked"
-      data-challenge="dce" data-map-type="Ktrans">
+      data-challenge="${safeChCt}" data-map-type="Ktrans">
     <td class="sc-col-sub">${escapeHtml(displayName || sid)}</td>
     <td class="sc-col-status">
       <span class="ss-badge ss-not-conf">Checking…</span>
     </td>
     <td class="sc-col-metrics">
-      <div class="sc-metrics-row">
-        ${_SC_METRIC_KEYS.map((k) =>
-          `<span class="sc-metric-pill">${escapeHtml(_SC_METRIC_LABELS[k])}</span>`
-        ).join("")}
+      <div class="sc-metrics-row" id="sc-metrics-${safeSid}">
+        <span class="sc-metrics-placeholder">—</span>
       </div>
     </td>
-    <td class="sc-col-artifacts" id="sc-artifacts-${escapeHtml(sid)}">—</td>
+    <td class="sc-col-artifacts" id="sc-artifacts-${safeSid}">—</td>
     <td class="sc-col-action">
-      <button type="button" class="sc-score-btn btn-sm"
-              data-sub-id="${escapeHtml(sid)}"
-              data-challenge="dce" data-map-type="Ktrans"
+      <button type="button" class="btn btn-secondary sc-score-btn btn-sm"
+              data-sub-id="${safeSid}"
+              data-challenge="${safeChCt}" data-map-type="Ktrans"
               disabled>Score</button>
     </td>
   </tr>
   <tr class="sc-row-detail-row" style="display:none">
     <td colspan="5">
-      <div class="sc-row-detail" id="sc-detail-${escapeHtml(sid)}"></div>
+      <div class="sc-row-detail" id="sc-detail-${safeSid}"></div>
     </td>
   </tr>`;
 }
 
 // Fetch /api/scoring-status for one submission and update its row.
-async function _fetchAndUpdateScoreStatus(sid) {
+async function _fetchAndUpdateScoreStatus(sid, challengeType) {
+  const ct = challengeType || getChallengeType() || "dce";
   try {
-    const r    = await fetch(`${API}/api/scoring-status?submission_id=${encodeURIComponent(sid)}&challenge_type=dce&map_type=Ktrans`);
+    const r    = await fetch(`${API}/api/scoring-status?submission_id=${encodeURIComponent(sid)}&challenge_type=${encodeURIComponent(ct)}&map_type=Ktrans`);
     const data = await r.json();
     _applyScoreStatus(sid, data);
   } catch (err) {
@@ -2949,64 +4161,103 @@ async function _fetchAndUpdateScoreStatus(sid) {
 function _applyScoreStatus(sid, data) {
   const row = [...document.querySelectorAll(".sc-row-wrap")]
     .find((r) => r.dataset.subId === sid);
-  if (!row) return;
+  _cacheScoreStatus(sid, data, row);
+  if (!row) { _syncCompactProgress(); return; }
 
   const status = data.status || "not_configured";
   row.dataset.scoreStatus = status;
 
   let badgeCls, badgeTxt;
   switch (status) {
-    case "ready":        badgeCls = "ss-ready";    badgeTxt = "Ready"; break;
-    case "scored":       badgeCls = "ss-scored";   badgeTxt = "Scored"; break;
-    case "failed":       badgeCls = "ss-failed";   badgeTxt = "Failed"; break;
-    default:             badgeCls = "ss-not-conf"; badgeTxt = "Not configured"; break;
+    case "ready":          badgeCls = "ss-ready";    badgeTxt = "Ready to score"; break;
+    case "scored":         badgeCls = "ss-scored";   badgeTxt = "Scored"; break;
+    case "failed":         badgeCls = "ss-failed";   badgeTxt = "Scoring failed"; break;
+    case "not_configured": badgeCls = "ss-not-conf"; badgeTxt = "Needs setup"; break;
+    case "not_ready":      badgeCls = "ss-not-conf"; badgeTxt = "Incomplete"; break;
+    default:               badgeCls = "ss-not-conf"; badgeTxt = "—"; break;
   }
 
   const badge = row.querySelector(".ss-badge");
   if (badge) { badge.className = `ss-badge ${badgeCls}`; badge.textContent = badgeTxt; }
 
-  // Enable Score button only when ready or already scored (retry)
+  // Enable Score button only when ready or retry
   const scoreBtn = row.querySelector(".sc-score-btn");
   if (scoreBtn) {
     scoreBtn.disabled = !(status === "ready" || status === "scored" || status === "failed");
   }
 
-  // If already scored, populate metrics
-  if (status === "scored" && data.score_result) {
-    _applyMetrics(sid, data.score_result.metrics || {});
-    _applyArtifacts(sid, data.score_result.artifacts || []);
+  // If already scored, populate metrics and cache for summary step
+  if (status === "scored") {
+    const result = _scorePayload(data);
+    _applyMetrics(sid, result.metrics || {});
+    _applyArtifacts(sid, result.artifacts || []);
+    const tableCard = el("score-table-card");
+    if (tableCard) tableCard.style.display = "";
     _enableScoringExport();
   }
+  // Cache score result for summary step (works for both "scored" and "failed")
+  if (status === "scored" || status === "failed") {
+    const tableCard = el("score-table-card");
+    if (tableCard) tableCard.style.display = "";
+    _cacheScoreStatus(sid, data, row);
+  }
 
-  // Populate detail drawer if there's a message or missing list
-  const detail = el(`sc-detail-${sid}`);
+  // Populate detail drawer — only show it for scored/failed/missing, NOT for bare "not_configured"
+  const detail    = el(`sc-detail-${sid}`);
   const detailRow = detail?.closest("tr.sc-row-detail-row");
   if (detail) {
     const missing = data.missing || [];
     const msg     = data.message || "";
-    const misHtml = missing.length
-      ? `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul>` : "";
-    detail.innerHTML = `<p style="font-size:0.73rem;margin:0 0 4px">${escapeHtml(msg)}</p>${misHtml}`;
-    if (detailRow && (missing.length > 0 || status === "scored" || status === "failed")) {
-      detailRow.style.display = "";
+
+    if (status === "scored" || status === "failed") {
+      // Show full detail for scored/failed
+      const misHtml = missing.length
+        ? `<details style="margin-top:6px"><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Prerequisites checklist</summary>`
+          + `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul></details>`
+        : "";
+      detail.innerHTML = msg ? `<p style="font-size:0.73rem;margin:0 0 4px">${escapeHtml(msg)}</p>${misHtml}` : misHtml;
+      if (detailRow) detailRow.style.display = "";
+    } else if (status === "not_ready" && missing.length > 0) {
+      // Show missing prereqs collapsed
+      detail.innerHTML = `<details><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Scoring needs additional setup — expand to see details</summary>`
+        + `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul></details>`;
+      if (detailRow) detailRow.style.display = "";
+    } else {
+      // not_configured or generic — don't show a noisy detail row
+      detail.innerHTML = "";
+      if (detailRow) detailRow.style.display = "none";
     }
   }
+  _syncCompactProgress();
 }
 
 function _applyMetrics(sid, metrics) {
-  const row = [...document.querySelectorAll(".sc-row-wrap")]
-    .find((r) => r.dataset.subId === sid);
-  if (!row) return;
-  const metRow = row.querySelector(".sc-metrics-row");
+  // Prefer the ID-based lookup (works after _buildScoreRow with new template)
+  const metRow = el(`sc-metrics-${sid}`) || (() => {
+    const row = [...document.querySelectorAll(".sc-row-wrap")].find((r) => r.dataset.subId === sid);
+    return row ? row.querySelector(".sc-metrics-row") : null;
+  })();
   if (!metRow) return;
-  metRow.innerHTML = _SC_METRIC_KEYS.map((k) => {
-    const val    = metrics[k];
-    const hasVal = val !== undefined && val !== null && val !== "";
-    return `<span class="sc-metric-pill${hasVal ? " has-value" : ""}">`
-         + escapeHtml(_SC_METRIC_LABELS[k])
-         + (hasVal ? `: ${escapeHtml(String(val))}` : "")
-         + `</span>`;
-  }).join("");
+
+  // Show ONLY numeric metric values (RMSE, CoV, finite %, …). String metadata
+  // such as "package" is never shown as a metric. Works for both the official
+  // DCE metrics and flattened QC/demo metrics from custom packages.
+  const numeric = _numericMetricEntries(metrics);
+
+  if (numeric.length === 0) {
+    metRow.innerHTML = `<span class="sc-metric-pill">No numeric metrics</span>`;
+    return;
+  }
+
+  // Prefer the well-known official keys first, then any remaining numeric keys.
+  const ordered = [
+    ...numeric.filter(([k]) => _SC_METRIC_KEYS.includes(k)),
+    ...numeric.filter(([k]) => !_SC_METRIC_KEYS.includes(k)),
+  ].slice(0, 8);
+
+  metRow.innerHTML = ordered.map(([k, v]) =>
+    `<span class="sc-metric-pill has-value">${escapeHtml(_metricLabel(k))}: ${escapeHtml(_fmtMetricVal(v))}</span>`
+  ).join("");
 }
 
 function _applyArtifacts(sid, artifacts) {
@@ -3017,16 +4268,22 @@ function _applyArtifacts(sid, artifacts) {
 }
 
 // Return the list of known submissions for the current session.
-// Falls back to batchState.validationData, then state.submissionId.
+// batchState.validationData is an object {results:[...], batch_id:...}, not an array.
 function _getKnownSubmissions() {
-  if (batchState.validationData && batchState.validationData.length > 0) {
-    return batchState.validationData.map((r) => ({
-      submission_id: r.submission_id,
-      display_name:  r.submission_id,
+  const results = batchState.validationData && batchState.validationData.results;
+  if (results && results.length > 0) {
+    return results.map((r) => ({
+      submission_id:  r.submission_id,
+      display_name:   r.source_folder || r.submission_id,
+      challenge_type: r.challenge_type || getChallengeType() || "dce",
     }));
   }
   if (state.submissionId) {
-    return [{ submission_id: state.submissionId, display_name: state.submissionId }];
+    return [{
+      submission_id:  state.submissionId,
+      display_name:   state.submissionId,
+      challenge_type: getChallengeType() || "dce",
+    }];
   }
   return [];
 }
@@ -3046,7 +4303,8 @@ function _updateScoreRow(subId, data) {
 // ── Single score execution ────────────────────────────────────────────────────
 
 async function _runSingleScore(btn, subId, challenge, mapType) {
-  if (btn) { btn.disabled = true; btn.textContent = "Scoring…"; }
+  const idleLabel = btn ? (btn.textContent.trim() || "Score") : "";
+  if (btn) setLoading(btn, true, "Scoring");
 
   const wrap = [...document.querySelectorAll(".sc-row-wrap")]
     .find((w) => w.dataset.subId === subId);
@@ -3069,7 +4327,8 @@ async function _runSingleScore(btn, subId, challenge, mapType) {
     _updateScoreRow(subId, { status: "failed", message: "Network error: " + err.message, metrics: {} });
     _tickScoreProgress(false, false);
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) setLoading(btn, false, idleLabel || "Score");
+    _syncCompactProgress();
   }
 }
 
@@ -3103,20 +4362,270 @@ document.addEventListener("click", (e) => {
 
 // "Score All" button is wired dynamically inside renderScoreStep().
 
+// ── renderSummaryStep() ───────────────────────────────────────────────────────
+
+function renderSummaryStep() {
+  unlockStep("summary");
+  unlockStep("export");
+  // Keep the footer in sync so Continue → Export is enabled the moment we arrive.
+  if (typeof _refreshWizardFooter === "function") _refreshWizardFooter();
+
+  const container = el("summary-cards");
+  if (!container) return;
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  const valResults = (batchState.validationData && batchState.validationData.results) || [];
+  const valTotal   = valResults.length;
+  const valPassed  = valResults.filter((r) => r.passed).length;
+  const valFailed  = valResults.filter((r) => !r.passed).length;
+  const valWarned  = valResults.filter((r) => r.passed && issueCount(r, "warnings") > 0).length;
+  const totalErrors   = valResults.reduce((a, r) => a + issueCount(r, "errors"), 0);
+  const totalWarnings = valResults.reduce((a, r) => a + issueCount(r, "warnings"), 0);
+
+  // ── Execution ─────────────────────────────────────────────────────────────
+  let execRan = 0, execSkipped = 0, execFailed = 0, execCannot = 0;
+  for (const r of valResults) {
+    const rr = (r.run_readiness || "").replace(/_/g, "-");
+    if (rr === "result-only") { execSkipped++; continue; }
+    if (rr === "cannot-run" || rr === "not-runnable") { execCannot++; continue; }
+    const ex = _execSummaries[r.submission_id];
+    if (!ex) continue;
+    if (ex.passed || ex.status === "pass") execRan++;
+    else if (ex.status === "failed") execFailed++;
+  }
+
+  // ── Scoring (numeric metrics only) ──────────────────────────────────────────
+  const scoredEntries = Object.values(_scoreCache).filter((s) => s.status === "scored");
+  const scoredCount   = scoredEntries.length;
+  const scoringFailed = Object.values(_scoreCache).filter((s) => s.status === "failed").length;
+  const scoreCardEl   = el("score-status-card");
+  const scoringConfigured = scoredCount > 0 || scoringFailed > 0 ||
+    !!(scoreCardEl && scoreCardEl.style.display !== "none");
+  const anyOfficial   = scoredEntries.some((s) => s.official === true);
+  const nonOfficialScored = scoredCount > 0 && !anyOfficial;
+
+  const _agg = {};
+  scoredEntries.forEach((s) => {
+    _numericMetricEntries(s.metrics || {}).forEach(([k, v]) => { (_agg[k] = _agg[k] || []).push(v); });
+  });
+  const metrics = {};
+  Object.entries(_agg).forEach(([k, arr]) => { metrics[k] = arr.reduce((a, b) => a + b, 0) / arr.length; });
+  const analysisEntries = _niftiAnalysisEntries();
+  const mapSummary = _aggregateNiftiAnalyses(analysisEntries);
+
+  // ── Overall status + one-sentence takeaway ──────────────────────────────────
+  let oState, oLabel, oSentence;
+  if (valTotal === 0) {
+    oState = "pending"; oLabel = "Pending"; oSentence = "No submissions have been validated yet.";
+  } else if (valFailed > 0) {
+    oState = "error"; oLabel = "Needs attention";
+    oSentence = `${valFailed} submission${valFailed !== 1 ? "s" : ""} failed validation. You can still export the available results.`;
+  } else if (scoredCount > 0) {
+    oState = "complete"; oLabel = "Complete";
+    oSentence = "Validation passed and scoring metrics are ready for export.";
+  } else if (!scoringConfigured) {
+    oState = "ready"; oLabel = "Ready for export";
+    oSentence = "Validation and execution results are ready for export.";
+  } else if (valWarned > 0) {
+    oState = "ready"; oLabel = "Ready for export";
+    oSentence = "Validation passed with warnings. Results are ready for export.";
+  } else {
+    oState = "ready"; oLabel = "Ready for export";
+    oSentence = "Validation passed. Results are ready for export.";
+  }
+  const heroHtml = `
+    <section class="summary-hero is-${oState}">
+      <div class="summary-hero-main">
+        <span class="summary-hero-eyebrow">Evaluation Summary</span>
+        <p class="summary-hero-sentence">${escapeHtml(oSentence)}</p>
+      </div>
+      ${statusPill(oLabel, oState)}
+    </section>`;
+
+  // ── Status rail (recap, not a nav) ──────────────────────────────────────────
+  const railSteps = [
+    { label: "Upload",   state: valTotal > 0 ? "complete" : "pending",
+      note: valTotal > 0 ? "Complete" : "Pending" },
+    { label: "Validate", state: valTotal === 0 ? "pending" : valFailed > 0 ? "error" : valWarned > 0 ? "warning" : "complete",
+      note: valTotal === 0 ? "Pending" : valFailed > 0 ? "Errors" : valWarned > 0 ? "Warnings" : "Complete" },
+    { label: "Run",      state: execRan > 0 ? "complete" : execSkipped > 0 ? "skipped" : execCannot > 0 ? "error" : "pending",
+      note: execRan > 0 ? "Ran" : execSkipped > 0 ? "Skipped" : execCannot > 0 ? "Cannot run" : "Pending" },
+    { label: "Score",    state: scoredCount > 0 ? "complete" : scoringFailed > 0 ? "error" : scoringConfigured ? "ready" : "pending",
+      note: scoredCount > 0 ? "Complete" : scoringFailed > 0 ? "Failed" : scoringConfigured ? "Ready" : "Not configured" },
+    { label: "Export",   state: "ready", note: "Ready" },
+  ];
+  const railHtml = `<div class="summary-rail" role="list">` + railSteps.map((s) => `
+    <span class="summary-rail-item is-${s.state}" role="listitem">
+      <span class="summary-rail-dot" aria-hidden="true"></span>${escapeHtml(s.label)} — ${escapeHtml(s.note)}
+    </span>`).join("") + `</div>`;
+
+  // ── Validation block (clear: N checked, warnings, errors) ───────────────────
+  const validationHtml = `
+    <div class="sa-h">Validation</div>
+    <div class="summary-validation">
+      <div class="sv-main">
+        <span class="sv-num">${valTotal}</span>
+        <span class="sv-cap">submission${valTotal !== 1 ? "s" : ""} checked</span>
+      </div>
+      <div class="sv-chips">
+        <span class="sv-chip ${totalWarnings > 0 ? "is-warn" : ""}"><b>${totalWarnings}</b> warning${totalWarnings !== 1 ? "s" : ""}</span>
+        <span class="sv-chip ${totalErrors > 0 ? "is-err" : ""}"><b>${totalErrors}</b> error${totalErrors !== 1 ? "s" : ""}</span>
+      </div>
+    </div>`;
+
+  // ── Execution block (intentional, not pending) ──────────────────────────────
+  let exState, exLabel, exMsg;
+  if (execRan > 0)          { exState = "complete"; exLabel = "Complete"; exMsg = `${execRan} submission${execRan !== 1 ? "s" : ""} ran in Docker.`; }
+  else if (execSkipped > 0) { exState = "skipped";  exLabel = "Skipped";  exMsg = "Result maps were already provided, so Docker execution was not needed."; }
+  else if (execFailed > 0)  { exState = "error";    exLabel = "Failed";   exMsg = `${execFailed} execution${execFailed !== 1 ? "s" : ""} did not complete.`; }
+  else if (execCannot > 0)  { exState = "error";    exLabel = "Cannot run"; exMsg = "No runnable code or result maps were found."; }
+  else                      { exState = "pending";  exLabel = "Pending";  exMsg = "No execution has run yet."; }
+  const executionHtml = `
+    <div class="sa-h-row"><span class="sa-h">Execution</span>${statusPill(exLabel, exState)}</div>
+    <p class="summary-exec-text">${escapeHtml(exMsg)}</p>`;
+
+  // ── Scientific map summary cards ────────────────────────────────────────────
+  const mapQualityHtml = _summaryPanel("Map quality", `
+    ${_summaryMetric("Map count", String(mapSummary.mapCount))}
+    ${_summaryMetric("Coefficient of variation", mapSummary.coefficientOfVariation == null ? "not available" : _fmtMetricVal(mapSummary.coefficientOfVariation))}
+    ${_summaryMetric("Standard deviation", mapSummary.standardDeviation == null ? "not available" : _fmtMetricVal(mapSummary.standardDeviation))}
+  `);
+  const parameterMapsHtml = _summaryPanel("Parameter maps detected", `
+    ${_summaryMetric("Detected maps", _listText(mapSummary.detected))}
+    ${_summaryMetric("CBF maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "CBF").length))}
+    ${_summaryMetric("ATT maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "ATT").length))}
+    ${_summaryMetric("Ktrans maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "Ktrans").length))}
+  `);
+  const voxelValidityHtml = _summaryPanel("Voxel validity", `
+    ${_summaryMetric("Finite voxels", `${_fmtPercentValue(mapSummary.finitePercent)} (${mapSummary.finiteVoxelCount}/${mapSummary.totalVoxelCount})`, "good")}
+    ${_summaryMetric("Negative voxels", _fmtPercentValue(mapSummary.negativePercent))}
+    ${_summaryMetric("NaN voxels", String(mapSummary.nanCount))}
+    ${_summaryMetric("Inf voxels", String(mapSummary.infCount))}
+  `);
+  const meanRows = [];
+  if (mapSummary.referenceBasedScoringAvailable) {
+    meanRows.push(_summaryMetric("RMSE", mapSummary.referenceMetrics.rmse == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.rmse)));
+    meanRows.push(_summaryMetric("MAE", mapSummary.referenceMetrics.mae == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.mae)));
+    meanRows.push(_summaryMetric("Bias", mapSummary.referenceMetrics.bias == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.bias)));
+    meanRows.push(_summaryMetric("Reference CoV", mapSummary.referenceMetrics.coefficientOfVariation == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.coefficientOfVariation)));
+  } else {
+    if (typeof mapSummary.meansByType.CBF === "number") meanRows.push(_summaryMetric("Mean CBF", `${_fmtMetricVal(mapSummary.meansByType.CBF)} mL/100g/min`));
+    if (typeof mapSummary.meansByType.ATT === "number") meanRows.push(_summaryMetric("Mean ATT", `${_fmtMetricVal(mapSummary.meansByType.ATT)} seconds`));
+    if (typeof mapSummary.meansByType.Ktrans === "number") meanRows.push(_summaryMetric("Mean Ktrans", `${_fmtMetricVal(mapSummary.meansByType.Ktrans)} min^-1`));
+    if (!meanRows.length) meanRows.push(_summaryMetric("Mean CBF / ATT", "not detected"));
+    meanRows.push(_summaryMetric("Reference-based scoring", "not available"));
+  }
+  const mapStatsHtml = _summaryPanel("Map statistics", meanRows.join(""));
+  const analyticsHtml = `
+    <section class="summary-nifti-grid">
+      ${mapQualityHtml}
+      ${parameterMapsHtml}
+      ${voxelValidityHtml}
+      ${mapStatsHtml}
+    </section>`;
+
+  // ── Export readiness (compact two-column checklist) ──────────────────────────
+  const checklist = [
+    { label: "Validation CSV", ready: valTotal > 0 },
+    { label: "Execution CSV",  ready: valTotal > 0 },
+    { label: "Scoring CSV",    ready: scoredCount > 0 },
+    { label: "Combined CSV",   ready: valTotal > 0 },
+    { label: "HTML Report",    ready: valTotal > 0 },
+  ];
+  const checklistHtml = `
+    <section class="summary-export-checklist">
+      <div class="sa-h">Export readiness</div>
+      <ul class="summary-check-grid">
+        ${checklist.map((c) => `
+          <li class="summary-check-item ${c.ready ? "is-ready" : "is-muted"}">
+            <span class="summary-check-mark" aria-hidden="true">${c.ready ? "✓" : "○"}</span>
+            <span class="summary-check-name">${escapeHtml(c.label)}</span>
+            <span class="summary-check-state">${c.ready ? "Ready" : "—"}</span>
+          </li>`).join("")}
+      </ul>
+    </section>`;
+
+  // ── Collapsed technical details (issues, raw metrics, scorer note) ──────────
+  const issuesHtml = valResults.map((r) => {
+    const name = escapeHtml(submissionDisplayName(r, r.submission_id || "submission"));
+    const errs = dedupeMessages((r.errors || []).map(simplifyMessage));
+    const warns = dedupeMessages((r.warnings || []).map(simplifyMessage));
+    if (!errs.length && !warns.length) return `<div class="summary-detail-sub"><b>${name}</b> — no issues.</div>`;
+    const ehtml = errs.map((e) => `<li class="sdi-err">${escapeHtml(e)}</li>`).join("");
+    const whtml = warns.map((w) => `<li class="sdi-warn">${escapeHtml(w)}</li>`).join("");
+    return `<div class="summary-detail-sub"><b>${name}</b><ul class="summary-detail-list">${ehtml}${whtml}</ul></div>`;
+  }).join("");
+
+  let rawMetricTable = "";
+  const numericKeys = [...new Set(scoredEntries.flatMap((s) => _numericMetricEntries(s.metrics || {}).map(([k]) => k)))];
+  if (scoredEntries.length && numericKeys.length) {
+    const head = numericKeys.map((k) => `<th><code>${escapeHtml(k)}</code><span class="raw-metric-label">${escapeHtml(_metricLabel(k))}</span></th>`).join("");
+    const rows = scoredEntries.map((s) => {
+      const cells = numericKeys.map((k) => {
+        const v = (s.metrics || {})[k];
+        return `<td>${typeof v === "number" ? escapeHtml(_fmtMetricVal(v)) : "—"}</td>`;
+      }).join("");
+      return `<tr><td>${escapeHtml(s.displayName || "Submission")}</td>${cells}</tr>`;
+    }).join("");
+    rawMetricTable = `<div class="summary-detail-block"><div class="summary-detail-h">Raw metric values</div>
+      <div style="overflow-x:auto"><table class="summary-metric-table"><thead><tr><th>Submission</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+  const scorerNote = nonOfficialScored
+    ? `<p class="summary-muted">Reference scoring package not installed. QC metrics are shown from the active scorer.</p>`
+    : "";
+  const detailsHtml = `
+    <details class="summary-details">
+      <summary>View technical details</summary>
+      <div class="summary-details-body">
+        ${scorerNote}
+        <div class="summary-detail-block"><div class="summary-detail-h">Validation issues</div>${issuesHtml || '<p class="summary-muted">No submissions.</p>'}</div>
+        <div class="summary-detail-block"><div class="summary-detail-h">Reference scoring metrics</div>${_renderReferenceTechnicalTable(analysisEntries)}</div>
+        <div class="summary-detail-block"><div class="summary-detail-h">Per-map NIfTI metadata and statistics</div>${_renderNiftiTechnicalTable(analysisEntries)}</div>
+        ${rawMetricTable}
+      </div>
+    </details>`;
+
+  // ── Assemble ────────────────────────────────────────────────────────────────
+  container.className = "summary-report";
+  container.innerHTML = heroHtml + railHtml + analyticsHtml + checklistHtml + detailsHtml;
+}
+
+// "Continue to Summary" buttons on Score step (both configured + not-configured cards)
+function _goToSummary() {
+  unlockStep("summary");
+  unlockStep("export");
+  renderSummaryStep();
+  goToStep("summary");
+}
+
+// Direct "Continue to Export" (used from summary step footer and internal nav)
+function _goToExport() {
+  unlockStep("export");
+  _syncExportStep();
+  goToStep("export");
+}
+
+const scoreContinueBtn = el("btn-score-continue");
+if (scoreContinueBtn) scoreContinueBtn.addEventListener("click", _goToSummary);
+const scoreContinueBtnNc = el("btn-score-continue-nc");
+if (scoreContinueBtnNc) scoreContinueBtnNc.addEventListener("click", _goToSummary);
+
 // ── Scoring export helpers ────────────────────────────────────────────────────
 
 function _enableScoringExport() {
   const blindedBtn   = el("export-scoring-blinded-btn");
   const unblindedBtn = el("export-scoring-unblinded-btn");
   const sub          = el("export-scoring-sub");
+  const group        = el("export-scoring-group");
+  if (group)        group.style.display  = "";
   if (blindedBtn)   blindedBtn.disabled   = false;
   if (unblindedBtn) unblindedBtn.disabled = false;
-  if (sub) sub.textContent = "Scoring results available for export";
+  if (sub) sub.textContent = "Ready.";
 }
 
 function _makeScoringExportHandler(btn, blinded) {
   if (!btn) return;
-  const label = blinded ? "Export Blinded CSV" : "Export Unblinded CSV";
+  const label = btn.textContent.trim() || (blinded ? "Download Scoring CSV" : "Download Unblinded Export");
   btn.addEventListener("click", async () => {
     const statusEl = el("export-scoring-status");
     setLoading(btn, true, label);
@@ -3155,10 +4664,67 @@ function _makeScoringExportHandler(btn, blinded) {
 _makeScoringExportHandler(el("export-scoring-blinded-btn"),   true);
 _makeScoringExportHandler(el("export-scoring-unblinded-btn"), false);
 
+// ── Combined summary CSV + HTML report ────────────────────────────────────────
+
+// Build a ?submission_id=…|batch_id=… query for the current session.
+function _sessionExportQuery() {
+  if (batchState.batchId) return `batch_id=${encodeURIComponent(batchState.batchId)}`;
+  if (state.submissionId) return `submission_id=${encodeURIComponent(state.submissionId)}`;
+  return null;
+}
+
+function _makeCombinedExportHandler(btn, blinded) {
+  if (!btn) return;
+  const label = btn.textContent.trim();
+  btn.addEventListener("click", async () => {
+    const statusEl = el("export-combined-status");
+    const q = _sessionExportQuery();
+    if (!q) {
+      if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to export. Validate first."; }
+      return;
+    }
+    setLoading(btn, true, label);
+    if (statusEl) statusEl.style.display = "none";
+    try {
+      const res = await fetch(`${API}/api/export-combined?${q}&blinded=${blinded}`);
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+      const blob  = await res.blob();
+      const cd    = res.headers.get("Content-Disposition") || "";
+      const fname = cd.match(/filename="([^"]+)"/)?.[1] || `osipi_combined_${blinded ? "blinded" : "unblinded"}.csv`;
+      triggerDownload(blob, fname);
+    } catch (err) {
+      if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "Export failed."; }
+    } finally {
+      setLoading(btn, false, label);
+    }
+  });
+}
+
+_makeCombinedExportHandler(el("export-combined-blinded-btn"),   true);
+_makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
+
+const reportBtn = el("export-report-btn");
+if (reportBtn) reportBtn.addEventListener("click", () => {
+  const statusEl = el("export-combined-status");
+  const q = _sessionExportQuery();
+  if (!q) {
+    if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to report on. Validate first."; }
+    return;
+  }
+  // Blinded HTML report is safe to share; open in a new tab.
+  window.open(`${API}/api/report?${q}&blinded=true`, "_blank", "noopener");
+});
+
 // ── Init ───────────────────────────────────────────────────────────────────────
 
 updateMapTypePills(getRadio("challenge_type") || "dce");
 syncSubmitLabel();
+
+// Stamp the initial step on <body> so CSS body[data-step] rules fire immediately,
+// then sync the footer (hides it on upload, shows it on other steps after restore).
+document.body.dataset.step = wf.step;
+_syncWfNav();
+_updateWizardFooter(wf.step);
 
 // ── Sidebar collapse toggle ────────────────────────────────────────────────────
 (function initSidebarCollapse() {
@@ -3177,30 +4743,38 @@ syncSubmitLabel();
 })();
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Session restore — startup check (no auto-restore; banner only)
+// Session restore — startup check (no auto-restore; subtle chip only)
 // ══════════════════════════════════════════════════════════════════════════════
 
 (function initSessionBanner() {
   const saved = loadSessionState();
   if (!saved) return;   // nothing saved or expired — normal fresh start
 
-  // Show banner — do NOT restore automatically
+  // Show the subtle topbar chip — do NOT auto-restore or show a banner
   showRestoreBanner(saved);
 
-  // "Restore" button
-  const restoreBtn = el("restore-session-btn");
-  if (restoreBtn) {
-    restoreBtn.addEventListener("click", async () => {
+  // Wire up the topbar restore chip
+  const chipBtn = el("restore-chip-btn");
+  if (chipBtn) {
+    chipBtn.addEventListener("click", async () => {
       _hideRestoreBanner();
       const ok = await restoreSessionFromStorage();
       if (!ok) {
-        // Session data was cleared (expired or corrupt) between banner display and click
+        // Session data was cleared (expired or corrupt) between chip display and click
         clearSessionState();
       }
     });
   }
 
-  // "Start new" button in banner
+  // Legacy hidden buttons still wired for completeness (they are never visible)
+  const restoreBtn = el("restore-session-btn");
+  if (restoreBtn) {
+    restoreBtn.addEventListener("click", async () => {
+      _hideRestoreBanner();
+      const ok = await restoreSessionFromStorage();
+      if (!ok) clearSessionState();
+    });
+  }
   const startNewBtn = el("start-new-session-btn");
   if (startNewBtn) {
     startNewBtn.addEventListener("click", () => {
