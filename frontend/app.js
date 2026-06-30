@@ -67,7 +67,31 @@ let _activePreviewMapId = null;
 let _activePreviewPlane = "axial";
 
 // Frontend-only list filters for review/validation/run/score history.
-const _indexFilter = { search: "", challenge: "all", type: "all", status: "all", map: "all" };
+const MAP_FILTER_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "CBF", label: "CBF" },
+  { value: "ATT", label: "ATT" },
+  { value: "Ktrans", label: "Ktrans" },
+  { value: "ve", label: "ve" },
+  { value: "vp", label: "vp" },
+  { value: "Kep", label: "Kep" },
+];
+
+const SORT_FILTER_OPTIONS = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "name", label: "Name A-Z" },
+  { value: "status", label: "Status" },
+];
+
+const _collapseState = {
+  index: null,
+  validation: null,
+  run: null,
+  leaderboard: null,
+};
+
+const _indexFilter = { search: "", status: "all", map: "all", sort: "newest", showAll: false };
 const _leaderboardFilter = {
   entries: [],
   loading: false,
@@ -78,6 +102,7 @@ const _leaderboardFilter = {
   challenge: "all",
   map: "all",
   sort: "newest",
+  showAll: false,
 };
 
 // ── Docker availability ───────────────────────────────────────────────────────
@@ -244,10 +269,71 @@ function _renderSearchBox(id, value, placeholder = "Search") {
   </label>`;
 }
 
-function _renderChipGroup(group, value, options) {
-  return `<div class="filter-chip-group" role="group" aria-label="${escapeHtml(group)} filters">
-    ${(options || []).map((opt) => `<button type="button" class="filter-chip${opt.value === value ? " fc-active" : ""}" data-filter-option="${escapeHtml(group)}" data-filter-value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>`).join("")}
-  </div>`;
+function _renderClearFilterButton(id, active) {
+  return active ? `<button type="button" class="filter-clear-btn" id="${escapeHtml(id)}">Clear filters</button>` : "";
+}
+
+function _renderCountBadge(count) {
+  return `<span class="collapsible-count">${escapeHtml(count || 0)}</span>`;
+}
+
+function _summaryChip(label, value, state = "") {
+  const cls = state ? ` list-summary-chip-${escapeHtml(state)}` : "";
+  return `<span class="list-summary-chip${cls}"><strong>${escapeHtml(value)}</strong>${escapeHtml(label)}</span>`;
+}
+
+function _latestLabel(value) {
+  if (!value) return "";
+  return `<span class="list-summary-latest">Latest: ${escapeHtml(value)}</span>`;
+}
+
+function _collapsibleDefaultOpen(key, count) {
+  if (_collapseState[key] == null) _collapseState[key] = Number(count || 0) <= 1;
+  return _collapseState[key];
+}
+
+function _setCollapsibleSectionOpen(key, open) {
+  _collapseState[key] = !!open;
+  const btn = document.querySelector(`[data-collapse-toggle="${key}"]`);
+  if (!btn) return;
+  const section = btn.closest(".collapsible-section");
+  const body = el(btn.dataset.collapseBody || "");
+  const summary = el(btn.dataset.collapseSummary || "");
+  btn.setAttribute("aria-expanded", String(!!open));
+  if (section) section.classList.toggle("is-collapsed", !open);
+  if (body) body.hidden = !open;
+  if (summary) summary.hidden = !!open;
+}
+
+function _syncCollapsibleSection(key, count, summaryHtml) {
+  const open = _collapsibleDefaultOpen(key, count);
+  const countEl = el(`${key}-section-count`);
+  const summaryEl = el(`${key}-section-summary`);
+  if (countEl) countEl.textContent = String(count || 0);
+  if (summaryEl) summaryEl.innerHTML = summaryHtml || "";
+  _setCollapsibleSectionOpen(key, open);
+}
+
+function _renderCollapsibleSection(key, title, count, summaryHtml, bodyHtml) {
+  const open = _collapsibleDefaultOpen(key, count);
+  return `<section class="collapsible-section${open ? "" : " is-collapsed"}" id="${escapeHtml(key)}-list-section">
+    <button type="button" class="collapsible-section-header" data-collapse-toggle="${escapeHtml(key)}" data-collapse-body="${escapeHtml(key)}-list-body" data-collapse-summary="${escapeHtml(key)}-section-summary" aria-expanded="${open ? "true" : "false"}" aria-controls="${escapeHtml(key)}-list-body">
+      <span class="collapsible-section-title">${escapeHtml(title)} ${_renderCountBadge(count)}</span>
+      <span class="collapse-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div id="${escapeHtml(key)}-section-summary" class="list-summary-strip"${open ? " hidden" : ""}>${summaryHtml || ""}</div>
+    <div id="${escapeHtml(key)}-list-body" class="collapsible-section-body"${open ? "" : " hidden"}>${bodyHtml || ""}</div>
+  </section>`;
+}
+
+function _restoreSearchFocus(id, cursor = null) {
+  const input = el(id);
+  if (!input) return;
+  input.focus({ preventScroll: true });
+  const pos = cursor == null ? input.value.length : Math.min(cursor, input.value.length);
+  try {
+    input.setSelectionRange(pos, pos);
+  } catch (_) {}
 }
 
 function _closeFilterMenus() {
@@ -281,17 +367,26 @@ function _handleFilterSelection(group, value) {
   if (group.startsWith("leaderboard-")) {
     const key = group.replace("leaderboard-", "");
     if (key in _leaderboardFilter) _leaderboardFilter[key] = value;
+    if (key !== "sort") _leaderboardFilter.showAll = false;
     _renderLeaderboardEntries();
     return;
   }
   if (group.startsWith("index-")) {
     const key = group.replace("index-", "");
     if (key in _indexFilter) _indexFilter[key] = value;
+    if (key !== "sort") _indexFilter.showAll = false;
     if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
     return;
   }
   if (group === "validation-status") {
     _reviewFilter.filter = value;
+    _reviewFilter.showAll = false;
+    _refreshValidationFilterBar();
+    _applyReviewFilters();
+    return;
+  }
+  if (group === "validation-map") {
+    _reviewFilter.map = value;
     _reviewFilter.showAll = false;
     _refreshValidationFilterBar();
     _applyReviewFilters();
@@ -308,10 +403,32 @@ function _handleFilterSelection(group, value) {
     _runFilter.showAll = false;
     _refreshRunFilterBar();
     _applyRunFilters();
+    return;
+  }
+  if (group === "run-map") {
+    _runFilter.map = value;
+    _runFilter.showAll = false;
+    _refreshRunFilterBar();
+    _applyRunFilters();
+    return;
+  }
+  if (group === "run-sort") {
+    _runFilter.sort = value;
+    _refreshRunFilterBar();
+    _applyRunFilters();
   }
 }
 
 document.addEventListener("click", (e) => {
+  const collapseBtn = e.target.closest("[data-collapse-toggle]");
+  if (collapseBtn) {
+    e.preventDefault();
+    const key = collapseBtn.dataset.collapseToggle || "";
+    const isOpen = collapseBtn.getAttribute("aria-expanded") === "true";
+    _setCollapsibleSectionOpen(key, !isOpen);
+    return;
+  }
+
   const menuBtn = e.target.closest("[data-filter-menu]");
   if (menuBtn) {
     e.preventDefault();
@@ -686,16 +803,11 @@ function _updateWizardFooter(step) {
   _hideLegacyWizardFooter();
 
   if (step === "upload") {
-    const gnBar = el("global-start-new");
-    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }  // no Start-new on first step
     _syncUploadSubmitButton();
     _syncInactiveStepActions("upload");
     return;
   }
 
-  // Show global Start New bar on non-upload steps
-  const gnBar = el("global-start-new");
-  if (gnBar) { gnBar.hidden = false; gnBar.style.display = ""; }
   _syncStepActionRow(step);
 }
 
@@ -1901,48 +2013,38 @@ function _indexSubmissionTypeValue(sub) {
 
 function _indexSubmissionStatusValue(sub) {
   const info = submissionTypeInfo(sub);
-  if (sub.status === "failed" || sub.detection_warning || info.state === "warning") return "needs-attention";
-  if (!sub.challenge_type || (!sub.detected_parameter_map_type && !sub.map_type)) return "missing-details";
+  if (sub.status === "failed") return "errors";
+  if (_indexSubmissionTypeValue(sub) === "result-only") return "skipped";
+  if (sub.detection_warning || info.state === "warning") return "warnings";
+  if (!sub.challenge_type || (!sub.detected_parameter_map_type && !sub.map_type)) return "warnings";
   return "ready";
 }
 
 function _renderIndexFilterBar(submissions) {
-  const mapOptions = ["all", ...new Set((submissions || [])
-    .map((s) => s.detected_parameter_map_type || s.map_type)
-    .filter(Boolean)
-    .map(String))].map((value) => ({ value, label: value === "all" ? "All" : value }));
-  return `<div class="filter-bar review-filter-bar" id="index-filter-bar">
-    ${_renderSearchBox("index-search", _indexFilter.search, "Search submissions")}
-    ${_renderFilterDropdown("index-challenge", "Challenge", _indexFilter.challenge, [
-      { value: "all", label: "All" },
-      { value: "asl", label: "ASL" },
-      { value: "dce", label: "DCE" },
-      { value: "dsc", label: "DSC" },
-      { value: "other", label: "Other" },
-    ])}
-    ${_renderFilterDropdown("index-type", "Type", _indexFilter.type, [
-      { value: "all", label: "All" },
-      { value: "runnable", label: "Runnable" },
-      { value: "result-only", label: "Result-only" },
-      { value: "unknown", label: "Needs review" },
-    ])}
+  const active = !!((_indexFilter.search || "").trim()
+    || _indexFilter.status !== "all"
+    || _indexFilter.map !== "all"
+    || _indexFilter.sort !== "newest");
+  return `<div class="filter-bar compact-filter-bar review-filter-bar" id="index-filter-bar">
+    ${_renderSearchBox("index-search", _indexFilter.search, "Search submissions...")}
     ${_renderFilterDropdown("index-status", "Status", _indexFilter.status, [
       { value: "all", label: "All" },
       { value: "ready", label: "Ready" },
-      { value: "needs-attention", label: "Needs attention" },
-      { value: "missing-details", label: "Missing details" },
+      { value: "warnings", label: "Warnings" },
+      { value: "errors", label: "Errors" },
+      { value: "skipped", label: "Skipped" },
     ])}
-    ${_renderFilterDropdown("index-map", "Map", _indexFilter.map, mapOptions)}
-    <button type="button" class="filter-clear-btn" id="index-clear-filters">Clear filters</button>
+    ${_renderFilterDropdown("index-map", "Map", _indexFilter.map, MAP_FILTER_OPTIONS)}
+    ${_renderFilterDropdown("index-sort", "Sort", _indexFilter.sort, SORT_FILTER_OPTIONS)}
+    ${_renderClearFilterButton("index-clear-filters", active)}
   </div>`;
 }
 
 function _filterIndexSubmissions(submissions) {
   const q = (_indexFilter.search || "").trim().toLowerCase();
-  return (submissions || []).filter((sub) => {
+  const filtered = (submissions || []).filter((sub) => {
     const challenge = String(sub.challenge_type || getChallengeType() || "other").toLowerCase();
     const mapType = String(sub.detected_parameter_map_type || sub.map_type || "").toLowerCase();
-    const type = _indexSubmissionTypeValue(sub);
     const status = _indexSubmissionStatusValue(sub);
     const text = [
       sub.submission_id,
@@ -1954,30 +2056,62 @@ function _filterIndexSubmissions(submissions) {
       challenge,
     ].filter(Boolean).join(" ").toLowerCase();
     if (q && !text.includes(q)) return false;
-    if (_indexFilter.challenge !== "all" && challenge !== _indexFilter.challenge) return false;
-    if (_indexFilter.type !== "all" && type !== _indexFilter.type) return false;
     if (_indexFilter.status !== "all" && status !== _indexFilter.status) return false;
     if (_indexFilter.map !== "all" && mapType !== String(_indexFilter.map).toLowerCase()) return false;
     return true;
   });
+  const withIndex = filtered.map((sub, idx) => ({ sub, idx }));
+  withIndex.sort((a, b) => {
+    if (_indexFilter.sort === "oldest") return a.idx - b.idx;
+    if (_indexFilter.sort === "name") {
+      return submissionDisplayName(a.sub, `Submission ${a.idx + 1}`)
+        .localeCompare(submissionDisplayName(b.sub, `Submission ${b.idx + 1}`));
+    }
+    if (_indexFilter.sort === "status") {
+      return _indexSubmissionStatusValue(a.sub).localeCompare(_indexSubmissionStatusValue(b.sub));
+    }
+    return b.idx - a.idx;
+  });
+  return withIndex.map((item) => item.sub);
+}
+
+function _indexListSummary(submissions) {
+  const items = submissions || [];
+  const ready = items.filter((s) => _indexSubmissionStatusValue(s) === "ready").length;
+  const warnings = items.filter((s) => _indexSubmissionStatusValue(s) === "warnings").length;
+  const errors = items.filter((s) => _indexSubmissionStatusValue(s) === "errors").length;
+  const skipped = items.filter((s) => _indexSubmissionStatusValue(s) === "skipped").length;
+  const latest = items.length ? submissionDisplayName(items[items.length - 1], `Submission ${items.length}`) : "";
+  return [
+    _summaryChip("total", items.length),
+    _summaryChip("ready", ready, "success"),
+    _summaryChip("warnings", warnings, warnings ? "warning" : ""),
+    _summaryChip("errors", errors, errors ? "error" : ""),
+    _summaryChip("result-only", skipped, skipped ? "muted" : ""),
+    _latestLabel(latest),
+  ].filter(Boolean).join("");
 }
 
 function _wireIndexFilterBar() {
   const search = el("index-search");
   if (search) {
     search.oninput = () => {
+      const cursor = search.selectionStart ?? search.value.length;
       _indexFilter.search = search.value;
-      if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
+      if (batchState.uploadData) {
+        renderBatchTable(batchState.uploadData.submissions || []);
+        _restoreSearchFocus("index-search", cursor);
+      }
     };
   }
   const clear = el("index-clear-filters");
   if (clear) {
     clear.onclick = () => {
       _indexFilter.search = "";
-      _indexFilter.challenge = "all";
-      _indexFilter.type = "all";
       _indexFilter.status = "all";
       _indexFilter.map = "all";
+      _indexFilter.sort = "newest";
+      _indexFilter.showAll = false;
       if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
     };
   }
@@ -2002,13 +2136,6 @@ function renderBatchTable(submissions) {
   if (desc && safeSubmissions.length > 0) {
     desc.textContent = `${safeSubmissions.length} submission${safeSubmissions.length !== 1 ? "s" : ""} detected.`;
   }
-  const hintCopy = el("index-hint-copy");
-  if (hintCopy) {
-    hintCopy.textContent = safeSubmissions.length <= 1
-      ? "Review detected submission."
-      : "Select submissions to validate.";
-  }
-
   const controls = document.querySelector("#step-index .batch-controls");
   const controlsLeft = controls?.querySelector(".batch-controls-left");
   const controlsRight = controls?.querySelector(".batch-controls-right");
@@ -2017,16 +2144,27 @@ function renderBatchTable(submissions) {
   if (controlsRight) controlsRight.style.display = "none";
 
   const visibleSubmissions = isSingle ? safeSubmissions : _filterIndexSubmissions(safeSubmissions);
+  const visibleTotal = visibleSubmissions.length;
+  const LIMIT = 5;
+  const renderSubmissions = (!isSingle && !_indexFilter.showAll && visibleTotal > LIMIT)
+    ? visibleSubmissions.slice(0, LIMIT)
+    : visibleSubmissions;
+
+  wrap.insertAdjacentHTML(
+    "beforeend",
+    _renderCollapsibleSection("index", "Review Detected Submissions", safeSubmissions.length, _indexListSummary(safeSubmissions), "")
+  );
+  const body = el("index-list-body") || wrap;
 
   if (!isSingle) {
-    wrap.insertAdjacentHTML("beforeend", _renderIndexFilterBar(safeSubmissions));
+    body.insertAdjacentHTML("beforeend", _renderIndexFilterBar(safeSubmissions));
     _wireIndexFilterBar();
   }
 
   const list = document.createElement("div");
   list.className = "sub-card-list" + (isSingle ? " sub-card-list--single" : "");
 
-  visibleSubmissions.forEach((sub, idx) => {
+  renderSubmissions.forEach((sub, idx) => {
     const isSelected = batchState.selectedIds.has(sub.submission_id);
     const typeInfo = submissionTypeInfo(sub);
     const statusState = sub.status === "failed" ? "error"
@@ -2112,21 +2250,32 @@ function renderBatchTable(submissions) {
     list.appendChild(card);
   });
 
-  wrap.appendChild(list);
-  if (!visibleSubmissions.length) {
-    wrap.insertAdjacentHTML("beforeend", `<div class="list-empty-state">
+  body.appendChild(list);
+  if (!visibleTotal) {
+    body.insertAdjacentHTML("beforeend", `<div class="list-empty-state">
       <p>No submissions match these filters.</p>
       <button type="button" class="btn btn-secondary btn-sm" id="index-empty-clear">Clear filters</button>
     </div>`);
     const emptyClear = el("index-empty-clear");
     if (emptyClear) emptyClear.onclick = () => {
       _indexFilter.search = "";
-      _indexFilter.challenge = "all";
-      _indexFilter.type = "all";
       _indexFilter.status = "all";
       _indexFilter.map = "all";
+      _indexFilter.sort = "newest";
+      _indexFilter.showAll = false;
       renderBatchTable(safeSubmissions);
     };
+  } else if (!isSingle && visibleTotal > LIMIT) {
+    body.insertAdjacentHTML("beforeend", `<div class="show-more-row" id="index-show-all-wrap">
+      <button type="button" id="index-show-all-btn" class="vr-show-all-btn">${_indexFilter.showAll ? "Show less" : `Show all ${visibleTotal} submissions`}</button>
+    </div>`);
+    const showAllBtn = el("index-show-all-btn");
+    if (showAllBtn) {
+      showAllBtn.onclick = () => {
+        _indexFilter.showAll = !_indexFilter.showAll;
+        renderBatchTable(safeSubmissions);
+      };
+    }
   }
   _syncBatchValidateBtn();
   _refreshWizardFooter();
@@ -2300,7 +2449,7 @@ function _renderSingleAsValidate(data) {
 
 // ── Step 3: Validate — render validation cards ────────────────────────────────
 
-const _reviewFilter = { filter: "all", search: "", sort: "status", showAll: false };
+const _reviewFilter = { filter: "all", search: "", map: "all", sort: "status", showAll: false };
 
 // ── Issue summary helper — one brief text (not a list) ───────────────────────
 function _issueSummary(errors, warnings) {
@@ -2335,26 +2484,29 @@ function _validationReason(errors, warnings) {
 }
 
 function _renderValidationFilterBar() {
-  return `<div class="filter-bar validation-filter-bar">
-    ${_renderSearchBox("batch-search", _reviewFilter.search, "Search validation results")}
-    ${_renderChipGroup("validation-status", _reviewFilter.filter, [
+  const active = !!((_reviewFilter.search || "").trim()
+    || _reviewFilter.filter !== "all"
+    || _reviewFilter.map !== "all"
+    || _reviewFilter.sort !== "status");
+  return `<div class="filter-bar compact-filter-bar validation-filter-bar">
+    ${_renderSearchBox("batch-search", _reviewFilter.search, "Search submissions...")}
+    ${_renderFilterDropdown("validation-status", "Status", _reviewFilter.filter, [
       { value: "all", label: "All" },
+      { value: "ready", label: "Ready" },
       { value: "passed", label: "Passed" },
       { value: "warnings", label: "Warnings" },
       { value: "errors", label: "Errors" },
-      { value: "runnable", label: "Runnable" },
-      { value: "result-only", label: "Result-only" },
+      { value: "failed", label: "Failed" },
+      { value: "skipped", label: "Skipped" },
     ])}
+    ${_renderFilterDropdown("validation-map", "Map", _reviewFilter.map, MAP_FILTER_OPTIONS)}
     ${_renderFilterDropdown("validation-sort", "Sort", _reviewFilter.sort, [
-      { value: "status", label: "Status" },
+      { value: "newest", label: "Newest" },
+      { value: "oldest", label: "Oldest" },
       { value: "name", label: "Name A-Z" },
-      { value: "errors", label: "Most errors" },
-      { value: "warnings", label: "Warnings" },
-      { value: "runnable", label: "Runnable first" },
+      { value: "status", label: "Status" },
     ])}
-    <div class="filter-bar-spacer"></div>
-    <button type="button" id="batch-expand-all" class="filter-text-btn">Expand all</button>
-    <button type="button" id="batch-collapse-all" class="filter-text-btn">Collapse all</button>
+    ${_renderClearFilterButton("validation-clear-filters", active)}
   </div>`;
 }
 
@@ -2362,11 +2514,46 @@ function _wireValidationFilterBar() {
   const searchEl = el("batch-search");
   if (searchEl) {
     searchEl.oninput = () => {
+      const cursor = searchEl.selectionStart ?? searchEl.value.length;
       _reviewFilter.search = searchEl.value;
       _reviewFilter.showAll = false;
+      _refreshValidationFilterBar();
+      _applyReviewFilters();
+      _restoreSearchFocus("batch-search", cursor);
+    };
+  }
+  const clear = el("validation-clear-filters");
+  if (clear) {
+    clear.onclick = () => {
+      _reviewFilter.filter = "all";
+      _reviewFilter.search = "";
+      _reviewFilter.map = "all";
+      _reviewFilter.sort = "status";
+      _reviewFilter.showAll = false;
+      _refreshValidationFilterBar();
       _applyReviewFilters();
     };
   }
+}
+
+function _validationListSummary(results, issueDetails) {
+  const rows = results || [];
+  const passed = rows.filter((r) => r.passed).length;
+  const warnings = rows.filter((r) => (issueDetails.get(r.submission_id)?.warnings.length || 0) > 0).length;
+  const errors = rows.filter((r) => (issueDetails.get(r.submission_id)?.errors.length || 0) > 0).length;
+  const runnable = rows.filter((r) => r.run_readiness === "runnable"
+    || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
+  const resultOnly = rows.filter((r) => r.run_readiness === "result_only"
+    || (r.passed && !r.has_run_instructions && (r.nifti_count > 0 || r.has_result_maps))).length;
+  return [
+    _summaryChip("checked", rows.length),
+    _summaryChip("passed", passed, "success"),
+    _summaryChip("warnings", warnings, warnings ? "warning" : ""),
+    _summaryChip("errors", errors, errors ? "error" : ""),
+    _summaryChip("runnable", runnable, "success"),
+    _summaryChip("result-only", resultOnly, resultOnly ? "muted" : ""),
+    _latestLabel(rows.length ? submissionDisplayName(rows[rows.length - 1], `Submission ${rows.length}`) : ""),
+  ].filter(Boolean).join("");
 }
 
 function _refreshValidationFilterBar() {
@@ -2398,6 +2585,7 @@ function renderValidateStep(data, isSingleMode) {
   // Reset filter state
   _reviewFilter.filter  = "all";
   _reviewFilter.search  = "";
+  _reviewFilter.map     = "all";
   _reviewFilter.sort    = "status";
   _reviewFilter.showAll = false;
   const valToolbar = el("val-toolbar");
@@ -2429,6 +2617,8 @@ function renderValidateStep(data, isSingleMode) {
     if (needsReviewCount > 0 && totalErrors === 0 && totalWarnings === 0) parts.push(`${needsReviewCount} need review`);
     desc.textContent = parts.join(" · ");
   }
+
+  _syncCollapsibleSection("validation", results.length, _validationListSummary(results, issueDetails));
 
   // ── 2. Filter/search handlers ─────────────────────────────────────────────
   _wireValidationFilterBar();
@@ -2516,10 +2706,12 @@ function renderValidateStep(data, isSingleMode) {
 	      wrap.className = "br-row-wrap validation-card";
 	      wrap.dataset.valStatus  = valStatus;
 	      wrap.dataset.runnable   = String(runnable);
-	      wrap.dataset.execStatus = execInitStatus;
-	      wrap.dataset.resultOnly = String(isResultOnly);
-	      wrap.dataset.subId      = r.submission_id;
+      wrap.dataset.execStatus = execInitStatus;
+      wrap.dataset.resultOnly = String(isResultOnly);
+      wrap.dataset.subId      = r.submission_id;
       wrap.dataset.name       = (r.submission_id + " " + (r.source_folder || "") + " " + safeName).toLowerCase();
+      wrap.dataset.map        = String(r.map_type || "").toLowerCase();
+      wrap.dataset.rowIndex   = String(idx);
       wrap.dataset.errCount   = String(errors.length);
       wrap.dataset.warnCount  = String(warnings.length);
 
@@ -2596,7 +2788,7 @@ function renderValidateStep(data, isSingleMode) {
 // ── Review filter / sort / search ─────────────────────────────────────────────
 
 function _applyReviewFilters() {
-  const { filter, search, sort, showAll } = _reviewFilter;
+  const { filter, search, map, sort, showAll } = _reviewFilter;
   const list = el("batch-submissions-list");
   if (!list) return;
 
@@ -2604,14 +2796,9 @@ function _applyReviewFilters() {
 
   const ORDER = { failed: 0, warning: 1, passed: 2 };
   rows.sort((a, b) => {
+    if (sort === "newest")   return (Number(b.dataset.rowIndex) || 0) - (Number(a.dataset.rowIndex) || 0);
+    if (sort === "oldest")   return (Number(a.dataset.rowIndex) || 0) - (Number(b.dataset.rowIndex) || 0);
     if (sort === "name")     return (a.dataset.name || "").localeCompare(b.dataset.name || "");
-    if (sort === "errors")   return (Number(b.dataset.errCount) || 0) - (Number(a.dataset.errCount) || 0);
-    if (sort === "warnings") return (Number(b.dataset.warnCount) || 0) - (Number(a.dataset.warnCount) || 0);
-    if (sort === "runnable") {
-      const ra = a.dataset.runnable === "true" ? 0 : 1;
-      const rb = b.dataset.runnable === "true" ? 0 : 1;
-      return ra !== rb ? ra - rb : (ORDER[a.dataset.valStatus] ?? 3) - (ORDER[b.dataset.valStatus] ?? 3);
-    }
     return (ORDER[a.dataset.valStatus] ?? 3) - (ORDER[b.dataset.valStatus] ?? 3);
   });
   rows.forEach((r) => list.appendChild(r));
@@ -2624,24 +2811,27 @@ function _applyReviewFilters() {
     const runnable = row.dataset.runnable === "true";
     const es       = row.dataset.execStatus;
     const name     = (row.dataset.name || "").toLowerCase();
+    const rowMap   = (row.dataset.map || "").toLowerCase();
 
     let show = true;
     switch (filter) {
+      case "ready":        show = runnable && es === "not-run"; break;
       case "passed":       show = vs === "passed"; break;
       case "warnings":     show = vs === "warning"; break;
       case "errors":       show = vs === "failed"; break;
-      case "runnable":     show = runnable && es === "not-run"; break;
       case "result-only":  show = row.dataset.resultOnly === "true"; break;
+      case "skipped":      show = row.dataset.resultOnly === "true"; break;
       case "needs-review": show = vs === "warning" || vs === "failed"; break;
       case "failed":       show = vs === "failed"; break;
-      case "ready":        show = runnable && es === "not-run"; break;
       // legacy values kept for safety
+      case "runnable":     show = runnable && es === "not-run"; break;
       case "cannot-run":   show = !runnable; break;
       case "executed":     show = es === "passed" || es === "failed"; break;
       case "exec-failed":  show = es === "failed"; break;
       default:             show = true;
     }
     if (show && q) show = name.includes(q);
+    if (show && map !== "all") show = rowMap === String(map).toLowerCase();
 
     if (show) matchingRows.push(row);
     else      row.style.display = "none";
@@ -2672,12 +2862,6 @@ function _applyReviewFilters() {
 
   const empty = el("batch-empty-state");
   if (empty) empty.style.display = total === 0 ? "" : "none";
-}
-
-function _syncFilterChips() {
-  document.querySelectorAll('[data-filter-option="validation-status"]').forEach((c) => {
-    c.classList.toggle("fc-active", c.dataset.filterValue === _reviewFilter.filter);
-  });
 }
 
 // ── Row expand/collapse helpers ───────────────────────────────────────────────
@@ -2735,16 +2919,6 @@ document.addEventListener("click", (e) => {
   if (execBtn && !execBtn.disabled) execBtn.click();
 });
 
-(function initExpandCollapseAll() {
-  const rows = () => document.querySelectorAll("#batch-submissions-list .br-row-wrap");
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("#batch-expand-all"))      rows().forEach((w) => _toggleRowDetail(w, true));
-    if (e.target.closest("#batch-collapse-all"))    rows().forEach((w) => _toggleRowDetail(w, false));
-    if (e.target.closest("#batch-expand-failed"))   rows().forEach((w) => _toggleRowDetail(w, w.dataset.valStatus === "failed"));
-    if (e.target.closest("#batch-expand-runnable")) rows().forEach((w) => _toggleRowDetail(w, w.dataset.runnable === "true"));
-  });
-})();
-
 // ── Validate step action buttons ──────────────────────────────────────────────
 
 const batchBackToBatchBtn = el("batch-back-to-batch-btn");
@@ -2795,25 +2969,79 @@ if (newBtn) {
 
 // ── Step 4: Run ───────────────────────────────────────────────────────────────
 
-const _runFilter = { view: "ready", showAll: false };
+const _runFilter = { view: "all", search: "", map: "all", sort: "newest", showAll: false };
 
 function _renderRunFilterBar() {
-  return `<div class="filter-bar run-filter-bar">
-    ${_renderChipGroup("run-status", _runFilter.view, [
+  const active = !!((_runFilter.search || "").trim()
+    || _runFilter.view !== "all"
+    || _runFilter.map !== "all"
+    || _runFilter.sort !== "newest");
+  return `<div class="filter-bar compact-filter-bar run-filter-bar">
+    ${_renderSearchBox("run-search", _runFilter.search, "Search submissions...")}
+    ${_renderFilterDropdown("run-status", "Status", _runFilter.view, [
       { value: "all", label: "All" },
-      { value: "ready", label: "Ready to run" },
-      { value: "cannot-run", label: "Cannot run" },
-      { value: "complete", label: "Complete" },
+      { value: "ready", label: "Ready" },
+      { value: "passed", label: "Passed" },
       { value: "failed", label: "Failed" },
       { value: "skipped", label: "Skipped" },
     ])}
+    ${_renderFilterDropdown("run-map", "Map", _runFilter.map, MAP_FILTER_OPTIONS)}
+    ${_renderFilterDropdown("run-sort", "Sort", _runFilter.sort, SORT_FILTER_OPTIONS)}
+    ${_renderClearFilterButton("run-clear-filters", active)}
   </div>`;
+}
+
+function _wireRunFilterBar() {
+  const search = el("run-search");
+  if (search) {
+    search.oninput = () => {
+      const cursor = search.selectionStart ?? search.value.length;
+      _runFilter.search = search.value;
+      _runFilter.showAll = false;
+      _refreshRunFilterBar();
+      _applyRunFilters();
+      _restoreSearchFocus("run-search", cursor);
+    };
+  }
+  const clear = el("run-clear-filters");
+  if (clear) {
+    clear.onclick = () => {
+      _runFilter.view = "all";
+      _runFilter.search = "";
+      _runFilter.map = "all";
+      _runFilter.sort = "newest";
+      _runFilter.showAll = false;
+      _refreshRunFilterBar();
+      _applyRunFilters();
+    };
+  }
 }
 
 function _refreshRunFilterBar() {
   const toolbar = el("run-toolbar");
   if (!toolbar || toolbar.style.display === "none") return;
   toolbar.innerHTML = _renderRunFilterBar();
+  _wireRunFilterBar();
+}
+
+function _runListSummary(results) {
+  const rows = results || [];
+  const ready = rows.filter((r) =>
+    (r.run_readiness === "runnable") || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
+  const skipped = rows.filter((r) =>
+    (r.run_readiness === "result_only") || (r.passed && !r.has_run_instructions && ((r.nifti_count || 0) > 0 || r.has_result_maps))).length;
+  const cannotRun = rows.length - ready - skipped;
+  const completed = Object.values(_execSummaries).filter((s) => s.status === "passed").length;
+  const failed = Object.values(_execSummaries).filter((s) => s.status === "failed").length;
+  return [
+    _summaryChip("total", rows.length),
+    _summaryChip("ready", ready, "success"),
+    _summaryChip("skipped", skipped, skipped ? "muted" : ""),
+    _summaryChip("cannot run", Math.max(0, cannotRun), cannotRun > 0 ? "warning" : ""),
+    _summaryChip("completed", completed, completed ? "success" : ""),
+    _summaryChip("failed", failed, failed ? "error" : ""),
+    _latestLabel(rows.length ? submissionDisplayName(rows[rows.length - 1], `Submission ${rows.length}`) : ""),
+  ].filter(Boolean).join("");
 }
 
 // ── Run progress tracking ─────────────────────────────────────────────────────
@@ -2892,9 +3120,10 @@ async function renderRunStep() {
 
   // Reset filter
   _runFilter.view    = "all";
+  _runFilter.search  = "";
+  _runFilter.map     = "all";
+  _runFilter.sort    = "newest";
   _runFilter.showAll = false;
-  const viewSel = el("run-view-select");
-  if (viewSel) viewSel.value = "all";
 
   // Count runnable and result-only
   const runnableResults  = results.filter((r) =>
@@ -2913,10 +3142,13 @@ async function renderRunStep() {
   const resultOnlyCount = resultOnlyResult.length;
   const cannotRunCount  = cannotRunResults.length;
   const allResultOnly   = runnableCount === 0 && resultOnlyCount > 0;
+  _syncCollapsibleSection("run", results.length, _runListSummary(results));
 
   // ── Skipped notice (all result-only) ──────────────────────────────────────
   const skippedNotice = el("run-skipped-notice");
   if (skippedNotice) skippedNotice.style.display = allResultOnly ? "" : "none";
+  const runListSection = el("run-list-section");
+  if (runListSection) runListSection.style.display = allResultOnly ? "none" : "";
   const list = el("run-submissions-list");
   if (list) list.style.display = allResultOnly ? "none" : "";
   const skippedContinueBtn = el("run-skipped-continue-btn");
@@ -2989,7 +3221,7 @@ async function renderRunStep() {
   if (toolbar) {
     toolbar.innerHTML = _renderRunFilterBar();
     toolbar.style.display = results.length > 1 && !allResultOnly ? "" : "none";
-    if (list && toolbar.parentElement) toolbar.parentElement.insertBefore(toolbar, list);
+    _wireRunFilterBar();
   }
 
   const showAllBtn = el("run-show-all-btn");
@@ -3005,7 +3237,7 @@ async function renderRunStep() {
   list.style.display = "";
   list.innerHTML = "";
 
-  results.forEach((r) => {
+  results.forEach((r, idx) => {
     const runReadiness = r.run_readiness
       || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile) ? "runnable"
           : r.passed && !r.has_run_instructions && ((r.nifti_count || 0) > 0 || r.has_result_maps) ? "result_only"
@@ -3026,7 +3258,9 @@ async function renderRunStep() {
     wrap.dataset.challenge = chall;
     wrap.dataset.runnable  = String(runnable);
     wrap.dataset.execStatus = initExecStatus;
-    wrap.dataset.name      = r.submission_id.toLowerCase();
+    wrap.dataset.name      = [r.submission_id, r.source_folder, r.display_name].filter(Boolean).join(" ").toLowerCase();
+    wrap.dataset.map       = String(r.map_type || "").toLowerCase();
+    wrap.dataset.rowIndex  = String(idx);
 
     // Status badge
     const statusHtml = _erRunStatusHtml(initExecStatus, runnable);
@@ -3099,16 +3333,26 @@ function _erRunStatusHtml(execStatus, runnable) {
 }
 
 function _applyRunFilters() {
-  const { view, showAll } = _runFilter;
+  const { view, search, map, sort, showAll } = _runFilter;
   const list = el("run-submissions-list");
   if (!list) return;
   // Works for both old .er-row-wrap (legacy) and new .run-sub-card elements
   const rows = [...list.querySelectorAll(".er-row-wrap, .run-sub-card")];
+  rows.sort((a, b) => {
+    if (sort === "oldest") return (Number(a.dataset.rowIndex) || 0) - (Number(b.dataset.rowIndex) || 0);
+    if (sort === "name") return (a.dataset.name || "").localeCompare(b.dataset.name || "");
+    if (sort === "status") return String(a.dataset.execStatus || "").localeCompare(String(b.dataset.execStatus || ""));
+    return (Number(b.dataset.rowIndex) || 0) - (Number(a.dataset.rowIndex) || 0);
+  });
+  rows.forEach((row) => list.appendChild(row));
 
   const matchingRows = [];
+  const q = (search || "").trim().toLowerCase();
   rows.forEach((row) => {
     const es       = row.dataset.execStatus;
     const runnable = row.dataset.runnable === "true";
+    const rowMap   = (row.dataset.map || "").toLowerCase();
+    const name     = (row.dataset.name || "").toLowerCase();
 	    let show = true;
 	    switch (view) {
 	      case "ready":     show = (runnable && es === "not-run") || es === "result-only"; break;
@@ -3121,6 +3365,8 @@ function _applyRunFilters() {
 	      case "timed-out": show = es === "timed-out"; break;
       default:          show = true; // "all"
     }
+    if (show && q) show = name.includes(q);
+    if (show && map !== "all") show = rowMap === String(map).toLowerCase();
     if (show) matchingRows.push(row);
     else row.style.display = "none";
   });
@@ -3236,6 +3482,7 @@ function _updateRunRow(subId, execData, isError) {
   }
 
   // Refresh run filter visibility
+  _syncCollapsibleSection("run", (batchState.validationData?.results || []).length, _runListSummary(batchState.validationData?.results || []));
   _applyRunFilters();
   _syncCompactProgress();
 }
@@ -3672,47 +3919,25 @@ function _leaderboardEntryText(entry) {
 
 function _renderLeaderboardFilterBar() {
   const f = _leaderboardFilter;
+  const active = !!((f.search || "").trim()
+    || f.status !== "all"
+    || f.map !== "all"
+    || f.sort !== "newest");
   return `
-    ${_renderSearchBox("leaderboard-search", f.search, "Search scored submissions")}
-    ${_renderFilterDropdown("leaderboard-date", "Date", f.date, [
-      { value: "all", label: "All time" },
-      { value: "24h", label: "Last 24 hours" },
-      { value: "7d", label: "Last 7 days" },
-      { value: "1m", label: "Last month" },
-      { value: "1q", label: "Last quarter" },
-      { value: "1y", label: "Last year" },
-    ])}
+    ${_renderSearchBox("leaderboard-search", f.search, "Search submissions...")}
     ${_renderFilterDropdown("leaderboard-status", "Status", f.status, [
       { value: "all", label: "All" },
+      { value: "ready", label: "Ready" },
+      { value: "passed", label: "Passed" },
+      { value: "warnings", label: "Warnings" },
+      { value: "errors", label: "Errors" },
       { value: "scored", label: "Scored" },
-      { value: "not_configured", label: "Not configured" },
       { value: "failed", label: "Failed" },
-      { value: "reference_not_available", label: "Reference unavailable" },
-      { value: "partial_reference_scoring", label: "Partial reference scoring" },
+      { value: "skipped", label: "Skipped" },
     ])}
-    ${_renderFilterDropdown("leaderboard-challenge", "Challenge", f.challenge, [
-      { value: "all", label: "All" },
-      { value: "ASL", label: "ASL" },
-      { value: "DCE", label: "DCE" },
-      { value: "DSC", label: "DSC" },
-      { value: "OTHER", label: "Other" },
-    ])}
-    ${_renderFilterDropdown("leaderboard-map", "Map type", f.map, [
-      { value: "all", label: "All" },
-      { value: "CBF", label: "CBF" },
-      { value: "ATT", label: "ATT" },
-      { value: "Ktrans", label: "Ktrans" },
-      { value: "ve", label: "ve" },
-      { value: "vp", label: "vp" },
-      { value: "Kep", label: "Kep" },
-    ])}
-    ${_renderFilterDropdown("leaderboard-sort", "Sort", f.sort, [
-      { value: "newest", label: "Newest first" },
-      { value: "oldest", label: "Oldest first" },
-      { value: "name", label: "Name A-Z" },
-      { value: "status", label: "Status" },
-    ])}
-    <button type="button" class="filter-clear-btn" id="leaderboard-clear-filters">Clear filters</button>`;
+    ${_renderFilterDropdown("leaderboard-map", "Map", f.map, MAP_FILTER_OPTIONS)}
+    ${_renderFilterDropdown("leaderboard-sort", "Sort", f.sort, SORT_FILTER_OPTIONS)}
+    ${_renderClearFilterButton("leaderboard-clear-filters", active)}`;
 }
 
 function _filteredLeaderboardEntries() {
@@ -3724,9 +3949,17 @@ function _filteredLeaderboardEntries() {
     const challenge = _leaderboardChallenge(entry);
     const mapTypes = _leaderboardMapTypes(entry).map((m) => m.toLowerCase());
     if (q && !_leaderboardEntryText(entry).includes(q)) return false;
-    if (!_dateWithinFilter(entry.scored_at || entry.created_at || entry.uploaded_at, f.date)) return false;
-    if (f.status !== "all" && status !== f.status && refStatus !== f.status) return false;
-    if (f.challenge !== "all" && challenge !== f.challenge) return false;
+    if (f.status !== "all") {
+      const matchesStatus =
+        (f.status === "scored" && status === "scored") ||
+        (f.status === "passed" && status === "scored") ||
+        (f.status === "ready" && (status === "ready" || status === "not_ready")) ||
+        (f.status === "failed" && status === "failed") ||
+        (f.status === "errors" && (status === "failed" || ["scoring_error", "reference_invalid", "no_finite_overlap"].includes(refStatus))) ||
+        (f.status === "warnings" && ["partial_reference_scoring", "reference_not_available", "not_configured"].includes(refStatus || status)) ||
+        (f.status === "skipped" && (status === "skipped" || refStatus === "reference_not_available"));
+      if (!matchesStatus) return false;
+    }
     if (f.map !== "all" && !mapTypes.includes(String(f.map).toLowerCase())) return false;
     return true;
   });
@@ -3741,6 +3974,23 @@ function _filteredLeaderboardEntries() {
 
 function _leaderboardStatusBadge(status) {
   return `<span class="${_leaderboardStatusClass(status)}">${escapeHtml(_leaderboardStatusLabel(status))}</span>`;
+}
+
+function _leaderboardSummary(entries) {
+  const rows = entries || [];
+  const scored = rows.filter((e) => e.status === "scored").length;
+  const failed = rows.filter((e) => e.status === "failed").length;
+  const partial = rows.filter((e) => _leaderboardReferenceStatus(e) === "partial_reference_scoring").length;
+  const unavailable = rows.filter((e) => _leaderboardReferenceStatus(e) === "reference_not_available").length;
+  const sorted = [...rows].sort((a, b) => new Date(b.scored_at || 0) - new Date(a.scored_at || 0));
+  return [
+    _summaryChip("total", rows.length),
+    _summaryChip("scored", scored, "success"),
+    _summaryChip("failed", failed, failed ? "error" : ""),
+    _summaryChip("partial", partial, partial ? "warning" : ""),
+    _summaryChip("reference unavailable", unavailable, unavailable ? "muted" : ""),
+    _latestLabel(sorted[0]?.submission_id || ""),
+  ].filter(Boolean).join("");
 }
 
 function _leaderboardMetricChip(label, value) {
@@ -3810,8 +4060,11 @@ function _wireLeaderboardFilterControls() {
   const search = el("leaderboard-search");
   if (search) {
     search.oninput = () => {
+      const cursor = search.selectionStart ?? search.value.length;
       _leaderboardFilter.search = search.value;
+      _leaderboardFilter.showAll = false;
       _renderLeaderboardEntries();
+      _restoreSearchFocus("leaderboard-search", cursor);
     };
   }
   const clear = el("leaderboard-clear-filters");
@@ -3823,12 +4076,13 @@ function _wireLeaderboardFilterControls() {
       _leaderboardFilter.challenge = "all";
       _leaderboardFilter.map = "all";
       _leaderboardFilter.sort = "newest";
+      _leaderboardFilter.showAll = false;
       _renderLeaderboardEntries();
     };
   }
 }
 
-function _renderLeaderboardEntries() {
+function _renderLeaderboardEntries(options = {}) {
   const card = el("leaderboard-card");
   const list = el("leaderboard-list");
   const filterBar = el("leaderboard-filter-bar");
@@ -3836,8 +4090,11 @@ function _renderLeaderboardEntries() {
   const sub = el("leaderboard-sub");
   if (!card || !list || !filterBar) return;
   card.style.display = "";
-  filterBar.innerHTML = _renderLeaderboardFilterBar();
-  _wireLeaderboardFilterControls();
+  _syncCollapsibleSection("leaderboard", (_leaderboardFilter.entries || []).length, _leaderboardSummary(_leaderboardFilter.entries || []));
+  if (!options.skipFilterBar) {
+    filterBar.innerHTML = _renderLeaderboardFilterBar();
+    _wireLeaderboardFilterControls();
+  }
 
   if (_leaderboardFilter.loading) {
     list.innerHTML = `<div class="leaderboard-loading">
@@ -3862,7 +4119,12 @@ function _renderLeaderboardEntries() {
   }
 
   const entries = _filteredLeaderboardEntries();
-  if (countEl) countEl.textContent = `${entries.length} submission${entries.length !== 1 ? "s" : ""}`;
+  if (countEl) {
+    const totalEntries = (_leaderboardFilter.entries || []).length;
+    countEl.textContent = entries.length === totalEntries
+      ? `${entries.length} submission${entries.length !== 1 ? "s" : ""}`
+      : `${entries.length} of ${totalEntries} submissions`;
+  }
   if (sub) sub.textContent = "Review scored submissions, reference status, and export readiness.";
   if (!entries.length) {
     const hasAny = (_leaderboardFilter.entries || []).length > 0;
@@ -3878,12 +4140,27 @@ function _renderLeaderboardEntries() {
       _leaderboardFilter.challenge = "all";
       _leaderboardFilter.map = "all";
       _leaderboardFilter.sort = "newest";
+      _leaderboardFilter.showAll = false;
       _renderLeaderboardEntries();
     };
     return;
   }
 
-  list.innerHTML = entries.map(_renderLeaderboardEntry).join("");
+  const LIMIT = 10;
+  const visibleEntries = !_leaderboardFilter.showAll && entries.length > LIMIT ? entries.slice(0, LIMIT) : entries;
+  const showMore = entries.length > LIMIT
+    ? `<div class="show-more-row leaderboard-show-more-row">
+        <button type="button" id="leaderboard-show-all-btn" class="vr-show-all-btn">${_leaderboardFilter.showAll ? "Show less" : `Show all ${entries.length} submissions`}</button>
+      </div>`
+    : "";
+  list.innerHTML = visibleEntries.map(_renderLeaderboardEntry).join("") + showMore;
+  const showAll = el("leaderboard-show-all-btn");
+  if (showAll) {
+    showAll.onclick = () => {
+      _leaderboardFilter.showAll = !_leaderboardFilter.showAll;
+      _renderLeaderboardEntries({ skipFilterBar: true });
+    };
+  }
 }
 
 function _formatLeaderboardTimestamp(value) {
@@ -4567,7 +4844,6 @@ function _renderPreviewModalContent(item, plane = "axial") {
         ${_summaryMetric("Negative voxels", _dashMetric(item.negative_percent, (v) => `${_fmtMetricVal(v)}%`))}
         ${item.preview_error ? `<p class="nifti-preview-error">${escapeHtml(item.preview_error)}</p>` : ""}
         <div class="nifti-preview-actions">${fullPreview}${download}<button type="button" class="btn btn-secondary btn-sm" data-preview-close>Close</button></div>
-        ${_previewNote()}
       </div>
     </div>`;
 }
@@ -5886,22 +6162,6 @@ document.body.dataset.step = wf.step;
 _syncWfNav();
 _updateWizardFooter(wf.step);
 
-// ── Sidebar collapse toggle ────────────────────────────────────────────────────
-(function initSidebarCollapse() {
-  const sidebar     = document.getElementById("sidebar");
-  const collapseBtn = document.getElementById("collapse-btn");
-  if (!sidebar || !collapseBtn) return;
-
-  if (localStorage.getItem("sidebar-collapsed") === "1") {
-    sidebar.classList.add("collapsed");
-  }
-
-  collapseBtn.addEventListener("click", () => {
-    const isNowCollapsed = sidebar.classList.toggle("collapsed");
-    try { localStorage.setItem("sidebar-collapsed", isNowCollapsed ? "1" : "0"); } catch(_) {}
-  });
-})();
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Session restore — startup check (no auto-restore; subtle chip only)
 // ══════════════════════════════════════════════════════════════════════════════
@@ -5947,8 +6207,8 @@ _updateWizardFooter(wf.step);
   }
 })();
 
-// ── "Start New" button in sidebar ─────────────────────────────────────────────
-(function initSidebarNewSession() {
+// Hidden reset hook used by contextual "New Submission" / restore actions.
+(function initHiddenNewSessionHook() {
   const btn = el("sidebar-new-session-btn");
   if (!btn) return;
   btn.addEventListener("click", () => {

@@ -40,15 +40,6 @@
   <!-- ── Scrollable step panels ─────────────────────────────── -->
   <main class="content step-main">
 
-    <!-- Persistent top-right "Start new" link — visible on all steps -->
-    <div id="global-start-new" class="global-start-new" style="display:none">
-      <button type="button" class="btn btn-ghost btn-sm global-new-btn"
-              onclick="document.getElementById('sidebar-new-session-btn').click()"
-              title="Discard current session and start fresh">
-        ↺ Start new
-      </button>
-    </div>
-
     <!-- Restore session banner (shown only when a saved session is found) -->
     <div id="restore-banner" class="restore-banner" role="alert" style="display:none">
       <div class="restore-banner-body">
@@ -240,13 +231,6 @@
         </div>
       </header>
 
-      <div class="step-hint-card">
-        <span id="index-hint-copy">Review detected submission.</span>
-        <button type="button" class="help-tooltip" aria-label="Submission type help">?
-          <span class="tooltip-text">Result-only submissions include output maps already; reproducible submissions include runnable code.</span>
-        </button>
-      </div>
-
       <div class="pg-card">
         <div class="pg-card-header" style="display:flex;align-items:center;justify-content:space-between">
           <div>
@@ -288,12 +272,6 @@
         </div>
       </header>
 
-      <div class="step-hint-card">
-        Validation results.
-        <button type="button" class="help-tooltip" aria-label="Validation warnings help">?
-          <span class="tooltip-text">Errors may block the workflow. Warnings are informational and do not block continuing.</span>
-        </button>
-      </div>
       <!-- Completion banner: shown after all validations finish -->
       <div id="validate-completion-banner" class="step-completion-banner" style="display:none"></div>
       <div class="pg-card">
@@ -317,44 +295,31 @@
 
         <div id="validate-summary-stats" class="validation-summary-stats" aria-label="Validation totals"></div>
 
-        <!-- Single compact toolbar: search + view + sort + expand controls -->
-        <div id="val-toolbar" class="vr-toolbar" style="padding:12px 24px;border-bottom:1px solid var(--divider)">
-          <input type="search" id="batch-search" class="vr-search" placeholder="Search…" autocomplete="off" />
-          <select id="batch-view-select" class="vr-select" aria-label="View">
-            <option value="all">View: All</option>
-            <option value="needs-review">Needs review</option>
-            <option value="ready">Ready to run</option>
-            <option value="failed">Failed</option>
-          </select>
-          <select id="batch-sort" class="vr-select" aria-label="Sort">
-            <option value="status">Sort: Status</option>
-            <option value="name">Sort: Name</option>
-            <option value="errors">Sort: Most errors</option>
-            <option value="warnings">Sort: Warnings</option>
-            <option value="runnable">Sort: Runnable first</option>
-          </select>
-          <div class="vr-toolbar-end">
-            <button type="button" id="batch-expand-all"   class="vr-link-btn">Expand all</button>
-            <button type="button" id="batch-collapse-all" class="vr-link-btn">Collapse all</button>
+        <section class="collapsible-section" id="validation-list-section">
+          <button type="button" class="collapsible-section-header" data-collapse-toggle="validation" data-collapse-body="validation-list-body" data-collapse-summary="validation-section-summary" aria-expanded="true" aria-controls="validation-list-body">
+            <span class="collapsible-section-title">Validate submissions <span class="collapsible-count" id="validation-section-count">0</span></span>
+            <span class="collapse-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div id="validation-section-summary" class="list-summary-strip" hidden></div>
+          <div id="validation-list-body" class="collapsible-section-body">
+            <div id="val-toolbar" class="vr-toolbar"></div>
+            <div class="br-table">
+              <div class="br-table-head">
+                <div>Submission</div>
+                <div>Status</div>
+                <div>Issue</div>
+                <div>Run readiness <button type="button" class="help-tooltip" aria-label="Run readiness help">?<span class="tooltip-text">Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.</span></button></div>
+                <div>Details</div>
+              </div>
+              <div id="batch-submissions-list"></div>
+              <div id="validate-no-runnable-msg" style="display:none;padding:12px 0;font-size:0.79rem;color:var(--muted)">No submissions are ready to run. Review validation issues first.</div>
+              <div id="batch-empty-state" class="vr-empty" style="display:none">No submissions match the filter.</div>
+              <div id="review-show-all-wrap" class="show-more-row" style="display:none">
+                <button type="button" id="review-show-all-btn" class="vr-show-all-btn"></button>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <!-- Review list -->
-        <div class="br-table" style="padding:0 24px 16px">
-          <div class="br-table-head">
-            <div>Submission</div>
-            <div>Status</div>
-            <div>Issue</div>
-            <div>Run readiness <button type="button" class="help-tooltip" aria-label="Run readiness help">?<span class="tooltip-text">Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.</span></button></div>
-            <div>Details</div>
-          </div>
-          <div id="batch-submissions-list"></div>
-          <div id="validate-no-runnable-msg" style="display:none;padding:12px 0;font-size:0.79rem;color:var(--muted)">No submissions are ready to run. Review validation issues first.</div>
-          <div id="batch-empty-state" class="vr-empty" style="display:none">No submissions match the filter.</div>
-          <div id="review-show-all-wrap" style="display:none">
-            <button type="button" id="review-show-all-btn" class="vr-show-all-btn"></button>
-          </div>
-        </div>
+        </section>
 
       </div><!-- .pg-card -->
 
@@ -374,12 +339,6 @@
         </div>
       </header>
 
-      <div class="step-hint-card">
-        Run code when needed.
-        <button type="button" class="help-tooltip" aria-label="Docker execution help" style="margin-left:6px">?
-          <span class="tooltip-text">Runnable submissions execute in Docker. Result-only submissions skip execution.</span>
-        </button>
-      </div>
       <!-- Completion banner: shown after execution finishes -->
       <div id="run-completion-banner" class="step-completion-banner" style="display:none"></div>
 
@@ -440,25 +399,22 @@
         </div>
       </div>
 
-      <!-- Submission cards list -->
-      <div id="run-submissions-list" class="run-cards-list"></div>
-      <div id="run-empty-state" class="vr-empty" style="display:none">No submissions match this filter.</div>
-      <div id="run-show-all-wrap" style="display:none;text-align:center;margin-top:12px">
-        <button type="button" id="run-show-all-btn" class="vr-show-all-btn"></button>
-      </div>
+      <section class="collapsible-section" id="run-list-section">
+        <button type="button" class="collapsible-section-header" data-collapse-toggle="run" data-collapse-body="run-list-body" data-collapse-summary="run-section-summary" aria-expanded="true" aria-controls="run-list-body">
+          <span class="collapsible-section-title">Run submissions <span class="collapsible-count" id="run-section-count">0</span></span>
+          <span class="collapse-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div id="run-section-summary" class="list-summary-strip" hidden></div>
+        <div id="run-list-body" class="collapsible-section-body">
+          <div id="run-toolbar" style="display:none"></div>
+          <div id="run-submissions-list" class="run-cards-list"></div>
+          <div id="run-empty-state" class="vr-empty" style="display:none">No submissions match this filter.</div>
+          <div id="run-show-all-wrap" class="show-more-row" style="display:none">
+            <button type="button" id="run-show-all-btn" class="vr-show-all-btn"></button>
+          </div>
+        </div>
+      </section>
       <div id="batch-exec-status" class="submit-status" style="display:none;margin-top:10px"></div>
-
-      <!-- View filter (shown when cards list has content) -->
-      <div id="run-toolbar" style="display:none;margin-top:4px">
-        <select id="run-view-select" class="vr-select" aria-label="Filter submissions">
-          <option value="all">All submissions</option>
-          <option value="ready">Ready to run</option>
-          <option value="not-run">Not yet run</option>
-          <option value="passed">Passed</option>
-          <option value="failed">Failed</option>
-          <option value="timed-out">Timed out</option>
-        </select>
-      </div>
 
       <!-- Hidden legacy elements (JS compat) -->
       <div id="run-table" style="display:none"></div>
@@ -650,17 +606,23 @@
       </div>
 
       <!-- Leaderboard: all previously scored submissions -->
-      <div class="pg-card" id="leaderboard-card" style="margin-top:16px;display:none">
+      <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
         <div class="pg-card-header">
-          <div>
-            <div class="pg-card-title">All Scored Submissions</div>
+          <button type="button" class="collapsible-section-header leaderboard-section-toggle" data-collapse-toggle="leaderboard" data-collapse-body="leaderboard-section-body" data-collapse-summary="leaderboard-section-summary" aria-expanded="true" aria-controls="leaderboard-section-body">
+            <span class="collapsible-section-title">All Scored Submissions <span class="collapsible-count" id="leaderboard-section-count">0</span></span>
+            <span class="collapse-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="leaderboard-header-copy">
             <div class="pg-card-sub" id="leaderboard-sub">Review scored submissions, reference status, and export readiness.</div>
           </div>
           <button type="button" id="leaderboard-refresh-btn" class="btn btn-secondary btn-sm">Refresh</button>
         </div>
-        <div id="leaderboard-filter-bar" class="filter-bar leaderboard-filter-bar"></div>
-        <div id="leaderboard-count" class="list-count-text"></div>
-        <div id="leaderboard-list" class="leaderboard-list"></div>
+        <div id="leaderboard-section-summary" class="list-summary-strip" hidden></div>
+        <div id="leaderboard-section-body" class="collapsible-section-body">
+          <div id="leaderboard-filter-bar" class="filter-bar compact-filter-bar leaderboard-filter-bar"></div>
+          <div id="leaderboard-count" class="list-count-text"></div>
+          <div id="leaderboard-list" class="leaderboard-list"></div>
+        </div>
         <table class="sc-table" id="leaderboard-table" hidden>
           <thead>
             <tr class="sc-table-head">
@@ -712,15 +674,6 @@
           <p class="card-desc">Choose blinded files for external review or unblinded files for internal use.</p>
         </div>
       </header>
-
-      <div class="step-hint-card">
-        <span class="step-label" style="margin-bottom:4px;display:block">Step 7 of 7</span>
-        <strong style="color:var(--text);font-size:0.95rem;display:block;margin-bottom:4px">Download results</strong>
-        Choose a file.
-        <button type="button" class="help-tooltip" aria-label="Blinded vs unblinded export help" style="margin-left:6px">?
-          <span class="tooltip-text"><strong>Blinded</strong>: team names and emails removed — safe to share with external reviewers. <strong>Unblinded</strong>: includes full team info — internal use only.</span>
-        </button>
-      </div>
 
       <div class="export-groups">
 

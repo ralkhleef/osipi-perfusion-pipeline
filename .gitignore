@@ -221,8 +221,10 @@ __marimo__/
 # OSIPI local data and submission workspaces
 submissions/incoming/*
 !submissions/incoming/.gitkeep
+submissions/incoming/*.tmp
 submissions/extracted/*
 !submissions/extracted/.gitkeep
+submissions/extracted/_*_temp_*/
 submissions/validated/*
 !submissions/validated/.gitkeep
 data/reference_data/*
@@ -244,6 +246,7 @@ data/outputs/validation/*
 !data/outputs/validation/.gitkeep
 !data/outputs/scoring/
 data/outputs/scoring/*
+data/outputs/previews/
 /release/
 
 # Legacy generated output folder from older CLI defaults.
@@ -269,5 +272,6 @@ data/outputs/scoring/*
 .env
 .venv/
 __pycache__/
+*.tmp
 test_data/
 data/scoring/

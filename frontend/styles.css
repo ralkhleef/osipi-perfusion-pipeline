@@ -2207,58 +2207,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ============================================================
-   Batch results — Filter chips
-   ============================================================ */
-
-.filter-chips {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--muted);
-  font-family: inherit;
-  transition: all 0.12s;
-  white-space: nowrap;
-  user-select: none;
-}
-
-.filter-chip:hover {
-  border-color: var(--muted);
-  color: var(--text);
-  background: var(--surface);
-}
-
-.filter-chip.fc-active {
-  background: var(--text);
-  color: #fff;
-  border-color: var(--text);
-}
-
-.filter-chip.fc-active.fc-pass { background: var(--success); border-color: var(--success); }
-.filter-chip.fc-active.fc-warn { background: #8a6200; border-color: #8a6200; }
-.filter-chip.fc-active.fc-fail { background: var(--error); border-color: var(--error); }
-.filter-chip.fc-active.fc-run  { background: #1a56a4; border-color: #1a56a4; }
-
-.filter-chip-count {
-  opacity: 0.75;
-  font-weight: 500;
-}
-
-/* ============================================================
    Batch results — Expand controls
    ============================================================ */
 
@@ -2625,50 +2573,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .vr-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .vr-filter-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
-/* More filters dropdown */
-.more-filters-wrap { position: relative; flex-shrink: 0; }
-.more-filters-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: #fff;
-  color: var(--muted);
-  font-family: inherit;
-  list-style: none;
-  transition: all 0.12s;
-  white-space: nowrap;
-  user-select: none;
-}
-.more-filters-btn::-webkit-details-marker { display: none; }
-.more-filters-btn::marker { display: none; }
-.more-filters-btn:hover { border-color: var(--muted); color: var(--text); background: var(--surface); }
-.more-filters-panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 50;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.10);
-  padding: 5px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 148px;
-}
-.more-filters-panel .filter-chip {
-  border-radius: 5px !important;
-  justify-content: flex-start;
-  width: 100%;
-}
-
 /* Table controls bar */
 .vr-table-controls {
   display: flex;
@@ -2930,243 +2834,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .docker-avail-row { padding:9px 24px; font-size:0.78rem; border-bottom:1px solid var(--divider); }
 .docker-ok  { background:#eef8f1; color:#1a7a3f; }
 .docker-err { background:#fdf0f0; color:#b91c1c; }
-
-/* ═══════════════════════════════════════════════════════════════════
-   v25 — Sidebar shell layout
-   (Adapted from Wildlife Research UI design patterns)
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* New shell variables */
-:root {
-  --navy:        #1e1354;   /* dark purple sidebar */
-  --blue-acc:    #5e42a6;   /* purple accent (same as --purple) */
-  --card-bg:     #ffffff;
-  --sidebar-w:   218px;
-  --sidebar-col: 64px;
-  --header-h:    56px;
-  --shell-ease:  cubic-bezier(.4,0,.2,1);
-}
-
-/* Override old column layout → sidebar row layout */
-.app {
-  display: flex !important;
-  flex-direction: row !important;
-  height: 100vh !important;
-  overflow: hidden !important;
-  min-height: unset !important;
-}
-
-/* Hide old top-bar and horizontal nav (replaced by sidebar) */
-.app-header, .wf-nav { display: none !important; }
-
-/* Step-main is the scroll container — must be block, not contents */
-.step-main { display: block; }
-
-/* ── Sidebar ── */
-.sidebar {
-  width: var(--sidebar-w);
-  background: var(--navy);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  transition: width .28s var(--shell-ease);
-  overflow: hidden;
-  position: relative;
-  z-index: 20;
-  box-shadow: 2px 0 10px rgba(0,0,0,.18);
-}
-.sidebar.collapsed { width: var(--sidebar-col); }
-
-/* Logo zone */
-.sidebar-logo {
-  height: var(--header-h);
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 10px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-  flex-shrink: 0;
-  overflow: hidden;
-}
-.sidebar-logo-img {
-  width: 30px; height: 30px; min-width: 30px;
-  filter: brightness(0) invert(1);
-  flex-shrink: 0;
-}
-.sidebar-logo-text {
-  overflow: hidden; white-space: nowrap;
-  opacity: 1; transform: translateX(0);
-  transition: opacity .2s var(--shell-ease), transform .2s var(--shell-ease);
-}
-.sidebar.collapsed .sidebar-logo-text {
-  opacity: 0; transform: translateX(-6px); pointer-events: none;
-}
-.sidebar-brand { color: #fff; font-size: 13px; font-weight: 700; letter-spacing: .2px; line-height: 1.2; }
-.sidebar-sub   { color: rgba(255,255,255,.36); font-size: 9.5px; text-transform: uppercase; letter-spacing: .3px; margin-top: 1px; }
-
-/* Sidebar nav area */
-.sidebar-nav { flex: 1; padding: 8px 0 4px; overflow-y: auto; overflow-x: hidden; }
-
-/* Nav items = repurposed wf-step buttons */
-.sidebar .wf-step {
-  display: flex;
-  align-items: center;
-  height: 41px;
-  padding: 0 0 0 14px;
-  gap: 0;
-  color: rgba(255,255,255,.46);
-  cursor: pointer;
-  border: none;
-  border-left: 3px solid transparent;
-  border-bottom: none;
-  margin-bottom: 0;
-  background: none;
-  width: 100%;
-  text-align: left;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  position: relative;
-  transition: background .15s, color .15s, border-color .15s;
-}
-.sidebar .wf-step:hover:not(:disabled) {
-  background: rgba(255,255,255,.07);
-  color: rgba(255,255,255,.9);
-}
-.sidebar .wf-step.wf-active {
-  background: rgba(255,255,255,.1);
-  color: #fff;
-  border-left-color: var(--purple);
-}
-.sidebar .wf-step:disabled   { opacity: .36; cursor: not-allowed; }
-.sidebar .wf-step.wf-future  { opacity: .28; cursor: default; }
-.sidebar .wf-step.wf-done    { color: rgba(100,210,130,.88); }
-.sidebar .wf-step.wf-warn    { color: rgba(255,205,70,.88); }
-.sidebar .wf-step.wf-fail    { color: rgba(255,110,110,.88); }
-
-/* Step number: hide old circle, replaced by icon */
-.sidebar .wf-step-num { display: none; }
-
-/* Icon wrapper */
-.nav-icon {
-  flex-shrink: 0;
-  width: 36px;
-  display: flex; align-items: center; justify-content: center;
-  transition: width .28s var(--shell-ease);
-}
-.sidebar:not(.collapsed) .nav-icon { width: 32px; }
-
-/* Step label */
-.nav-label {
-  font-size: 13px; font-weight: 500;
-  opacity: 1; transform: translateX(0);
-  transition: opacity .18s var(--shell-ease), transform .18s var(--shell-ease);
-  white-space: nowrap; overflow: hidden;
-}
-.sidebar.collapsed .nav-label {
-  opacity: 0; transform: translateX(-8px); pointer-events: none;
-}
-
-/* Tooltip shown on hover when sidebar is collapsed */
-.nav-tooltip {
-  position: absolute;
-  left: calc(var(--sidebar-col) + 10px);
-  top: 50%; transform: translateY(-50%) scale(.94);
-  background: #1a3a68; color: #fff;
-  padding: 4px 10px; border-radius: 6px;
-  font-size: 11.5px; font-weight: 500;
-  pointer-events: none; opacity: 0;
-  transition: opacity .13s, transform .13s;
-  white-space: nowrap;
-  box-shadow: 0 3px 10px rgba(0,0,0,.28);
-  z-index: 200;
-}
-.sidebar.collapsed .wf-step:hover:not(:disabled) .nav-tooltip {
-  opacity: 1; transform: translateY(-50%) scale(1);
-}
-
-/* Sidebar footer / collapse */
-.sidebar-footer {
-  padding: 5px 0 7px;
-  border-top: 1px solid rgba(255,255,255,.07);
-  flex-shrink: 0;
-}
-.collapse-btn {
-  display: flex; align-items: center;
-  padding: 0 0 0 14px; height: 35px;
-  color: rgba(255,255,255,.26); background: none; border: none;
-  cursor: pointer; width: 100%;
-  transition: color .15s, background .15s;
-  white-space: nowrap; overflow: hidden; gap: 0;
-}
-.collapse-btn:hover { color: rgba(255,255,255,.6); background: rgba(255,255,255,.05); }
-.collapse-icon-wrap {
-  flex-shrink: 0; width: 36px;
-  display: flex; align-items: center; justify-content: center;
-}
-.sidebar:not(.collapsed) .collapse-icon-wrap { width: 32px; }
-.collapse-chevron { display: block; transition: transform .28s var(--shell-ease); }
-.sidebar.collapsed .collapse-chevron { transform: rotate(180deg); }
-.collapse-label {
-  font-size: 12px; opacity: 1; transform: translateX(0);
-  transition: opacity .18s var(--shell-ease), transform .18s var(--shell-ease);
-}
-.sidebar.collapsed .collapse-label { opacity: 0; transform: translateX(-8px); pointer-events: none; }
-
-/* ── Main wrapper (right of sidebar) ── */
-.main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-width: 0;
-  min-height: 0;
-  height: 100vh;
-}
-
-/* ── Top header bar ── */
-.header {
-  flex: 0 0 var(--header-h);
-  height: var(--header-h);
-  background: #fff;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 28px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
-}
-.header-left h1 {
-  font-size: 0.98rem; font-weight: 700; color: var(--text);
-  line-height: 1.2; margin: 0;
-}
-.page-subtitle { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
-.header-right  { display: flex; align-items: center; gap: 10px; }
-
-/* Session chip: now on white background, restyle */
-.session-chip {
-  display: flex; align-items: center; gap: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 3px 10px;
-  font-size: 0.72rem; color: var(--muted);
-}
-.session-sep { opacity: 0.5; }
-
-/* ── Scrollable content area ── */
-.content {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 0 20px 60px;
-  background: var(--bg);
-}
-
-/* Index table: wider in sidebar layout */
-.content .batch-table-wrap { max-width: 860px; margin: 0 auto; }
 
 /* ═══════════════════════════════════════════════════════════════
    v26 — Inspired layout: page cards, source cards, progress panel
@@ -3707,7 +3374,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 /* ── Score status card (user-facing) ──────────────────────────────────────── */
 .score-status-card {
-  background: var(--card-bg);
+  background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 24px 28px;
@@ -3747,7 +3414,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin-bottom: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--card-bg);
+  background: #fff;
   overflow: hidden;
 }
 .score-provider-summary {
@@ -3803,7 +3470,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 .score-provider-card {
-  background: var(--card-bg);
+  background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 18px;
@@ -4005,36 +3672,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   background: rgba(239, 68, 68, 0.25);
   color: #fecaca;
 }
-
-/* Sidebar "Start New" button */
-.sidebar-new-session-wrap {
-  padding: 8px 12px 4px;
-}
-.sidebar-new-session-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  background: none;
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 6px;
-  color: rgba(255,255,255,0.6);
-  font-size: 0.73rem;
-  font-weight: 500;
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-  text-align: left;
-}
-.sidebar-new-session-btn:hover {
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.9);
-  border-color: rgba(255,255,255,0.3);
-}
-.sidebar-new-session-label { flex: 1; }
-/* Collapsed sidebar — hide label */
-.sidebar.collapsed .sidebar-new-session-label,
-.sidebar.collapsed .sidebar-new-session-wrap { display: none; }
 
 /* ── Scoring Admin Setup Panel ─────────────────────────────────────────────── */
 .scoring-admin-panel {
@@ -4475,85 +4112,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 /* Score table — hide action column when scoring not yet available */
 .sc-col-action { white-space: nowrap; }
 
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   WIZARD FOOTER — sticky Back / Continue bar  (v42)
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-.wizard-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--surface, #fff);
-  border-top: 1px solid var(--divider, #e2e8f0);
-  padding: 12px 24px;
-  box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
-}
-
-.wf-back-btn {
-  min-width: 80px;
-  font-size: 0.85rem;
-  color: var(--muted, #94a3b8);
-  background: none;
-  border: 1px solid var(--divider, #e2e8f0);
-  border-radius: 6px;
-  padding: 7px 16px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.wf-back-btn:hover {
-  color: var(--text);
-  border-color: var(--text-muted, #64748b);
-}
-
-.wf-hint {
-  flex: 1;
-  text-align: center;
-  font-size: 0.78rem;
-  color: var(--muted, #94a3b8);
-}
-
-.wf-next-btn {
-  min-width: 160px;
-  font-size: 0.88rem;
-  padding: 8px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.wf-next-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   STEP HINT CARD — "What happens here" helper at top of each step
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-.step-hint-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #f8fafc;
-  border: 1px solid var(--divider, #e2e8f0);
-  border-left: 3px solid #4a90d9;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 18px;
-  font-size: 0.82rem;
-  color: var(--muted, #64748b);
-  line-height: 1.55;
-}
-
-.step-hint-card .shc-icon {
-  font-size: 1rem;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    STEP COMPLETION BANNER — shown after validate / run finishes
@@ -5049,16 +4607,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 /* When JS sets display:none, it overrides this rule so hiding still works */
 
-/* ── Step hint cards — more readable ── */
-.step-hint-card {
-  max-width: 860px;
-  margin: 0 auto 14px;
-  padding: 10px 16px !important;
-  font-size: 0.78rem !important;
-  line-height: 1.5 !important;
-  color: #4a5568 !important;
-}
-
 /* ── All step panels: consistent top padding ── */
 .step-panel {
   padding-top: 20px !important;
@@ -5071,11 +4619,11 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .step-panel > .score-status-card,
 .step-panel > .scoring-admin-panel,
 .step-panel > .export-groups,
-.step-panel > .step-hint-card,
 .step-panel > .run-completion-banner,
 .step-panel > .validate-completion-banner,
 .step-panel > .run-skipped-notice,
 .step-panel > .run-cards-list,
+.step-panel > #run-list-section,
 .step-panel > .step-action-bar {
   max-width: 860px;
   margin-left: auto;
@@ -5404,15 +4952,6 @@ html, body {
   border-radius: 6px !important;
   font-size: 0.72rem !important;
   padding: 7px 11px !important;
-}
-
-/* 6. Step hint card — use lavender/purple instead of blue-border gray */
-.step-hint-card {
-  background: var(--purple-faint) !important;
-  border: 1px solid var(--purple-light) !important;
-  border-left: 3px solid var(--purple) !important;
-  color: var(--purple) !important;
-  opacity: 0.9;
 }
 
 /* 7. Semantic run-status badge colors */
@@ -6073,42 +5612,8 @@ html, body {
 .wf-restore-pill--warn:hover { border-color: #dc2626; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v54 — Clean wizard footer (Back + Continue only); global Start New bar;
-         upload-card restore notice
+   v54 — Upload-card restore notice
    ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Footer: just Back left + Continue right, nothing else */
-.wizard-footer {
-  /* display removed — controlled by body[data-step] rule */
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 10px 24px !important;
-  gap: 0 !important;
-}
-/* Remove grid layout from v53 */
-.wf-left, .wf-right { display: contents; }
-.wf-hint { display: none !important; }
-.wf-restore-pill, .wf-new-link { display: none !important; }
-
-/* Global "Start new" bar — right-aligned, sits at the top of the content area */
-.global-start-new {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 0 2px;
-  max-width: 720px;
-  margin: 0 auto;
-}
-.global-new-btn {
-  background: none;
-  border: none;
-  padding: 3px 6px;
-  font-size: 0.74rem;
-  color: var(--muted, #94a3b8);
-  cursor: pointer;
-  border-radius: 4px;
-  transition: color 0.15s;
-}
-.global-new-btn:hover { color: var(--text, #1e293b); }
 
 /* Upload-card restore notice — slim inline strip */
 .upload-restore-notice {
@@ -6174,11 +5679,6 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   display: flex !important;
 }
 
-/* Upload step: hide global-start-new bar too */
-body[data-step="upload"] .global-start-new {
-  display: none !important;
-}
-
 /* ==========================================================================
    v58 — GLOBAL UI CONSISTENCY PASS
    Every step now matches the Upload card: one centred 720px column, white
@@ -6225,18 +5725,6 @@ body[data-step="upload"] .global-start-new {
 #step-run .run-skipped-notice,
 #step-score .score-main-card {
   border-top: 4px solid var(--purple);
-}
-
-/* ── 3. Step lead-in line ("hint card") → clean, on-brand, one sentence ──── */
-.step-hint-card {
-  background: var(--purple-faint);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--purple);
-  border-radius: 10px;
-  color: var(--muted);
-  font-size: 0.8rem;
-  padding: 11px 15px;
-  margin-bottom: 16px;
 }
 
 /* Consistent card header typography across steps */
@@ -6317,11 +5805,8 @@ body[data-step="upload"] .global-start-new {
 .step-completion-banner.scb-success { background: var(--success-bg); border: 1px solid var(--success-border); color: var(--success); }
 .step-completion-banner.scb-warning { background: var(--warn-bg);   border: 1px solid var(--warn-border);   color: var(--warn); }
 
-/* ── 10. Footer: shared across all steps, never covering content ─────────── */
-.wizard-footer { max-width: var(--card-w); margin: 0 auto; left: 0; right: 0; }
-
 /* ── 11. Unified tooltip trigger sizing in headers ──────────────────────── */
-.field-label-row .help-tooltip, .step-hint-card .help-tooltip,
+.field-label-row .help-tooltip,
 .pg-card-header .help-tooltip { vertical-align: middle; }
 
 /* ==========================================================================
@@ -6561,7 +6046,6 @@ body[data-step="upload"] .global-start-new {
 .vr-action-btn,
 .sc-score-btn,
 .scoring-pkg-remove-btn,
-.global-new-btn,
 .upload-restore-link,
 .upload-restore-dismiss,
 .wf-back-btn,
@@ -6597,7 +6081,6 @@ body[data-step="upload"] .global-start-new {
 .vr-action-btn:hover:not(:disabled),
 .sc-score-btn:hover:not(:disabled),
 .scoring-pkg-remove-btn:hover:not(:disabled),
-.global-new-btn:hover:not(:disabled),
 .upload-restore-link:hover:not(:disabled),
 .upload-restore-dismiss:hover:not(:disabled),
 .wf-back-btn:hover:not(:disabled),
@@ -6626,7 +6109,6 @@ body[data-step="upload"] .global-start-new {
 .vr-action-btn:focus-visible,
 .sc-score-btn:focus-visible,
 .scoring-pkg-remove-btn:focus-visible,
-.global-new-btn:focus-visible,
 .upload-restore-link:focus-visible,
 .upload-restore-dismiss:focus-visible,
 .wf-back-btn:focus-visible,
@@ -6644,7 +6126,6 @@ body[data-step="upload"] .global-start-new {
 .vr-action-btn:disabled,
 .sc-score-btn:disabled,
 .scoring-pkg-remove-btn:disabled,
-.global-new-btn:disabled,
 .upload-restore-link:disabled,
 .upload-restore-dismiss:disabled,
 .wf-back-btn:disabled,
@@ -6693,7 +6174,6 @@ body[data-step="upload"] .global-start-new {
 .btn-ghost,
 .wf-back-btn,
 .vr-action-btn,
-.global-new-btn,
 .upload-restore-link,
 .upload-restore-dismiss {
   background: transparent;
@@ -6705,7 +6185,6 @@ body[data-step="upload"] .global-start-new {
 .btn-ghost:hover:not(:disabled),
 .wf-back-btn:hover:not(:disabled),
 .vr-action-btn:hover:not(:disabled),
-.global-new-btn:hover:not(:disabled),
 .upload-restore-link:hover:not(:disabled),
 .upload-restore-dismiss:hover:not(:disabled) {
   background: #f8fafc;
@@ -6887,67 +6366,6 @@ body[data-step="upload"] .global-start-new {
 
 body[data-step="upload"] .content.step-main {
   padding-bottom: 28px;
-}
-
-.wizard-footer {
-  position: fixed !important;
-  left: 50% !important;
-  right: auto !important;
-  bottom: 14px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: min(var(--card-w, 980px), calc(100vw - 32px));
-  max-width: min(var(--card-w, 980px), calc(100vw - 32px));
-  margin: 0;
-  padding: 12px;
-  border: 1px solid rgba(124, 92, 191, 0.18);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 18px 50px rgba(17, 24, 39, 0.16);
-  backdrop-filter: blur(18px);
-  z-index: 80;
-}
-
-.wizard-footer:not([hidden]) {
-  display: flex !important;
-}
-
-.wizard-footer[data-disabled-reason]::after {
-  content: attr(data-disabled-reason);
-  position: absolute;
-  right: 12px;
-  bottom: calc(100% + 8px);
-  max-width: min(360px, calc(100vw - 40px));
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 650;
-  line-height: 1.35;
-  box-shadow: 0 14px 30px rgba(17, 24, 39, 0.18);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.wizard-footer[data-disabled-reason]:hover::after,
-.wizard-footer[data-disabled-reason]:focus-within::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.wf-back-btn,
-.wf-next-btn {
-  min-width: 148px;
-}
-
-.wf-next-btn {
-  min-width: 184px;
 }
 
 .export-groups {
@@ -7156,22 +6574,6 @@ body[data-step="upload"] .content.step-main {
     max-width: 100%;
   }
 
-  .wizard-footer {
-    bottom: 8px;
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    padding: 10px;
-    gap: 8px;
-  }
-
-  .wf-back-btn,
-  .wf-next-btn {
-    min-width: 0;
-    flex: 1 1 0;
-    padding-left: 10px;
-    padding-right: 10px;
-  }
-
   .compact-progress-label {
     font-size: 0.7rem;
   }
@@ -7232,10 +6634,6 @@ body[data-step="upload"] .content.step-main {
   white-space: normal;
 }
 
-.step-shell > .step-hint-card {
-  display: none !important;
-}
-
 .step-shell > .step-completion-banner {
   margin: 0 !important;
   border-left: 0 !important;
@@ -7251,6 +6649,7 @@ body[data-step="upload"] .content.step-main {
 .step-shell > .export-groups,
 .step-shell > .step-action-bar,
 .step-shell > .run-cards-list,
+.step-shell > #run-list-section,
 .step-shell > #run-empty-state,
 .step-shell > #run-show-all-wrap,
 .step-shell > #run-toolbar,
@@ -7279,6 +6678,7 @@ body[data-step="upload"] .content.step-main {
 .step-shell > .export-groups,
 .step-shell > .step-action-bar,
 .step-shell > #run-submissions-list,
+.step-shell > #run-list-section,
 .step-shell > #run-empty-state,
 .step-shell > #run-show-all-wrap,
 .step-shell > #run-toolbar,
@@ -7530,6 +6930,143 @@ body[data-step] .wizard-footer {
   background: #fff;
 }
 
+.collapsible-section {
+  background: #fff;
+  border-top: 1px solid var(--divider);
+}
+
+.collapsible-section-header {
+  appearance: none;
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--divider);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapsible-section-header:hover,
+.collapsible-section-header:focus-visible {
+  background: #fbfbff;
+}
+
+.collapsible-section-title {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.collapsible-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(124, 92, 191, 0.24);
+  background: #f7f4ff;
+  color: #4b3789;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.collapse-chevron {
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.collapsible-section:not(.is-collapsed) .collapse-chevron {
+  transform: rotate(180deg);
+}
+
+.collapsible-section-body[hidden],
+.list-summary-strip[hidden] {
+  display: none !important;
+}
+
+.list-summary-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--divider);
+  background: #fbfcff;
+}
+
+.list-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid var(--divider);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.list-summary-chip strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-summary-chip-success strong { color: var(--success); }
+.list-summary-chip-warning strong { color: var(--warn); }
+.list-summary-chip-error strong { color: var(--error); }
+.list-summary-chip-muted strong { color: var(--muted); }
+
+.list-summary-latest {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-filter-bar {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.compact-filter-control {
+  min-width: 0;
+}
+
+.compact-filter-bar .filter-search {
+  flex: 1 1 260px;
+}
+
+.compact-filter-bar .filter-dropdown,
+.compact-filter-bar .filter-clear-btn {
+  flex: 0 0 auto;
+}
+
+.show-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
 .filter-bar-spacer {
   flex: 1;
   min-width: 8px;
@@ -7572,8 +7109,7 @@ body[data-step] .wizard-footer {
 
 .filter-pill,
 .filter-clear-btn,
-.filter-text-btn,
-.filter-chip {
+.filter-text-btn {
   appearance: none;
   min-height: 36px;
   border: 1px solid var(--border);
@@ -7609,8 +7145,6 @@ body[data-step] .wizard-footer {
 
 .filter-pill:hover,
 .filter-pill.is-active,
-.filter-chip:hover,
-.filter-chip.fc-active,
 .filter-clear-btn:hover,
 .filter-text-btn:hover {
   border-color: rgba(124, 92, 191, 0.46);
@@ -7661,13 +7195,6 @@ body[data-step] .wizard-footer {
   font-weight: 900;
 }
 
-.filter-chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.filter-chip,
 .filter-clear-btn,
 .filter-text-btn {
   padding: 0 12px;
@@ -7738,6 +7265,78 @@ body[data-step] .wizard-footer {
 #leaderboard-refresh-btn:hover {
   background: #f7f4ff;
   border-color: rgba(124, 92, 191, 0.48);
+}
+
+#step-index .pg-card-body > .collapsible-section {
+  margin-top: 12px;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#step-index .collapsible-section-body {
+  padding: 12px;
+}
+
+#step-index .review-filter-bar {
+  padding: 0 0 12px;
+}
+
+#validation-list-section {
+  border-top: 1px solid var(--divider);
+}
+
+#validation-list-section .br-table {
+  padding: 16px 24px !important;
+}
+
+#run-list-section {
+  background: #fff;
+}
+
+#run-list-section .run-cards-list {
+  margin-top: 0;
+  padding: 18px 28px 0;
+}
+
+#run-list-section #run-empty-state,
+#run-list-section #run-show-all-wrap {
+  margin: 0 28px 18px;
+}
+
+#run-list-section #run-toolbar .filter-bar {
+  padding: 12px 28px;
+}
+
+#leaderboard-card .pg-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+#leaderboard-card .leaderboard-section-toggle {
+  grid-column: 1;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+#leaderboard-card .leaderboard-section-toggle:hover,
+#leaderboard-card .leaderboard-section-toggle:focus-visible {
+  background: transparent;
+}
+
+#leaderboard-card .leaderboard-header-copy {
+  grid-column: 1;
+  min-width: 0;
+}
+
+#leaderboard-refresh-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
 }
 
 #leaderboard-table {
@@ -8032,8 +7631,23 @@ body[data-step] .wizard-footer {
     padding: 12px 16px;
   }
 
+  .compact-filter-bar {
+    flex-wrap: wrap;
+  }
+
   .filter-search {
     flex-basis: 100%;
+  }
+
+  .compact-filter-bar .filter-dropdown,
+  .compact-filter-bar .filter-clear-btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .compact-filter-bar .filter-pill,
+  .compact-filter-bar .filter-clear-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .leaderboard-row {

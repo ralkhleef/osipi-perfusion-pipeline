@@ -140,6 +140,10 @@ checkContains("Upload GitHub source gates on input", appJs, 'source === "github"
 checkContains("Upload CTA disabled until ready", appJs, "submitBtn.disabled = !canUpload");
 checkContains("Challenge type tooltip text", html, "Select the OSIPI challenge type for this submission.");
 checkContains("Parameter map type tooltip text", html, "auto-detect CBF, ATT, Ktrans, ve, vp, or Kep");
+checkNotContains("Duplicate global Start New wrapper removed", html, "global-start-new");
+checkNotContains("Global Start New styling removed", css, "global-new-btn");
+checkNotContains("Duplicate step hint cards removed", html, "step-hint-card");
+checkNotContains("Step hint card styling removed", css, "step-hint-card");
 checkContains("Reusable in-card action rows", appJs, "function _ensureStepActionRow");
 checkContains("Action rows have data-step hook", appJs, "data-step-action-row");
 checkContains("Action row CSS", css, ".step-action-row");
@@ -179,9 +183,12 @@ checkContains("Review action row appends inside card", appJs, 'el("step-index")?
 checkContains("Review submission type tooltip", appJs, "Result maps provided help");
 checkContains("Review has multi-submission filter bar", appJs, "function _renderIndexFilterBar");
 checkContains("Review search filters submissions", appJs, "index-search");
-checkContains("Review challenge dropdown filter", appJs, '"index-challenge"');
 checkContains("Review map type dropdown filter", appJs, '"index-map"');
+checkContains("Review status dropdown filter", appJs, '"index-status"');
+checkContains("Review sort dropdown filter", appJs, '"index-sort"');
 checkContains("Review clear filters button", appJs, "index-clear-filters");
+checkContains("Review list is collapsible", appJs, '_renderCollapsibleSection("index"');
+checkContains("Review show all submissions", appJs, "index-show-all-btn");
 checkContains("Detected submission cards show metadata chips", appJs, "sub-card-tags");
 
 console.log("\n[ Run step ]");
@@ -192,10 +199,12 @@ checkContains("Result-only run hides per-submission list", appJs, 'list.innerHTM
 checkContains("Result-only run hides duplicate continue", appJs, 'skippedContinueBtn.style.display = "none"');
 checkContains("Run readiness tooltip", html, "Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.");
 checkContains("Run button says Docker", html, "Run code in Docker");
+check("Run collapsible section", "run-list-section");
 checkContains("Run has polished filter bar", appJs, "function _renderRunFilterBar");
-checkContains("Run ready filter chip", appJs, "Ready to run");
-checkContains("Run cannot-run filter chip", appJs, "Cannot run");
-checkContains("Run complete filter chip", appJs, '"complete"');
+checkContains("Run compact filter search", appJs, "run-search");
+checkContains("Run status dropdown", appJs, '"run-status"');
+checkContains("Run map dropdown", appJs, '"run-map"');
+checkContains("Run sort dropdown", appJs, '"run-sort"');
 checkContains("Run skipped filter chip", appJs, '"skipped"');
 checkContains("Run filter keeps Continue logic separate", appJs, "_applyRunFilters();");
 
@@ -217,19 +226,23 @@ checkContains("Leaderboard timestamp formatting", appJs, "function _formatLeader
 check("Leaderboard filter bar", "leaderboard-filter-bar");
 check("Leaderboard list", "leaderboard-list");
 check("Leaderboard count", "leaderboard-count");
+check("Leaderboard collapsible summary", "leaderboard-section-summary");
+checkContains("Leaderboard can collapse and expand", html, 'data-collapse-toggle="leaderboard"');
 checkContains("Leaderboard has custom filter dropdown helper", appJs, "function _renderFilterDropdown");
-checkContains("Leaderboard date dropdown", appJs, '"leaderboard-date"');
 checkContains("Leaderboard status dropdown", appJs, '"leaderboard-status"');
-checkContains("Leaderboard challenge dropdown", appJs, '"leaderboard-challenge"');
 checkContains("Leaderboard map dropdown", appJs, '"leaderboard-map"');
 checkContains("Leaderboard sort dropdown", appJs, '"leaderboard-sort"');
+checkNotContains("Leaderboard date dropdown removed", appJs, '"leaderboard-date"');
+checkNotContains("Leaderboard challenge dropdown removed", appJs, '"leaderboard-challenge"');
 checkContains("Dropdown opens from filter pill", appJs, "data-filter-menu");
 checkContains("Dropdown selected option checkmark", appJs, "filter-option-check");
 checkContains("Only one dropdown stays open", appJs, "function _closeFilterMenus");
 checkContains("Escape closes dropdowns", appJs, 'e.key === "Escape"');
 checkContains("Leaderboard search filters rows", appJs, "leaderboard-search");
+checkContains("Review search restores focus after filtering", appJs, '_restoreSearchFocus("index-search"');
 checkContains("Leaderboard clear filters restores rows", appJs, "leaderboard-clear-filters");
 checkContains("Leaderboard empty state for filters", appJs, "No submissions match these filters.");
+checkContains("Leaderboard show more works", appJs, "leaderboard-show-all-btn");
 checkContains("Leaderboard loading state", appJs, "leaderboard-loading");
 checkContains("Leaderboard error retry state", appJs, "leaderboard-retry-btn");
 checkContains("Leaderboard row cards render", appJs, "leaderboard-row");
@@ -243,6 +256,12 @@ checkContains("Leaderboard reference unavailable badge", css, ".leaderboard-stat
 checkContains("Leaderboard partial reference badge", css, ".leaderboard-status-partial_reference_scoring");
 checkContains("Leaderboard long-name card truncation", css, ".leaderboard-submission-name");
 checkContains("Reusable filter bar CSS", css, ".filter-bar");
+checkContains("Reusable compact filter bar CSS", css, ".compact-filter-bar");
+checkContains("Reusable collapsible section CSS", css, ".collapsible-section");
+checkContains("Reusable collapsible section header CSS", css, ".collapsible-section-header");
+checkContains("Reusable collapse chevron CSS", css, ".collapse-chevron");
+checkContains("Reusable show more row CSS", css, ".show-more-row");
+checkContains("Reusable list summary strip CSS", css, ".list-summary-strip");
 checkContains("Filter menu CSS", css, ".filter-menu");
 checkContains("Filter pill CSS", css, ".filter-pill");
 
@@ -330,6 +349,7 @@ checkContains("Export has Unblinded Export buttons", html, "Download Unblinded E
 console.log("\n[ Validate step cards ]");
 checkContains("Validate title is status-driven", html, 'id="validate-card-title"');
 checkContains("Validate totals strip exists", html, 'id="validate-summary-stats"');
+check("Validate collapsible section", "validation-list-section");
 checkContains("Validate renders cards", appJs, 'validation-card');
 checkContains("Validate details collapsed by default", appJs, 'class="vr-row-detail" style="display:none"');
 checkContains("Validate edit controls are header-local", html, 'class="validation-header-actions"');
@@ -340,8 +360,10 @@ checkContains("Validate filter all", appJs, '"validation-status"');
 checkContains("Validate filter passed", appJs, '"passed"');
 checkContains("Validate filter warnings", appJs, '"warnings"');
 checkContains("Validate filter errors", appJs, '"errors"');
-checkContains("Validate filter runnable", appJs, '"runnable"');
-checkContains("Validate filter result-only", appJs, '"result-only"');
+checkContains("Validate filter ready", appJs, '"ready"');
+checkContains("Validate filter skipped", appJs, '"skipped"');
+checkContains("Validate map dropdown", appJs, '"validation-map"');
+checkContains("Validate sort dropdown", appJs, '"validation-sort"');
 checkContains("Validation filters preserve error visibility", appJs, "case \"errors\"");
 
 console.log("\n[ Tooltips for key terms ]");
@@ -365,6 +387,7 @@ console.log("\n[ Topbar / session ]");
 check("Topbar new-session btn",    "sidebar-new-session-btn");
 check("Session chip",              "session-chip");
 check("Restore banner",            "restore-banner");
+checkNotContains("Old sidebar collapse JS removed", appJs, "initSidebarCollapse");
 
 console.log("\n[ CSS class presence ]");
 // .app-topbar intentionally removed (topbar removed in v53)
