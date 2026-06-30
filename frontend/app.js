@@ -327,7 +327,7 @@ const COMPACT_PROGRESS_STEPS = [
 
 function goToStep(step) {
   wf.step = step;
-  document.body.dataset.step = step;   // CSS hook: body[data-step="upload"] hides footer
+  document.body.dataset.step = step;   // CSS hook for the current wizard step
   WF_STEPS.forEach((s) => {
     const panel = el(`step-${s}`);
     if (panel) panel.hidden = (s !== step);
@@ -342,20 +342,20 @@ function goToStep(step) {
   const hSub   = el("page-subtitle");
   if (hTitle) hTitle.textContent  = titles.title || step;
   if (hSub)   hSub.textContent    = titles.sub   || "";
-  // Update wizard footer
+  // Update local wizard actions
   _updateWizardFooter(step);
   // Persist step to session
   saveSessionState();
 }
 
-// ── Wizard Footer ─────────────────────────────────────────────────────────────
+// ── Wizard Actions ────────────────────────────────────────────────────────────
 
 const _WF_FOOTER_CONFIG = {
   upload:   { back: null,       next: null,       nextLabel: "Upload and Continue",     hint: "Fill in team details and choose a submission file below" },
   index:    { back: "upload",   next: "validate", nextLabel: "Validate Submission",     hint: "" },
   validate: { back: "index",    next: "run",       nextLabel: "Continue to Run",        hint: "" },
   run:      { back: "validate", next: "score",     nextLabel: "Continue to Score",      hint: "" },
-  score:    { back: "run",      next: "summary",  nextLabel: "Continue to Summary",     hint: "" },
+  score:    { back: "run",      next: "summary",  nextLabel: "Continue",                hint: "" },
   summary:  { back: "score",    next: "export",   nextLabel: "Continue to Export",      hint: "" },
   export:   { back: "summary",  next: null,        nextLabel: "Finish",                  hint: "" },
 };
@@ -369,129 +369,188 @@ function _allValidationResultsAreResultOnly() {
   return results.length > 0 && results.every((r) => inferredRunReadiness(r) === "result_only");
 }
 
-function _updateWizardFooter(step) {
-  const cfg     = _WF_FOOTER_CONFIG[step];
+function _hideLegacyWizardFooter() {
   const footer  = el("wizard-footer");
   const backBtn = el("wf-back-btn");
   const nextBtn = el("wf-next-btn");
-  if (!footer || !cfg) return;
+  if (!footer) return;
+  footer.hidden = true;
+  footer.style.display = "none";
+  delete footer.dataset.disabledReason;
+  footer.removeAttribute("title");
+  if (backBtn) {
+    backBtn.onclick = null;
+    backBtn.style.display = "";
+    backBtn.style.visibility = "hidden";
+  }
+  if (nextBtn) {
+    nextBtn.onclick = null;
+    nextBtn.disabled = true;
+    nextBtn.removeAttribute("aria-label");
+    nextBtn.removeAttribute("aria-describedby");
+    delete nextBtn.dataset.disabledReason;
+  }
+}
 
-  // Upload step: use the SAME shared footer as every other step. Back is hidden
-  // (first step) but keeps its space so the CTA stays right-aligned; the Next
-  // button is the sole "Upload and Detect" action and drives handleSubmit().
-  if (step === "upload") {
-    footer.hidden = false;
-    footer.style.display = "flex";
-    delete footer.dataset.disabledReason;
-    footer.removeAttribute("title");
-    const gnBar = el("global-start-new");
-    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }  // no Start-new on first step
-    if (backBtn) { backBtn.style.display = ""; backBtn.style.visibility = "hidden"; backBtn.onclick = null; }
-    if (nextBtn) {
-      const label = submitLabel();              // "Upload and Detect" (or edit label)
-      nextBtn.textContent = label;
-      nextBtn.style.opacity = "";
-      nextBtn.removeAttribute("aria-describedby");
-      nextBtn.removeAttribute("aria-label");
-      delete nextBtn.dataset.disabledReason;
-      const canUpload = _isStepReady("upload");
-      nextBtn.disabled = !canUpload;
-      if (!canUpload) {
-        const reason = "Choose a submission file or source to continue.";
-        nextBtn.title = reason;
-        nextBtn.dataset.disabledReason = reason;
-        nextBtn.setAttribute("aria-label", `${label}. ${reason}`);
-      } else {
-        nextBtn.title = "";
-      }
-      nextBtn.onclick = () => { if (!nextBtn.disabled) handleSubmit(); };
+function _stepActionHost(step) {
+  if (step === "index") {
+    return el("step-index")?.querySelector(".pg-card") || el("step-index");
+  }
+  if (step === "run" && _allValidationResultsAreResultOnly()) {
+    return el("run-skipped-notice") || el("step-run");
+  }
+  return el(`step-${step}`);
+}
+
+function _stepActionPrimary(step) {
+  return document.querySelector(`[data-step-action-row="${step}"] .step-action-primary`);
+}
+
+function _syncInactiveStepActions(activeStep) {
+  document.querySelectorAll("[data-step-action-row]").forEach((row) => {
+    const isActive = row.dataset.stepActionRow === activeStep && activeStep !== "upload";
+    row.hidden = !isActive;
+    row.style.display = isActive ? "" : "none";
+  });
+}
+
+function _ensureStepActionRow(step) {
+  const cfg = _WF_FOOTER_CONFIG[step];
+  if (!cfg || step === "upload") return null;
+  const host = _stepActionHost(step);
+  if (!host) return null;
+
+  let row = document.querySelector(`[data-step-action-row="${step}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "step-action-row";
+    row.dataset.stepActionRow = step;
+    row.innerHTML = `
+      <div class="step-action-left">
+        <button type="button" class="btn btn-secondary step-action-back">Back</button>
+      </div>
+      <div class="step-action-right">
+        <button type="button" class="btn btn-primary step-action-primary">Continue</button>
+      </div>`;
+  }
+
+  if (row.parentElement !== host) host.appendChild(row);
+  return row;
+}
+
+function _stepPrimaryLabel(step) {
+  if (step === "run" && _allValidationResultsAreResultOnly()) return "Continue to Score";
+  return _WF_FOOTER_CONFIG[step]?.nextLabel || "Continue";
+}
+
+function _advanceWizardStep(step) {
+  const cfg = _WF_FOOTER_CONFIG[step];
+  if (!cfg) return;
+
+  if (step === "index") {
+    const selected = batchState.selectedIds.size
+      ? [...batchState.selectedIds]
+      : (batchState.uploadData?.submissions || []).map((s) => s.submission_id);
+    if (selected.length > 0) {
+      runBatchValidation(selected);
+    } else {
+      unlockStep("validate");
+      goToStep("validate");
     }
     return;
   }
 
-  footer.hidden = false;
-  footer.style.display = "flex";
-  delete footer.dataset.disabledReason;
-  footer.removeAttribute("title");
+  if (step === "export") return;
+  if (!cfg.next) return;
 
-  // Show global Start New bar on non-upload steps
-  const gnBar = el("global-start-new");
-  if (gnBar) { gnBar.hidden = false; gnBar.style.display = ""; }
+  unlockStep(cfg.next);
+  if (cfg.next === "run")     { renderRunStep().catch(() => {}); }
+  if (cfg.next === "score")   { renderScoreStep().catch(() => {}); }
+  if (cfg.next === "summary") { renderSummaryStep(); }
+  if (cfg.next === "export")  { _syncExportStep(); }
+  goToStep(cfg.next);
+}
 
-  // Back button
+function _syncStepActionRow(step) {
+  _syncInactiveStepActions(step);
+  if (step === "upload") return;
+
+  const cfg = _WF_FOOTER_CONFIG[step];
+  const row = _ensureStepActionRow(step);
+  if (!cfg || !row) return;
+
+  row.hidden = false;
+  row.style.display = "";
+  delete row.dataset.disabledReason;
+  row.removeAttribute("title");
+
+  const backBtn = row.querySelector(".step-action-back");
+  const primaryBtn = row.querySelector(".step-action-primary");
+
   if (backBtn) {
-    backBtn.style.visibility = "visible";  // reset (upload step hides it via visibility)
     if (cfg.back) {
       backBtn.style.display = "";
       backBtn.onclick = () => goToStep(cfg.back);
     } else {
       backBtn.style.display = "none";
+      backBtn.onclick = null;
     }
   }
 
-  // Next / Continue button
-  if (nextBtn) {
-    let nextLabel = cfg.nextLabel || "Continue →";
-    if (step === "run" && _allValidationResultsAreResultOnly()) {
-      nextLabel = "Continue to Score";
-    }
-    nextBtn.textContent   = nextLabel;
-    nextBtn.style.opacity = "";
-    nextBtn.title         = "";
-    nextBtn.removeAttribute("aria-describedby");
-    nextBtn.removeAttribute("aria-label");
-    delete nextBtn.dataset.disabledReason;
+  if (!primaryBtn) return;
+  const label = _stepPrimaryLabel(step);
+  if (!primaryBtn.classList.contains("btn-loading")) primaryBtn.textContent = label;
+  primaryBtn.style.opacity = "";
+  primaryBtn.title = "";
+  primaryBtn.removeAttribute("aria-describedby");
+  primaryBtn.removeAttribute("aria-label");
+  delete primaryBtn.dataset.disabledReason;
 
-    // (upload case handled above — never reaches here)
+  const canProceed = step === "export" ? true : _isStepReady(step);
+  primaryBtn.disabled = !canProceed;
+  primaryBtn.onclick = () => {
+    if (primaryBtn.disabled) return;
+    _advanceWizardStep(step);
+  };
 
-    const canProceed  = _isStepReady(step);
-    nextBtn.disabled  = !canProceed;
-    const blockedReason = canProceed ? "" : _stepBlockedReason(step);
-    if (blockedReason) {
-      nextBtn.title = blockedReason;
-      nextBtn.dataset.disabledReason = blockedReason;
-      nextBtn.setAttribute("aria-label", `${nextLabel}. ${blockedReason}`);
-      footer.dataset.disabledReason = blockedReason;
-      footer.title = blockedReason;
-    }
+  const blockedReason = canProceed ? "" : _stepBlockedReason(step);
+  if (blockedReason) {
+    primaryBtn.title = blockedReason;
+    primaryBtn.dataset.disabledReason = blockedReason;
+    primaryBtn.setAttribute("aria-label", `${label}. ${blockedReason}`);
+    row.dataset.disabledReason = blockedReason;
+    row.title = blockedReason;
+  }
 
-    // Index step: "Validate All →" triggers the validate-all handler
-    if (step === "index") {
-      nextBtn.onclick = () => {
-        if (nextBtn.disabled) return;
-        const selected = batchState.selectedIds.size
-          ? [...batchState.selectedIds]
-          : (batchState.uploadData?.submissions || []).map((s) => s.submission_id);
-        if (selected.length > 0) {
-          runBatchValidation(selected);
-        } else {
-          unlockStep("validate");
-          goToStep("validate");
-        }
-      };
-    } else if (cfg.next) {
-      nextBtn.onclick = () => {
-        if (nextBtn.disabled) return;
-        unlockStep(cfg.next);
-        if (cfg.next === "run")     { renderRunStep().catch(() => {}); }
-        if (cfg.next === "score")   { renderScoreStep().catch(() => {}); }
-        if (cfg.next === "summary") { renderSummaryStep(); }
-        if (cfg.next === "export")  { _syncExportStep(); }
-        goToStep(cfg.next);
-      };
-    } else if (step === "export") {
-      nextBtn.disabled      = false;
-      nextBtn.onclick       = null;
-      nextBtn.style.opacity = "0.6";
-      nextBtn.title         = "All done — start a new session anytime.";
-      delete footer.dataset.disabledReason;
-      footer.removeAttribute("title");
-    }
+  if (step === "export") {
+    primaryBtn.style.opacity = "0.72";
+    primaryBtn.title = "All done. Start a new session anytime.";
+    delete row.dataset.disabledReason;
+    row.removeAttribute("title");
   }
 }
 
+function _updateWizardFooter(step) {
+  const cfg = _WF_FOOTER_CONFIG[step];
+  if (!cfg) return;
+  _hideLegacyWizardFooter();
+
+  if (step === "upload") {
+    const gnBar = el("global-start-new");
+    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }  // no Start-new on first step
+    _syncUploadSubmitButton();
+    _syncInactiveStepActions("upload");
+    return;
+  }
+
+  // Show global Start New bar on non-upload steps
+  const gnBar = el("global-start-new");
+  if (gnBar) { gnBar.hidden = false; gnBar.style.display = ""; }
+  _syncStepActionRow(step);
+}
+
 // True when a submission source/file is selected on the Upload step (so the
-// shared footer's "Upload and Detect" button can enable). Edit mode (re-validate
+// in-card "Upload and Detect" button can enable). Edit mode (re-validate
 // an existing submission) is always ready.
 function _canUpload() {
   if (state.mode === "edit" && state.submissionId) return true;
@@ -499,6 +558,27 @@ function _canUpload() {
   if (source === "zenodo") return !!(el("zenodo-input") && el("zenodo-input").value.trim());
   if (source === "github") return !!(el("github-url") && el("github-url").value.trim());
   return !!state.pendingLocalFiles; // local
+}
+
+function _syncUploadSubmitButton() {
+  const submitBtn = el("submit-btn");
+  if (!submitBtn) return;
+  const label = submitLabel();
+  if (!submitBtn.classList.contains("btn-loading")) {
+    submitBtn.textContent = label;
+  }
+  const canUpload = _canUpload();
+  submitBtn.disabled = !canUpload;
+  if (!canUpload) {
+    const reason = "Choose a submission file or source to continue.";
+    submitBtn.title = reason;
+    submitBtn.dataset.disabledReason = reason;
+    submitBtn.setAttribute("aria-label", `${label}. ${reason}`);
+  } else {
+    submitBtn.title = "";
+    submitBtn.removeAttribute("aria-label");
+    delete submitBtn.dataset.disabledReason;
+  }
 }
 
 // Whether the current step allows proceeding to next
@@ -513,7 +593,7 @@ function _isStepReady(step) {
       // Warnings never block. Continue → Run is enabled when at least one
       // submission has ZERO blocking errors (r.passed === error_count === 0).
       // Run-readiness (runnable vs result-only) is decided on the Run step, so
-      // it must NOT gate the footer here — a result-only submission that passed
+      // it must NOT gate the action row here — a result-only submission that passed
       // with warnings still has 0 errors and must be allowed to continue.
       return results.some((r) => r.passed || issueCount(r, "errors") === 0);
     }
@@ -548,7 +628,7 @@ function _stepBlockedReason(step) {
   }
 }
 
-// Refresh wizard footer without changing step (e.g. after validation finishes)
+// Refresh local wizard actions without changing step (e.g. after validation finishes)
 function _refreshWizardFooter() {
   _updateWizardFooter(wf.step);
   _syncCompactProgress();
@@ -763,6 +843,7 @@ function submitLabel() {
 
 function syncSubmitLabel() {
   setLoading(el("submit-btn"), false, submitLabel());
+  _syncUploadSubmitButton();
 }
 
 // ── State reset ───────────────────────────────────────────────────────────────
@@ -1258,6 +1339,7 @@ function switchSource(type) {
   const panel = el(`source-${type}`);
   if (panel) panel.classList.add("active");
   _refreshWizardFooter();   // selection requirement differs per source
+  _syncUploadSubmitButton();
 }
 
 // ── Local file inputs ─────────────────────────────────────────────────────────
@@ -1350,13 +1432,19 @@ function setLocalFiles(files, label) {
   if (lbl) { lbl.textContent = label; lbl.className = "file-label ready"; }
   const srcErr = el("source-error");
   if (srcErr) srcErr.textContent = "";
-  _refreshWizardFooter();   // enable the footer "Upload and Detect" button
+  _refreshWizardFooter();   // enable the in-card "Upload and Detect" button
+  _syncUploadSubmitButton();
 }
 
-// Enable/disable the footer "Upload and Detect" button as Zenodo/GitHub inputs change.
+// Enable/disable the in-card "Upload and Detect" button as Zenodo/GitHub inputs change.
 ["zenodo-input", "github-url"].forEach((id) => {
   const inp = el(id);
-  if (inp) inp.addEventListener("input", () => { if (wf.step === "upload") _refreshWizardFooter(); });
+  if (inp) inp.addEventListener("input", () => {
+    if (wf.step === "upload") {
+      _refreshWizardFooter();
+      _syncUploadSubmitButton();
+    }
+  });
 });
 
 // ── Form validation ───────────────────────────────────────────────────────────
@@ -1551,9 +1639,7 @@ async function handleSubmit() {
   if (!validateForm()) return;
 
   requestInProgress = true;
-  // The visible action lives in the shared wizard footer on the upload step;
-  // fall back to the (hidden) in-card button elsewhere.
-  const btn = (wf.step === "upload" && el("wf-next-btn")) ? el("wf-next-btn") : el("submit-btn");
+  const btn = el("submit-btn");
   clearSubmitStatus();
 
   // ── Edit mode: reuse existing submission, re-validate ────────────────────
@@ -1569,6 +1655,7 @@ async function handleSubmit() {
     } finally {
       requestInProgress = false;
       setLoading(btn, false, submitLabel());
+      _syncUploadSubmitButton();
     }
     return;
   }
@@ -1649,12 +1736,13 @@ async function handleSubmit() {
   } finally {
     requestInProgress = false;
     setLoading(btn, false, submitLabel());
+    _syncUploadSubmitButton();
   }
 }
 
 // ── Step 2: Review detected submissions ───────────────────────────────────────
 
-// Render detected submissions as clean cards. Selection state and footer-driven
+// Render detected submissions as clean cards. Selection state and action-row
 // validation both work through batchState.selectedIds.
 function renderBatchTable(submissions) {
   const wrap = el("batch-table-wrap");
@@ -1824,8 +1912,8 @@ if (batchNewBtn) {
 async function runBatchValidation(submissionIds) {
   if (!submissionIds.length) return;
   const statusEl = el("batch-validate-status");
-  const footerNext = wf.step === "index" ? el("wf-next-btn") : null;
-  const footerLabel = footerNext ? footerNext.textContent.trim() : "Validate Submission";
+  const actionNext = wf.step === "index" ? _stepActionPrimary("index") : null;
+  const actionLabel = actionNext ? actionNext.textContent.trim() : "Validate Submission";
 
   const disableBtns = (v) => {
     [batchValSelBtn, batchValAllBtn, batchSelectAllBtn, batchDeselectAllBtn].forEach((b) => {
@@ -1833,7 +1921,7 @@ async function runBatchValidation(submissionIds) {
     });
   };
   disableBtns(true);
-  if (footerNext) setLoading(footerNext, true, "Validating");
+  if (actionNext) setLoading(actionNext, true, "Validating");
   if (statusEl) {
     statusEl.style.display = "block";
     statusEl.className = "submit-status status-info";
@@ -1897,7 +1985,7 @@ async function runBatchValidation(submissionIds) {
       statusEl.textContent = err.message || "Validation failed.";
     }
   } finally {
-    if (footerNext) setLoading(footerNext, false, footerLabel);
+    if (actionNext) setLoading(actionNext, false, actionLabel);
     disableBtns(false);
     _syncBatchValidateBtn();
     _refreshWizardFooter();
@@ -1984,7 +2072,7 @@ function renderValidateStep(data, isSingleMode) {
     ? "Validation failed"
     : totalWarnings > 0 ? "Validation needs attention" : "Validation complete";
 
-  // Pre-compute counts for summary and footer readiness.
+  // Pre-compute counts for summary and action readiness.
   const runnableCount    = results.filter((r) => r.run_readiness === "runnable"
                                                || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
   const resultOnlyCount  = results.filter((r) => r.run_readiness === "result_only"
@@ -2185,7 +2273,7 @@ function renderValidateStep(data, isSingleMode) {
   if (singleActions) singleActions.style.display = single ? "" : "none";
 
   const backBtn = el("batch-back-to-batch-btn");
-  if (backBtn) backBtn.style.display = batchState.isBatch ? "" : "none";
+  if (backBtn) backBtn.style.display = "none";
 
   // Show/hide "no runnable" message — only show when there are truly no valid submissions
   const noRunnableMsg = el("validate-no-runnable-msg");
@@ -2471,7 +2559,7 @@ function _refreshRunProgress() {
       + `<span class="scb-text">Execution complete — ${parts.join(" · ")}</span>`;
     _showCompletionBanner("run-completion-banner", bannerHtml, bannerType);
 
-    // Unlock Score step and refresh footer
+    // Unlock Score step and refresh local actions
     unlockStep("score");
     _refreshWizardFooter();
     renderScoreStep().catch(() => {});
@@ -2516,14 +2604,8 @@ async function renderRunStep() {
   if (list) list.style.display = allResultOnly ? "none" : "";
   const skippedContinueBtn = el("run-skipped-continue-btn");
   if (skippedContinueBtn) {
-    const newBtn = skippedContinueBtn.cloneNode(true);
-    skippedContinueBtn.replaceWith(newBtn);
-    newBtn.addEventListener("click", () => {
-      unlockStep("score");
-      unlockStep("export");
-      goToStep("score");
-      renderScoreStep().catch(() => {});
-    });
+    skippedContinueBtn.style.display = "none";
+    skippedContinueBtn.onclick = null;
   }
 
   // ── Settings card (hide when all result-only) ──────────────────────────────
@@ -2683,6 +2765,7 @@ async function renderRunStep() {
   });
 
   _applyRunFilters();
+  _refreshWizardFooter();
 }
 
 // Render the run-status cell content for a given execStatus + runnable
@@ -3201,24 +3284,58 @@ function _updateValCardExecBadge(subId, newStatus) {
 
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 
+function _leaderboardStatusLabel(status) {
+  switch (status) {
+    case "scored":         return "Scored";
+    case "failed":         return "Failed";
+    case "not_configured": return "Needs setup";
+    case "not_ready":      return "Incomplete";
+    case "ready":          return "Ready";
+    default:               return status ? status.replace(/_/g, " ") : "Unknown";
+  }
+}
+
+function _leaderboardStatusClass(status) {
+  const clean = String(status || "unknown").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
+  return `leaderboard-status-badge leaderboard-status-${clean}`;
+}
+
+function _formatLeaderboardTimestamp(value) {
+  if (!value) return { date: "—", time: "" };
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return { date: String(value), time: "" };
+  return {
+    date: dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }),
+    time: dt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+  };
+}
+
 async function loadLeaderboard() {
   const card   = el("leaderboard-card");
   const tbody  = el("leaderboard-table-body");
   const sub    = el("leaderboard-sub");
   if (!card || !tbody) return;
 
+  card.style.display = "";
+  tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Loading scored submissions…</td></tr>`;
+  if (sub) sub.textContent = "Refreshing scored submissions";
+
   try {
     const res  = await fetch(`${API}/api/leaderboard`);
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Could not load scored submissions.</td></tr>`;
+      if (sub) sub.textContent = "Refresh failed";
+      return;
+    }
     const data = await res.json();
     const entries = data.entries || [];
 
     if (entries.length === 0) {
-      card.style.display = "none";
+      tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">No scored submissions yet.</td></tr>`;
+      if (sub) sub.textContent = "No submissions scored yet";
       return;
     }
 
-    card.style.display = "";
     if (sub) sub.textContent = `${entries.length} submission${entries.length !== 1 ? "s" : ""} scored`;
 
     tbody.innerHTML = entries.map((e) => {
@@ -3228,22 +3345,22 @@ async function loadLeaderboard() {
       const silver  = m.osipi_score_silver != null ? `${m.osipi_score_silver}%`
                     : m.osipi_silver_score != null  ? `${m.osipi_silver_score}%`
                     : "—";
-      const statusCls = e.status === "scored" ? "sc-badge-scored"
-                      : e.status === "failed"  ? "sc-badge-failed"
-                      : "sc-badge-nc";
-      const ts = e.scored_at ? new Date(e.scored_at).toLocaleString() : "—";
+      const status = e.status || "unknown";
+      const ts = _formatLeaderboardTimestamp(e.scored_at);
+      const safeSid = escapeHtml(e.submission_id || "unknown");
       return `<tr>
-        <td style="font-family:monospace;font-size:0.78rem">${escapeHtml(e.submission_id)}</td>
-        <td><span class="rs-badge ${statusCls}">${escapeHtml(e.status)}</span></td>
-        <td style="font-size:0.78rem;color:var(--text-secondary)">${escapeHtml(ts)}</td>
-        <td>${escapeHtml(acc)}</td>
-        <td>${escapeHtml(rep)}</td>
-        <td>${escapeHtml(silver)}</td>
+        <td class="leaderboard-submission-cell"><span title="${safeSid}">${safeSid}</span></td>
+        <td><span class="${_leaderboardStatusClass(status)}">${escapeHtml(_leaderboardStatusLabel(status))}</span></td>
+        <td class="leaderboard-time-cell"><span>${escapeHtml(ts.date)}</span>${ts.time ? `<small>${escapeHtml(ts.time)}</small>` : ""}</td>
+        <td class="leaderboard-metric-cell">${escapeHtml(acc)}</td>
+        <td class="leaderboard-metric-cell">${escapeHtml(rep)}</td>
+        <td class="leaderboard-metric-cell">${escapeHtml(silver)}</td>
       </tr>`;
     }).join("");
 
   } catch (_) {
-    // Silently skip — leaderboard is non-critical
+    tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Could not load scored submissions.</td></tr>`;
+    if (sub) sub.textContent = "Refresh failed";
   }
 }
 
@@ -3655,6 +3772,99 @@ function _summaryPanel(title, bodyHtml) {
   return `<section class="summary-nifti-card">
     <div class="summary-nifti-title">${escapeHtml(title)}</div>
     <div class="summary-nifti-body">${bodyHtml}</div>
+  </section>`;
+}
+
+function _metricOrUnavailable(value, formatter = _fmtMetricVal) {
+  return typeof value === "number" && isFinite(value) ? formatter(value) : "not available";
+}
+
+function _referenceStatusBadge(status) {
+  const raw = status || "reference_not_available";
+  const state = raw === "available" || raw === "compared" ? "complete"
+    : raw === "partial_reference_scoring" ? "warning"
+    : raw === "scoring_error" ? "error"
+    : raw === "reference_not_available" ? "pending"
+    : "ready";
+  const label = raw === "available" ? "Complete"
+    : raw === "partial_reference_scoring" ? "Partial reference scoring"
+    : raw === "reference_not_available" ? "Reference unavailable"
+    : raw === "scoring_error" ? "Scoring error"
+    : raw;
+  return statusPill(label, state);
+}
+
+function _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount) {
+  if (valTotal === 0) return { state: "pending", label: "Needs attention", refStatus: "not_started" };
+  if (valFailed > 0) return { state: "error", label: "Needs attention", refStatus: mapSummary.referenceStatus };
+  if (mapSummary.referenceStatus === "partial_reference_scoring") {
+    return { state: "warning", label: "Partial reference scoring", refStatus: mapSummary.referenceStatus };
+  }
+  if (mapSummary.referenceStatus === "scoring_error") {
+    return { state: "error", label: "Needs attention", refStatus: mapSummary.referenceStatus };
+  }
+  if (mapSummary.referenceComparedMapCount > 0) {
+    return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
+  }
+  if (scoredCount > 0 || mapSummary.mapCount > 0) {
+    return { state: "pending", label: "Reference unavailable", refStatus: "reference_not_available" };
+  }
+  return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
+}
+
+function _renderReferenceReportSection(mapSummary) {
+  const wholeRows = mapSummary.referenceRows.filter((row) => row.scope === "whole map" || !row.scope);
+  if (!wholeRows.length) return "";
+  const maskRowsFor = (row) => mapSummary.referenceRows.filter((mask) =>
+    mask.scope && mask.scope !== "whole map"
+    && mask.submitted_file === row.submitted_file
+    && (mask.detected_map_type || "") === (row.detected_map_type || "")
+  );
+  return `<section class="summary-section summary-reference-report">
+    <div class="summary-section-header">
+      <span class="summary-section-kicker">Reference-Based Scoring</span>
+      <h2>Reference-Based Scoring</h2>
+      <p>Scientific comparison metrics are shown only where matching reference maps or masks were available.</p>
+    </div>
+    <div class="summary-reference-list">
+      ${wholeRows.map((row) => {
+        const masks = maskRowsFor(row);
+        return `<article class="summary-reference-card">
+          <div class="summary-reference-card-head">
+            <div>
+              <div class="summary-reference-map">${escapeHtml(row.detected_map_type || "Unknown map")}</div>
+              <div class="summary-reference-file" title="${escapeHtml(row.submitted_file || "")}">${escapeHtml(row.submitted_file || "submitted map")}</div>
+            </div>
+            ${_referenceStatusBadge(row.status || mapSummary.referenceStatus)}
+          </div>
+          <div class="summary-reference-metrics">
+            ${_summaryMetric("Status", row.status || mapSummary.referenceStatus)}
+            ${_summaryMetric("RMSE", _metricOrUnavailable(row.rmse))}
+            ${_summaryMetric("MAE", _metricOrUnavailable(row.mae))}
+            ${_summaryMetric("Bias", _metricOrUnavailable(row.bias))}
+            ${_summaryMetric("CoV", _metricOrUnavailable(row.coefficient_of_variation))}
+            ${_summaryMetric("Correlation", _metricOrUnavailable(row.correlation))}
+          </div>
+          ${masks.length ? `<details class="summary-mask-details">
+            <summary>Mask / ROI metrics</summary>
+            <div class="summary-mask-table-wrap">
+              <table class="summary-mask-table">
+                <thead><tr><th>Mask / ROI</th><th>Status</th><th>RMSE</th><th>MAE</th><th>Bias</th><th>CoV</th><th>Correlation</th></tr></thead>
+                <tbody>${masks.map((mask) => `<tr>
+                  <td>${escapeHtml(mask.scope || mask.mask_name || "mask")}</td>
+                  <td>${escapeHtml(mask.status || "")}</td>
+                  <td>${escapeHtml(_metricOrUnavailable(mask.rmse))}</td>
+                  <td>${escapeHtml(_metricOrUnavailable(mask.mae))}</td>
+                  <td>${escapeHtml(_metricOrUnavailable(mask.bias))}</td>
+                  <td>${escapeHtml(_metricOrUnavailable(mask.coefficient_of_variation))}</td>
+                  <td>${escapeHtml(_metricOrUnavailable(mask.correlation))}</td>
+                </tr>`).join("")}</tbody>
+              </table>
+            </div>
+          </details>` : ""}
+        </article>`;
+      }).join("")}
+    </div>
   </section>`;
 }
 
@@ -4146,6 +4356,7 @@ async function renderScoreStep() {
     }));
     saveSessionState();
     _syncCompactProgress();
+    _refreshWizardFooter();
     return;
   }
 
@@ -4179,10 +4390,16 @@ async function renderScoreStep() {
 
   // ── 3. Submission scoring rows (hidden until scoring runs) ──────────────────
   const tbody = el("score-table-body");
-  if (!tableCard || !tbody) return;
+  if (!tableCard || !tbody) {
+    _refreshWizardFooter();
+    return;
+  }
 
   const subs = _getKnownSubmissions();
-  if (!subs.length) return;
+  if (!subs.length) {
+    _refreshWizardFooter();
+    return;
+  }
 
   tableCard.style.display = "none";
   tbody.innerHTML = "";
@@ -4199,6 +4416,7 @@ async function renderScoreStep() {
     const ct  = sub.challenge_type || getChallengeType() || "dce";
     _fetchAndUpdateScoreStatus(sid, ct);
   }
+  _refreshWizardFooter();
 }
 
 // Build an HTML score table row for a given submission.
@@ -4456,7 +4674,7 @@ document.addEventListener("click", (e) => {
 function renderSummaryStep() {
   unlockStep("summary");
   unlockStep("export");
-  // Keep the footer in sync so Continue → Export is enabled the moment we arrive.
+  // Keep the action row in sync so Continue to Export is enabled the moment we arrive.
   if (typeof _refreshWizardFooter === "function") _refreshWizardFooter();
 
   const container = el("summary-cards");
@@ -4502,136 +4720,95 @@ function renderSummaryStep() {
   const analysisEntries = _niftiAnalysisEntries();
   const mapSummary = _aggregateNiftiAnalyses(analysisEntries);
 
-  // ── Overall status + one-sentence takeaway ──────────────────────────────────
-  let oState, oLabel, oSentence;
-  if (valTotal === 0) {
-    oState = "pending"; oLabel = "Pending"; oSentence = "No submissions have been validated yet.";
-  } else if (valFailed > 0) {
-    oState = "error"; oLabel = "Needs attention";
-    oSentence = `${valFailed} submission${valFailed !== 1 ? "s" : ""} failed validation. You can still export the available results.`;
-  } else if (scoredCount > 0) {
-    oState = "complete"; oLabel = "Complete";
-    oSentence = "Validation passed and scoring metrics are ready for export.";
-  } else if (!scoringConfigured) {
-    oState = "ready"; oLabel = "Ready for export";
-    oSentence = "Validation and execution results are ready for export.";
-  } else if (valWarned > 0) {
-    oState = "ready"; oLabel = "Ready for export";
-    oSentence = "Validation passed with warnings. Results are ready for export.";
-  } else {
-    oState = "ready"; oLabel = "Ready for export";
-    oSentence = "Validation passed. Results are ready for export.";
-  }
-  const heroHtml = `
-    <section class="summary-hero is-${oState}">
-      <div class="summary-hero-main">
-        <span class="summary-hero-eyebrow">Evaluation Summary</span>
-        <p class="summary-hero-sentence">${escapeHtml(oSentence)}</p>
+  // ── Final report sections ──────────────────────────────────────────────────
+  const overall = _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount);
+  const submissionName = valResults.length === 1
+    ? submissionDisplayName(valResults[0], valResults[0].submission_id || "Submission")
+    : valResults.length > 1 ? `${valResults.length} submissions`
+      : scoredEntries[0]?.displayName || state.submissionId || "not available";
+  const challengeType = valResults[0]?.challenge_type || getChallengeType() || "not available";
+  const comparedMapText = mapSummary.referenceComparedMapCount > 0
+    ? `${mapSummary.referenceComparedMapCount}/${mapSummary.referenceMapCount || mapSummary.referenceComparedMapCount}`
+    : String(mapSummary.mapCount || 0);
+  const referenceUnavailableNote = mapSummary.referenceComparedMapCount > 0
+    ? ""
+    : `<p class="summary-qc-only-note">Reference scoring unavailable — showing QC metrics only.</p>`;
+  const referenceBadgeHtml = mapSummary.referenceComparedMapCount > 0
+    || mapSummary.referenceStatus === "partial_reference_scoring"
+    || mapSummary.referenceStatus === "scoring_error"
+    ? _referenceStatusBadge(mapSummary.referenceStatus)
+    : statusPill("QC only", "pending");
+  const finalMetricRows = mapSummary.referenceComparedMapCount > 0
+    ? `
+      ${_summaryMetric("RMSE", _metricOrUnavailable(mapSummary.referenceMetrics.rmse))}
+      ${_summaryMetric("MAE", _metricOrUnavailable(mapSummary.referenceMetrics.mae))}
+      ${_summaryMetric("Bias", _metricOrUnavailable(mapSummary.referenceMetrics.bias))}
+      ${_summaryMetric("CoV", _metricOrUnavailable(mapSummary.referenceMetrics.coefficientOfVariation))}
+    `
+    : "";
+  const finalOutputHtml = `
+    <section class="summary-section summary-final-output">
+      <div class="summary-section-header">
+        <span class="summary-section-kicker">Final Output</span>
+        <div class="summary-final-title-row">
+          <h2>Final Output</h2>
+          <div class="summary-final-badges">
+            ${statusPill(overall.label, overall.state)}
+            ${referenceBadgeHtml}
+          </div>
+        </div>
+        ${referenceUnavailableNote}
       </div>
-      ${statusPill(oLabel, oState)}
+      <div class="summary-final-grid">
+        ${_summaryMetric("Overall status", overall.label)}
+        ${_summaryMetric("Submission name", submissionName)}
+        ${_summaryMetric("Challenge type", challengeType)}
+        ${_summaryMetric("Detected map types", _listText(mapSummary.detected))}
+        ${_summaryMetric("Number of maps scored", comparedMapText)}
+        ${_summaryMetric("Reference scoring status", mapSummary.referenceStatus || "reference_not_available")}
+      </div>
+      ${finalMetricRows ? `<div class="summary-final-metrics">${finalMetricRows}</div>` : ""}
     </section>`;
 
-  // ── Status rail (recap, not a nav) ──────────────────────────────────────────
-  const railSteps = [
-    { label: "Upload",   state: valTotal > 0 ? "complete" : "pending",
-      note: valTotal > 0 ? "Complete" : "Pending" },
-    { label: "Validate", state: valTotal === 0 ? "pending" : valFailed > 0 ? "error" : valWarned > 0 ? "warning" : "complete",
-      note: valTotal === 0 ? "Pending" : valFailed > 0 ? "Errors" : valWarned > 0 ? "Warnings" : "Complete" },
-    { label: "Run",      state: execRan > 0 ? "complete" : execSkipped > 0 ? "skipped" : execCannot > 0 ? "error" : "pending",
-      note: execRan > 0 ? "Ran" : execSkipped > 0 ? "Skipped" : execCannot > 0 ? "Cannot run" : "Pending" },
-    { label: "Score",    state: scoredCount > 0 ? "complete" : scoringFailed > 0 ? "error" : scoringConfigured ? "ready" : "pending",
-      note: scoredCount > 0 ? "Complete" : scoringFailed > 0 ? "Failed" : scoringConfigured ? "Ready" : "Not configured" },
-    { label: "Export",   state: "ready", note: "Ready" },
+  const qcRows = [
+    _summaryMetric("Finite voxel percentage", `${_fmtPercentValue(mapSummary.finitePercent)} (${mapSummary.finiteVoxelCount}/${mapSummary.totalVoxelCount})`, "good"),
+    _summaryMetric("Negative voxel percentage", _fmtPercentValue(mapSummary.negativePercent)),
+    _summaryMetric("NaN count", String(mapSummary.nanCount)),
+    _summaryMetric("Inf count", String(mapSummary.infCount)),
+    _summaryMetric("Coefficient of variation", _metricOrUnavailable(mapSummary.coefficientOfVariation)),
   ];
-  const railHtml = `<div class="summary-rail" role="list">` + railSteps.map((s) => `
-    <span class="summary-rail-item is-${s.state}" role="listitem">
-      <span class="summary-rail-dot" aria-hidden="true"></span>${escapeHtml(s.label)} — ${escapeHtml(s.note)}
-    </span>`).join("") + `</div>`;
-
-  // ── Validation block (clear: N checked, warnings, errors) ───────────────────
-  const validationHtml = `
-    <div class="sa-h">Validation</div>
-    <div class="summary-validation">
-      <div class="sv-main">
-        <span class="sv-num">${valTotal}</span>
-        <span class="sv-cap">submission${valTotal !== 1 ? "s" : ""} checked</span>
+  if (typeof mapSummary.meansByType.CBF === "number") qcRows.push(_summaryMetric("Mean CBF", `${_fmtMetricVal(mapSummary.meansByType.CBF)} mL/100g/min`));
+  if (typeof mapSummary.meansByType.ATT === "number") qcRows.push(_summaryMetric("Mean ATT", `${_fmtMetricVal(mapSummary.meansByType.ATT)} seconds`));
+  if (typeof mapSummary.meansByType.Ktrans === "number") qcRows.push(_summaryMetric("Mean Ktrans", `${_fmtMetricVal(mapSummary.meansByType.Ktrans)} min^-1`));
+  const qcSummaryHtml = `
+    <section class="summary-section summary-qc-summary">
+      <div class="summary-section-header">
+        <span class="summary-section-kicker">Key QC Summary</span>
+        <h2>Key QC Summary</h2>
+        <p>These are quality-control/map statistics, not official OSIPI scores.</p>
       </div>
-      <div class="sv-chips">
-        <span class="sv-chip ${totalWarnings > 0 ? "is-warn" : ""}"><b>${totalWarnings}</b> warning${totalWarnings !== 1 ? "s" : ""}</span>
-        <span class="sv-chip ${totalErrors > 0 ? "is-err" : ""}"><b>${totalErrors}</b> error${totalErrors !== 1 ? "s" : ""}</span>
-      </div>
-    </div>`;
-
-  // ── Execution block (intentional, not pending) ──────────────────────────────
-  let exState, exLabel, exMsg;
-  if (execRan > 0)          { exState = "complete"; exLabel = "Complete"; exMsg = `${execRan} submission${execRan !== 1 ? "s" : ""} ran in Docker.`; }
-  else if (execSkipped > 0) { exState = "skipped";  exLabel = "Skipped";  exMsg = "Result maps were already provided, so Docker execution was not needed."; }
-  else if (execFailed > 0)  { exState = "error";    exLabel = "Failed";   exMsg = `${execFailed} execution${execFailed !== 1 ? "s" : ""} did not complete.`; }
-  else if (execCannot > 0)  { exState = "error";    exLabel = "Cannot run"; exMsg = "No runnable code or result maps were found."; }
-  else                      { exState = "pending";  exLabel = "Pending";  exMsg = "No execution has run yet."; }
-  const executionHtml = `
-    <div class="sa-h-row"><span class="sa-h">Execution</span>${statusPill(exLabel, exState)}</div>
-    <p class="summary-exec-text">${escapeHtml(exMsg)}</p>`;
-
-  // ── Scientific map summary cards ────────────────────────────────────────────
-  const mapQualityHtml = _summaryPanel("Map quality", `
-    ${_summaryMetric("Map count", String(mapSummary.mapCount))}
-    ${_summaryMetric("Coefficient of variation", mapSummary.coefficientOfVariation == null ? "not available" : _fmtMetricVal(mapSummary.coefficientOfVariation))}
-    ${_summaryMetric("Standard deviation", mapSummary.standardDeviation == null ? "not available" : _fmtMetricVal(mapSummary.standardDeviation))}
-  `);
-  const parameterMapsHtml = _summaryPanel("Parameter maps detected", `
-    ${_summaryMetric("Detected maps", _listText(mapSummary.detected))}
-    ${_summaryMetric("CBF maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "CBF").length))}
-    ${_summaryMetric("ATT maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "ATT").length))}
-    ${_summaryMetric("Ktrans maps", String(mapSummary.maps.filter((m) => m.detected_map_type === "Ktrans").length))}
-  `);
-  const voxelValidityHtml = _summaryPanel("Voxel validity", `
-    ${_summaryMetric("Finite voxels", `${_fmtPercentValue(mapSummary.finitePercent)} (${mapSummary.finiteVoxelCount}/${mapSummary.totalVoxelCount})`, "good")}
-    ${_summaryMetric("Negative voxels", _fmtPercentValue(mapSummary.negativePercent))}
-    ${_summaryMetric("NaN voxels", String(mapSummary.nanCount))}
-    ${_summaryMetric("Inf voxels", String(mapSummary.infCount))}
-  `);
-  const meanRows = [];
-  if (mapSummary.referenceComparedMapCount > 0) {
-    meanRows.push(_summaryMetric("Reference status", mapSummary.referenceStatus));
-    meanRows.push(_summaryMetric("Compared maps", `${mapSummary.referenceComparedMapCount}/${mapSummary.referenceMapCount || mapSummary.referenceComparedMapCount}`));
-    meanRows.push(_summaryMetric("RMSE", mapSummary.referenceMetrics.rmse == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.rmse)));
-    meanRows.push(_summaryMetric("MAE", mapSummary.referenceMetrics.mae == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.mae)));
-    meanRows.push(_summaryMetric("Bias", mapSummary.referenceMetrics.bias == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.bias)));
-    meanRows.push(_summaryMetric("Reference CoV", mapSummary.referenceMetrics.coefficientOfVariation == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.coefficientOfVariation)));
-    if (mapSummary.referenceStatus === "partial_reference_scoring") {
-      meanRows.push(_summaryMetric("Map status", mapSummary.referenceMapStatusText));
-    }
-  } else {
-    if (typeof mapSummary.meansByType.CBF === "number") meanRows.push(_summaryMetric("Mean CBF", `${_fmtMetricVal(mapSummary.meansByType.CBF)} mL/100g/min`));
-    if (typeof mapSummary.meansByType.ATT === "number") meanRows.push(_summaryMetric("Mean ATT", `${_fmtMetricVal(mapSummary.meansByType.ATT)} seconds`));
-    if (typeof mapSummary.meansByType.Ktrans === "number") meanRows.push(_summaryMetric("Mean Ktrans", `${_fmtMetricVal(mapSummary.meansByType.Ktrans)} min^-1`));
-    if (!meanRows.length) meanRows.push(_summaryMetric("Mean CBF / ATT", "not detected"));
-    meanRows.push(_summaryMetric("Reference status", mapSummary.referenceStatus));
-    if (mapSummary.referenceMapStatusText !== "not available") {
-      meanRows.push(_summaryMetric("Map status", mapSummary.referenceMapStatusText));
-    }
-  }
-  const mapStatsHtml = _summaryPanel("Map statistics", meanRows.join(""));
-  const analyticsHtml = `
-    <section class="summary-nifti-grid">
-      ${mapQualityHtml}
-      ${parameterMapsHtml}
-      ${voxelValidityHtml}
-      ${mapStatsHtml}
+      <div class="summary-vertical-metrics">${qcRows.join("")}</div>
     </section>`;
 
-  // ── Export readiness (compact two-column checklist) ──────────────────────────
+  const referenceReportHtml = _renderReferenceReportSection(mapSummary);
+
+  // ── Export readiness (stacked checklist) ────────────────────────────────────
   const checklist = [
     { label: "Validation CSV", ready: valTotal > 0 },
-    { label: "Execution CSV",  ready: valTotal > 0 },
     { label: "Scoring CSV",    ready: scoredCount > 0 },
     { label: "Combined CSV",   ready: valTotal > 0 },
     { label: "HTML Report",    ready: valTotal > 0 },
   ];
+  if (mapSummary.referenceComparedMapCount > 0) {
+    checklist.push({ label: "Reference scoring JSON/CSV", ready: true });
+  }
   const checklistHtml = `
-    <section class="summary-export-checklist">
-      <div class="sa-h">Export readiness</div>
+    <section class="summary-section summary-export-checklist">
+      <div class="summary-section-header">
+        <span class="summary-section-kicker">Export Readiness</span>
+        <h2>Export Readiness</h2>
+        <p>Files available from the Export step.</p>
+      </div>
       <ul class="summary-check-grid">
         ${checklist.map((c) => `
           <li class="summary-check-item ${c.ready ? "is-ready" : "is-muted"}">
@@ -4640,9 +4817,24 @@ function renderSummaryStep() {
             <span class="summary-check-state">${c.ready ? "Ready" : "—"}</span>
           </li>`).join("")}
       </ul>
-    </section>`;
+        </section>`;
 
   // ── Collapsed technical details (issues, raw metrics, scorer note) ──────────
+  const qcSummaryJson = {
+    total_voxel_count: mapSummary.totalVoxelCount,
+    finite_voxel_count: mapSummary.finiteVoxelCount,
+    finite_voxel_percent: mapSummary.finitePercent,
+    negative_voxel_count: mapSummary.negativeVoxelCount,
+    negative_voxel_percent: mapSummary.negativePercent,
+    nan_count: mapSummary.nanCount,
+    inf_count: mapSummary.infCount,
+    coefficient_of_variation: mapSummary.coefficientOfVariation,
+    standard_deviation: mapSummary.standardDeviation,
+    detected_map_types: mapSummary.detected,
+    means_by_map_type: mapSummary.meansByType,
+    reference_based_scoring_available: mapSummary.referenceBasedScoringAvailable,
+    reference_status: mapSummary.referenceStatus,
+  };
   const issuesHtml = valResults.map((r) => {
     const name = escapeHtml(submissionDisplayName(r, r.submission_id || "submission"));
     const errs = dedupeMessages((r.errors || []).map(simplifyMessage));
@@ -4678,16 +4870,17 @@ function renderSummaryStep() {
         <div class="summary-detail-block"><div class="summary-detail-h">Validation issues</div>${issuesHtml || '<p class="summary-muted">No submissions.</p>'}</div>
         <div class="summary-detail-block"><div class="summary-detail-h">Reference scoring metrics</div>${_renderReferenceTechnicalTable(analysisEntries)}</div>
         <div class="summary-detail-block"><div class="summary-detail-h">Per-map NIfTI metadata and statistics</div>${_renderNiftiTechnicalTable(analysisEntries)}</div>
+        <div class="summary-detail-block"><div class="summary-detail-h">QC summary JSON</div><pre class="summary-json-block">${escapeHtml(JSON.stringify(qcSummaryJson, null, 2))}</pre></div>
         ${rawMetricTable}
       </div>
     </details>`;
 
   // ── Assemble ────────────────────────────────────────────────────────────────
   container.className = "summary-report";
-  container.innerHTML = heroHtml + railHtml + analyticsHtml + checklistHtml + detailsHtml;
+  container.innerHTML = finalOutputHtml + qcSummaryHtml + referenceReportHtml + checklistHtml + detailsHtml;
 }
 
-// "Continue to Summary" buttons on Score step (both configured + not-configured cards)
+// Legacy "Continue to Summary" buttons on Score step (hidden; action row is primary)
 function _goToSummary() {
   unlockStep("summary");
   unlockStep("export");
@@ -4695,7 +4888,7 @@ function _goToSummary() {
   goToStep("summary");
 }
 
-// Direct "Continue to Export" (used from summary step footer and internal nav)
+// Direct "Continue to Export" (used from summary action row and internal nav)
 function _goToExport() {
   unlockStep("export");
   _syncExportStep();
@@ -4818,7 +5011,7 @@ updateMapTypePills(getRadio("challenge_type") || "dce");
 syncSubmitLabel();
 
 // Stamp the initial step on <body> so CSS body[data-step] rules fire immediately,
-// then sync the footer (hides it on upload, shows it on other steps after restore).
+// then sync the local action area for the current step.
 document.body.dataset.step = wf.step;
 _syncWfNav();
 _updateWizardFooter(wf.step);
