@@ -227,20 +227,30 @@ submissions/validated/*
 !submissions/validated/.gitkeep
 data/reference_data/*
 !data/reference_data/.gitkeep
+
+# Generated output directories — keep only .gitkeep sentinels
 data/outputs/*
 !data/outputs/.gitkeep
 !data/outputs/execution/
+data/outputs/execution/*
 !data/outputs/execution/.gitkeep
+!data/outputs/execution_results/
+data/outputs/execution_results/*
 !data/outputs/manifests/
+data/outputs/manifests/*
 !data/outputs/manifests/.gitkeep
 !data/outputs/validation/
+data/outputs/validation/*
 !data/outputs/validation/.gitkeep
+!data/outputs/scoring/
+data/outputs/scoring/*
 /release/
 
 # Legacy generated output folder from older CLI defaults.
 /outputs/
 
 # Large medical imaging data should stay outside version control.
+# (Exceptions: test fixtures under tests/ are tracked intentionally.)
 *.nii
 *.nii.gz
 *.dcm
@@ -248,14 +258,16 @@ data/outputs/*
 *.mha
 *.mhd
 *.nrrd
+!tests/**/*.nii
+!tests/**/*.nii.gz
 
-# generated/local data
-data/extracted/
-data/outputs/validation/
-*.nii
-*.nii.gz
+# Uploaded ZIPs
 *.zip
+!tests/**/*.zip
+
+# Local environment
 .env
 .venv/
 __pycache__/
 test_data/
+data/scoring/

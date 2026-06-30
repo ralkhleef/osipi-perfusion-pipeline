@@ -83,9 +83,10 @@ def test_no_nifti_files_fails(tmp_path: Path) -> None:
 
 
 def test_unknown_challenge_type_fails(tmp_path: Path) -> None:
+    # "unknown" is not in KNOWN_CHALLENGE_TYPES {"asl", "dce", "dsc"} — must error.
     submission = _make_submission(tmp_path / "unknown_team")
 
-    result = validate_submission(submission, challenge_type="dsc", output_dir=tmp_path / "validation")
+    result = validate_submission(submission, challenge_type="unknown", output_dir=tmp_path / "validation")
 
     assert result.passed is False
     assert "UNKNOWN_CHALLENGE_TYPE" in [issue.code for issue in result.errors]

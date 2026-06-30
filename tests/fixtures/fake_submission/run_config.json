@@ -1,0 +1,4 @@
+{
+  "command": "python3 /submission/run.py --output /output",
+  "timeout_seconds": 120
+}

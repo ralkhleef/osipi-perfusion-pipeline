@@ -1,0 +1,12 @@
+{
+  "package_id": "demo_dce_scoring",
+  "name": "Demo DCE Scoring Package",
+  "version": "1.0.0",
+  "challenge_type": "dce",
+  "map_type": "ktrans",
+  "description": "DEMO/TEST package only. Outputs synthetic metrics for pipeline testing. NOT official OSIPI scoring.",
+  "metrics": ["demo_rmse", "demo_bias", "demo_cv", "demo_score"],
+  "entry_point": "scoring.py",
+  "call_mode": "standard",
+  "expected_input_pattern": "*.nii*"
+}

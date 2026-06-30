@@ -1,0 +1,7 @@
+{
+  "team_name": "OSIPI Test Team",
+  "contact_email": "test@osipi.org",
+  "challenge_type": "dce",
+  "submission_type": "reproducible",
+  "description": "Fake reproducible submission for integration testing. Writes synthetic DCE perfusion maps (ktrans, kep, vp) to /output."
+}

@@ -9,7 +9,17 @@ services:
       - "8000:8000"
     environment:
       PYTHONPATH: /app/backend:/app/src
+      # Docker-outside-of-Docker (DooD) path translation.
+      # The backend runs inside a container but spawns docker run on the HOST
+      # daemon via the socket mount. Volume paths in docker run -v must be
+      # host-visible. These vars let docker_runner.py translate container paths
+      # (/app/submissions/...) to the equivalent host paths before building
+      # the -v arguments. ${PWD} is expanded by docker-compose on the host.
+      HOST_SUBMISSIONS_DIR: ${PWD}/submissions
+      HOST_OUTPUTS_DIR: ${PWD}/data/outputs
+      HOST_REFERENCE_DATA_DIR: ${PWD}/data/reference_data
     volumes:
       - ./data:/app/data
       - ./submissions:/app/submissions
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

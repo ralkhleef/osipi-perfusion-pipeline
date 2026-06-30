@@ -27,6 +27,37 @@ VALIDATED_DIR   = SUBMISSIONS_DIR / "validated"     # reserved for future use
 # --- frontend ---
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
+# --- scoring ---
+#
+# Provider scripts + reference data live under data/scoring/providers/<provider_id>/
+# Each provider directory is self-contained:
+#   data/scoring/providers/osipi_tf62_dce_ktrans/
+#       challengeScoring.py          ← scoring script
+#       reference/                   ← reference / DRO NIfTI maps
+#       masks/                       ← mask NIfTI files
+#
+# Scoring artifacts (result JSONs, CSVs, plots) go to data/outputs/scoring/
+
+SCORING_DIR         = DATA_DIR / "scoring"
+PROVIDERS_DIR       = SCORING_DIR / "providers"      # legacy built-in provider scripts + reference data
+SCORING_OUTPUTS_DIR = OUTPUTS_DIR / "scoring"        # per-submission score artifacts + result JSON
+
+# OSIPI TF6.2 DCE Ktrans built-in provider
+# Place challengeScoring.py + DROKtransNifti/ + Masks/ inside this directory.
+OSIPI_TF62_DIR = PROVIDERS_DIR / "osipi_tf62_dce_ktrans"
+
+# OSIPI CodeCollection dev/test-data provider  (NOT used for official scoring)
+CODECOLLECTION_DIR = PROVIDERS_DIR / "osipi_codecollection_dce"
+
+# Uploaded / admin-installed scoring packages (one sub-dir per package_id)
+SCORING_PACKAGES_DIR = SCORING_DIR / "packages"
+
+# Per-challenge-type active scoring configuration (which mode/package is active)
+SCORING_ACTIVE_CONFIG = SCORING_DIR / "active.json"
+
+# Backward-compatible alias so any code that still imports SCORING_RESULTS_DIR keeps working
+SCORING_RESULTS_DIR = SCORING_OUTPUTS_DIR
+
 
 # ---------------------------------------------------------------------------
 # Shared path-safety utility

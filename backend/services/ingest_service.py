@@ -7,7 +7,7 @@ can locate the extracted folder without exposing file paths to the frontend.
 import shutil
 import zipfile
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from services.path_config import EXTRACTED_DIR, INCOMING_DIR, safe_relative_path
 
@@ -128,8 +128,12 @@ def save_and_extract_batch_from_path(zip_path: Path, filename: str) -> Dict:
     return _finalize_staged_dir(temp_dir, batch_stem, safe_filename, file_count)
 
 
-def save_uploaded_folder(files: Iterable[Tuple[str, bytes]]) -> Dict:
+def save_uploaded_folder(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dict:
     """Save browser folder-upload files into a single submission folder.
+
+    ``files`` is an iterable of ``(relative_path_string, data)`` where
+    ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
+    on disk (streaming path — avoids holding all files in RAM at once).
 
     Enforces cumulative file count and size limits before staging.
     """
@@ -143,14 +147,15 @@ def save_uploaded_folder(files: Iterable[Tuple[str, bytes]]) -> Dict:
             "error": f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
         }
 
-    safe_files: List[Tuple[Path, bytes]] = []
+    safe_files: List[Tuple[Path, Union[bytes, Path]]] = []
     cumulative_bytes = 0
     for raw_name, contents in materialized:
         try:
             safe_files.append((_safe_relative_path(raw_name), contents))
         except ValueError:
             continue
-        cumulative_bytes += len(contents)
+        size = contents.stat().st_size if isinstance(contents, Path) else len(contents)
+        cumulative_bytes += size
         if cumulative_bytes > EXTRACT_MAX_BYTES:
             return {
                 "success": False,
@@ -178,7 +183,10 @@ def save_uploaded_folder(files: Iterable[Tuple[str, bytes]]) -> Dict:
             rel_path = Path(*rel_path.parts[1:])
         dest = extracted_dir / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(contents)
+        if isinstance(contents, Path):
+            shutil.copy2(contents, dest)
+        else:
+            dest.write_bytes(contents)
         saved += 1
 
     return {
@@ -192,8 +200,12 @@ def save_uploaded_folder(files: Iterable[Tuple[str, bytes]]) -> Dict:
     }
 
 
-def save_folder_as_batch(files: Iterable[Tuple[str, bytes]]) -> Dict:
+def save_folder_as_batch(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dict:
     """Save browser folder-upload files and auto-detect batch boundaries.
+
+    ``files`` is an iterable of ``(relative_path_string, data)`` where
+    ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
+    on disk (streaming path — avoids holding all files in RAM at once).
 
     Enforces cumulative size / file-count limits before staging.
     Uses the same ``_finalize_staged_dir`` path as ZIP uploads, so
@@ -209,14 +221,15 @@ def save_folder_as_batch(files: Iterable[Tuple[str, bytes]]) -> Dict:
             "error": f"Too many files in folder upload (limit: {EXTRACT_MAX_FILES:,}).",
         }
 
-    safe_files: List[Tuple[Path, bytes]] = []
+    safe_files: List[Tuple[Path, Union[bytes, Path]]] = []
     cumulative_bytes = 0
     for raw_name, contents in materialized:
         try:
             safe_files.append((_safe_relative_path(raw_name), contents))
         except ValueError:
             continue
-        cumulative_bytes += len(contents)
+        size = contents.stat().st_size if isinstance(contents, Path) else len(contents)
+        cumulative_bytes += size
         if cumulative_bytes > EXTRACT_MAX_BYTES:
             return {
                 "success": False,
@@ -243,7 +256,10 @@ def save_folder_as_batch(files: Iterable[Tuple[str, bytes]]) -> Dict:
         rel_stored = Path(*rel_path.parts[1:]) if common_root and len(rel_path.parts) > 1 else rel_path
         dest = temp_dir / rel_stored
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(contents)
+        if isinstance(contents, Path):
+            shutil.copy2(contents, dest)
+        else:
+            dest.write_bytes(contents)
         saved += 1
 
     display_filename = f"{common_root or batch_stem} (folder)"
@@ -407,7 +423,18 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
 
     submission_dirs = [d for d in top_dirs if _is_submission_candidate(d)]
 
-    return submission_dirs if len(submission_dirs) >= 2 else None
+    if len(submission_dirs) < 2:
+        return None
+
+    # If every top-level dir is a well-known structural subdir (input/, results/,
+    # maps/, …) this is a single submission whose data is laid out across those
+    # folders — NOT a multi-team batch.  Without this check a ZIP that contains
+    # ``input/`` and ``results/maps/`` at its top level would be wrongly split
+    # into two submissions (e.g. ``<name>_input`` and ``<name>_results``).
+    if _is_structural_layout(submission_dirs):
+        return None
+
+    return submission_dirs
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -435,7 +462,16 @@ def _finalize_staged_dir(
         final_dir = EXTRACTED_DIR / batch_stem
         if final_dir.exists():
             shutil.rmtree(final_dir)
-        temp_dir.rename(final_dir)
+        # Unwrap a single redundant wrapper folder so the submission root
+        # directly contains input/ , results/maps/ , README, etc.  Without this
+        # a ZIP shaped like ``Lena_ASL/input/ Lena_ASL/results/maps/`` would
+        # extract to ``<id>/Lena_ASL/input`` (an extra nesting level).
+        inner = _redundant_wrapper(temp_dir)
+        if inner is not None:
+            inner.rename(final_dir)
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        else:
+            temp_dir.rename(final_dir)
         detection = detect_submission_metadata(batch_stem)
         return {
             "success": True,
@@ -478,11 +514,79 @@ def _finalize_staged_dir(
     }
 
 
+# ── Structural subdirectory names: indicate a SINGLE-submission layout ────────
+# If ALL inner directories of a folder have names from this set, the parent is
+# ONE submission (input/results/maps are its internal data layout), not a batch.
+# A real multi-team batch would have names like "Team_A", "submission_001", etc.
+_STRUCTURAL_SUBDIRS: frozenset = frozenset({
+    "input", "inputs",
+    "result", "results",
+    "output", "outputs",
+    "reference", "ref", "references",
+    "masks", "mask",
+    "maps", "map",
+    "data", "raw", "processed",
+    "src", "source", "sources", "code", "scripts",
+    "logs", "log", "tmp", "temp",
+    "docs", "doc", "analysis",
+})
+
+
+def _is_structural_layout(dirs: List[Path]) -> bool:
+    """Return True if every directory name is a well-known structural subdirectory.
+
+    Example — treat as ONE submission (not a batch)::
+
+        lena_realistic_asl_osipi_named/
+            input/        ← structural
+            results/      ← structural
+                maps/
+
+    A batch would have team-named subdirectories::
+
+        batch_upload/
+            Team_A/
+            Team_B/
+    """
+    return bool(dirs) and all(d.name.lower() in _STRUCTURAL_SUBDIRS for d in dirs)
+
+
+def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
+    """Return the inner directory if *staged_dir* is just a single wrapper folder.
+
+    Many submission ZIPs wrap everything in one named folder
+    (e.g. ``Lena_ASL_osipi_named/`` containing ``input/`` and ``results/maps/``).
+    After extraction that produces a redundant nesting level.  This detects the
+    case so the caller can promote the inner folder up to the submission root.
+
+    Returns the inner directory only when *staged_dir* contains exactly one
+    entry, that entry is a directory, and its name is NOT a structural subdir
+    (``input``/``results``/…). Returns None otherwise (nothing to unwrap).
+    """
+    try:
+        entries = [e for e in staged_dir.iterdir()]
+    except (PermissionError, FileNotFoundError):
+        return None
+    dirs = [e for e in entries if e.is_dir()]
+    if (
+        len(entries) == 1
+        and len(dirs) == 1
+        and dirs[0].name.lower() not in _STRUCTURAL_SUBDIRS
+    ):
+        return dirs[0]
+    return None
+
+
 def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
     """One-level wrapper-unwrap: check if wrapper_dir itself is a batch container.
 
     Only called when exactly one top-level directory exists.  Does NOT recurse
     further, so three-level nesting is treated as a single submission.
+
+    Returns None (single submission) if:
+    - fewer than 2 inner directories are found, OR
+    - ALL inner directories look like structural subdirectories of one submission
+      (e.g. ``input/``, ``results/``, ``maps/`` — see ``_is_structural_layout``).
 
     Includes all inner directories that contain any files — not just those with
     NIfTI files — so that incomplete submissions are detected and can fail
@@ -498,7 +602,15 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
 
     submission_dirs = [d for d in inner_dirs if _is_submission_candidate(d)]
 
-    return submission_dirs if len(submission_dirs) >= 2 else None
+    if len(submission_dirs) < 2:
+        return None
+
+    # If all subdirs are structural names (input/, results/, maps/, …)
+    # this is a single submission with an internal data layout — not a batch.
+    if _is_structural_layout(submission_dirs):
+        return None
+
+    return submission_dirs
 
 
 def _auto_extract_single_zip(directory: Path) -> None:

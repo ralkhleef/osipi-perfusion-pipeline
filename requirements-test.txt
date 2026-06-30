@@ -1,0 +1,5 @@
+# Test-only dependencies — install alongside requirements.txt and backend/requirements.txt
+# pip install -r requirements.txt -r backend/requirements.txt -r requirements-test.txt
+pytest>=8
+httpx>=0.27
+anyio[trio]>=4
