@@ -6,124 +6,48 @@
   <title>OSIPI Perfusion Challenge — Review System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=36" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=63" />
 </head>
-<body>
+<body data-step="upload">
 
 <div class="app">
 
-  <!-- ── Sidebar ────────────────────────────────────────────── -->
-  <aside class="sidebar" id="sidebar">
+  <!-- ── Hidden step-state holders (used by JS for unlockStep / _syncWfNav) ── -->
+  <div id="wf-state-holder" aria-hidden="true" style="display:none">
+    <button class="wf-step wf-active" id="wf-btn-upload"   data-step="upload"   type="button">Upload</button>
+    <button class="wf-step"           id="wf-btn-index"    data-step="index"    type="button" disabled>Index</button>
+    <button class="wf-step"           id="wf-btn-validate" data-step="validate" type="button" disabled>Validate</button>
+    <button class="wf-step"           id="wf-btn-run"      data-step="run"      type="button" disabled>Run</button>
+    <button class="wf-step wf-future" id="wf-btn-score"    data-step="score"    type="button" disabled>Score</button>
+    <button class="wf-step"           id="wf-btn-summary"  data-step="summary"  type="button" disabled>Summary</button>
+    <button class="wf-step"           id="wf-btn-export"   data-step="export"   type="button" disabled>Export</button>
+  </div>
 
-    <!-- Logo -->
-    <div class="sidebar-logo">
-      <img src="/static/assets/logo.svg" alt="OSIPI" class="sidebar-logo-img" />
-      <div class="sidebar-logo-text">
-        <div class="sidebar-brand">OSIPI</div>
-        <div class="sidebar-sub">Perfusion Challenge</div>
-      </div>
+  <!-- ── Topbar elements kept in DOM (hidden) for JS compatibility ── -->
+  <div aria-hidden="true" style="display:none">
+    <div id="session-chip" class="session-chip session-chip--subtle">
+      <span id="session-team"></span>
+      <span class="session-sep">·</span>
+      <span id="session-challenge"></span>
     </div>
+    <button id="restore-chip-btn" class="topbar-restore-chip" type="button">
+      <span id="restore-chip-label">Restore session</span>
+    </button>
+    <button id="sidebar-new-session-btn" type="button">Start new</button>
+  </div>
 
-    <!-- Nav steps -->
-    <nav class="sidebar-nav" aria-label="Workflow steps">
+  <!-- ── Scrollable step panels ─────────────────────────────── -->
+  <main class="content step-main">
 
-      <button class="wf-step wf-active" id="wf-btn-upload" data-step="upload" type="button">
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </span>
-        <span class="nav-label">Upload</span>
-        <span class="nav-tooltip">Upload</span>
-      </button>
-
-      <button class="wf-step" id="wf-btn-index" data-step="index" type="button" disabled>
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        </span>
-        <span class="nav-label">Index</span>
-        <span class="nav-tooltip">Index</span>
-      </button>
-
-      <button class="wf-step" id="wf-btn-validate" data-step="validate" type="button" disabled>
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-        </span>
-        <span class="nav-label">Validate</span>
-        <span class="nav-tooltip">Validate</span>
-      </button>
-
-      <button class="wf-step" id="wf-btn-run" data-step="run" type="button" disabled>
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"/></svg>
-        </span>
-        <span class="nav-label">Run</span>
-        <span class="nav-tooltip">Run</span>
-      </button>
-
-      <button class="wf-step wf-future" id="wf-btn-score" data-step="score" type="button" disabled>
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        </span>
-        <span class="nav-label">Score</span>
-        <span class="nav-tooltip">Score</span>
-      </button>
-
-      <button class="wf-step" id="wf-btn-export" data-step="export" type="button" disabled>
-        <span class="nav-icon" aria-hidden="true">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </span>
-        <span class="nav-label">Export</span>
-        <span class="nav-tooltip">Export</span>
-      </button>
-
-    </nav>
-
-    <!-- Start New Session button -->
-    <div class="sidebar-new-session-wrap">
-      <button class="sidebar-new-session-btn" id="sidebar-new-session-btn" type="button">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
-        </svg>
-        <span class="sidebar-new-session-label">Start New</span>
+    <!-- Persistent top-right "Start new" link — visible on all steps -->
+    <div id="global-start-new" class="global-start-new" style="display:none">
+      <button type="button" class="btn btn-ghost btn-sm global-new-btn"
+              onclick="document.getElementById('sidebar-new-session-btn').click()"
+              title="Discard current session and start fresh">
+        ↺ Start new
       </button>
     </div>
-
-    <!-- Collapse button -->
-    <div class="sidebar-footer">
-      <button class="collapse-btn" id="collapse-btn" type="button" aria-label="Collapse sidebar">
-        <span class="collapse-icon-wrap">
-          <svg class="collapse-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </span>
-        <span class="collapse-label">Collapse</span>
-      </button>
-    </div>
-
-  </aside><!-- .sidebar -->
-
-  <!-- ── Main (header + scrollable content) ─────────────────── -->
-  <div class="main">
-
-    <!-- Top header -->
-    <header class="header">
-      <div class="header-left">
-        <h1 id="page-title">Upload</h1>
-        <p id="page-subtitle" class="page-subtitle">Submit parameter maps for automated validation</p>
-      </div>
-      <div class="header-right">
-        <div id="session-chip" class="session-chip" style="display:none">
-          <span id="session-team"></span>
-          <span class="session-sep">·</span>
-          <span id="session-challenge"></span>
-        </div>
-      </div>
-    </header>
-
-    <!-- Scrollable step panels -->
-    <main class="content step-main">
 
     <!-- Restore session banner (shown only when a saved session is found) -->
     <div id="restore-banner" class="restore-banner" role="alert" style="display:none">
@@ -136,40 +60,66 @@
         <span id="restore-banner-info" class="restore-banner-info">Previous local session found.</span>
       </div>
       <div class="restore-banner-actions">
-        <button id="restore-session-btn" class="btn-sm btn-primary" type="button">Restore</button>
-        <button id="start-new-session-btn" class="btn-sm" type="button">Start new</button>
+        <button id="restore-session-btn" class="btn btn-primary btn-sm" type="button">Restore</button>
+        <button id="start-new-session-btn" class="btn btn-secondary btn-sm" type="button">Start new</button>
       </div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════
          Step 1 — Upload
          ════════════════════════════════════════════════════════ -->
-    <section id="step-upload" class="step-panel">
+    <section id="step-upload" class="step-panel step-panel-upload">
 
-      <!-- Card 1: Submission Setup -->
-      <div class="pg-card">
-        <div class="pg-card-header">
-          <div class="pg-card-title">Submission Setup</div>
-          <div class="pg-card-sub">Team and challenge information</div>
+      <div class="form-card upload-form-card">
+
+        <!-- Header -->
+        <header class="form-header">
+          <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+          <div class="heading-text">
+            <span class="step-label">Step 1 of 7: Upload</span>
+            <h1 class="card-title">Start a new submission review</h1>
+            <p class="card-desc">Enter team details, choose the challenge type, then upload a submission ZIP file.</p>
+          </div>
+        </header>
+
+        <!-- Restore session notice — shown only when a saved session exists -->
+        <div id="upload-restore-notice" class="upload-restore-notice" style="display:none">
+          <span id="upload-restore-msg">Previous session available.</span>
+          <button type="button" id="upload-restore-btn" class="btn btn-ghost btn-sm upload-restore-link"
+                  onclick="document.getElementById('restore-chip-btn').click()">Restore</button>
+          <button type="button" class="btn btn-icon btn-ghost upload-restore-dismiss" aria-label="Dismiss"
+                  onclick="document.getElementById('upload-restore-notice').style.display='none'">✕</button>
         </div>
-        <div class="pg-card-body">
 
+        <!-- Submission Information -->
+        <div class="form-section">
+          <h2 class="section-heading">Submission Information</h2>
           <div class="field-row-2">
-            <div class="form-group" style="margin-bottom:0">
+            <div class="form-group">
               <label class="label" for="team-name">Team Name <span class="req">*</span></label>
               <input type="text" id="team-name" placeholder="e.g. NeuroFlow Lab" autocomplete="off" />
               <div id="team-name-error" class="field-error"></div>
             </div>
-            <div class="form-group" style="margin-bottom:0">
+            <div class="form-group">
               <label class="label" for="contact-email">Contact Email <span class="req">*</span></label>
               <input type="email" id="contact-email" placeholder="name@institution.edu" />
               <div id="contact-email-error" class="field-error"></div>
             </div>
           </div>
+        </div>
 
-          <div class="pg-field-group">
-            <label class="pg-field-label">Challenge Type <span class="req">*</span></label>
-            <div class="pill-row" role="radiogroup" aria-label="Challenge type">
+        <!-- Challenge Details -->
+        <div class="form-section">
+          <h2 class="section-heading">Challenge Details</h2>
+
+          <div class="form-group">
+            <div class="field-label-row">
+              <label class="label" style="margin-bottom:0">Challenge Type <span class="req">*</span></label>
+              <button type="button" class="help-tooltip" aria-label="Challenge type help">?
+                <span class="tooltip-text">Select the OSIPI challenge type for this submission.</span>
+              </button>
+            </div>
+            <div class="pill-row" role="radiogroup" aria-label="Challenge type" style="margin-top:8px">
               <label class="pill"><input type="radio" name="challenge_type" value="asl" /><span>ASL</span></label>
               <label class="pill"><input type="radio" name="challenge_type" value="dce" checked /><span>DCE</span></label>
               <label class="pill"><input type="radio" name="challenge_type" value="dsc" /><span>DSC</span></label>
@@ -181,64 +131,48 @@
             <div id="challenge-type-error" class="field-error"></div>
           </div>
 
-          <div class="pg-field-group" style="margin-bottom:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-              <label class="pg-field-label" style="margin-bottom:0">Parameter Map Type</label>
+
+          <div class="form-group" style="margin-bottom:0">
+            <div class="field-label-row">
+              <label class="label" style="margin-bottom:0">Parameter Map Type</label>
               <span class="optional-tag">Optional — auto-detected</span>
-              <button type="button" class="help-tooltip" aria-label="Parameter map type help">
-                ?
-                <span class="tooltip-text">Leave blank — the system will auto-detect the parameter map type from the submitted files.</span>
+              <button type="button" class="help-tooltip" aria-label="Parameter map type help">?
+                <span class="tooltip-text">Optional. The app can auto-detect CBF, ATT, Ktrans, ve, vp, or Kep from filenames and metadata.</span>
               </button>
             </div>
-            <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type">
+            <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type" style="margin-top:8px">
               <!-- populated by JS -->
             </div>
             <div id="map-type-other-wrap" style="display:none; margin-top:8px;">
               <input type="text" id="map-type-other" placeholder="Specify map type" />
             </div>
           </div>
-
         </div>
-      </div>
 
-      <!-- Card 2: Submission Source -->
-      <div class="pg-card">
-        <div class="pg-card-header">
-          <div class="pg-card-title">Submission Source</div>
-          <div class="pg-card-sub">Choose how to provide your parameter maps</div>
-        </div>
-        <div class="pg-card-body">
+        <!-- Upload Submission -->
+        <div class="form-section">
+          <h2 class="section-heading">Upload Submission</h2>
 
-          <!-- Source option cards -->
-          <div class="src-options-row" role="radiogroup" aria-label="Submission source">
-            <label class="source-tab src-option-card active" id="tab-local">
+          <div class="source-tabs" role="radiogroup" aria-label="Submission source">
+            <label class="source-tab active" id="tab-local">
               <input type="radio" name="submission_type" value="local" checked />
-              <span class="src-option-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              </span>
-              <span class="src-option-label">Local Upload</span>
-              <span class="src-option-sub">ZIP file or folder</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Local Upload
             </label>
-            <label class="source-tab src-option-card" id="tab-zenodo">
+            <label class="source-tab" id="tab-zenodo">
               <input type="radio" name="submission_type" value="zenodo" />
-              <span class="src-option-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>
-              </span>
-              <span class="src-option-label">Zenodo</span>
-              <span class="src-option-sub">DOI or record URL</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>
+              Zenodo
             </label>
-            <label class="source-tab src-option-card" id="tab-github">
+            <label class="source-tab" id="tab-github">
               <input type="radio" name="submission_type" value="github" />
-              <span class="src-option-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.2 0C6.4.4 5.3.7 5.3.7a4.8 4.8 0 0 0-.1 3.5 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.6V22"/></svg>
-              </span>
-              <span class="src-option-label">GitHub</span>
-              <span class="src-option-sub">Repo URL + branch</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.7a5.2 5.2 0 0 0-1.4-3.6 4.8 4.8 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.2 0C6.4.4 5.3.7 5.3.7a4.8 4.8 0 0 0-.1 3.5 5.2 5.2 0 0 0-1.4 3.6c0 5.2 3.1 6.4 6.1 6.7a3.4 3.4 0 0 0-.9 2.6V22"/></svg>
+              GitHub
             </label>
           </div>
 
           <!-- Local panel -->
-          <div id="source-local" class="source-panel active" style="margin-top:16px">
+          <div id="source-local" class="source-panel active">
             <div id="drop-zone" class="drop-zone">
               <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -249,7 +183,7 @@
               <p class="drop-primary">Drag and drop your submission here</p>
               <p class="drop-hint">ZIP file, folder, or individual files</p>
               <div class="choose-wrap">
-                <button type="button" id="choose-btn" class="choose-btn" aria-haspopup="true" aria-expanded="false">
+                <button type="button" id="choose-btn" class="btn btn-secondary choose-btn" aria-haspopup="true" aria-expanded="false">
                   Browse Files
                 </button>
                 <div id="choose-menu" class="choose-menu" role="menu">
@@ -266,28 +200,28 @@
           </div>
 
           <!-- Zenodo panel -->
-          <div id="source-zenodo" class="source-panel" style="margin-top:16px">
+          <div id="source-zenodo" class="source-panel">
             <input type="text" id="zenodo-input"
                    placeholder="https://zenodo.org/records/123456, DOI, or record ID" />
           </div>
 
           <!-- GitHub panel -->
-          <div id="source-github" class="source-panel" style="margin-top:16px">
+          <div id="source-github" class="source-panel">
             <div class="github-fields">
               <input type="url" id="github-url" placeholder="https://github.com/org/repo" />
               <input type="text" id="github-branch" placeholder="Branch (optional)" />
             </div>
           </div>
 
-          <div id="source-error" class="field-error"></div>
-
-          <!-- Submit -->
-          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--divider)">
-            <div id="submit-status" class="submit-status" style="display:none"></div>
-            <button type="button" id="submit-btn" class="submit-btn">Upload and Detect</button>
-          </div>
-
+          <div id="source-error" class="field-error" style="margin-top:8px"></div>
         </div>
+
+        <!-- Submit -->
+        <div class="form-actions">
+          <div id="submit-status" class="submit-status" style="display:none"></div>
+          <button type="button" id="submit-btn" class="btn btn-primary btn-full submit-btn">Upload and Detect</button>
+        </div>
+
       </div>
 
     </section>
@@ -296,25 +230,41 @@
     <!-- ════════════════════════════════════════════════════════
          Step 2 — Index
          ════════════════════════════════════════════════════════ -->
-    <section id="step-index" class="step-panel" hidden>
+    <section id="step-index" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 2 of 7: Review</span>
+          <h1 class="card-title">Review detected submission</h1>
+          <p class="card-desc">Confirm the detected submission details, then validate the selected entry.</p>
+        </div>
+      </header>
+
+      <div class="step-hint-card">
+        <span id="index-hint-copy">Review detected submission.</span>
+        <button type="button" class="help-tooltip" aria-label="Submission type help">?
+          <span class="tooltip-text">Result-only submissions include output maps already; reproducible submissions include runnable code.</span>
+        </button>
+      </div>
 
       <div class="pg-card">
         <div class="pg-card-header" style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <div class="pg-card-title">Submission Queue</div>
+            <span class="step-label">Step 2 of 7</span>
+            <div class="pg-card-title" id="batch-index-title">Review Detected Submission</div>
             <div class="pg-card-sub" id="batch-header-desc">Detected submissions ready to validate</div>
           </div>
-          <button type="button" id="batch-new-btn" class="btn-ghost btn-sm">New Submission</button>
+          <button type="button" id="batch-new-btn" class="btn btn-ghost btn-sm">New Submission</button>
         </div>
         <div class="pg-card-body">
           <div class="batch-controls">
             <div class="batch-controls-left">
-              <button type="button" id="batch-select-all-btn" class="btn-secondary btn-sm">Select All</button>
-              <button type="button" id="batch-deselect-all-btn" class="btn-secondary btn-sm">Deselect All</button>
+              <button type="button" id="batch-select-all-btn" class="btn btn-secondary btn-sm">Select All</button>
+              <button type="button" id="batch-deselect-all-btn" class="btn btn-secondary btn-sm">Deselect All</button>
             </div>
             <div class="batch-controls-right">
-              <button type="button" id="batch-validate-selected-btn" class="submit-btn btn-sm">Validate Selected</button>
-              <button type="button" id="batch-validate-all-btn" class="submit-btn btn-sm btn-outline">Validate All</button>
+              <button type="button" id="batch-validate-selected-btn" class="btn btn-primary submit-btn btn-sm">Validate Selected</button>
+              <button type="button" id="batch-validate-all-btn" class="btn btn-secondary submit-btn btn-sm btn-outline">Validate All</button>
             </div>
           </div>
           <div id="batch-validate-status" class="submit-status" style="display:none;margin-top:10px;"></div>
@@ -328,20 +278,44 @@
     <!-- ════════════════════════════════════════════════════════
          Step 3 — Validate
          ════════════════════════════════════════════════════════ -->
-    <section id="step-validate" class="step-panel" hidden>
+    <section id="step-validate" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 3 of 7: Validate</span>
+          <h1 class="card-title">Validate submission files</h1>
+          <p class="card-desc">Review errors, warnings, run readiness, and output-map checks before execution.</p>
+        </div>
+      </header>
+
+      <div class="step-hint-card">
+        Validation results.
+        <button type="button" class="help-tooltip" aria-label="Validation warnings help">?
+          <span class="tooltip-text">Errors may block the workflow. Warnings are informational and do not block continuing.</span>
+        </button>
+      </div>
+      <!-- Completion banner: shown after all validations finish -->
+      <div id="validate-completion-banner" class="step-completion-banner" style="display:none"></div>
       <div class="pg-card">
 
-        <!-- Header: title + one-line summary + nav buttons -->
+        <!-- Header: title + one-line summary -->
         <div class="pg-card-header" style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <div class="pg-card-title">Validation Results</div>
+            <span class="step-label">Step 3 of 7</span>
+            <div class="pg-card-title" id="validate-card-title">Validation</div>
             <div class="pg-card-sub" id="batch-results-desc"></div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button type="button" id="batch-back-to-batch-btn" class="btn-secondary btn-sm">← Back to Index</button>
-            <button type="button" id="validate-continue-btn"   class="btn-primary btn-sm" disabled>Continue to Run →</button>
+          <div id="single-result-actions" class="validation-header-actions" style="display:none">
+            <button type="button" id="replace-btn" class="btn btn-secondary btn-sm">Replace Submission</button>
+            <button type="button" id="edit-btn" class="btn btn-secondary btn-sm">Edit Details</button>
+            <button type="button" id="new-btn" class="btn btn-ghost btn-sm">Start New</button>
           </div>
+          <button type="button" id="batch-back-to-batch-btn" class="btn btn-secondary btn-sm">Back to Review</button>
+          <!-- validate-continue-btn kept hidden for JS compat; action row handles navigation -->
+          <button type="button" id="validate-continue-btn" class="btn btn-primary btn-sm" disabled style="display:none">Continue to Run</button>
         </div>
+
+        <div id="validate-summary-stats" class="validation-summary-stats" aria-label="Validation totals"></div>
 
         <!-- Single compact toolbar: search + view + sort + expand controls -->
         <div id="val-toolbar" class="vr-toolbar" style="padding:12px 24px;border-bottom:1px solid var(--divider)">
@@ -371,7 +345,7 @@
             <div>Submission</div>
             <div>Status</div>
             <div>Issue</div>
-            <div>Run readiness</div>
+            <div>Run readiness <button type="button" class="help-tooltip" aria-label="Run readiness help">?<span class="tooltip-text">Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.</span></button></div>
             <div>Details</div>
           </div>
           <div id="batch-submissions-list"></div>
@@ -384,43 +358,66 @@
 
       </div><!-- .pg-card -->
 
-      <!-- Single-submission action bar (shown below card) -->
-      <div id="single-result-actions" class="step-action-bar" style="display:none">
-        <div class="actions-left">
-          <button type="button" id="replace-btn" class="btn-secondary">Replace Submission</button>
-          <button type="button" id="edit-btn"    class="btn-secondary">Edit Details</button>
-        </div>
-        <button type="button" id="new-btn" class="btn-ghost">Start New Submission</button>
-      </div>
-
     </section>
 
 
     <!-- ════════════════════════════════════════════════════════
          Step 4 — Run
          ════════════════════════════════════════════════════════ -->
-    <section id="step-run" class="step-panel" hidden>
+    <section id="step-run" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 4 of 7: Run</span>
+          <h1 class="card-title">Run code when needed</h1>
+          <p class="card-desc">Execute reproducible submissions in Docker, or skip execution when result maps are already provided.</p>
+        </div>
+      </header>
 
-      <!-- Run Settings Card -->
+      <div class="step-hint-card">
+        Run code when needed.
+        <button type="button" class="help-tooltip" aria-label="Docker execution help" style="margin-left:6px">?
+          <span class="tooltip-text">Runnable submissions execute in Docker. Result-only submissions skip execution.</span>
+        </button>
+      </div>
+      <!-- Completion banner: shown after execution finishes -->
+      <div id="run-completion-banner" class="step-completion-banner" style="display:none"></div>
+
+      <!-- Result-only skipped notice (shown when all submissions are result-only) -->
+      <div id="run-skipped-notice" class="run-skipped-notice" style="display:none">
+        <div class="rsn-icon">✓</div>
+        <h3 style="margin-bottom:6px">Execution skipped</h3>
+        <p>Result maps were already included.</p>
+        <span class="status-pill status-skipped">Skipped</span>
+        <button type="button" id="run-skipped-continue-btn" class="btn btn-primary">Continue to Score</button>
+      </div>
+
+      <!-- Run summary + action card -->
       <div class="run-settings-card" id="run-settings-card">
-        <div class="rsc-row">
-          <div class="rsc-stat-group" id="run-summary-stats">
-            <!-- populated by renderRunStep() -->
-            <p id="run-results-desc" style="font-size:0.79rem;color:var(--muted);margin:0"></p>
+        <span class="step-label">Step 4 of 7</span>
+        <div class="pg-card-title" style="margin:0 0 10px">Run Code</div>
+        <div class="rsc-top">
+          <!-- Summary text: populated by JS -->
+          <div id="run-summary-block">
+            <p id="run-results-desc" class="run-summary-line"></p>
+            <p id="run-cannot-reason" class="run-cannot-reason" style="display:none"></p>
           </div>
           <div class="rsc-actions">
             <label class="rsc-timeout-label">
-              Timeout (s)
+              Timeout&nbsp;(s)
               <input type="number" id="batch-exec-timeout" value="300" min="10" max="3600" class="rsc-timeout-input" />
             </label>
-            <button type="button" id="batch-exec-all-btn" class="run-model-btn idle" style="display:none">
+            <button type="button" id="batch-exec-all-btn" class="btn btn-primary run-model-btn idle" style="display:none">
               <span class="run-btn-icon">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </span>
-              Run ready submissions
+              Run code in Docker
             </button>
           </div>
         </div>
+
+        <!-- Docker badge -->
+        <div id="batch-docker-banner" style="display:none;margin-top:10px"></div>
 
         <!-- Progress panel (hidden until runs start) -->
         <div id="run-progress-panel" class="run-progress-panel" style="display:none">
@@ -435,61 +432,40 @@
             <div class="run-prog-fill" id="run-prog-fill" style="width:0%"></div>
           </div>
           <div class="run-stat-grid">
-            <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-total">--</div><div class="run-stat-cell-lbl">Queued</div></div>
+            <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-total">--</div><div class="run-stat-cell-lbl">Total</div></div>
             <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-completed">0</div><div class="run-stat-cell-lbl">Completed</div></div>
             <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-failed">0</div><div class="run-stat-cell-lbl">Failed</div></div>
-            <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-outputs">0</div><div class="run-stat-cell-lbl">Outputs</div></div>
+            <div class="run-stat-cell"><div class="run-stat-cell-val" id="rp-outputs">0</div><div class="run-stat-cell-lbl">Output files</div></div>
           </div>
         </div>
       </div>
 
-      <!-- Result-only skipped notice (shown when all submissions are result-only) -->
-      <div id="run-skipped-notice" class="run-skipped-notice" style="display:none">
-        <div class="rsn-icon">📋</div>
-        <h3>Execution not needed</h3>
-        <p>All submissions contain result maps only — automatic execution is skipped.<br>The submitted maps will be used directly for scoring and export.</p>
-        <button type="button" id="run-skipped-continue-btn" class="btn-primary">Continue to Export →</button>
+      <!-- Submission cards list -->
+      <div id="run-submissions-list" class="run-cards-list"></div>
+      <div id="run-empty-state" class="vr-empty" style="display:none">No submissions match this filter.</div>
+      <div id="run-show-all-wrap" style="display:none;text-align:center;margin-top:12px">
+        <button type="button" id="run-show-all-btn" class="vr-show-all-btn"></button>
+      </div>
+      <div id="batch-exec-status" class="submit-status" style="display:none;margin-top:10px"></div>
+
+      <!-- View filter (shown when cards list has content) -->
+      <div id="run-toolbar" style="display:none;margin-top:4px">
+        <select id="run-view-select" class="vr-select" aria-label="Filter submissions">
+          <option value="all">All submissions</option>
+          <option value="ready">Ready to run</option>
+          <option value="not-run">Not yet run</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+          <option value="timed-out">Timed out</option>
+        </select>
       </div>
 
-      <!-- Queue card -->
-      <div class="pg-card">
-        <div class="pg-card-header" style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0;border-bottom:none">
-          <!-- Docker availability banner -->
-          <div id="batch-docker-banner" style="display:none;flex:1"></div>
-        </div>
-
-        <!-- Toolbar: view filter -->
-        <div class="vr-toolbar" id="run-toolbar" style="display:none;padding:12px 24px;border-bottom:1px solid var(--divider)">
-          <select id="run-view-select" class="vr-select" aria-label="View">
-            <option value="ready">View: Ready to run</option>
-            <option value="all">All</option>
-            <option value="not-run">Not run</option>
-            <option value="passed">Passed</option>
-            <option value="failed">Failed</option>
-            <option value="timed-out">Timed out</option>
-          </select>
-        </div>
-
-        <!-- Run table -->
-        <div class="br-table" id="run-table" style="display:none;padding:0 24px 16px">
-          <div class="br-table-head er-table-head">
-            <div>Submission</div><div>Run status</div><div>Outputs</div><div>Output check</div><div>Action</div>
-          </div>
-          <div id="run-submissions-list"></div>
-          <div id="run-empty-state" class="vr-empty" style="display:none">No submissions match this filter.</div>
-          <div id="run-show-all-wrap" style="display:none">
-            <button type="button" id="run-show-all-btn" class="vr-show-all-btn"></button>
-          </div>
-        </div>
-
-        <div id="batch-exec-status" class="submit-status" style="display:none;margin:10px 24px"></div>
-      </div>
-
-      <!-- Hidden legacy single-submission elements (kept for JS compat) -->
+      <!-- Hidden legacy elements (JS compat) -->
+      <div id="run-table" style="display:none"></div>
       <div id="execute-section" style="display:none">
         <span id="run-panel-status" class="run-panel-status rps-na"></span>
         <div id="run-controls" style="display:none">
-          <button type="button" id="execute-btn" class="btn-secondary" style="display:none">Run</button>
+          <button type="button" id="execute-btn" class="btn btn-secondary" style="display:none">Run</button>
           <input type="number" id="execute-timeout" value="300" style="display:none" />
         </div>
         <p id="run-cannot-note" style="display:none"></p>
@@ -503,34 +479,155 @@
     <!-- ════════════════════════════════════════════════════════
          Step 5 — Score
          ════════════════════════════════════════════════════════ -->
-    <section id="step-score" class="step-panel" hidden>
+    <section id="step-score" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 5 of 7: Score / QC</span>
+          <h1 class="card-title">Score and quality-check outputs</h1>
+          <p class="card-desc">Run configured scoring or continue with validation and execution results when scoring is optional.</p>
+        </div>
+      </header>
 
-      <!-- Main user-facing status card -->
-      <div class="score-status-card" id="score-status-card">
-        <div class="score-status-card-inner">
-          <div class="score-status-header">
-            <div class="score-status-titles">
-              <div class="score-status-title" id="score-status-title">Scoring not configured yet</div>
-              <div class="score-status-sub" id="score-status-sub">Set up a scoring provider to score your Ktrans outputs against reference data.</div>
-            </div>
-            <span class="score-status-badge" id="score-status-badge">Not configured</span>
+      <!-- ── Scoring not configured (mode = none) ── -->
+      <div class="score-main-card" id="score-not-configured-card" style="display:none">
+        <div class="smc-icon">📊</div>
+        <div class="smc-body">
+          <span class="step-label" style="margin-bottom:6px">Step 5 of 7</span>
+          <div class="smc-title">Scoring not configured
+            <button type="button" class="help-tooltip" aria-label="Reference scoring status help">?
+              <span class="tooltip-text">Reference metrics are calculated only when a matching private ground-truth map is available.</span>
+            </button>
           </div>
-          <div class="score-status-actions">
-            <button id="btn-score-all" class="btn-primary btn-sm" type="button" disabled>Score outputs</button>
-            <span class="score-status-hint" id="score-status-hint">Exports still work — download your Ktrans results at any time.</span>
+          <p class="smc-desc">QC/export remains available.</p>
+          <div class="smc-actions">
+            <button id="btn-score-continue-nc" class="btn btn-primary" type="button">Continue to Summary</button>
           </div>
         </div>
       </div>
 
-      <!-- Collapsed provider setup details -->
-      <details class="score-provider-details" id="score-provider-details">
-        <summary class="score-provider-summary">Provider setup details</summary>
-        <div class="score-provider-details-body">
-          <div id="score-provider-grid" class="score-provider-grid"></div>
+      <!-- ── Scoring ready (mode = builtin or custom) ── -->
+      <div class="score-main-card score-main-card--ready" id="score-status-card" style="display:none">
+        <div class="smc-icon smc-icon--ready">✓</div>
+        <div class="smc-body">
+          <span class="step-label" style="margin-bottom:6px">Step 5 of 7</span>
+          <div class="smc-title-row">
+            <div class="smc-title" id="score-status-title">Scoring is ready</div>
+            <span class="smc-badge smc-badge--ready" id="score-status-badge">Configured</span>
+            <button type="button" class="help-tooltip" aria-label="QC metrics help">?
+              <span class="tooltip-text">QC metrics describe map validity and statistics. They are not official OSIPI scores.</span>
+            </button>
+          </div>
+          <p class="smc-desc" id="score-status-sub">Scoring is active.</p>
+          <div id="score-metric-preview" class="score-metric-preview" style="display:none"></div>
+          <div class="smc-actions">
+            <button id="btn-score-all" class="btn btn-primary" type="button">Run Scoring</button>
+            <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue to Summary</button>
+          </div>
+          <p class="smc-hint" id="score-status-hint"></p>
+        </div>
+      </div>
+
+      <!-- ── Reviewer / Admin: Scoring Setup (collapsed by default) ── -->
+      <details class="scoring-admin-panel" id="scoring-admin-panel">
+        <summary class="scoring-admin-summary">
+          <span class="scoring-admin-icon">⚙</span>
+          Reviewer / Admin: Scoring Setup
+          <span class="scoring-admin-badge" id="scoring-admin-badge">Not configured</span>
+        </summary>
+        <div class="scoring-admin-body">
+          <p class="scoring-admin-desc">
+            Configure scoring. Reviewer/admin use only.
+            <button type="button" class="help-tooltip" aria-label="Scoring package help">?
+              <span class="tooltip-text">A trusted ZIP containing scoring code and optional reference data.</span>
+            </button>
+          </p>
+
+          <!-- Mode selector -->
+          <div class="scoring-mode-list" id="scoring-mode-list">
+
+            <label class="scoring-mode-row" id="scoring-mode-none-row">
+              <input type="radio" name="scoring-mode" id="scoring-mode-none" value="none" checked>
+              <div class="scoring-mode-content">
+                <div class="scoring-mode-title">No scoring</div>
+                <div class="scoring-mode-desc">Skip the scoring step. Validation and export still work.</div>
+              </div>
+            </label>
+
+            <label class="scoring-mode-row" id="scoring-mode-builtin-row">
+              <input type="radio" name="scoring-mode" id="scoring-mode-builtin" value="builtin">
+              <div class="scoring-mode-content">
+                <div class="scoring-mode-title">
+                  Default OSIPI scoring
+                  <span class="scoring-mode-chip">DCE · Ktrans</span>
+                </div>
+                <div class="scoring-mode-desc">Requires installed reference data and masks.</div>
+                <div class="scoring-mode-status" id="scoring-builtin-status"></div>
+              </div>
+            </label>
+
+            <label class="scoring-mode-row" id="scoring-mode-custom-row">
+              <input type="radio" name="scoring-mode" id="scoring-mode-custom" value="custom">
+              <div class="scoring-mode-content">
+                <div class="scoring-mode-title">
+                  Custom scoring package
+                  <button type="button" class="help-tooltip" aria-label="Custom package help" style="margin-left:4px">?
+                    <span class="tooltip-text">Use reviewed packages for ASL, DSC, or updated DCE scoring.</span>
+                  </button>
+                </div>
+                <div class="scoring-mode-desc">Upload a reviewed package ZIP.</div>
+              </div>
+            </label>
+
+          </div>
+
+          <!-- Custom package section (shown only when custom radio is selected) -->
+          <div id="scoring-custom-section" style="display:none">
+            <div class="scoring-security-warning">
+              ⚠ <strong>Trusted reviewers/admins only.</strong>
+              A scoring package runs code on the server. Only upload packages that have been reviewed by a trusted team member.
+              Never upload packages from unknown sources.
+            </div>
+            <div class="scoring-upload-row">
+              <label class="btn btn-secondary btn-sm scoring-upload-label" for="scoring-pkg-input">
+                Upload Package ZIP
+              </label>
+              <input type="file" id="scoring-pkg-input" accept=".zip" style="display:none">
+              <span id="scoring-pkg-upload-status" class="scoring-upload-status"></span>
+            </div>
+
+            <!-- Installed packages list -->
+            <div id="scoring-pkg-list" class="scoring-pkg-list"></div>
+
+            <!-- Package selector (shown when packages exist) -->
+            <div id="scoring-pkg-select-wrap" style="display:none">
+              <label class="scoring-pkg-select-label" for="scoring-pkg-select">
+                Active package for this challenge type:
+              </label>
+              <select id="scoring-pkg-select" class="scoring-pkg-select"></select>
+            </div>
+          </div>
+
+          <!-- Apply button + status -->
+          <div class="scoring-admin-actions">
+            <button type="button" id="scoring-setup-save-btn" class="btn btn-primary btn-sm">
+              Apply Configuration
+            </button>
+            <span id="scoring-setup-msg" class="scoring-setup-msg" style="display:none"></span>
+          </div>
+
+          <!-- Advanced provider details (technical — inside admin, collapsed) -->
+          <details class="score-provider-details" id="score-provider-details">
+            <summary class="score-provider-summary">Advanced scoring details</summary>
+            <div class="score-provider-details-body">
+              <div id="score-provider-grid" class="score-provider-grid"></div>
+            </div>
+          </details>
+
         </div>
       </details>
 
-      <!-- Submission scoring table (shown once scoring is possible) -->
+      <!-- Submission scoring table (shown after scoring runs) -->
       <div class="pg-card" id="score-table-card" style="display:none">
         <div class="pg-card-header">
           <div>
@@ -538,7 +635,6 @@
             <div class="pg-card-sub" id="score-table-sub">Ready to score</div>
           </div>
         </div>
-
         <table class="sc-table" id="score-table">
           <thead>
             <tr class="sc-table-head">
@@ -553,46 +649,111 @@
         </table>
       </div>
 
+      <!-- Leaderboard: all previously scored submissions -->
+      <div class="pg-card" id="leaderboard-card" style="margin-top:16px;display:none">
+        <div class="pg-card-header">
+          <div>
+            <div class="pg-card-title">All Scored Submissions</div>
+            <div class="pg-card-sub" id="leaderboard-sub">Review scored submissions, reference status, and export readiness.</div>
+          </div>
+          <button type="button" id="leaderboard-refresh-btn" class="btn btn-secondary btn-sm">Refresh</button>
+        </div>
+        <div id="leaderboard-filter-bar" class="filter-bar leaderboard-filter-bar"></div>
+        <div id="leaderboard-count" class="list-count-text"></div>
+        <div id="leaderboard-list" class="leaderboard-list"></div>
+        <table class="sc-table" id="leaderboard-table" hidden>
+          <thead>
+            <tr class="sc-table-head">
+              <th>Submission</th>
+              <th>Status</th>
+              <th>Scored at</th>
+              <th>Accuracy</th>
+              <th>Repeatability</th>
+              <th>Silver Score</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-table-body"></tbody>
+        </table>
+      </div>
+
     </section>
 
 
     <!-- ════════════════════════════════════════════════════════
-         Step 6 — Export
+         Step 6 — Results Summary
          ════════════════════════════════════════════════════════ -->
-    <section id="step-export" class="step-panel" hidden>
+    <section id="step-summary" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 6 of 7: Results Summary</span>
+          <h1 class="card-title">Results Summary</h1>
+          <p class="card-desc">Review validation, execution, scoring, and export readiness for this session.</p>
+        </div>
+      </header>
+
+      <div id="summary-cards" class="summary-report">
+        <!-- Populated by renderSummaryStep() in app.js: hero, pipeline rail,
+             validation donut, execution row, QC metric bars, export checklist,
+             and collapsed technical details. -->
+      </div>
+    </section>
+
+
+    <!-- ════════════════════════════════════════════════════════
+         Step 7 — Export
+         ════════════════════════════════════════════════════════ -->
+    <section id="step-export" class="step-panel step-shell" hidden>
+      <header class="form-header step-shell-header">
+        <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
+        <div class="heading-text">
+          <span class="step-label">Step 7 of 7: Export</span>
+          <h1 class="card-title">Download results</h1>
+          <p class="card-desc">Choose blinded files for external review or unblinded files for internal use.</p>
+        </div>
+      </header>
+
+      <div class="step-hint-card">
+        <span class="step-label" style="margin-bottom:4px;display:block">Step 7 of 7</span>
+        <strong style="color:var(--text);font-size:0.95rem;display:block;margin-bottom:4px">Download results</strong>
+        Choose a file.
+        <button type="button" class="help-tooltip" aria-label="Blinded vs unblinded export help" style="margin-left:6px">?
+          <span class="tooltip-text"><strong>Blinded</strong>: team names and emails removed — safe to share with external reviewers. <strong>Unblinded</strong>: includes full team info — internal use only.</span>
+        </button>
+      </div>
 
       <div class="export-groups">
 
         <!-- Validation Results -->
         <div class="export-group">
           <div class="export-group-header">
-            <div class="export-group-icon export-icon-check">✓</div>
-            <div>
-              <div class="export-group-title">Validation Results</div>
-              <div class="export-group-sub">Status, errors, warnings, and NIfTI counts for all submissions</div>
+              <div class="export-group-icon export-icon-check">✓</div>
+              <div>
+              <div class="export-group-title">Validation CSV</div>
+              <div class="export-group-sub">Validation results.</div>
             </div>
           </div>
           <div class="export-group-body">
             <!-- Batch export -->
             <div id="batch-export-val-wrap" class="export-pair">
-              <button type="button" id="batch-export-blinded-btn" class="export-dl-btn">
+              <button type="button" id="batch-export-blinded-btn" class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Validation CSV" title="Blinded export removes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Blinded
+                Download Validation CSV
               </button>
-              <button type="button" id="batch-export-unblinded-btn" class="export-dl-btn">
+              <button type="button" id="batch-export-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for validation CSV" title="Unblinded export includes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Unblinded
+                Download Unblinded Export
               </button>
             </div>
             <!-- Single-submission export -->
             <div id="single-export-val" class="export-pair" style="display:none">
-              <button type="button" id="export-val-blinded-btn" class="export-dl-btn">
+              <button type="button" id="export-val-blinded-btn" class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Validation CSV" title="Blinded export removes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Blinded
+                Download Validation CSV
               </button>
-              <button type="button" id="export-val-unblinded-btn" class="export-dl-btn">
+              <button type="button" id="export-val-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for validation CSV" title="Unblinded export includes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Unblinded
+                Download Unblinded Export
               </button>
             </div>
           </div>
@@ -601,33 +762,33 @@
         <!-- Execution Results -->
         <div class="export-group">
           <div class="export-group-header">
-            <div class="export-group-icon export-icon-run">▶</div>
-            <div>
-              <div class="export-group-title">Execution Results</div>
-              <div class="export-group-sub">Run outcomes, exit codes, output file counts, and output validation</div>
+              <div class="export-group-icon export-icon-run">▶</div>
+              <div>
+              <div class="export-group-title">Execution CSV</div>
+              <div class="export-group-sub">Docker run results.</div>
             </div>
           </div>
           <div class="export-group-body">
             <!-- Batch execution export -->
             <div id="batch-export-exec-wrap" class="export-pair">
-              <button type="button" id="batch-export-exec-blinded-btn" class="export-dl-btn">
+              <button type="button" id="batch-export-exec-blinded-btn" class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Execution CSV" title="Blinded export removes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Blinded
+                Download Execution CSV
               </button>
-              <button type="button" id="batch-export-exec-unblinded-btn" class="export-dl-btn">
+              <button type="button" id="batch-export-exec-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for execution CSV" title="Unblinded export includes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Unblinded
+                Download Unblinded Export
               </button>
             </div>
             <!-- Single-submission execution export -->
             <div id="exec-export-row" class="export-pair" style="display:none">
-              <button type="button" id="exec-export-blinded-btn" class="export-dl-btn">
+              <button type="button" id="exec-export-blinded-btn" class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Execution CSV" title="Blinded export removes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Blinded
+                Download Execution CSV
               </button>
-              <button type="button" id="exec-export-unblinded-btn" class="export-dl-btn">
+              <button type="button" id="exec-export-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for execution CSV" title="Unblinded export includes team name and contact email.">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Unblinded
+                Download Unblinded Export
               </button>
             </div>
             <div id="exec-export-status" class="submit-status" style="display:none;margin-top:8px;"></div>
@@ -637,18 +798,46 @@
         <!-- Scoring Results -->
         <div class="export-group" id="export-scoring-group">
           <div class="export-group-header">
-            <div class="export-group-icon export-icon-score">★</div>
-            <div>
-              <div class="export-group-title">Scoring Results</div>
-              <div class="export-group-sub" id="export-scoring-sub">Score submissions first to enable export</div>
+              <div class="export-group-icon export-icon-score">★</div>
+              <div>
+              <div class="export-group-title">Scoring CSV</div>
+              <div class="export-group-sub" id="export-scoring-sub">Scoring results.</div>
             </div>
           </div>
           <div class="export-group-body">
             <div class="export-pair">
-              <button type="button" id="export-scoring-blinded-btn"   class="export-dl-btn" disabled>Blinded</button>
-              <button type="button" id="export-scoring-unblinded-btn" class="export-dl-btn" disabled>Unblinded</button>
+              <button type="button" id="export-scoring-blinded-btn"   class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Scoring CSV" title="Blinded export removes team name and contact email." disabled>Download Scoring CSV</button>
+              <button type="button" id="export-scoring-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for scoring CSV" title="Unblinded export includes team name and contact email." disabled>Download Unblinded Export</button>
             </div>
             <div id="export-scoring-status" class="submit-status" style="display:none;margin-top:8px;"></div>
+          </div>
+        </div>
+
+        <!-- Combined Summary & Report -->
+        <div class="export-group" id="export-combined-group">
+          <div class="export-group-header">
+              <div class="export-group-icon export-icon-score">∑</div>
+              <div>
+              <div class="export-group-title">Combined CSV</div>
+              <div class="export-group-sub">One row per submission.</div>
+            </div>
+          </div>
+          <div class="export-group-body">
+            <div class="export-pair">
+              <button type="button" id="export-combined-blinded-btn" class="btn btn-primary export-dl-btn" aria-label="Download Blinded Export: Download Combined CSV" title="Blinded export removes team name and contact email.">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Combined CSV
+              </button>
+              <button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn" aria-label="Download Unblinded Export for combined CSV" title="Unblinded export includes team name and contact email.">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Unblinded Export
+              </button>
+              <button type="button" id="export-report-btn" class="btn btn-secondary export-dl-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                Open HTML Report
+              </button>
+            </div>
+            <div id="export-combined-status" class="submit-status" style="display:none;margin-top:8px;"></div>
           </div>
         </div>
 
@@ -659,12 +848,16 @@
 
     </section>
 
-    </main><!-- .content -->
+    <!-- ── Wizard footer (sticky bottom navigation) ───────────────── -->
+    <div id="wizard-footer" class="wizard-footer" style="display:none" hidden>
+      <button id="wf-back-btn" class="btn btn-ghost wf-back-btn" type="button">← Back</button>
+      <button id="wf-next-btn" class="btn btn-primary wf-next-btn" type="button" disabled>Continue</button>
+    </div>
 
-  </div><!-- .main -->
+    </main><!-- .content -->
 
 </div><!-- .app -->
 
-<script src="/static/app.js?v=36" defer></script>
+<script src="/static/app.js?v=53" defer></script>
 </body>
 </html>

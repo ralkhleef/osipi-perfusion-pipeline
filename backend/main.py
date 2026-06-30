@@ -1,6 +1,7 @@
 """FastAPI backend for the OSIPI perfusion pipeline web interface."""
 
 import csv
+import html
 import io
 import json
 import os
@@ -60,6 +61,14 @@ from services.scoring_package_service import (
     load_active_config,
     remove_package,
     set_active_entry,
+)
+from services.nifti_preview_service import (
+    get_preview_download_path,
+    get_preview_item,
+    get_preview_png_path,
+    list_submission_previews,
+    public_preview_item,
+    public_preview_manifest,
 )
 from scoring import (
     all_providers_status,
@@ -961,6 +970,174 @@ def serve_nifti(submission_id: str, filepath: str):
     )
 
 
+@app.get("/api/submissions/{submission_id}/previews")
+def list_submission_preview_manifest(
+    submission_id: str,
+    challenge_type: Optional[str] = Query(None),
+):
+    """Return cached preview metadata for submitted/result NIfTI maps only."""
+    manifest = list_submission_previews(submission_id, challenge_type=challenge_type)
+    return public_preview_manifest(manifest)
+
+
+@app.get("/api/submissions/{submission_id}/previews/{map_id}/{plane}.png")
+def serve_submission_preview_png(submission_id: str, map_id: str, plane: str):
+    """Serve a cached PNG preview slice for a submitted/result map."""
+    try:
+        path = get_preview_png_path(submission_id, map_id, plane)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return FileResponse(
+        str(path),
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@app.get("/api/submissions/{submission_id}/maps/{map_id}/download")
+def download_submission_preview_map(submission_id: str, map_id: str):
+    """Download the original submitted/result NIfTI map used for preview."""
+    try:
+        path = get_preview_download_path(submission_id, map_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    media_type = "application/gzip" if path.name.lower().endswith(".gz") else "application/octet-stream"
+    return FileResponse(
+        str(path),
+        media_type=media_type,
+        filename=path.name,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _preview_page_html(submission_id: str, item: dict) -> str:
+    public = public_preview_item(item)
+    title = html.escape(public.get("file_name") or "NIfTI preview")
+    map_type = html.escape(public.get("detected_map_type") or "Unknown")
+    shape = html.escape(" x ".join(str(v) for v in public.get("shape") or []) or "not available")
+    voxel = html.escape(", ".join(str(v) for v in public.get("voxel_size") or []) or "not available")
+    dtype = html.escape(str(public.get("dtype") or "not available"))
+    mean = html.escape(str(public.get("mean") if public.get("mean") is not None else "not available"))
+    std = html.escape(str(public.get("std") if public.get("std") is not None else "not available"))
+    finite = html.escape(str(public.get("finite_percent") if public.get("finite_percent") is not None else "not available"))
+    negative = html.escape(str(public.get("negative_percent") if public.get("negative_percent") is not None else "not available"))
+    error = html.escape(public.get("preview_error") or "")
+    download_url = html.escape(public.get("download_url") or "#")
+    planes = [
+        ("Axial", public.get("axial_url")),
+        ("Coronal", public.get("coronal_url")),
+        ("Sagittal", public.get("sagittal_url")),
+    ]
+    plane_buttons = "".join(
+        f'<button type="button" data-plane="{html.escape(url)}" class="{ "is-active" if i == 0 else "" }">{label}</button>'
+        for i, (label, url) in enumerate(planes)
+        if url
+    )
+    first_image = next((url for _, url in planes if url), "")
+    preview_body = (
+        f'<img id="preview-image" src="{html.escape(first_image)}" alt="Preview slice for {title}">'
+        if first_image else
+        f'<div class="empty-preview">Preview unavailable{": " + error if error else ""}</div>'
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} preview</title>
+  <style>
+    :root {{ color-scheme: light; --purple:#533a9d; --border:#d8dde8; --text:#20232d; --muted:#687083; }}
+    body {{ margin:0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f4f5f8; color:var(--text); }}
+    main {{ max-width:1040px; margin:0 auto; padding:28px 18px 40px; }}
+    .page {{ background:#fff; border:1px solid var(--border); border-radius:14px; overflow:hidden; box-shadow:0 12px 34px rgba(20,24,36,.08); }}
+    header {{ display:flex; justify-content:space-between; gap:16px; padding:18px 20px; border-top:5px solid var(--purple); border-bottom:1px solid var(--border); }}
+    h1 {{ margin:0; font-size:1.1rem; line-height:1.3; overflow-wrap:anywhere; }}
+    .sub {{ margin-top:5px; color:var(--muted); font-size:.86rem; }}
+    .status {{ align-self:flex-start; border:1px solid var(--border); border-radius:999px; padding:5px 10px; color:var(--purple); font-weight:800; font-size:.74rem; white-space:nowrap; }}
+    .content {{ display:grid; grid-template-columns:minmax(0, 1.5fr) minmax(260px, .75fr); gap:0; }}
+    .viewer {{ padding:18px; border-right:1px solid var(--border); }}
+    .tabs {{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }}
+    .tabs button {{ border:1px solid var(--border); background:#fff; color:var(--text); border-radius:8px; padding:7px 12px; font-weight:750; cursor:pointer; }}
+    .tabs button.is-active {{ border-color:var(--purple); color:var(--purple); background:#f1edff; }}
+    .image-wrap {{ min-height:420px; display:grid; place-items:center; background:#10131a; border-radius:10px; overflow:hidden; }}
+    img {{ max-width:100%; max-height:74vh; image-rendering:auto; }}
+    .empty-preview {{ color:#fff; padding:28px; text-align:center; }}
+    aside {{ padding:18px 20px; }}
+    dl {{ display:grid; grid-template-columns:110px minmax(0,1fr); gap:9px 12px; margin:0; font-size:.84rem; }}
+    dt {{ color:var(--muted); }}
+    dd {{ margin:0; font-weight:750; overflow-wrap:anywhere; }}
+    .actions {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }}
+    a.button {{ text-decoration:none; border-radius:9px; padding:9px 12px; font-weight:800; font-size:.82rem; }}
+    .primary {{ background:var(--purple); color:#fff; }}
+    .secondary {{ border:1px solid var(--border); color:var(--text); background:#fff; }}
+    .note {{ margin-top:18px; color:var(--muted); font-size:.8rem; line-height:1.5; }}
+    @media (max-width: 820px) {{ .content {{ grid-template-columns:1fr; }} .viewer {{ border-right:0; border-bottom:1px solid var(--border); }} header {{ flex-direction:column; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="page">
+      <header>
+        <div>
+          <h1>{title}</h1>
+          <div class="sub">{map_type} · submission {html.escape(make_safe_id(submission_id))}</div>
+        </div>
+        <div class="status">{'Preview available' if public.get('preview_available') else 'Preview unavailable'}</div>
+      </header>
+      <div class="content">
+        <div class="viewer">
+          <div class="tabs">{plane_buttons}</div>
+          <div class="image-wrap">{preview_body}</div>
+        </div>
+        <aside>
+          <dl>
+            <dt>Map type</dt><dd>{map_type}</dd>
+            <dt>Shape</dt><dd>{shape}</dd>
+            <dt>Voxel size</dt><dd>{voxel}</dd>
+            <dt>Data type</dt><dd>{dtype}</dd>
+            <dt>Mean</dt><dd>{mean}</dd>
+            <dt>Std.</dt><dd>{std}</dd>
+            <dt>Finite %</dt><dd>{finite}</dd>
+            <dt>Negative %</dt><dd>{negative}</dd>
+          </dl>
+          <div class="actions">
+            <a class="button primary" href="{download_url}">Download NIfTI for ITK-SNAP</a>
+            <a class="button secondary" href="/static/index.html#summary">Back to app</a>
+          </div>
+          <p class="note">For full medical image inspection, download the NIfTI file and open it in ITK-SNAP, FSLeyes, 3D Slicer, or another NIfTI viewer.</p>
+        </aside>
+      </div>
+    </section>
+  </main>
+  <script>
+    const buttons = document.querySelectorAll('[data-plane]');
+    const img = document.getElementById('preview-image');
+    buttons.forEach((button) => button.addEventListener('click', () => {{
+      buttons.forEach((b) => b.classList.remove('is-active'));
+      button.classList.add('is-active');
+      if (img) img.src = button.dataset.plane;
+    }}));
+  </script>
+</body>
+</html>"""
+
+
+@app.get("/preview/{submission_id}/{map_id}")
+def full_preview_page(submission_id: str, map_id: str):
+    """Open a view-only full preview page for a submitted/result map."""
+    item = get_preview_item(submission_id, map_id)
+    if item is None:
+        list_submission_previews(submission_id, challenge_type=None)
+        item = get_preview_item(submission_id, map_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Preview map not found.")
+    return Response(content=_preview_page_html(submission_id, item), media_type="text/html")
+
+
 # ---------------------------------------------------------------------------
 # Docker execution — build image and run submission
 # ---------------------------------------------------------------------------
@@ -1327,6 +1504,16 @@ def score_single(req: ScoreRequest):
     return result
 
 
+@app.post("/api/score-single")
+def score_single_legacy(req: ScoreRequest):
+    """Backwards-compatible alias for ``POST /api/score``.
+
+    Older clients/tests call ``/api/score-single``; it delegates to the same
+    single-submission scoring logic so behaviour is identical.
+    """
+    return score_single(req)
+
+
 @app.post("/api/score-batch")
 def score_batch_endpoint(req: ScoreBatchRequest):
     """Run scoring for a list of submissions sequentially.
@@ -1382,9 +1569,13 @@ def get_leaderboard():
 
 @app.get("/api/scoring/packages")
 def scoring_packages_list():
-    """List all installed scoring packages with their manifests and readiness."""
-    packages = list_packages()
-    return {"count": len(packages), "packages": packages}
+    """List all installed scoring packages with their manifests and readiness.
+
+    Returns a JSON array of package objects (each with ``package_id``). The
+    array shape is the stable, backwards-compatible contract clients/tests rely
+    on; the frontend handles both an array and a legacy ``{packages: [...]}``.
+    """
+    return list_packages()
 
 
 @app.post("/api/scoring/packages/upload")
@@ -1440,8 +1631,14 @@ def scoring_package_remove(package_id: str):
 
 @app.get("/api/scoring/active-config")
 def scoring_active_config():
-    """Return the current active scoring configuration for all challenge types."""
-    return {"active_config": load_active_config(), "packages": list_packages()}
+    """Return the current active scoring configuration for all challenge types.
+
+    Exposes the config under both ``active`` (stable/expected key) and
+    ``active_config`` (legacy key the frontend reads) so older and newer
+    clients keep working.
+    """
+    cfg = load_active_config()
+    return {"active": cfg, "active_config": cfg, "packages": list_packages()}
 
 
 class ScoringSetActiveRequest(BaseModel):

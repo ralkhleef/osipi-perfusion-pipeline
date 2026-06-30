@@ -60,6 +60,26 @@ const _execSummaries = {};
 // Scoring result cache populated by _applyScoreStatus() — keyed by submission_id
 const _scoreCache = {};
 
+// NIfTI preview manifest cache populated by Results Summary.
+const _previewManifestCache = {};
+const _previewItemsById = {};
+let _activePreviewMapId = null;
+let _activePreviewPlane = "axial";
+
+// Frontend-only list filters for review/validation/run/score history.
+const _indexFilter = { search: "", challenge: "all", type: "all", status: "all", map: "all" };
+const _leaderboardFilter = {
+  entries: [],
+  loading: false,
+  error: "",
+  search: "",
+  date: "all",
+  status: "all",
+  challenge: "all",
+  map: "all",
+  sort: "newest",
+};
+
 // ── Docker availability ───────────────────────────────────────────────────────
 
 const dockerStatus = { available: null, version: "", message: "" };
@@ -189,6 +209,136 @@ function submissionTypeInfo(item) {
 function statusPill(label, state) {
   return `<span class="status-pill status-${escapeHtml(state || "pending")}">${escapeHtml(label)}</span>`;
 }
+
+function helpTooltip(text, label = "More information") {
+  return `<button type="button" class="help-tooltip" aria-label="${escapeHtml(label)}">?<span class="tooltip-text">${escapeHtml(text)}</span></button>`;
+}
+
+function _filterOptionLabel(options, value) {
+  const found = (options || []).find((opt) => opt.value === value);
+  return found ? found.label : "All";
+}
+
+function _renderFilterDropdown(group, label, value, options) {
+  const active = value && value !== "all";
+  const selectedLabel = _filterOptionLabel(options, value);
+  return `<div class="filter-dropdown" data-filter-dropdown="${escapeHtml(group)}">
+    <button type="button" class="filter-pill${active ? " is-active" : ""}" data-filter-menu="${escapeHtml(group)}" aria-haspopup="menu" aria-expanded="false">
+      <span class="filter-pill-label">${escapeHtml(label)}</span>
+      <span class="filter-pill-value">${escapeHtml(selectedLabel)}</span>
+      <span class="filter-pill-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div class="filter-menu" role="menu" hidden>
+      ${(options || []).map((opt) => `<button type="button" class="filter-option${opt.value === value ? " is-selected" : ""}" role="menuitemradio" aria-checked="${opt.value === value ? "true" : "false"}" data-filter-option="${escapeHtml(group)}" data-filter-value="${escapeHtml(opt.value)}">
+        <span class="filter-option-check" aria-hidden="true">${opt.value === value ? "✓" : ""}</span>
+        <span>${escapeHtml(opt.label)}</span>
+      </button>`).join("")}
+    </div>
+  </div>`;
+}
+
+function _renderSearchBox(id, value, placeholder = "Search") {
+  return `<label class="filter-search" for="${escapeHtml(id)}">
+    <span class="filter-search-icon" aria-hidden="true">⌕</span>
+    <input type="search" id="${escapeHtml(id)}" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder)}" autocomplete="off">
+  </label>`;
+}
+
+function _renderChipGroup(group, value, options) {
+  return `<div class="filter-chip-group" role="group" aria-label="${escapeHtml(group)} filters">
+    ${(options || []).map((opt) => `<button type="button" class="filter-chip${opt.value === value ? " fc-active" : ""}" data-filter-option="${escapeHtml(group)}" data-filter-value="${escapeHtml(opt.value)}">${escapeHtml(opt.label)}</button>`).join("")}
+  </div>`;
+}
+
+function _closeFilterMenus() {
+  document.querySelectorAll(".filter-dropdown .filter-menu").forEach((menu) => {
+    menu.hidden = true;
+  });
+  document.querySelectorAll("[data-filter-menu]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function _dateWithinFilter(value, filter) {
+  if (!filter || filter === "all") return true;
+  if (!value) return false;
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return false;
+  const now = Date.now();
+  const ageMs = now - dt.getTime();
+  const day = 24 * 60 * 60 * 1000;
+  const limits = {
+    "24h": day,
+    "7d": 7 * day,
+    "1m": 31 * day,
+    "1q": 92 * day,
+    "1y": 366 * day,
+  };
+  return ageMs <= (limits[filter] || Infinity);
+}
+
+function _handleFilterSelection(group, value) {
+  if (group.startsWith("leaderboard-")) {
+    const key = group.replace("leaderboard-", "");
+    if (key in _leaderboardFilter) _leaderboardFilter[key] = value;
+    _renderLeaderboardEntries();
+    return;
+  }
+  if (group.startsWith("index-")) {
+    const key = group.replace("index-", "");
+    if (key in _indexFilter) _indexFilter[key] = value;
+    if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
+    return;
+  }
+  if (group === "validation-status") {
+    _reviewFilter.filter = value;
+    _reviewFilter.showAll = false;
+    _refreshValidationFilterBar();
+    _applyReviewFilters();
+    return;
+  }
+  if (group === "validation-sort") {
+    _reviewFilter.sort = value;
+    _refreshValidationFilterBar();
+    _applyReviewFilters();
+    return;
+  }
+  if (group === "run-status") {
+    _runFilter.view = value;
+    _runFilter.showAll = false;
+    _refreshRunFilterBar();
+    _applyRunFilters();
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const menuBtn = e.target.closest("[data-filter-menu]");
+  if (menuBtn) {
+    e.preventDefault();
+    const menu = menuBtn.closest(".filter-dropdown")?.querySelector(".filter-menu");
+    const wasOpen = menu && !menu.hidden;
+    _closeFilterMenus();
+    if (menu && !wasOpen) {
+      menu.hidden = false;
+      menuBtn.setAttribute("aria-expanded", "true");
+    }
+    return;
+  }
+
+  const option = e.target.closest("[data-filter-option]");
+  if (option) {
+    e.preventDefault();
+    _handleFilterSelection(option.dataset.filterOption || "", option.dataset.filterValue || "all");
+    _closeFilterMenus();
+    return;
+  }
+
+  if (!e.target.closest(".filter-dropdown")) _closeFilterMenus();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") _closeFilterMenus();
+});
 
 function issueCount(result, field) {
   if (!result) return 0;
@@ -1742,6 +1892,97 @@ async function handleSubmit() {
 
 // ── Step 2: Review detected submissions ───────────────────────────────────────
 
+function _indexSubmissionTypeValue(sub) {
+  const info = submissionTypeInfo(sub);
+  if (info.state === "skipped" || sub.run_readiness === "result_only") return "result-only";
+  if (hasRunInstructions(sub)) return "runnable";
+  return "unknown";
+}
+
+function _indexSubmissionStatusValue(sub) {
+  const info = submissionTypeInfo(sub);
+  if (sub.status === "failed" || sub.detection_warning || info.state === "warning") return "needs-attention";
+  if (!sub.challenge_type || (!sub.detected_parameter_map_type && !sub.map_type)) return "missing-details";
+  return "ready";
+}
+
+function _renderIndexFilterBar(submissions) {
+  const mapOptions = ["all", ...new Set((submissions || [])
+    .map((s) => s.detected_parameter_map_type || s.map_type)
+    .filter(Boolean)
+    .map(String))].map((value) => ({ value, label: value === "all" ? "All" : value }));
+  return `<div class="filter-bar review-filter-bar" id="index-filter-bar">
+    ${_renderSearchBox("index-search", _indexFilter.search, "Search submissions")}
+    ${_renderFilterDropdown("index-challenge", "Challenge", _indexFilter.challenge, [
+      { value: "all", label: "All" },
+      { value: "asl", label: "ASL" },
+      { value: "dce", label: "DCE" },
+      { value: "dsc", label: "DSC" },
+      { value: "other", label: "Other" },
+    ])}
+    ${_renderFilterDropdown("index-type", "Type", _indexFilter.type, [
+      { value: "all", label: "All" },
+      { value: "runnable", label: "Runnable" },
+      { value: "result-only", label: "Result-only" },
+      { value: "unknown", label: "Needs review" },
+    ])}
+    ${_renderFilterDropdown("index-status", "Status", _indexFilter.status, [
+      { value: "all", label: "All" },
+      { value: "ready", label: "Ready" },
+      { value: "needs-attention", label: "Needs attention" },
+      { value: "missing-details", label: "Missing details" },
+    ])}
+    ${_renderFilterDropdown("index-map", "Map", _indexFilter.map, mapOptions)}
+    <button type="button" class="filter-clear-btn" id="index-clear-filters">Clear filters</button>
+  </div>`;
+}
+
+function _filterIndexSubmissions(submissions) {
+  const q = (_indexFilter.search || "").trim().toLowerCase();
+  return (submissions || []).filter((sub) => {
+    const challenge = String(sub.challenge_type || getChallengeType() || "other").toLowerCase();
+    const mapType = String(sub.detected_parameter_map_type || sub.map_type || "").toLowerCase();
+    const type = _indexSubmissionTypeValue(sub);
+    const status = _indexSubmissionStatusValue(sub);
+    const text = [
+      sub.submission_id,
+      sub.display_name,
+      sub.name,
+      sub.source_folder,
+      sub.original_filename,
+      mapType,
+      challenge,
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (q && !text.includes(q)) return false;
+    if (_indexFilter.challenge !== "all" && challenge !== _indexFilter.challenge) return false;
+    if (_indexFilter.type !== "all" && type !== _indexFilter.type) return false;
+    if (_indexFilter.status !== "all" && status !== _indexFilter.status) return false;
+    if (_indexFilter.map !== "all" && mapType !== String(_indexFilter.map).toLowerCase()) return false;
+    return true;
+  });
+}
+
+function _wireIndexFilterBar() {
+  const search = el("index-search");
+  if (search) {
+    search.oninput = () => {
+      _indexFilter.search = search.value;
+      if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
+    };
+  }
+  const clear = el("index-clear-filters");
+  if (clear) {
+    clear.onclick = () => {
+      _indexFilter.search = "";
+      _indexFilter.challenge = "all";
+      _indexFilter.type = "all";
+      _indexFilter.status = "all";
+      _indexFilter.map = "all";
+      if (batchState.uploadData) renderBatchTable(batchState.uploadData.submissions || []);
+    };
+  }
+}
+
 // Render detected submissions as clean cards. Selection state and action-row
 // validation both work through batchState.selectedIds.
 function renderBatchTable(submissions) {
@@ -1775,10 +2016,17 @@ function renderBatchTable(submissions) {
   if (controlsLeft) controlsLeft.style.display = isSingle ? "none" : "";
   if (controlsRight) controlsRight.style.display = "none";
 
+  const visibleSubmissions = isSingle ? safeSubmissions : _filterIndexSubmissions(safeSubmissions);
+
+  if (!isSingle) {
+    wrap.insertAdjacentHTML("beforeend", _renderIndexFilterBar(safeSubmissions));
+    _wireIndexFilterBar();
+  }
+
   const list = document.createElement("div");
   list.className = "sub-card-list" + (isSingle ? " sub-card-list--single" : "");
 
-  safeSubmissions.forEach((sub, idx) => {
+  visibleSubmissions.forEach((sub, idx) => {
     const isSelected = batchState.selectedIds.has(sub.submission_id);
     const typeInfo = submissionTypeInfo(sub);
     const statusState = sub.status === "failed" ? "error"
@@ -1800,26 +2048,37 @@ function renderBatchTable(submissions) {
     const safeName = escapeHtml(submissionDisplayName(sub, `Submission ${idx + 1}`));
     const safeChallenge = escapeHtml(challengeLabel(sub.challenge_type));
     const safeType = escapeHtml(typeInfo.label);
+    const subTypeHelp = typeInfo.state === "skipped"
+      ? "This means the submission already includes output maps, so Docker execution may be skipped."
+      : "Submission type indicates whether output maps are provided or code must be run.";
     const niftiCount   = sub.nifti_count ?? "—";
+    const mapChip = sub.detected_parameter_map_type || sub.map_type || "Map not detected";
+    const readinessChip = _indexSubmissionTypeValue(sub) === "result-only" ? "Result maps provided"
+      : _indexSubmissionTypeValue(sub) === "runnable" ? "Runnable" : "Needs review";
 
     card.innerHTML = `
       ${isSingle ? "" : `<input type="checkbox" class="sub-card-check" data-id="${escapeHtml(sub.submission_id)}" ${isSelected ? "checked" : ""} aria-label="Select ${safeName}" />`}
       <div class="sub-card-body">
         <div class="sub-card-top">
-          <span class="sub-card-name">${safeName}</span>
+          <span class="sub-card-name" title="${safeName}">${safeName}</span>
           ${statusPill(statusLabel, statusState)}
+        </div>
+        <div class="sub-card-tags">
+          <span class="sub-tag">${safeChallenge}</span>
+          <span class="sub-tag">${escapeHtml(mapChip)}</span>
+          <span class="sub-tag ${_indexSubmissionTypeValue(sub) === "runnable" ? "sub-tag--repro" : "sub-tag--result"}">${escapeHtml(readinessChip)}</span>
         </div>
         <div class="sub-card-fields">
           <div class="sub-field">
-            <span class="sub-field-label">Challenge type</span>
+            <span class="sub-field-label">Challenge type ${helpTooltip("Select the OSIPI challenge type for this submission.", "Challenge type help")}</span>
             <span class="sub-field-value">${safeChallenge}</span>
           </div>
           <div class="sub-field">
-            <span class="sub-field-label">Map type</span>
+            <span class="sub-field-label">Map type ${helpTooltip("Optional. The app can auto-detect CBF, ATT, Ktrans, ve, vp, or Kep from filenames and metadata.", "Parameter map type help")}</span>
             <span class="sub-field-value">${safeMapLabel}</span>
           </div>
           <div class="sub-field">
-            <span class="sub-field-label">Submission type</span>
+            <span class="sub-field-label">Submission type ${helpTooltip(subTypeHelp, typeInfo.state === "skipped" ? "Result maps provided help" : "Submission type help")}</span>
             <span class="sub-field-value">${safeType}</span>
           </div>
           <div class="sub-field">
@@ -1854,6 +2113,21 @@ function renderBatchTable(submissions) {
   });
 
   wrap.appendChild(list);
+  if (!visibleSubmissions.length) {
+    wrap.insertAdjacentHTML("beforeend", `<div class="list-empty-state">
+      <p>No submissions match these filters.</p>
+      <button type="button" class="btn btn-secondary btn-sm" id="index-empty-clear">Clear filters</button>
+    </div>`);
+    const emptyClear = el("index-empty-clear");
+    if (emptyClear) emptyClear.onclick = () => {
+      _indexFilter.search = "";
+      _indexFilter.challenge = "all";
+      _indexFilter.type = "all";
+      _indexFilter.status = "all";
+      _indexFilter.map = "all";
+      renderBatchTable(safeSubmissions);
+    };
+  }
   _syncBatchValidateBtn();
   _refreshWizardFooter();
 }
@@ -2060,6 +2334,48 @@ function _validationReason(errors, warnings) {
   return "No issues found.";
 }
 
+function _renderValidationFilterBar() {
+  return `<div class="filter-bar validation-filter-bar">
+    ${_renderSearchBox("batch-search", _reviewFilter.search, "Search validation results")}
+    ${_renderChipGroup("validation-status", _reviewFilter.filter, [
+      { value: "all", label: "All" },
+      { value: "passed", label: "Passed" },
+      { value: "warnings", label: "Warnings" },
+      { value: "errors", label: "Errors" },
+      { value: "runnable", label: "Runnable" },
+      { value: "result-only", label: "Result-only" },
+    ])}
+    ${_renderFilterDropdown("validation-sort", "Sort", _reviewFilter.sort, [
+      { value: "status", label: "Status" },
+      { value: "name", label: "Name A-Z" },
+      { value: "errors", label: "Most errors" },
+      { value: "warnings", label: "Warnings" },
+      { value: "runnable", label: "Runnable first" },
+    ])}
+    <div class="filter-bar-spacer"></div>
+    <button type="button" id="batch-expand-all" class="filter-text-btn">Expand all</button>
+    <button type="button" id="batch-collapse-all" class="filter-text-btn">Collapse all</button>
+  </div>`;
+}
+
+function _wireValidationFilterBar() {
+  const searchEl = el("batch-search");
+  if (searchEl) {
+    searchEl.oninput = () => {
+      _reviewFilter.search = searchEl.value;
+      _reviewFilter.showAll = false;
+      _applyReviewFilters();
+    };
+  }
+}
+
+function _refreshValidationFilterBar() {
+  const toolbar = el("val-toolbar");
+  if (!toolbar || toolbar.style.display === "none") return;
+  toolbar.innerHTML = _renderValidationFilterBar();
+  _wireValidationFilterBar();
+}
+
 function renderValidateStep(data, isSingleMode) {
   const results = data.results || [];
   const single  = isSingleMode === true || !batchState.isBatch;
@@ -2084,12 +2400,10 @@ function renderValidateStep(data, isSingleMode) {
   _reviewFilter.search  = "";
   _reviewFilter.sort    = "status";
   _reviewFilter.showAll = false;
+  const valToolbar = el("val-toolbar");
+  if (valToolbar) valToolbar.innerHTML = _renderValidationFilterBar();
   const searchEl  = el("batch-search");
-  const sortEl    = el("batch-sort");
-  const viewSelEl = el("batch-view-select");
-  if (searchEl)  searchEl.value  = "";
-  if (sortEl)    sortEl.value    = "status";
-  if (viewSelEl) viewSelEl.value = "all";
+  if (searchEl) searchEl.value = "";
 
   // ── 1. One-line summary in step header desc ───────────────────────────────
   const titleEl = el("validate-card-title");
@@ -2116,30 +2430,10 @@ function renderValidateStep(data, isSingleMode) {
     desc.textContent = parts.join(" · ");
   }
 
-  // ── 2. View dropdown + search + sort handlers ─────────────────────────────
-  if (viewSelEl) {
-    viewSelEl.onchange = () => {
-      _reviewFilter.filter  = viewSelEl.value;
-      _reviewFilter.showAll = false;
-      _applyReviewFilters();
-    };
-  }
-  if (searchEl) {
-    searchEl.oninput = () => {
-      _reviewFilter.search  = searchEl.value;
-      _reviewFilter.showAll = false;
-      _applyReviewFilters();
-    };
-  }
-  if (sortEl) {
-    sortEl.onchange = () => {
-      _reviewFilter.sort = sortEl.value;
-      _applyReviewFilters();
-    };
-  }
+  // ── 2. Filter/search handlers ─────────────────────────────────────────────
+  _wireValidationFilterBar();
 
   // ── Toolbar visibility: hide for single submission (no search/filter needed)
-  const valToolbar = el("val-toolbar");
   if (valToolbar) valToolbar.style.display = results.length <= 1 ? "none" : "";
 
   // ── 3. Show-all button ────────────────────────────────────────────────────
@@ -2187,6 +2481,9 @@ function renderValidateStep(data, isSingleMode) {
       const safeMap       = escapeHtml(r.map_type || "Not detected");
       const reason        = escapeHtml(_validationReason(errors, warnings));
       const subType       = submissionTypeInfo(r);
+      const subTypeHelp   = isResultOnly
+        ? "This means the submission already includes output maps, so Docker execution may be skipped."
+        : "Submission type indicates whether output maps are provided or code must be run.";
 
       // Detail content
       const niftiLine = rNiftiCount > 0
@@ -2215,12 +2512,13 @@ function renderValidateStep(data, isSingleMode) {
       // No inline exec section on Validate — execution happens in Run step only
       const execHtml = "";
 
-      const wrap = document.createElement("div");
-      wrap.className = "br-row-wrap validation-card";
-      wrap.dataset.valStatus  = valStatus;
-      wrap.dataset.runnable   = String(runnable);
-      wrap.dataset.execStatus = execInitStatus;
-      wrap.dataset.subId      = r.submission_id;
+	      const wrap = document.createElement("div");
+	      wrap.className = "br-row-wrap validation-card";
+	      wrap.dataset.valStatus  = valStatus;
+	      wrap.dataset.runnable   = String(runnable);
+	      wrap.dataset.execStatus = execInitStatus;
+	      wrap.dataset.resultOnly = String(isResultOnly);
+	      wrap.dataset.subId      = r.submission_id;
       wrap.dataset.name       = (r.submission_id + " " + (r.source_folder || "") + " " + safeName).toLowerCase();
       wrap.dataset.errCount   = String(errors.length);
       wrap.dataset.warnCount  = String(warnings.length);
@@ -2236,8 +2534,8 @@ function renderValidateStep(data, isSingleMode) {
             <span>Challenge: ${safeChallenge}</span>
             <span>Map: ${safeMap}</span>
             <span>NIfTI: ${escapeHtml(rNiftiCount)}</span>
-            <span>${escapeHtml(subType.label)}</span>
-            ${statusPill(runTxt, runState)}
+            <span class="validation-meta-with-help">${escapeHtml(subType.label)} ${helpTooltip(subTypeHelp, isResultOnly ? "Result maps provided help" : "Submission type help")}</span>
+            <span class="validation-meta-with-help">${statusPill(runTxt, runState)} ${helpTooltip("Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.", "Run readiness help")}</span>
             <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem"></span>
           </div>
           <div class="validation-card-actions">
@@ -2329,11 +2627,15 @@ function _applyReviewFilters() {
 
     let show = true;
     switch (filter) {
-      case "needs-review": show = vs === "warning"; break;
+      case "passed":       show = vs === "passed"; break;
+      case "warnings":     show = vs === "warning"; break;
+      case "errors":       show = vs === "failed"; break;
+      case "runnable":     show = runnable && es === "not-run"; break;
+      case "result-only":  show = row.dataset.resultOnly === "true"; break;
+      case "needs-review": show = vs === "warning" || vs === "failed"; break;
       case "failed":       show = vs === "failed"; break;
       case "ready":        show = runnable && es === "not-run"; break;
       // legacy values kept for safety
-      case "passed":       show = vs === "passed"; break;
       case "cannot-run":   show = !runnable; break;
       case "executed":     show = es === "passed" || es === "failed"; break;
       case "exec-failed":  show = es === "failed"; break;
@@ -2373,12 +2675,8 @@ function _applyReviewFilters() {
 }
 
 function _syncFilterChips() {
-  // Sync the view select dropdown (v23 toolbar)
-  const viewSel = el("batch-view-select");
-  if (viewSel) viewSel.value = _reviewFilter.filter;
-  // Also sync any legacy chips still present
-  document.querySelectorAll(".filter-chip[data-filter-val]").forEach((c) => {
-    c.classList.toggle("fc-active", c.dataset.filterVal === _reviewFilter.filter);
+  document.querySelectorAll('[data-filter-option="validation-status"]').forEach((c) => {
+    c.classList.toggle("fc-active", c.dataset.filterValue === _reviewFilter.filter);
   });
 }
 
@@ -2498,6 +2796,25 @@ if (newBtn) {
 // ── Step 4: Run ───────────────────────────────────────────────────────────────
 
 const _runFilter = { view: "ready", showAll: false };
+
+function _renderRunFilterBar() {
+  return `<div class="filter-bar run-filter-bar">
+    ${_renderChipGroup("run-status", _runFilter.view, [
+      { value: "all", label: "All" },
+      { value: "ready", label: "Ready to run" },
+      { value: "cannot-run", label: "Cannot run" },
+      { value: "complete", label: "Complete" },
+      { value: "failed", label: "Failed" },
+      { value: "skipped", label: "Skipped" },
+    ])}
+  </div>`;
+}
+
+function _refreshRunFilterBar() {
+  const toolbar = el("run-toolbar");
+  if (!toolbar || toolbar.style.display === "none") return;
+  toolbar.innerHTML = _renderRunFilterBar();
+}
 
 // ── Run progress tracking ─────────────────────────────────────────────────────
 const _runProgress = { total: 0, completed: 0, failed: 0, outputs: 0 };
@@ -2669,14 +2986,10 @@ async function renderRunStep() {
 
   // ── Toolbar visibility ─────────────────────────────────────────────────────
   const toolbar = el("run-toolbar");
-  if (toolbar) toolbar.style.display = results.length > 1 && !allResultOnly ? "" : "none";
-
-  if (viewSel) {
-    viewSel.onchange = () => {
-      _runFilter.view    = viewSel.value;
-      _runFilter.showAll = false;
-      _applyRunFilters();
-    };
+  if (toolbar) {
+    toolbar.innerHTML = _renderRunFilterBar();
+    toolbar.style.display = results.length > 1 && !allResultOnly ? "" : "none";
+    if (list && toolbar.parentElement) toolbar.parentElement.insertBefore(toolbar, list);
   }
 
   const showAllBtn = el("run-show-all-btn");
@@ -2727,7 +3040,7 @@ async function renderRunStep() {
     }
 
     // Action buttons
-    const actionsHtml = runnable
+      const actionsHtml = runnable
       ? `<div class="run-card-actions">
            <button type="button" class="btn btn-primary btn-sm er-run-btn"
                    data-sub-id="${safeSubId}"
@@ -2738,21 +3051,22 @@ async function renderRunStep() {
            <button type="button" class="btn btn-ghost btn-sm er-detail-btn">Details</button>
          </div>`;
 
-    const safeName = r.source_folder ? escapeHtml(r.source_folder) : safeSubId;
+	    const safeName = r.source_folder ? escapeHtml(r.source_folder) : safeSubId;
+	    const fileCount = r.nifti_count ?? r.output_file_count ?? "—";
 
-    wrap.innerHTML = `
-      <div class="run-card-main">
-        <div class="run-card-info">
-          <div class="run-card-name" title="${safeSubId}">${safeName}</div>
+	    wrap.innerHTML = `
+	      <div class="run-card-main">
+	        <div class="run-card-info">
+	          <div class="run-card-name" title="${safeSubId}">${safeName}</div>
           <div class="run-card-status-row">
             ${statusHtml}
             ${reasonHtml}
           </div>
-        </div>
-        <div class="run-card-right">
-          <div class="run-card-outputs er-outputs-cell"><span class="rs-na">—</span></div>
-          ${actionsHtml}
-        </div>
+	        </div>
+	        <div class="run-card-right">
+	          <div class="run-card-outputs er-outputs-cell"><span class="rs-na">${escapeHtml(fileCount)} file${Number(fileCount) === 1 ? "" : "s"}</span></div>
+	          ${actionsHtml}
+	        </div>
       </div>
       <div class="er-row-detail run-card-detail" style="display:none">
         ${isResultOnly
@@ -2795,13 +3109,16 @@ function _applyRunFilters() {
   rows.forEach((row) => {
     const es       = row.dataset.execStatus;
     const runnable = row.dataset.runnable === "true";
-    let show = true;
-    switch (view) {
-      case "ready":     show = (runnable && es === "not-run") || es === "result-only"; break;
-      case "not-run":   show = es === "not-run"; break;
-      case "passed":    show = es === "passed"; break;
-      case "failed":    show = es === "failed"; break;
-      case "timed-out": show = es === "timed-out"; break;
+	    let show = true;
+	    switch (view) {
+	      case "ready":     show = (runnable && es === "not-run") || es === "result-only"; break;
+	      case "cannot-run": show = es === "cannot-run"; break;
+	      case "complete":  show = es === "passed"; break;
+	      case "skipped":   show = es === "result-only"; break;
+	      case "not-run":   show = es === "not-run"; break;
+	      case "passed":    show = es === "passed"; break;
+	      case "failed":    show = es === "failed" || es === "timed-out"; break;
+	      case "timed-out": show = es === "timed-out"; break;
       default:          show = true; // "all"
     }
     if (show) matchingRows.push(row);
@@ -3291,6 +3608,11 @@ function _leaderboardStatusLabel(status) {
     case "not_configured": return "Needs setup";
     case "not_ready":      return "Incomplete";
     case "ready":          return "Ready";
+    case "reference_not_available": return "Reference unavailable";
+    case "partial_reference_scoring": return "Partial reference scoring";
+    case "scoring_error": return "Scoring error";
+    case "reference_invalid": return "Reference invalid";
+    case "no_finite_overlap": return "No finite overlap";
     default:               return status ? status.replace(/_/g, " ") : "Unknown";
   }
 }
@@ -3298,6 +3620,270 @@ function _leaderboardStatusLabel(status) {
 function _leaderboardStatusClass(status) {
   const clean = String(status || "unknown").replace(/[^a-z0-9_-]/gi, "-").toLowerCase();
   return `leaderboard-status-badge leaderboard-status-${clean}`;
+}
+
+function _leaderboardReferenceStatus(entry) {
+  return entry.reference_scoring_status
+    || entry.reference_status
+    || entry.referenceBasedScoringStatus
+    || entry.reference_based_scoring_status
+    || (entry.reference_based_scoring_available ? "scored" : "");
+}
+
+function _leaderboardChallenge(entry) {
+  return String(entry.challenge_type || entry.challenge || entry.metrics?.challenge_type || "Not provided").toUpperCase();
+}
+
+function _leaderboardMapTypes(entry) {
+  const raw = entry.map_types || entry.detected_map_types || entry.parameter_maps_detected
+    || entry.metrics?.parameter_maps_detected || entry.metrics?.map_type || entry.map_type;
+  if (Array.isArray(raw)) return raw.filter(Boolean).map(String);
+  if (typeof raw === "string" && raw.trim()) return raw.split(/[,|;]/).map((v) => v.trim()).filter(Boolean);
+  return [];
+}
+
+function _leaderboardMetric(entry, keys) {
+  const metrics = entry.metrics || {};
+  for (const key of keys) {
+    if (typeof metrics[key] === "number" && isFinite(metrics[key])) return metrics[key];
+  }
+  return null;
+}
+
+function _leaderboardMetrics(entry) {
+  return {
+    rmse: _leaderboardMetric(entry, ["rmse", "RMSE", "reference_mean_rmse", "mean_rmse"]),
+    mae: _leaderboardMetric(entry, ["mae", "MAE", "reference_mean_mae", "mean_mae"]),
+    bias: _leaderboardMetric(entry, ["bias", "mean_error", "reference_mean_bias", "mean_bias"]),
+    cov: _leaderboardMetric(entry, ["coefficient_of_variation", "cov", "CoV", "reference_mean_coefficient_of_variation", "mean_coefficient_of_variation"]),
+  };
+}
+
+function _leaderboardEntryText(entry) {
+  return [
+    entry.submission_id,
+    entry.display_name,
+    entry.team_name,
+    entry.provider_id,
+    _leaderboardChallenge(entry),
+    _leaderboardMapTypes(entry).join(" "),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function _renderLeaderboardFilterBar() {
+  const f = _leaderboardFilter;
+  return `
+    ${_renderSearchBox("leaderboard-search", f.search, "Search scored submissions")}
+    ${_renderFilterDropdown("leaderboard-date", "Date", f.date, [
+      { value: "all", label: "All time" },
+      { value: "24h", label: "Last 24 hours" },
+      { value: "7d", label: "Last 7 days" },
+      { value: "1m", label: "Last month" },
+      { value: "1q", label: "Last quarter" },
+      { value: "1y", label: "Last year" },
+    ])}
+    ${_renderFilterDropdown("leaderboard-status", "Status", f.status, [
+      { value: "all", label: "All" },
+      { value: "scored", label: "Scored" },
+      { value: "not_configured", label: "Not configured" },
+      { value: "failed", label: "Failed" },
+      { value: "reference_not_available", label: "Reference unavailable" },
+      { value: "partial_reference_scoring", label: "Partial reference scoring" },
+    ])}
+    ${_renderFilterDropdown("leaderboard-challenge", "Challenge", f.challenge, [
+      { value: "all", label: "All" },
+      { value: "ASL", label: "ASL" },
+      { value: "DCE", label: "DCE" },
+      { value: "DSC", label: "DSC" },
+      { value: "OTHER", label: "Other" },
+    ])}
+    ${_renderFilterDropdown("leaderboard-map", "Map type", f.map, [
+      { value: "all", label: "All" },
+      { value: "CBF", label: "CBF" },
+      { value: "ATT", label: "ATT" },
+      { value: "Ktrans", label: "Ktrans" },
+      { value: "ve", label: "ve" },
+      { value: "vp", label: "vp" },
+      { value: "Kep", label: "Kep" },
+    ])}
+    ${_renderFilterDropdown("leaderboard-sort", "Sort", f.sort, [
+      { value: "newest", label: "Newest first" },
+      { value: "oldest", label: "Oldest first" },
+      { value: "name", label: "Name A-Z" },
+      { value: "status", label: "Status" },
+    ])}
+    <button type="button" class="filter-clear-btn" id="leaderboard-clear-filters">Clear filters</button>`;
+}
+
+function _filteredLeaderboardEntries() {
+  const f = _leaderboardFilter;
+  const q = (f.search || "").trim().toLowerCase();
+  const rows = (f.entries || []).filter((entry) => {
+    const status = entry.status || "unknown";
+    const refStatus = _leaderboardReferenceStatus(entry);
+    const challenge = _leaderboardChallenge(entry);
+    const mapTypes = _leaderboardMapTypes(entry).map((m) => m.toLowerCase());
+    if (q && !_leaderboardEntryText(entry).includes(q)) return false;
+    if (!_dateWithinFilter(entry.scored_at || entry.created_at || entry.uploaded_at, f.date)) return false;
+    if (f.status !== "all" && status !== f.status && refStatus !== f.status) return false;
+    if (f.challenge !== "all" && challenge !== f.challenge) return false;
+    if (f.map !== "all" && !mapTypes.includes(String(f.map).toLowerCase())) return false;
+    return true;
+  });
+  rows.sort((a, b) => {
+    if (f.sort === "oldest") return new Date(a.scored_at || 0) - new Date(b.scored_at || 0);
+    if (f.sort === "name") return String(a.submission_id || "").localeCompare(String(b.submission_id || ""));
+    if (f.sort === "status") return String(a.status || "").localeCompare(String(b.status || ""));
+    return new Date(b.scored_at || 0) - new Date(a.scored_at || 0);
+  });
+  return rows;
+}
+
+function _leaderboardStatusBadge(status) {
+  return `<span class="${_leaderboardStatusClass(status)}">${escapeHtml(_leaderboardStatusLabel(status))}</span>`;
+}
+
+function _leaderboardMetricChip(label, value) {
+  const tips = {
+    RMSE: "Root mean squared error between the submitted map and reference map.",
+    MAE: "Mean absolute error between the submitted map and reference map.",
+    Bias: "Mean signed difference between submitted and reference values.",
+    CoV: "Standard deviation divided by mean. Useful for checking map variability.",
+  };
+  return `<span class="metric-chip">${escapeHtml(label)}${tips[label] ? ` ${helpTooltip(tips[label], `${label} help`)}` : ""} <strong>${escapeHtml(_dashMetric(value))}</strong></span>`;
+}
+
+function _renderLeaderboardEntry(entry) {
+  const sid = entry.submission_id || "unknown";
+  const safeSid = escapeHtml(sid);
+  const ts = _formatLeaderboardTimestamp(entry.scored_at);
+  const status = entry.status || "unknown";
+  const refStatus = _leaderboardReferenceStatus(entry);
+  const challenge = _leaderboardChallenge(entry);
+  const mapTypes = _leaderboardMapTypes(entry);
+  const metrics = _leaderboardMetrics(entry);
+  const artifactCount = Number(entry.artifact_count || 0);
+  const exportReady = status === "scored" || artifactCount > 0;
+  const mapBadges = mapTypes.length
+    ? mapTypes.slice(0, 4).map((m) => `<span class="list-chip">${escapeHtml(m)}</span>`).join("")
+    : `<span class="list-chip is-muted">Map type not provided</span>`;
+  const refBadge = refStatus
+    ? `<span class="${_leaderboardStatusClass(refStatus)}">${escapeHtml(_leaderboardStatusLabel(refStatus))}</span>`
+    : `<span class="leaderboard-status-badge leaderboard-status-unknown">Reference not provided</span>`;
+  return `<article class="leaderboard-row" data-leaderboard-row data-sub-id="${safeSid}" data-status="${escapeHtml(status)}" data-reference-status="${escapeHtml(refStatus || "")}">
+    <div class="leaderboard-row-main">
+      <div class="leaderboard-row-title">
+        <div class="leaderboard-submission-name" title="${safeSid}">${safeSid}</div>
+        <div class="leaderboard-row-badges">
+          <span class="list-chip list-chip-strong">${escapeHtml(challenge)}</span>
+          ${mapBadges}
+          ${_leaderboardStatusBadge(status)}
+          ${refBadge}
+        </div>
+      </div>
+      <div class="leaderboard-meta-line">
+        <span>${escapeHtml(ts.date)}${ts.time ? ` · ${escapeHtml(ts.time)}` : ""}</span>
+        <span>Export readiness ${helpTooltip("Export files are available after validation/scoring artifacts have been generated.", "Export readiness help")}: ${exportReady ? "Ready" : "Pending"}</span>
+      </div>
+      <div class="leaderboard-metric-row">
+        ${_leaderboardMetricChip("RMSE", metrics.rmse)}
+        ${_leaderboardMetricChip("MAE", metrics.mae)}
+        ${_leaderboardMetricChip("Bias", metrics.bias)}
+        ${_leaderboardMetricChip("CoV", metrics.cov)}
+      </div>
+    </div>
+    <div class="leaderboard-actions">
+      <button type="button" class="btn btn-secondary btn-sm" data-leaderboard-view="${safeSid}">View results</button>
+      <a class="btn btn-secondary btn-sm" href="/api/export-scoring?submission_id=${encodeURIComponent(sid)}&blinded=false">Export</a>
+      <button type="button" class="btn btn-ghost btn-sm" data-leaderboard-detail="${safeSid}">Details</button>
+    </div>
+    <div class="leaderboard-detail" hidden>
+      <div><strong>Provider:</strong> ${escapeHtml(entry.provider_id || "not provided")}</div>
+      <div><strong>Reference scoring:</strong> ${escapeHtml(refStatus || "not provided")}</div>
+      <div><strong>Artifacts:</strong> ${escapeHtml(artifactCount)} file${artifactCount === 1 ? "" : "s"}</div>
+      ${entry.message ? `<div><strong>Message:</strong> ${escapeHtml(entry.message)}</div>` : ""}
+    </div>
+  </article>`;
+}
+
+function _wireLeaderboardFilterControls() {
+  const search = el("leaderboard-search");
+  if (search) {
+    search.oninput = () => {
+      _leaderboardFilter.search = search.value;
+      _renderLeaderboardEntries();
+    };
+  }
+  const clear = el("leaderboard-clear-filters");
+  if (clear) {
+    clear.onclick = () => {
+      _leaderboardFilter.search = "";
+      _leaderboardFilter.date = "all";
+      _leaderboardFilter.status = "all";
+      _leaderboardFilter.challenge = "all";
+      _leaderboardFilter.map = "all";
+      _leaderboardFilter.sort = "newest";
+      _renderLeaderboardEntries();
+    };
+  }
+}
+
+function _renderLeaderboardEntries() {
+  const card = el("leaderboard-card");
+  const list = el("leaderboard-list");
+  const filterBar = el("leaderboard-filter-bar");
+  const countEl = el("leaderboard-count");
+  const sub = el("leaderboard-sub");
+  if (!card || !list || !filterBar) return;
+  card.style.display = "";
+  filterBar.innerHTML = _renderLeaderboardFilterBar();
+  _wireLeaderboardFilterControls();
+
+  if (_leaderboardFilter.loading) {
+    list.innerHTML = `<div class="leaderboard-loading">
+      <div class="leaderboard-skeleton"></div>
+      <div class="leaderboard-skeleton short"></div>
+    </div>`;
+    if (countEl) countEl.textContent = "Loading scored submissions…";
+    if (sub) sub.textContent = "Refreshing scored submissions";
+    return;
+  }
+
+  if (_leaderboardFilter.error) {
+    list.innerHTML = `<div class="list-empty-state is-error">
+      <p>${escapeHtml(_leaderboardFilter.error)}</p>
+      <button type="button" class="btn btn-secondary btn-sm" id="leaderboard-retry-btn">Retry</button>
+    </div>`;
+    const retry = el("leaderboard-retry-btn");
+    if (retry) retry.onclick = loadLeaderboard;
+    if (countEl) countEl.textContent = "Refresh failed";
+    if (sub) sub.textContent = "Review scored submissions, reference status, and export readiness.";
+    return;
+  }
+
+  const entries = _filteredLeaderboardEntries();
+  if (countEl) countEl.textContent = `${entries.length} submission${entries.length !== 1 ? "s" : ""}`;
+  if (sub) sub.textContent = "Review scored submissions, reference status, and export readiness.";
+  if (!entries.length) {
+    const hasAny = (_leaderboardFilter.entries || []).length > 0;
+    list.innerHTML = `<div class="list-empty-state">
+      <p>${hasAny ? "No submissions match these filters." : "No scored submissions yet."}</p>
+      ${hasAny ? `<button type="button" class="btn btn-secondary btn-sm" id="leaderboard-empty-clear">Clear filters</button>` : ""}
+    </div>`;
+    const emptyClear = el("leaderboard-empty-clear");
+    if (emptyClear) emptyClear.onclick = () => {
+      _leaderboardFilter.search = "";
+      _leaderboardFilter.date = "all";
+      _leaderboardFilter.status = "all";
+      _leaderboardFilter.challenge = "all";
+      _leaderboardFilter.map = "all";
+      _leaderboardFilter.sort = "newest";
+      _renderLeaderboardEntries();
+    };
+    return;
+  }
+
+  list.innerHTML = entries.map(_renderLeaderboardEntry).join("");
 }
 
 function _formatLeaderboardTimestamp(value) {
@@ -3311,56 +3897,29 @@ function _formatLeaderboardTimestamp(value) {
 }
 
 async function loadLeaderboard() {
-  const card   = el("leaderboard-card");
-  const tbody  = el("leaderboard-table-body");
-  const sub    = el("leaderboard-sub");
-  if (!card || !tbody) return;
-
-  card.style.display = "";
-  tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Loading scored submissions…</td></tr>`;
-  if (sub) sub.textContent = "Refreshing scored submissions";
+  const card = el("leaderboard-card");
+  if (!card) return;
+  _leaderboardFilter.loading = true;
+  _leaderboardFilter.error = "";
+  _renderLeaderboardEntries();
 
   try {
     const res  = await fetch(`${API}/api/leaderboard`);
     if (!res.ok) {
-      tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Could not load scored submissions.</td></tr>`;
-      if (sub) sub.textContent = "Refresh failed";
+      _leaderboardFilter.loading = false;
+      _leaderboardFilter.error = "Could not load scored submissions.";
+      _renderLeaderboardEntries();
       return;
     }
     const data = await res.json();
-    const entries = data.entries || [];
-
-    if (entries.length === 0) {
-      tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">No scored submissions yet.</td></tr>`;
-      if (sub) sub.textContent = "No submissions scored yet";
-      return;
-    }
-
-    if (sub) sub.textContent = `${entries.length} submission${entries.length !== 1 ? "s" : ""} scored`;
-
-    tbody.innerHTML = entries.map((e) => {
-      const m       = e.metrics || {};
-      const acc     = m.accuracy        != null ? String(m.accuracy)        : "—";
-      const rep     = m.repeatability   != null ? String(m.repeatability)   : "—";
-      const silver  = m.osipi_score_silver != null ? `${m.osipi_score_silver}%`
-                    : m.osipi_silver_score != null  ? `${m.osipi_silver_score}%`
-                    : "—";
-      const status = e.status || "unknown";
-      const ts = _formatLeaderboardTimestamp(e.scored_at);
-      const safeSid = escapeHtml(e.submission_id || "unknown");
-      return `<tr>
-        <td class="leaderboard-submission-cell"><span title="${safeSid}">${safeSid}</span></td>
-        <td><span class="${_leaderboardStatusClass(status)}">${escapeHtml(_leaderboardStatusLabel(status))}</span></td>
-        <td class="leaderboard-time-cell"><span>${escapeHtml(ts.date)}</span>${ts.time ? `<small>${escapeHtml(ts.time)}</small>` : ""}</td>
-        <td class="leaderboard-metric-cell">${escapeHtml(acc)}</td>
-        <td class="leaderboard-metric-cell">${escapeHtml(rep)}</td>
-        <td class="leaderboard-metric-cell">${escapeHtml(silver)}</td>
-      </tr>`;
-    }).join("");
-
+    _leaderboardFilter.entries = data.entries || [];
+    _leaderboardFilter.loading = false;
+    _leaderboardFilter.error = "";
+    _renderLeaderboardEntries();
   } catch (_) {
-    tbody.innerHTML = `<tr class="leaderboard-state-row"><td colspan="6">Could not load scored submissions.</td></tr>`;
-    if (sub) sub.textContent = "Refresh failed";
+    _leaderboardFilter.loading = false;
+    _leaderboardFilter.error = "Could not load scored submissions.";
+    _renderLeaderboardEntries();
   }
 }
 
@@ -3368,6 +3927,28 @@ async function loadLeaderboard() {
   const btn = el("leaderboard-refresh-btn");
   if (btn) btn.addEventListener("click", loadLeaderboard);
 })();
+
+document.addEventListener("click", (e) => {
+  const detailBtn = e.target.closest("[data-leaderboard-detail]");
+  if (detailBtn) {
+    const row = detailBtn.closest(".leaderboard-row");
+    const detail = row?.querySelector(".leaderboard-detail");
+    if (detail) {
+      detail.hidden = !detail.hidden;
+      detailBtn.textContent = detail.hidden ? "Details" : "Close";
+    }
+    return;
+  }
+  const viewBtn = e.target.closest("[data-leaderboard-view]");
+  if (viewBtn) {
+    const sid = viewBtn.getAttribute("data-leaderboard-view");
+    if (sid && _scoreCache[sid]) {
+      _goToSummary();
+    } else {
+      viewBtn.closest(".leaderboard-row")?.querySelector("[data-leaderboard-detail]")?.click();
+    }
+  }
+});
 
 // ── Step 6: Export ────────────────────────────────────────────────────────────
 
@@ -3761,9 +4342,26 @@ function _aggregateNiftiAnalyses(analyses) {
   };
 }
 
+function _summaryMetricTooltip(label) {
+  const tooltips = {
+    "Reference scoring status": "Reference metrics are calculated only when a matching private ground-truth map is available.",
+    "Finite voxels": "Percent of voxels that are valid numbers, excluding NaN and Inf.",
+    "Finite voxel percentage": "Percent of voxels that are valid numbers, excluding NaN and Inf.",
+    "Negative voxels": "Percent of voxels below zero. Some map types should rarely contain negative values.",
+    "Negative voxel percentage": "Percent of voxels below zero. Some map types should rarely contain negative values.",
+    "Coefficient of variation": "Standard deviation divided by mean. Useful for checking map variability.",
+    "CoV": "Standard deviation divided by mean. Useful for checking map variability.",
+    "RMSE": "Root mean squared error between the submitted map and reference map.",
+    "MAE": "Mean absolute error between the submitted map and reference map.",
+    "Bias": "Mean signed difference between submitted and reference values.",
+  };
+  return tooltips[label] || "";
+}
+
 function _summaryMetric(label, value, tone = "") {
+  const tip = _summaryMetricTooltip(label);
   return `<div class="summary-kv${tone ? ` is-${tone}` : ""}">
-    <span class="summary-kv-label">${escapeHtml(label)}</span>
+    <span class="summary-kv-label">${escapeHtml(label)}${tip ? ` ${helpTooltip(tip, `${label} help`)}` : ""}</span>
     <span class="summary-kv-value">${escapeHtml(value)}</span>
   </div>`;
 }
@@ -3777,6 +4375,221 @@ function _summaryPanel(title, bodyHtml) {
 
 function _metricOrUnavailable(value, formatter = _fmtMetricVal) {
   return typeof value === "number" && isFinite(value) ? formatter(value) : "not available";
+}
+
+function _dashMetric(value, formatter = _fmtMetricVal) {
+  return typeof value === "number" && isFinite(value) ? formatter(value) : "—";
+}
+
+function _previewCacheKey(submissionId, challengeType) {
+  return `${submissionId || "submission"}::${challengeType || "auto"}`;
+}
+
+function _previewSubmissionId(valResults) {
+  if (valResults && valResults.length) return valResults[0].submission_id || state.submissionId || "";
+  if (state.submissionId) return state.submissionId;
+  const cachedIds = Object.keys(_scoreCache);
+  return cachedIds.length ? cachedIds[0] : "";
+}
+
+function _previewShapeText(shape) {
+  return Array.isArray(shape) && shape.length ? shape.join(" x ") : "not available";
+}
+
+function _previewVoxelText(voxelSize) {
+  return Array.isArray(voxelSize) && voxelSize.length ? voxelSize.join(", ") : "not available";
+}
+
+function _previewStatusBadge(item) {
+  return item?.preview_available
+    ? statusPill("Preview available", "complete")
+    : statusPill("Preview unavailable", "pending");
+}
+
+function _previewNote() {
+  return `<p class="nifti-preview-note">For full medical image inspection, download the NIfTI file and open it in ITK-SNAP, FSLeyes, 3D Slicer, or another NIfTI viewer.</p>`;
+}
+
+function _storePreviewItems(manifest) {
+  Object.keys(_previewItemsById).forEach((key) => delete _previewItemsById[key]);
+  (manifest?.maps || []).forEach((item) => {
+    if (item?.map_id) _previewItemsById[item.map_id] = item;
+  });
+}
+
+function _renderPreviewCard(item) {
+  const mapId = item.map_id || "";
+  const thumb = item.preview_available && item.thumbnail_url
+    ? `<img src="${escapeHtml(item.thumbnail_url)}" alt="Middle-slice preview for ${escapeHtml(item.file_name || "NIfTI map")}">`
+    : `<div class="nifti-preview-placeholder">Preview unavailable</div>`;
+  const previewDisabled = item.preview_available ? "" : " disabled";
+  const fullPreview = item.preview_available && item.full_preview_url
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.full_preview_url)}" target="_blank" rel="noopener">Open full preview</a>`
+    : `<span class="btn btn-secondary btn-sm is-disabled" aria-disabled="true">Open full preview</span>`;
+  const download = item.download_url
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.download_url)}" title="Downloads the original submitted/result NIfTI map.">Download NIfTI for ITK-SNAP</a>`
+    : `<span class="btn btn-secondary btn-sm is-disabled" aria-disabled="true" title="Download is not available for this file.">Download NIfTI for ITK-SNAP</span>`;
+  return `<article class="nifti-preview-card" data-preview-map-id="${escapeHtml(mapId)}">
+    <button type="button" class="nifti-preview-thumb" data-open-preview-map="${escapeHtml(mapId)}"${previewDisabled} aria-label="Preview ${escapeHtml(item.file_name || "NIfTI map")}">
+      ${thumb}
+    </button>
+    <div class="nifti-preview-card-body">
+      <div class="nifti-preview-card-head">
+        <div>
+          <div class="nifti-preview-file" title="${escapeHtml(item.file_name || "")}">${escapeHtml(item.file_name || "NIfTI map")}</div>
+          <div class="nifti-preview-map">${escapeHtml(item.detected_map_type || "Unknown map")}</div>
+        </div>
+        ${_previewStatusBadge(item)}
+      </div>
+      <div class="nifti-preview-meta">
+        ${_summaryMetric("Shape", _previewShapeText(item.shape))}
+        ${_summaryMetric("Voxel size", _previewVoxelText(item.voxel_size))}
+        ${_summaryMetric("Finite voxels", _dashMetric(item.finite_percent, (v) => `${_fmtMetricVal(v)}%`))}
+      </div>
+      ${item.preview_error ? `<p class="nifti-preview-error">${escapeHtml(item.preview_error)}</p>` : ""}
+      <div class="nifti-preview-actions">
+        <button type="button" class="btn btn-secondary btn-sm preview-open-btn" data-open-preview-map="${escapeHtml(mapId)}"${previewDisabled}>Preview</button>
+        ${fullPreview}
+        ${download}
+      </div>
+    </div>
+  </article>`;
+}
+
+function _renderImagePreviewSection(manifest, options = {}) {
+  const loading = options.loading === true;
+  const submissionId = options.submissionId || manifest?.submission_id || "";
+  const maps = manifest?.maps || [];
+  const body = loading
+    ? `<div class="nifti-preview-loading">Generating cached NIfTI previews…</div>`
+    : maps.length
+      ? `<div class="nifti-preview-list">${maps.map(_renderPreviewCard).join("")}</div>${_previewNote()}`
+      : `<div class="nifti-preview-empty">No submitted/result NIfTI maps are available for preview yet.</div>${_previewNote()}`;
+  return `<section id="summary-image-preview-section" class="summary-section summary-image-preview" data-submission-id="${escapeHtml(submissionId)}">
+    <div class="summary-section-header">
+      <span class="summary-section-kicker">Image Preview</span>
+      <h2>Image Preview</h2>
+      <p>Submitted/result NIfTI map previews.</p>
+    </div>
+    ${body}
+  </section>`;
+}
+
+async function _loadAndRenderImagePreviews(submissionId, challengeType) {
+  if (!submissionId) return;
+  const key = _previewCacheKey(submissionId, challengeType);
+  const section = el("summary-image-preview-section");
+  if (_previewManifestCache[key]) {
+    _storePreviewItems(_previewManifestCache[key]);
+  }
+  try {
+    const url = new URL(`${API}/api/submissions/${encodeURIComponent(submissionId)}/previews`);
+    if (challengeType) url.searchParams.set("challenge_type", challengeType);
+    const resp = await fetch(url.toString());
+    if (!resp.ok) throw new Error(`Preview request failed (${resp.status})`);
+    const manifest = await resp.json();
+    _previewManifestCache[key] = manifest;
+    _storePreviewItems(manifest);
+    const current = el("summary-image-preview-section");
+    if (current && current.dataset.submissionId === String(submissionId)) {
+      current.outerHTML = _renderImagePreviewSection(manifest, { submissionId });
+    }
+  } catch (err) {
+    const current = el("summary-image-preview-section") || section;
+    if (current && current.dataset.submissionId === String(submissionId)) {
+      current.outerHTML = `<section id="summary-image-preview-section" class="summary-section summary-image-preview" data-submission-id="${escapeHtml(submissionId)}">
+        <div class="summary-section-header">
+          <span class="summary-section-kicker">Image Preview</span>
+          <h2>Image Preview</h2>
+          <p>Submitted/result NIfTI map previews.</p>
+        </div>
+        <div class="nifti-preview-empty">Preview unavailable: ${escapeHtml(err.message || String(err))}</div>
+        ${_previewNote()}
+      </section>`;
+    }
+  }
+}
+
+function _ensurePreviewModal() {
+  let modal = el("nifti-preview-modal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "nifti-preview-modal";
+  modal.className = "nifti-preview-modal-backdrop";
+  modal.hidden = true;
+  modal.innerHTML = `<div class="nifti-preview-modal-panel" role="dialog" aria-modal="true" aria-labelledby="nifti-preview-title">
+    <button type="button" class="nifti-preview-close" data-preview-close aria-label="Close preview">Close</button>
+    <div id="nifti-preview-modal-content"></div>
+  </div>`;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function _previewPlaneUrl(item, plane) {
+  return item?.[`${plane}_url`] || "";
+}
+
+function _renderPreviewModalContent(item, plane = "axial") {
+  const availablePlanes = ["axial", "coronal", "sagittal"].filter((p) => _previewPlaneUrl(item, p));
+  const activePlane = availablePlanes.includes(plane) ? plane : (availablePlanes[0] || "axial");
+  _activePreviewPlane = activePlane;
+  const imageUrl = _previewPlaneUrl(item, activePlane);
+  const tabs = availablePlanes.map((p) =>
+    `<button type="button" class="${p === activePlane ? "is-active" : ""}" data-preview-plane="${escapeHtml(p)}">${escapeHtml(p[0].toUpperCase() + p.slice(1))}</button>`
+  ).join("");
+  const image = imageUrl
+    ? `<img class="nifti-preview-modal-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(activePlane)} preview for ${escapeHtml(item.file_name || "NIfTI map")}">`
+    : `<div class="nifti-preview-modal-empty">Preview unavailable</div>`;
+  const fullPreview = item.full_preview_url
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.full_preview_url)}" target="_blank" rel="noopener">Open full preview</a>`
+    : "";
+  const download = item.download_url
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.download_url)}">Download NIfTI for ITK-SNAP</a>`
+    : "";
+  return `<div class="nifti-preview-modal-header">
+      <div>
+        <div class="summary-section-kicker">Image Preview</div>
+        <h2 id="nifti-preview-title">${escapeHtml(item.file_name || "NIfTI map")}</h2>
+        <p>${escapeHtml(item.detected_map_type || "Unknown map")}</p>
+      </div>
+      ${_previewStatusBadge(item)}
+    </div>
+    ${tabs ? `<div class="nifti-preview-tabs">${tabs}</div>` : ""}
+    <div class="nifti-preview-modal-grid">
+      <div class="nifti-preview-modal-image-wrap">${image}</div>
+      <div class="nifti-preview-modal-meta">
+        ${_summaryMetric("Map type", item.detected_map_type || "Unknown")}
+        ${_summaryMetric("Shape", _previewShapeText(item.shape))}
+        ${_summaryMetric("Voxel size", _previewVoxelText(item.voxel_size))}
+        ${_summaryMetric("Mean", _dashMetric(item.mean))}
+        ${_summaryMetric("Std. deviation", _dashMetric(item.std))}
+        ${_summaryMetric("Finite voxels", _dashMetric(item.finite_percent, (v) => `${_fmtMetricVal(v)}%`))}
+        ${_summaryMetric("Negative voxels", _dashMetric(item.negative_percent, (v) => `${_fmtMetricVal(v)}%`))}
+        ${item.preview_error ? `<p class="nifti-preview-error">${escapeHtml(item.preview_error)}</p>` : ""}
+        <div class="nifti-preview-actions">${fullPreview}${download}<button type="button" class="btn btn-secondary btn-sm" data-preview-close>Close</button></div>
+        ${_previewNote()}
+      </div>
+    </div>`;
+}
+
+function _openNiftiPreview(mapId, plane = "axial") {
+  const item = _previewItemsById[mapId];
+  if (!item || !item.preview_available) return;
+  _activePreviewMapId = mapId;
+  const modal = _ensurePreviewModal();
+  const content = modal.querySelector("#nifti-preview-modal-content");
+  if (content) content.innerHTML = _renderPreviewModalContent(item, plane);
+  modal.hidden = false;
+  document.body.classList.add("preview-modal-open");
+  modal.querySelector("[data-preview-close]")?.focus();
+}
+
+function _closeNiftiPreview() {
+  const modal = el("nifti-preview-modal");
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.classList.remove("preview-modal-open");
+  _activePreviewMapId = null;
 }
 
 function _referenceStatusBadge(status) {
@@ -3807,7 +4620,7 @@ function _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount) {
     return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
   }
   if (scoredCount > 0 || mapSummary.mapCount > 0) {
-    return { state: "pending", label: "Reference unavailable", refStatus: "reference_not_available" };
+    return { state: "pending", label: "QC only", refStatus: "reference_not_available" };
   }
   return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
 }
@@ -3823,8 +4636,8 @@ function _renderReferenceReportSection(mapSummary) {
   return `<section class="summary-section summary-reference-report">
     <div class="summary-section-header">
       <span class="summary-section-kicker">Reference-Based Scoring</span>
-      <h2>Reference-Based Scoring</h2>
-      <p>Scientific comparison metrics are shown only where matching reference maps or masks were available.</p>
+      <h2>Reference-Based Scoring ${helpTooltip("Reference metrics are calculated only when a matching private ground-truth map is available.", "Reference scoring status help")}</h2>
+      <p>Available reference comparisons.</p>
     </div>
     <div class="summary-reference-list">
       ${wholeRows.map((row) => {
@@ -4157,7 +4970,8 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
   try {
     const r = await fetch(`${API}/api/scoring/packages`);
     const d = await r.json();
-    packages = d.packages || [];
+    // Endpoint returns a bare array; tolerate a legacy {packages:[...]} too.
+    packages = Array.isArray(d) ? d : (d.packages || []);
   } catch (_) {
     listEl.innerHTML = `<p style="font-size:0.75rem;color:var(--muted)">Could not load packages.</p>`;
     return;
@@ -4667,6 +5481,43 @@ document.addEventListener("click", (e) => {
   btn.textContent = isHidden ? "Close" : "Details";
 });
 
+// ── Delegation: NIfTI preview cards and modal controls ───────────────────────
+
+document.addEventListener("click", (e) => {
+  const trigger = e.target.closest("[data-open-preview-map]");
+  if (trigger) {
+    e.preventDefault();
+    const mapId = trigger.getAttribute("data-open-preview-map");
+    if (mapId) _openNiftiPreview(mapId);
+    return;
+  }
+
+  const planeBtn = e.target.closest("[data-preview-plane]");
+  if (planeBtn && _activePreviewMapId) {
+    e.preventDefault();
+    const item = _previewItemsById[_activePreviewMapId];
+    const plane = planeBtn.getAttribute("data-preview-plane") || _activePreviewPlane;
+    const content = el("nifti-preview-modal")?.querySelector("#nifti-preview-modal-content");
+    if (item && content) content.innerHTML = _renderPreviewModalContent(item, plane);
+    return;
+  }
+
+  if (e.target.closest("[data-preview-close]")) {
+    e.preventDefault();
+    _closeNiftiPreview();
+    return;
+  }
+
+  const modal = el("nifti-preview-modal");
+  if (modal && !modal.hidden && e.target === modal) {
+    _closeNiftiPreview();
+  }
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") _closeNiftiPreview();
+});
+
 // "Score All" button is wired dynamically inside renderScoreStep().
 
 // ── renderSummaryStep() ───────────────────────────────────────────────────────
@@ -4722,14 +5573,21 @@ function renderSummaryStep() {
 
   // ── Final report sections ──────────────────────────────────────────────────
   const overall = _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount);
+  const previewSubmissionId = _previewSubmissionId(valResults);
   const submissionName = valResults.length === 1
     ? submissionDisplayName(valResults[0], valResults[0].submission_id || "Submission")
     : valResults.length > 1 ? `${valResults.length} submissions`
       : scoredEntries[0]?.displayName || state.submissionId || "not available";
   const challengeType = valResults[0]?.challenge_type || getChallengeType() || "not available";
+  const previewKey = _previewCacheKey(previewSubmissionId, challengeType);
+  const previewManifest = _previewManifestCache[previewKey] || null;
+  if (previewManifest) _storePreviewItems(previewManifest);
   const comparedMapText = mapSummary.referenceComparedMapCount > 0
     ? `${mapSummary.referenceComparedMapCount}/${mapSummary.referenceMapCount || mapSummary.referenceComparedMapCount}`
     : String(mapSummary.mapCount || 0);
+  const referenceStatusText = mapSummary.referenceMapStatuses.length
+    ? mapSummary.referenceMapStatusText
+    : (mapSummary.referenceStatus === "reference_not_available" ? "Reference unavailable" : mapSummary.referenceStatus || "reference_not_available");
   const referenceUnavailableNote = mapSummary.referenceComparedMapCount > 0
     ? ""
     : `<p class="summary-qc-only-note">Reference scoring unavailable — showing QC metrics only.</p>`;
@@ -4765,17 +5623,19 @@ function renderSummaryStep() {
         ${_summaryMetric("Challenge type", challengeType)}
         ${_summaryMetric("Detected map types", _listText(mapSummary.detected))}
         ${_summaryMetric("Number of maps scored", comparedMapText)}
-        ${_summaryMetric("Reference scoring status", mapSummary.referenceStatus || "reference_not_available")}
+        ${_summaryMetric("Reference scoring status", referenceStatusText)}
       </div>
       ${finalMetricRows ? `<div class="summary-final-metrics">${finalMetricRows}</div>` : ""}
     </section>`;
 
   const qcRows = [
-    _summaryMetric("Finite voxel percentage", `${_fmtPercentValue(mapSummary.finitePercent)} (${mapSummary.finiteVoxelCount}/${mapSummary.totalVoxelCount})`, "good"),
-    _summaryMetric("Negative voxel percentage", _fmtPercentValue(mapSummary.negativePercent)),
+    _summaryMetric("Finite voxels", `${_fmtPercentValue(mapSummary.finitePercent)} (${mapSummary.finiteVoxelCount}/${mapSummary.totalVoxelCount})`, "good"),
+    _summaryMetric("Negative voxels", _fmtPercentValue(mapSummary.negativePercent)),
     _summaryMetric("NaN count", String(mapSummary.nanCount)),
     _summaryMetric("Inf count", String(mapSummary.infCount)),
     _summaryMetric("Coefficient of variation", _metricOrUnavailable(mapSummary.coefficientOfVariation)),
+    _summaryMetric("Standard deviation", _metricOrUnavailable(mapSummary.standardDeviation)),
+    _summaryMetric("Map count", String(mapSummary.mapCount || 0)),
   ];
   if (typeof mapSummary.meansByType.CBF === "number") qcRows.push(_summaryMetric("Mean CBF", `${_fmtMetricVal(mapSummary.meansByType.CBF)} mL/100g/min`));
   if (typeof mapSummary.meansByType.ATT === "number") qcRows.push(_summaryMetric("Mean ATT", `${_fmtMetricVal(mapSummary.meansByType.ATT)} seconds`));
@@ -4784,15 +5644,21 @@ function renderSummaryStep() {
     <section class="summary-section summary-qc-summary">
       <div class="summary-section-header">
         <span class="summary-section-kicker">Key QC Summary</span>
-        <h2>Key QC Summary</h2>
-        <p>These are quality-control/map statistics, not official OSIPI scores.</p>
+        <h2>Key QC Summary ${helpTooltip("QC metrics describe map validity and statistics. They are not official OSIPI scores.", "QC metrics help")}</h2>
+        <p>Map validity and statistics.</p>
       </div>
       <div class="summary-vertical-metrics">${qcRows.join("")}</div>
     </section>`;
 
+  const imagePreviewHtml = _renderImagePreviewSection(previewManifest, {
+    loading: !!previewSubmissionId && !previewManifest,
+    submissionId: previewSubmissionId,
+  });
+
   const referenceReportHtml = _renderReferenceReportSection(mapSummary);
 
   // ── Export readiness (stacked checklist) ────────────────────────────────────
+  const hasDifferenceMaps = mapSummary.referenceRows.some((row) => row.difference_map);
   const checklist = [
     { label: "Validation CSV", ready: valTotal > 0 },
     { label: "Scoring CSV",    ready: scoredCount > 0 },
@@ -4801,6 +5667,9 @@ function renderSummaryStep() {
   ];
   if (mapSummary.referenceComparedMapCount > 0) {
     checklist.push({ label: "Reference scoring JSON/CSV", ready: true });
+  }
+  if (hasDifferenceMaps) {
+    checklist.push({ label: "Difference maps", ready: true });
   }
   const checklistHtml = `
     <section class="summary-section summary-export-checklist">
@@ -4864,7 +5733,7 @@ function renderSummaryStep() {
     : "";
   const detailsHtml = `
     <details class="summary-details">
-      <summary>View technical details</summary>
+      <summary>Technical Details</summary>
       <div class="summary-details-body">
         ${scorerNote}
         <div class="summary-detail-block"><div class="summary-detail-h">Validation issues</div>${issuesHtml || '<p class="summary-muted">No submissions.</p>'}</div>
@@ -4877,7 +5746,8 @@ function renderSummaryStep() {
 
   // ── Assemble ────────────────────────────────────────────────────────────────
   container.className = "summary-report";
-  container.innerHTML = finalOutputHtml + qcSummaryHtml + referenceReportHtml + checklistHtml + detailsHtml;
+  container.innerHTML = finalOutputHtml + qcSummaryHtml + imagePreviewHtml + referenceReportHtml + checklistHtml + detailsHtml;
+  if (previewSubmissionId) _loadAndRenderImagePreviews(previewSubmissionId, challengeType);
 }
 
 // Legacy "Continue to Summary" buttons on Score step (hidden; action row is primary)
