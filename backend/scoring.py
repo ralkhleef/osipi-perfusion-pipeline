@@ -274,6 +274,12 @@ _PERFUSION_MAP_TYPES: dict[str, dict[str, object]] = {
         "units": "min^-1",
         "tokens": {"ktrans", "k-trans", "k_trans"},
     },
+    "ve": {
+        "short": "ve",
+        "label": "Extravascular extracellular volume fraction",
+        "units": None,
+        "tokens": {"ve", "v_e"},
+    },
     "kep": {
         "short": "Kep",
         "label": "Rate constant",
@@ -339,7 +345,7 @@ def _detect_map_type(path: Path) -> dict:
     tokens = set(tokenized.split())
     compact = tokenized.replace(" ", "")
 
-    for key in ("cbf", "att", "ktrans", "kep", "vp"):
+    for key in ("cbf", "att", "ktrans", "ve", "kep", "vp"):
         spec = _PERFUSION_MAP_TYPES[key]
         aliases = set(spec["tokens"])  # type: ignore[arg-type]
         compact_aliases = [
@@ -860,29 +866,41 @@ def _comparison_metrics(
     ref_finite: list[float] = []
     errors: list[float] = []
     negative_count = 0
+    submitted_finite_count = 0
+    reference_finite_count = 0
 
     for sub, ref, include in zip(submitted_values, reference_values, selector):
         if not include:
             continue
-        if isinstance(sub, (int, float)) and math.isfinite(float(sub)) and float(sub) < 0:
-            negative_count += 1
-        if not (
-            isinstance(sub, (int, float))
-            and isinstance(ref, (int, float))
-            and math.isfinite(float(sub))
-            and math.isfinite(float(ref))
-        ):
+        sub_is_finite = isinstance(sub, (int, float)) and math.isfinite(float(sub))
+        ref_is_finite = isinstance(ref, (int, float)) and math.isfinite(float(ref))
+        if sub_is_finite:
+            submitted_finite_count += 1
+        if ref_is_finite:
+            reference_finite_count += 1
+        if not (sub_is_finite and ref_is_finite):
             continue
         sf = float(sub)
         rf = float(ref)
+        if sf < 0:
+            negative_count += 1
         sub_finite.append(sf)
         ref_finite.append(rf)
         errors.append(sf - rf)
 
     n = len(errors)
     if not n:
+        status = "no_finite_overlap"
+        error = "No finite submitted/reference voxel pairs were available in the scored region."
+        if total_count > 0 and reference_finite_count == 0:
+            status = "reference_invalid"
+            error = "Reference map has no finite voxels in the scored region."
+        elif total_count > 0 and submitted_finite_count == 0:
+            status = "submitted_invalid"
+            error = "Submitted map has no finite voxels in the scored region."
         return {
-            "status": "no_finite_overlap",
+            "status": status,
+            "error": error,
             "voxel_count": 0,
             "total_voxel_count": total_count,
             "finite_voxel_percent": _pct(0, total_count),
@@ -992,9 +1010,16 @@ def _score_reference_maps(
 
         try:
             sub_data = _load_nifti_values(submitted_path)
+        except Exception as exc:
+            row["status"] = "submitted_invalid"
+            row["error"] = str(exc)
+            result["maps"].append(row)
+            continue
+
+        try:
             ref_data = _load_nifti_values(ref_path)
         except Exception as exc:
-            row["status"] = "scoring_error"
+            row["status"] = "reference_invalid"
             row["error"] = str(exc)
             result["maps"].append(row)
             continue
@@ -1020,6 +1045,8 @@ def _score_reference_maps(
         whole_metrics = _comparison_metrics(sub_values, ref_values)
         row["status"] = whole_metrics.get("status", "compared")
         row["whole_map"] = whole_metrics
+        if whole_metrics.get("error"):
+            row["error"] = whole_metrics.get("error")
         if whole_metrics.get("status") == "compared":
             compared_metrics.append(whole_metrics)
 
@@ -1075,10 +1102,24 @@ def _score_reference_maps(
     result["summary"]["mean_coefficient_of_variation"] = _json_float(_mean([
         m.get("coefficient_of_variation") for m in compared_metrics if m.get("coefficient_of_variation") is not None
     ]))
+    map_statuses = [str(m.get("status") or "") for m in result["maps"]]
+    error_statuses = {
+        "shape_mismatch",
+        "scoring_error",
+        "reference_invalid",
+        "submitted_invalid",
+        "no_finite_overlap",
+    }
     if compared_count:
-        result["status"] = "available"
         result["available"] = True
-    elif any(m.get("status") == "shape_mismatch" for m in result["maps"]):
+        if compared_count == len(submitted_maps) and all(status == "compared" for status in map_statuses):
+            result["status"] = "available"
+        else:
+            result["status"] = "partial_reference_scoring"
+            result["warnings"].append(
+                "Only some submitted parameter maps had valid reference comparisons; see per-map statuses."
+            )
+    elif any(status in error_statuses for status in map_statuses):
         result["status"] = "scoring_error"
     return result
 
@@ -1317,7 +1358,7 @@ def _attach_nifti_analysis(
     artifact_dir: Optional[Path] = None,
 ) -> dict:
     analysis = analyze_submission_niftis(submission_id, challenge_type, artifact_dir=artifact_dir)
-    ref_available = bool(reference_based_scoring_available or analysis.get("reference_based_scoring_available"))
+    ref_available = bool(analysis.get("reference_based_scoring_available"))
     analysis["reference_based_scoring_available"] = ref_available
     result["nifti_analysis"] = analysis
     result["map_qc_summary"] = analysis.get("summary", {})
@@ -1342,7 +1383,7 @@ def _with_nifti_status(
     reference_based_scoring_available: bool = False,
 ) -> dict:
     analysis = analyze_submission_niftis(submission_id, challenge_type)
-    ref_available = bool(reference_based_scoring_available or analysis.get("reference_based_scoring_available"))
+    ref_available = bool(analysis.get("reference_based_scoring_available"))
     analysis["reference_based_scoring_available"] = ref_available
     payload["nifti_analysis"] = analysis
     payload["map_qc_summary"] = analysis.get("summary", {})

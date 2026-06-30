@@ -10,9 +10,9 @@ const API = window.location.origin;
 
 const MAP_OPTIONS = {
   asl:   ["CBF", "ATT", "Other"],
-  dce:   ["Ktrans", "Kep", "Vp", "Other"],
+  dce:   ["Ktrans", "ve", "Kep", "Vp", "Other"],
   dsc:   ["CBF", "CBV", "MTT", "Other"],
-  other: ["CBF", "ATT", "Ktrans", "Kep", "Vp", "CBV", "MTT", "Other"],
+  other: ["CBF", "ATT", "Ktrans", "ve", "Kep", "Vp", "CBV", "MTT", "Other"],
 };
 
 // ── Workflow state ─────────────────────────────────────────────────────────────
@@ -376,12 +376,36 @@ function _updateWizardFooter(step) {
   const nextBtn = el("wf-next-btn");
   if (!footer || !cfg) return;
 
-  // Upload step: footer hidden — the card's own "Upload and Detect" button is the sole action
+  // Upload step: use the SAME shared footer as every other step. Back is hidden
+  // (first step) but keeps its space so the CTA stays right-aligned; the Next
+  // button is the sole "Upload and Detect" action and drives handleSubmit().
   if (step === "upload") {
-    footer.hidden = true;
-    footer.style.display = "none";
+    footer.hidden = false;
+    footer.style.display = "flex";
+    delete footer.dataset.disabledReason;
+    footer.removeAttribute("title");
     const gnBar = el("global-start-new");
-    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }
+    if (gnBar) { gnBar.hidden = true; gnBar.style.display = "none"; }  // no Start-new on first step
+    if (backBtn) { backBtn.style.display = ""; backBtn.style.visibility = "hidden"; backBtn.onclick = null; }
+    if (nextBtn) {
+      const label = submitLabel();              // "Upload and Detect" (or edit label)
+      nextBtn.textContent = label;
+      nextBtn.style.opacity = "";
+      nextBtn.removeAttribute("aria-describedby");
+      nextBtn.removeAttribute("aria-label");
+      delete nextBtn.dataset.disabledReason;
+      const canUpload = _isStepReady("upload");
+      nextBtn.disabled = !canUpload;
+      if (!canUpload) {
+        const reason = "Choose a submission file or source to continue.";
+        nextBtn.title = reason;
+        nextBtn.dataset.disabledReason = reason;
+        nextBtn.setAttribute("aria-label", `${label}. ${reason}`);
+      } else {
+        nextBtn.title = "";
+      }
+      nextBtn.onclick = () => { if (!nextBtn.disabled) handleSubmit(); };
+    }
     return;
   }
 
@@ -396,6 +420,7 @@ function _updateWizardFooter(step) {
 
   // Back button
   if (backBtn) {
+    backBtn.style.visibility = "visible";  // reset (upload step hides it via visibility)
     if (cfg.back) {
       backBtn.style.display = "";
       backBtn.onclick = () => goToStep(cfg.back);
@@ -465,18 +490,32 @@ function _updateWizardFooter(step) {
   }
 }
 
+// True when a submission source/file is selected on the Upload step (so the
+// shared footer's "Upload and Detect" button can enable). Edit mode (re-validate
+// an existing submission) is always ready.
+function _canUpload() {
+  if (state.mode === "edit" && state.submissionId) return true;
+  const source = getSourceType();
+  if (source === "zenodo") return !!(el("zenodo-input") && el("zenodo-input").value.trim());
+  if (source === "github") return !!(el("github-url") && el("github-url").value.trim());
+  return !!state.pendingLocalFiles; // local
+}
+
 // Whether the current step allows proceeding to next
 function _isStepReady(step) {
   switch (step) {
-    case "upload":  return true; // always enabled — handleSubmit does its own validation
+    case "upload":  return _canUpload(); // enabled once a file/source is selected
     // Index: ready as soon as upload data exists (user can run validation)
     case "index":
       return !!(batchState.uploadData || batchState.validationData || state.submissionId);
     case "validate": {
       const results = batchState.validationData ? (batchState.validationData.results || []) : [];
-      return results.length > 0 && results.some((r) =>
-        r.passed && ["runnable", "result_only"].includes(inferredRunReadiness(r))
-      );
+      // Warnings never block. Continue → Run is enabled when at least one
+      // submission has ZERO blocking errors (r.passed === error_count === 0).
+      // Run-readiness (runnable vs result-only) is decided on the Run step, so
+      // it must NOT gate the footer here — a result-only submission that passed
+      // with warnings still has 0 errors and must be allowed to continue.
+      return results.some((r) => r.passed || issueCount(r, "errors") === 0);
     }
     case "run":    return true;  // always allow continue — non-blocking
     case "score":  return true;  // always allow continue to export
@@ -502,7 +541,7 @@ function _stepBlockedReason(step) {
     case "validate": {
       const results = batchState.validationData ? (batchState.validationData.results || []) : [];
       if (!results.length) return "Run validation before continuing.";
-      return "Validation found no runnable or result-only submissions to continue with.";
+      return "Every submission has blocking errors. Fix the errors to continue (warnings do not block).";
     }
     default:
       return "Complete the current step before continuing.";
@@ -1218,6 +1257,7 @@ function switchSource(type) {
   document.querySelectorAll(".source-panel").forEach((p) => p.classList.remove("active"));
   const panel = el(`source-${type}`);
   if (panel) panel.classList.add("active");
+  _refreshWizardFooter();   // selection requirement differs per source
 }
 
 // ── Local file inputs ─────────────────────────────────────────────────────────
@@ -1310,7 +1350,14 @@ function setLocalFiles(files, label) {
   if (lbl) { lbl.textContent = label; lbl.className = "file-label ready"; }
   const srcErr = el("source-error");
   if (srcErr) srcErr.textContent = "";
+  _refreshWizardFooter();   // enable the footer "Upload and Detect" button
 }
+
+// Enable/disable the footer "Upload and Detect" button as Zenodo/GitHub inputs change.
+["zenodo-input", "github-url"].forEach((id) => {
+  const inp = el(id);
+  if (inp) inp.addEventListener("input", () => { if (wf.step === "upload") _refreshWizardFooter(); });
+});
 
 // ── Form validation ───────────────────────────────────────────────────────────
 
@@ -1504,7 +1551,9 @@ async function handleSubmit() {
   if (!validateForm()) return;
 
   requestInProgress = true;
-  const btn = el("submit-btn");
+  // The visible action lives in the shared wizard footer on the upload step;
+  // fall back to the (hidden) in-card button elsewhere.
+  const btn = (wf.step === "upload" && el("wf-next-btn")) ? el("wf-next-btn") : el("submit-btn");
   clearSubmitStatus();
 
   // ── Edit mode: reuse existing submission, re-validate ────────────────────
@@ -3491,15 +3540,24 @@ function _aggregateNiftiAnalyses(analyses) {
   };
   const refAvg = (key) => {
     const vals = refObjects
-      .map((ref) => ref.summary && Number(ref.summary[key]))
-      .filter((v) => isFinite(v));
+      .map((ref) => ref.summary ? ref.summary[key] : null)
+      .filter((raw) => typeof raw === "number" && isFinite(raw));
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   };
   const referenceRows = [];
+  const referenceMapRows = [];
   refObjects.forEach((ref) => {
     (ref.maps || []).forEach((item) => {
       const whole = item.whole_map || {};
-      referenceRows.push({ ...whole, ...item, scope: "whole map", mask_name: "" });
+      const wholeRow = {
+        ...whole,
+        ...item,
+        scope: "whole map",
+        mask_name: "",
+        status: item.status || whole.status || "",
+      };
+      referenceRows.push(wholeRow);
+      referenceMapRows.push(wholeRow);
       (item.masks || []).forEach((mask) => {
         referenceRows.push({
           ...(mask.metrics || {}),
@@ -3514,6 +3572,32 @@ function _aggregateNiftiAnalyses(analyses) {
       });
     });
   });
+  const referenceMapCount = referenceMapRows.length;
+  const referenceComparedMapCount = referenceMapRows.filter((row) => row.status === "compared").length;
+  const referenceMissingMapCount = referenceMapRows.filter((row) => row.status === "reference_not_available").length;
+  const referenceErroredMapCount = referenceMapRows.filter((row) =>
+    row.status && row.status !== "compared" && row.status !== "reference_not_available"
+  ).length;
+  let referenceStatus = refObjects.find((ref) => ref.status)?.status || "reference_not_available";
+  if (referenceMapCount > 0) {
+    if (referenceComparedMapCount > 0 && referenceComparedMapCount < referenceMapCount) {
+      referenceStatus = "partial_reference_scoring";
+    } else if (referenceComparedMapCount === referenceMapCount) {
+      referenceStatus = "available";
+    } else if (referenceErroredMapCount > 0) {
+      referenceStatus = "scoring_error";
+    } else if (referenceMissingMapCount === referenceMapCount) {
+      referenceStatus = "reference_not_available";
+    }
+  }
+  const referenceMapStatuses = referenceMapRows.map((row) => ({
+    map: row.detected_map_type || row.submitted_file || "map",
+    status: row.status || "unknown",
+  }));
+  const referenceMapStatusText = referenceMapStatuses.length
+    ? referenceMapStatuses.slice(0, 4).map((row) => `${row.map}: ${row.status}`).join("; ")
+      + (referenceMapStatuses.length > 4 ? `; +${referenceMapStatuses.length - 4} more` : "")
+    : "not available";
   const totalVoxelCount = sum("total_voxel_count");
   const finiteVoxelCount = sum("finite_voxel_count");
   const negativeVoxelCount = sum("negative_voxel_count");
@@ -3542,9 +3626,14 @@ function _aggregateNiftiAnalyses(analyses) {
     coefficientOfVariation: avg("mean_coefficient_of_variation"),
     standardDeviation: avg("mean_standard_deviation"),
     meansByType,
-    referenceBasedScoringAvailable: analyses.some((a) => a.reference_based_scoring_available === true)
-      || refObjects.some((ref) => ref.available === true),
-    referenceStatus: refObjects.find((ref) => ref.status)?.status || "reference_not_available",
+    referenceBasedScoringAvailable: referenceComparedMapCount > 0,
+    referenceStatus,
+    referenceMapCount,
+    referenceComparedMapCount,
+    referenceMissingMapCount,
+    referenceErroredMapCount,
+    referenceMapStatuses,
+    referenceMapStatusText,
     referenceRows,
     referenceMetrics: {
       rmse: refAvg("mean_rmse"),
@@ -4503,17 +4592,25 @@ function renderSummaryStep() {
     ${_summaryMetric("Inf voxels", String(mapSummary.infCount))}
   `);
   const meanRows = [];
-  if (mapSummary.referenceBasedScoringAvailable) {
+  if (mapSummary.referenceComparedMapCount > 0) {
+    meanRows.push(_summaryMetric("Reference status", mapSummary.referenceStatus));
+    meanRows.push(_summaryMetric("Compared maps", `${mapSummary.referenceComparedMapCount}/${mapSummary.referenceMapCount || mapSummary.referenceComparedMapCount}`));
     meanRows.push(_summaryMetric("RMSE", mapSummary.referenceMetrics.rmse == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.rmse)));
     meanRows.push(_summaryMetric("MAE", mapSummary.referenceMetrics.mae == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.mae)));
     meanRows.push(_summaryMetric("Bias", mapSummary.referenceMetrics.bias == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.bias)));
     meanRows.push(_summaryMetric("Reference CoV", mapSummary.referenceMetrics.coefficientOfVariation == null ? "not available" : _fmtMetricVal(mapSummary.referenceMetrics.coefficientOfVariation)));
+    if (mapSummary.referenceStatus === "partial_reference_scoring") {
+      meanRows.push(_summaryMetric("Map status", mapSummary.referenceMapStatusText));
+    }
   } else {
     if (typeof mapSummary.meansByType.CBF === "number") meanRows.push(_summaryMetric("Mean CBF", `${_fmtMetricVal(mapSummary.meansByType.CBF)} mL/100g/min`));
     if (typeof mapSummary.meansByType.ATT === "number") meanRows.push(_summaryMetric("Mean ATT", `${_fmtMetricVal(mapSummary.meansByType.ATT)} seconds`));
     if (typeof mapSummary.meansByType.Ktrans === "number") meanRows.push(_summaryMetric("Mean Ktrans", `${_fmtMetricVal(mapSummary.meansByType.Ktrans)} min^-1`));
     if (!meanRows.length) meanRows.push(_summaryMetric("Mean CBF / ATT", "not detected"));
-    meanRows.push(_summaryMetric("Reference-based scoring", "not available"));
+    meanRows.push(_summaryMetric("Reference status", mapSummary.referenceStatus));
+    if (mapSummary.referenceMapStatusText !== "not available") {
+      meanRows.push(_summaryMetric("Map status", mapSummary.referenceMapStatusText));
+    }
   }
   const mapStatsHtml = _summaryPanel("Map statistics", meanRows.join(""));
   const analyticsHtml = `

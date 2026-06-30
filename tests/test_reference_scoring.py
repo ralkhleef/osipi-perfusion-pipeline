@@ -73,11 +73,30 @@ def _reference_result() -> dict:
     return scoring.analyze_submission_niftis("sub-001", "asl")["reference_scoring"]
 
 
-def _cbf_row(result: dict) -> dict:
+def _map_row(result: dict, map_type: str) -> dict:
     for row in result["maps"]:
-        if row["detected_map_type"] == "CBF":
+        if row["detected_map_type"] == map_type:
             return row
-    raise AssertionError(f"No CBF row found: {result}")
+    raise AssertionError(f"No {map_type} row found: {result}")
+
+
+def _cbf_row(result: dict) -> dict:
+    return _map_row(result, "CBF")
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("sub-001_cbf.nii.gz", "CBF"),
+        ("sub-001_att.nii.gz", "ATT"),
+        ("sub-001_ktrans.nii.gz", "Ktrans"),
+        ("sub-001_ve.nii.gz", "ve"),
+        ("sub-001_vp.nii.gz", "Vp"),
+        ("sub-001_kep.nii.gz", "Kep"),
+    ],
+)
+def test_filename_detection_supports_reference_parameter_types(filename: str, expected: str) -> None:
+    assert scoring._detect_map_type(Path(filename))["detected_map_type"] == expected
 
 
 def test_perfect_submitted_map_gives_zero_rmse_and_bias(scoring_workspace: Path) -> None:
@@ -115,6 +134,36 @@ def test_missing_reference_returns_reference_not_available_and_keeps_qc(scoring_
     assert _cbf_row(result)["status"] == "reference_not_available"
 
 
+def test_reference_with_no_finite_voxels_is_scoring_error_and_qc_still_works(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [1, 2, 3, 4])
+    _write_reference(scoring_workspace, [float("nan"), float("nan"), float("nan"), float("nan")])
+
+    analysis = scoring.analyze_submission_niftis("sub-001", "asl")
+    result = analysis["reference_scoring"]
+    row = _cbf_row(result)
+
+    assert analysis["summary"]["finite_percent"] == pytest.approx(100.0)
+    assert result["available"] is False
+    assert result["status"] == "scoring_error"
+    assert row["status"] == "reference_invalid"
+    assert row["whole_map"]["status"] == "reference_invalid"
+
+
+def test_no_finite_overlap_is_scoring_error_not_missing(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [1, float("nan"), float("nan"), float("nan")])
+    _write_reference(scoring_workspace, [float("nan"), 2, float("nan"), float("nan")])
+
+    analysis = scoring.analyze_submission_niftis("sub-001", "asl")
+    result = analysis["reference_scoring"]
+    row = _cbf_row(result)
+
+    assert analysis["summary"]["finite_percent"] == pytest.approx(25.0)
+    assert result["available"] is False
+    assert result["status"] == "scoring_error"
+    assert row["status"] == "no_finite_overlap"
+    assert row["whole_map"]["status"] == "no_finite_overlap"
+
+
 def test_mismatched_shape_returns_scoring_error(scoring_workspace: Path) -> None:
     _write_submitted(scoring_workspace, [1, 2, 3, 4])
     _write_reference(scoring_workspace, [1, 2, 3, 4, 5, 6, 7, 8], shape=(2, 2, 2))
@@ -139,6 +188,31 @@ def test_mask_based_scoring_uses_only_mask_voxels(scoring_workspace: Path) -> No
     assert mask["metrics"]["voxel_count"] == 2
     assert mask["metrics"]["bias"] == pytest.approx(3.0)
     assert mask["metrics"]["rmse"] == pytest.approx(math.sqrt(10.0))
+
+
+def test_negative_voxel_percent_uses_scored_finite_overlap_denominator(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [-1, -2, -3, -4])
+    _write_reference(scoring_workspace, [0, float("nan"), float("nan"), float("nan")])
+
+    metrics = _cbf_row(_reference_result())["whole_map"]
+
+    assert metrics["voxel_count"] == 1
+    assert 0.0 <= metrics["negative_voxel_percent"] <= 100.0
+    assert metrics["negative_voxel_percent"] == pytest.approx(100.0)
+
+
+def test_partial_reference_scoring_when_some_maps_are_missing(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [3, 4, 5, 6], name="sub-001_cbf.nii.gz")
+    _write_submitted(scoring_workspace, [1, 1, 1, 1], name="sub-001_att.nii.gz")
+    _write_reference(scoring_workspace, [1, 2, 3, 4], name="sub-001_cbf.nii.gz")
+
+    result = _reference_result()
+
+    assert result["available"] is True
+    assert result["status"] == "partial_reference_scoring"
+    assert result["summary"]["compared_map_count"] == 1
+    assert _map_row(result, "CBF")["status"] == "compared"
+    assert _map_row(result, "ATT")["status"] == "reference_not_available"
 
 
 def test_reference_artifacts_include_json_csv_and_difference_map(scoring_workspace: Path) -> None:
