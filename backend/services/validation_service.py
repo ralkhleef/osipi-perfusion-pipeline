@@ -9,12 +9,21 @@ Results are saved to data/outputs/validation/ for the Outputs page.
 import json
 import sys
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
 from services.ingest_service import detect_submission_metadata, make_safe_id
+from osipi_pipeline.ingestion.manifest import manifest_files, refresh_manifest
+from osipi_pipeline.performance import (
+    configured_worker_limit,
+    finish_job,
+    start_job,
+    timed,
+    update_job,
+)
 
 # ---------------------------------------------------------------------------
 # Optional nibabel NIfTI readability check
@@ -26,6 +35,16 @@ _SRC_DIR   = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
+from osipi_pipeline.config.rules import (
+    challenge_types,
+    default_challenge_type,
+    expected_maps_by_challenge,
+    known_auto_detected_labels,
+    map_type_specs,
+    map_type_patterns,
+    tuple_setting,
+)
+
 try:
     from osipi_pipeline.validation.nifti_validator import validate_nifti_files as _validate_nifti_files
     _NIFTI_VALIDATOR_AVAILABLE = True
@@ -34,7 +53,13 @@ except ImportError:
     _validate_nifti_files = None  # type: ignore[assignment]
 
 
-def _run_nifti_validation(nifti_files: List[Path]) -> tuple:
+def _run_nifti_validation(
+    nifti_files: List[Path],
+    *,
+    quick: bool = False,
+    force_refresh: bool = False,
+    workers: Optional[int] = None,
+) -> tuple:
     """Run nibabel readability checks on non-empty NIfTI files.
 
     Returns (errors, warnings, nifti_summary) as lists. If nibabel is not
@@ -57,7 +82,12 @@ def _run_nifti_validation(nifti_files: List[Path]) -> tuple:
         return errors, warnings, summary
 
     try:
-        results = _validate_nifti_files(non_empty)
+        results = _validate_nifti_files(
+            non_empty,
+            quick=quick,
+            force_refresh=force_refresh,
+            workers=workers,
+        )
     except Exception as exc:
         warnings.append(_warn("NIFTI_VALIDATION_ERROR", f"NIfTI check failed unexpectedly: {exc}"))
         return errors, warnings, summary
@@ -76,39 +106,42 @@ def _run_nifti_validation(nifti_files: List[Path]) -> tuple:
 # Shared constants
 # ---------------------------------------------------------------------------
 
-NIFTI_SUFFIXES = (".nii", ".nii.gz")
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
+CODE_FILE_NAMES = set(tuple_setting("code_file_names"))
+CODE_EXTENSIONS = set(tuple_setting("code_extensions"))
+CODE_FOLDER_NAMES = set(tuple_setting("code_folder_names"))
+README_NAMES = set(tuple_setting("readme_names"))
 
-EXPECTED_MAPS: Dict[str, tuple] = {
-    "dce": ("ktrans", "kep", "vp"),
-    "asl": ("cbf", "att"),
-    "dsc": ("cbv", "cbf", "mtt"),
-}
 
-MAP_TYPE_PATTERNS: Dict[str, tuple] = {
-    "cbf":    ("cbf", "cerebral_blood_flow", "perfmap", "perfusion", "perf"),
-    "ktrans": ("ktrans", "k_trans", "transfer_constant"),
-    "att":    ("att", "arterial_transit_time", "attmap"),
-    "kep":    ("kep", "k_ep", "rate_constant"),
-    "vp":     ("vp", "v_p", "plasma_volume"),
-    "cbv":    ("cbv", "cerebral_blood_volume"),
-    "mtt":    ("mtt", "mean_transit_time"),
-}
+def _expected_maps() -> Dict[str, tuple]:
+    return expected_maps_by_challenge()
 
-# All map type labels that detect_submission_metadata() can return (title-cased)
-KNOWN_AUTO_DETECTED = frozenset({
-    "CBF", "Ktrans", "ATT", "Kep", "Vp", "CBV", "MTT", "Mixed/Other",
-})
 
-CODE_FILE_NAMES = {
-    "dockerfile", "requirements.txt", "environment.yml",
-    "main.py", "run.py", "setup.py",
-}
-CODE_EXTENSIONS = {".py", ".sh", ".m", ".r", ".ipynb", ".jl"}
-CODE_FOLDER_NAMES = {"scripts", "code", "src"}
+def _map_type_patterns() -> Dict[str, tuple]:
+    return map_type_patterns()
 
-README_NAMES = {"readme.md", "readme.txt", "readme", "sop.pdf", "metadata.json"}
 
-KNOWN_CHALLENGE_TYPES = {"asl", "dce", "dsc"}
+def _known_auto_detected() -> frozenset[str]:
+    return known_auto_detected_labels()
+
+
+def _known_challenge_types() -> tuple[str, ...]:
+    return tuple(challenge_types())
+
+
+def _default_challenge_type() -> str:
+    return default_challenge_type()
+
+
+def _map_display_name(map_id: str) -> str:
+    spec = map_type_specs().get(str(map_id).lower(), {})
+    return str(spec.get("display") or map_id)
+
+def _challenge_help() -> str:
+    return ", ".join(_known_challenge_types())
+
+def _suffix_help(suffixes: tuple[str, ...]) -> str:
+    return ", ".join(suffixes) if suffixes else "configured NIfTI suffixes"
 
 # Output subdirectory — matches the CLI package.
 VALIDATION_SUBDIR = OUTPUTS_DIR / "validation"
@@ -132,7 +165,7 @@ def _warn(code: str, message: str, path: str = "") -> Dict:
 
 def validate_submission(
     submission_id: str,
-    challenge_type: str = "dce",
+    challenge_type: str | None = None,
     expected_nifti_count: Optional[int] = None,
     expected_nifti_count_mode: Optional[str] = None,
     include_code: Optional[str] = None,
@@ -143,6 +176,10 @@ def validate_submission(
     map_type_mode: Optional[str] = None,
     notes: Optional[str] = None,
     mode: str = "auto",
+    qc_mode: str = "deep",
+    force_validation_refresh: bool = False,
+    nifti_validation_workers: Optional[int] = None,
+    job_id: Optional[str] = None,
 ) -> Dict:
     """Validate the submission folder for the given submission_id.
 
@@ -155,8 +192,10 @@ def validate_submission(
               ``"reproducible"`` — does not require output maps; focuses on
               executability via Dockerfile.
     """
+    job_id = job_id or start_job("validation", total=1, stage="starting", key=submission_id)
+    quick_qc = (qc_mode or "deep").strip().lower() == "quick"
     # Normalise challenge type first so it is available for all early-exit paths.
-    normalized_challenge = (challenge_type or "dce").lower()
+    normalized_challenge = (challenge_type or _default_challenge_type()).lower()
 
     # Sanitize submission_id — block path traversal and unsafe characters
     safe_submission_id = make_safe_id(submission_id)
@@ -166,20 +205,23 @@ def validate_submission(
     try:
         folder.resolve().relative_to(EXTRACTED_DIR.resolve())
     except ValueError:
-        return _finish(
+        result = _finish(
             safe_submission_id, normalized_challenge,
             [_err("INVALID_SUBMISSION_ID", "Submission ID contains an invalid path.")],
             [], 0, 0, team_name, contact_email, map_type, notes,
         )
+        result["job_id"] = job_id
+        finish_job(job_id, error="Invalid submission ID.")
+        return result
 
     submission_id = safe_submission_id  # use sanitized ID for the rest of the function
     errors: List[Dict] = []
     warnings: List[Dict] = []
 
-    if normalized_challenge not in KNOWN_CHALLENGE_TYPES:
+    if normalized_challenge not in _known_challenge_types():
         errors.append(_err(
             "UNKNOWN_CHALLENGE_TYPE",
-            f"Challenge type '{challenge_type}' is not recognised. Use asl, dce, or dsc.",
+            f"Challenge type '{challenge_type}' is not recognised. Use one of: {_challenge_help()}.",
         ))
 
     if not folder.exists() or not folder.is_dir():
@@ -188,14 +230,27 @@ def validate_submission(
             "Submission files were not found. Please re-upload your ZIP file.",
             str(folder),
         ))
-        return _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
-                       team_name, contact_email, map_type, notes)
+        result = _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
+                         team_name, contact_email, map_type, notes)
+        result["job_id"] = job_id
+        finish_job(job_id, error="Submission folder missing.")
+        return result
 
-    all_files: List[Path] = [f for f in folder.rglob("*") if f.is_file()]
+    update_job(job_id, stage="scanning files")
+    with timed("validation.manifest.load", submission_id=submission_id):
+        all_files: List[Path] = manifest_files(
+            folder,
+            refresh_if_stale=True,
+            submission_id=submission_id,
+            challenge_type=normalized_challenge,
+        )
     if not all_files:
         errors.append(_err("SUBMISSION_FOLDER_EMPTY", "The submission folder is empty.", str(folder)))
-        return _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
-                       team_name, contact_email, map_type, notes)
+        result = _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
+                         team_name, contact_email, map_type, notes)
+        result["job_id"] = job_id
+        finish_job(job_id, error="Submission folder empty.")
+        return result
 
     # ── Auto mode: detect whether this is result-only or reproducible ──────────
     if mode in ("auto", ""):
@@ -220,7 +275,7 @@ def validate_submission(
     effective_map_type = map_type
     if (map_type_mode or "").lower() == "auto" or (map_type or "").lower() == "auto":
         detected = detection.get("detected_parameter_map_type", "Unknown")
-        if detected in KNOWN_AUTO_DETECTED:
+        if detected in _known_auto_detected():
             effective_map_type = detected
         else:
             effective_map_type = ""
@@ -257,7 +312,7 @@ def validate_submission(
             # result_only mode: NIfTI maps are required
             errors.append(_err(
                 "NO_NIFTI_FILES",
-                "No .nii or .nii.gz parameter map files were found. "
+                f"No parameter map files were found ({_suffix_help(NIFTI_SUFFIXES)}). "
                 "Add your output maps or include a Dockerfile for reproducible execution.",
                 str(folder),
             ))
@@ -274,23 +329,25 @@ def validate_submission(
         if not reproducible:
             # Map-name checks only make sense when pre-existing maps are present.
             joined = " ".join(f.name.lower() for f in nifti_files)
+            patterns_by_map = _map_type_patterns()
+            expected_maps = _expected_maps()
             selected_map = (effective_map_type or "").lower()
-            selected_patterns = MAP_TYPE_PATTERNS.get(selected_map)
+            selected_patterns = patterns_by_map.get(selected_map)
             if selected_patterns is not None:
                 expected_groups = [(selected_map, selected_patterns)]
             elif selected_map not in {"", "auto", "other", "mixed/other"}:
                 expected_groups = [(selected_map, (selected_map,))]
             else:
                 expected_groups = [
-                    (name, MAP_TYPE_PATTERNS.get(name, (name,)))
-                    for name in EXPECTED_MAPS.get(normalized_challenge, ())
+                    (name, patterns_by_map.get(name, (name,)))
+                    for name in expected_maps.get(normalized_challenge, ())
                 ]
 
             for label, patterns in expected_groups:
                 if not any(pattern in joined for pattern in patterns):
                     warnings.append(_warn(
                         "EXPECTED_MAP_MISSING",
-                        f"Expected {label.upper()} parameter map was not found.",
+                        f"Expected {_map_display_name(label)} parameter map was not found.",
                         str(folder),
                     ))
 
@@ -303,7 +360,13 @@ def validate_submission(
                 ))
 
         # ---- nibabel readability check (non-empty files only) ---------------
-        nib_errors, nib_warnings, nifti_summary = _run_nifti_validation(nifti_files)
+        update_job(job_id, stage="validating NIfTI files", total=len(nifti_files))
+        nib_errors, nib_warnings, nifti_summary = _run_nifti_validation(
+            nifti_files,
+            quick=quick_qc,
+            force_refresh=force_validation_refresh,
+            workers=nifti_validation_workers,
+        )
         errors.extend(nib_errors)
         warnings.extend(nib_warnings)
 
@@ -315,7 +378,7 @@ def validate_submission(
         errors.append(_err(
             "NO_README_OR_METADATA",
             "A README or SOP was marked as included, but none was found. "
-            "Add README.md, README.txt, SOP.pdf, or metadata.json.",
+            f"Add one of the configured README/metadata files: {', '.join(sorted(README_NAMES))}.",
             str(folder),
         ))
     elif not readme_found:
@@ -357,8 +420,11 @@ def validate_submission(
         if include_code == "yes" and not _has_code(all_files):
             warnings.append(_warn(
                 "NO_CODE_FILES",
-                "Code files were marked as included, but none were found. "
-                "Expected: Dockerfile, .py / .sh / .m files, or a scripts/ folder.",
+                (
+                    "Code files were marked as included, but none were found. "
+                    "Expected one of the configured code indicators: "
+                    f"{', '.join(sorted(CODE_FILE_NAMES | CODE_EXTENSIONS | CODE_FOLDER_NAMES))}."
+                ),
                 str(folder),
             ))
 
@@ -379,8 +445,8 @@ def validate_submission(
     runnable = has_run_instructions and len(blocking_errors) == 0
 
     # Detect whether the submission has NIfTI maps inside a results/ or maps/
-    # subdirectory (common ASL layout: submission_root/results/maps/*.nii.gz).
-    # A file only counts when it is a real NIfTI (.nii / .nii.gz) AND lives under
+    # subdirectory (for example: submission_root/results/maps/map.nii.gz).
+    # A file only counts when it has a configured NIfTI suffix AND lives under
     # a "results" or "maps" folder — a stray .gz archive must not count.
     has_result_maps = any(
         f.name.lower().endswith(NIFTI_SUFFIXES)
@@ -398,7 +464,7 @@ def validate_submission(
     else:
         run_readiness = "not_runnable"
 
-    return _finish(
+    result = _finish(
         submission_id, normalized_challenge, errors, warnings,
         len(nifti_files) if nifti_files else 0,
         len(all_files),
@@ -411,6 +477,10 @@ def validate_submission(
         nifti_summary=nifti_summary,
         has_result_maps=has_result_maps,
     )
+    result["job_id"] = job_id
+    result["qc_mode"] = "quick" if quick_qc else "deep"
+    finish_job(job_id, error=None if result.get("passed") else "")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +577,7 @@ def _has_code(files: List[Path]) -> bool:
 
 def preflight_check(
     submission_id: str,
-    challenge_type: str = "dce",
+    challenge_type: str | None = None,
     team_name: Optional[str] = None,
     contact_email: Optional[str] = None,
 ) -> Dict:
@@ -523,7 +593,7 @@ def preflight_check(
       ``errors``                 — blocking issues (not runnable).
       ``warnings``               — advisory issues (runnable but note these).
     """
-    normalized_challenge = (challenge_type or "dce").lower()
+    normalized_challenge = (challenge_type or _default_challenge_type()).lower()
     safe_id = make_safe_id(submission_id)
     folder  = EXTRACTED_DIR / safe_id
 
@@ -557,7 +627,12 @@ def preflight_check(
             "warnings": [],
         }
 
-    all_files: List[Path] = [f for f in folder.rglob("*") if f.is_file()]
+    all_files: List[Path] = manifest_files(
+        folder,
+        refresh_if_stale=True,
+        submission_id=safe_id,
+        challenge_type=normalized_challenge,
+    )
 
     # -- Run instructions (Dockerfile) --
     dockerfiles = [f for f in all_files if f.name == "Dockerfile"]
@@ -622,7 +697,7 @@ def preflight_check(
 
 def validate_generated_outputs(
     output_dir: Path,
-    challenge_type: str = "dce",
+    challenge_type: str | None = None,
     map_type: Optional[str] = None,
 ) -> Dict:
     """Validate NIfTI files generated by Docker execution (from /output).
@@ -634,7 +709,7 @@ def validate_generated_outputs(
     Returns:
         ``passed``, ``nifti_count``, ``output_files``, ``errors``, ``warnings``
     """
-    normalized_challenge = (challenge_type or "dce").lower()
+    normalized_challenge = (challenge_type or _default_challenge_type()).lower()
     errors: List[Dict]   = []
     warnings: List[Dict] = []
 
@@ -647,34 +722,43 @@ def validate_generated_outputs(
             "warnings": [],
         }
 
-    all_files = [f for f in output_dir.rglob("*") if f.is_file()]
+    with timed("validation.generated_outputs.manifest", path=str(output_dir)):
+        refresh_manifest(output_dir, submission_id=output_dir.name, challenge_type=normalized_challenge)
+        all_files = manifest_files(
+            output_dir,
+            refresh_if_stale=False,
+            submission_id=output_dir.name,
+            challenge_type=normalized_challenge,
+        )
     output_files_rel = sorted(str(f.relative_to(output_dir)) for f in all_files)
     nifti_files = [f for f in all_files if f.name.lower().endswith(NIFTI_SUFFIXES)]
 
     if not nifti_files:
         errors.append(_err(
             "NO_GENERATED_NIFTI",
-            "The submission did not produce any NIfTI output files (.nii or .nii.gz).",
+            f"The submission did not produce any NIfTI output files ({_suffix_help(NIFTI_SUFFIXES)}).",
         ))
     else:
         joined = " ".join(f.name.lower() for f in nifti_files)
+        patterns_by_map = _map_type_patterns()
+        expected_maps = _expected_maps()
         selected_map = (map_type or "").lower()
-        selected_patterns = MAP_TYPE_PATTERNS.get(selected_map)
+        selected_patterns = patterns_by_map.get(selected_map)
         if selected_patterns is not None:
             expected_groups = [(selected_map, selected_patterns)]
         elif selected_map not in {"", "auto", "other", "mixed/other"}:
             expected_groups = [(selected_map, (selected_map,))]
         else:
             expected_groups = [
-                (name, MAP_TYPE_PATTERNS.get(name, (name,)))
-                for name in EXPECTED_MAPS.get(normalized_challenge, ())
+                (name, patterns_by_map.get(name, (name,)))
+                for name in expected_maps.get(normalized_challenge, ())
             ]
 
         for label, patterns in expected_groups:
             if not any(pattern in joined for pattern in patterns):
                 warnings.append(_warn(
                     "EXPECTED_MAP_MISSING",
-                    f"Expected {label.upper()} map not found in generated outputs.",
+                    f"Expected {_map_display_name(label)} map not found in generated outputs.",
                 ))
 
         for f in nifti_files:
@@ -709,34 +793,53 @@ def validate_generated_outputs(
 
 def validate_batch(
     submission_ids: List[str],
-    challenge_type: str = "dce",
+    challenge_type: str | None = None,
+    challenge_types: Optional[Dict] = None,
     map_type: Optional[str] = None,
     map_type_mode: Optional[str] = None,
     notes: Optional[str] = None,
     team_names: Optional[Dict] = None,
     contact_emails: Optional[Dict] = None,
     mode: str = "result_validation",
+    qc_mode: str = "deep",
 ) -> Dict:
     """Validate multiple submissions and return an aggregate batch result.
 
     Each submission is validated independently.  Failures in one submission do
     not prevent the remaining ones from being validated.
+
+    ``challenge_types`` optionally maps ``submission_id -> challenge`` so a mixed
+    batch validates each submission under its own challenge; any submission not
+    listed falls back to ``challenge_type``. Challenges are never merged — each
+    submission is validated strictly under its own challenge's rules.
     """
     team_names    = team_names    or {}
     contact_emails = contact_emails or {}
+    challenge_types = challenge_types or {}
 
-    results: List[Dict] = []
-    for sid in submission_ids:
+    def _challenge_for(sid: str) -> str | None:
+        picked = challenge_types.get(sid)
+        if picked and str(picked).strip() and str(picked).strip().lower() != "unknown":
+            return str(picked).strip()
+        return challenge_type
+
+    job_id = start_job("batch_validation", total=len(submission_ids), stage="validating submissions")
+    workers = configured_worker_limit("batch_validation_workers", 2, ceiling=4)
+    results: List[Optional[Dict]] = [None] * len(submission_ids)
+
+    def _validate_one(index: int, sid: str) -> tuple[int, Dict]:
         try:
             result = validate_submission(
                 sid,
-                challenge_type=challenge_type,
+                challenge_type=_challenge_for(sid),
                 map_type=map_type,
                 map_type_mode=map_type_mode,
                 notes=notes,
                 team_name=team_names.get(sid),
                 contact_email=contact_emails.get(sid),
                 mode=mode,
+                qc_mode=qc_mode,
+                nifti_validation_workers=1,
             )
         except Exception as exc:
             now = datetime.now(timezone.utc).isoformat()
@@ -744,7 +847,7 @@ def validate_batch(
                 "submission_id": sid,
                 "team_name":     team_names.get(sid, ""),
                 "contact_email": contact_emails.get(sid, ""),
-                "challenge_type": challenge_type.upper(),
+                "challenge_type": (_challenge_for(sid) or _default_challenge_type()).upper(),
                 "map_type":      "",
                 "mode":          mode,
                 "passed":        False,
@@ -758,23 +861,50 @@ def validate_batch(
                 "validated_at":  now,
                 "checked_at":    now,
             }
-        results.append(result)
+        return index, result
+
+    completed = 0
+    with timed("validation.batch", submission_count=len(submission_ids), workers=workers):
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="batch-validate") as executor:
+            futures = [
+                executor.submit(_validate_one, index, sid)
+                for index, sid in enumerate(submission_ids)
+            ]
+            for future in as_completed(futures):
+                index, result = future.result()
+                results[index] = result
+                completed += 1
+                update_job(job_id, completed=completed)
 
     now = datetime.now(timezone.utc).isoformat()
     batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    final_results: List[Dict] = [r for r in results if r is not None]
+
+    # Track which challenges are actually present so a mixed batch is honest
+    # rather than being labelled with one global challenge.
+    challenges_present = sorted({
+        str(r.get("challenge_type") or "").upper()
+        for r in final_results
+        if r.get("challenge_type")
+    })
 
     summary: Dict = {
         "batch_id":         batch_id,
-        "challenge_type":   challenge_type.upper(),
+        "job_id":           job_id,
+        "workers":          workers,
+        "challenge_type":   (challenge_type or _default_challenge_type()).upper(),
+        "challenges_present": challenges_present,
+        "mixed_challenges": len(challenges_present) > 1,
         "mode":             mode,
-        "submission_count": len(results),
-        "passed_count":     sum(1 for r in results if r.get("passed")),
-        "failed_count":     sum(1 for r in results if not r.get("passed")),
-        "runnable_count":   sum(1 for r in results if r.get("runnable")),
+        "submission_count": len(final_results),
+        "passed_count":     sum(1 for r in final_results if r.get("passed")),
+        "failed_count":     sum(1 for r in final_results if not r.get("passed")),
+        "runnable_count":   sum(1 for r in final_results if r.get("runnable")),
         "validated_at":     now,
-        "results":          results,
+        "results":          final_results,
     }
     _save_batch_result(batch_id, summary)
+    finish_job(job_id)
     return summary
 
 

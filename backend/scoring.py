@@ -62,6 +62,15 @@ from services.scoring_package_service import (
     list_packages,
     run_package_scoring,
 )
+from osipi_pipeline.config.rules import (
+    map_type_specs,
+    mask_label_rules,
+    mask_name_patterns,
+    output_map_subpaths,
+    private_path_parts,
+    tuple_setting,
+)
+from osipi_pipeline.ingestion.manifest import manifest_files
 
 # ---------------------------------------------------------------------------
 # Provider registry
@@ -191,33 +200,61 @@ def _exec_output_dir(submission_id: str, challenge_type: str) -> Path:
     return OUTPUTS_DIR / "execution" / key / "outputs"
 
 
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
+_PRIVATE_PATH_PARTS = private_path_parts()
+_MASK_NAME_PATTERNS = mask_name_patterns()
+
+
+def _is_nifti_path(path: Path) -> bool:
+    name = path.name.lower()
+    return path.is_file() and any(name.endswith(suffix) for suffix in NIFTI_SUFFIXES)
+
+
+def _strip_nifti_suffix(name: str) -> str:
+    lower = name.lower()
+    for suffix in sorted(NIFTI_SUFFIXES, key=len, reverse=True):
+        if lower.endswith(suffix):
+            return lower[: -len(suffix)]
+    return Path(lower).stem
+
+
 def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
     """Return NIfTI files that represent the output maps for this submission.
 
     Priority order:
     1. Docker execution output dir  (OUTPUTS_DIR/execution/{key}/outputs/)
-    2. Submitted results/maps/      (EXTRACTED_DIR/{id}/results/maps/)
-    3. Submitted results/           (EXTRACTED_DIR/{id}/results/)
-    4. Extracted submission root    (EXTRACTED_DIR/{id}/)
-
-    This ensures ASL result-only submissions (which put maps in results/maps/)
-    are treated as having output maps available, without requiring Docker execution.
+    2. Configured submitted-map subdirectories from config/settings.yaml
     """
     exec_dir = _exec_output_dir(submission_id, challenge_type)
     if exec_dir.exists():
-        niftis = [f for f in exec_dir.rglob("*") if (f.suffix == ".nii" or f.name.endswith(".nii.gz")) and f.is_file()]
+        niftis = [
+            f for f in manifest_files(exec_dir, refresh_if_stale=True, submission_id=exec_dir.name)
+            if _is_nifti_path(f)
+        ]
         if niftis:
             return niftis
 
     extracted_base = EXTRACTED_DIR / submission_id
-    for subpath in ("results/maps", "results", ""):
+    extracted_files = manifest_files(extracted_base, refresh_if_stale=True, submission_id=submission_id)
+    for subpath in output_map_subpaths():
         candidate = extracted_base / subpath if subpath else extracted_base
         if candidate.exists():
-            niftis = [f for f in candidate.rglob("*") if (f.suffix == ".nii" or f.name.endswith(".nii.gz")) and f.is_file()]
+            niftis = [
+                f for f in extracted_files
+                if _is_nifti_path(f) and _path_is_relative_to(f, candidate)
+            ]
             if niftis:
                 return niftis
 
     return []
+
+
+def _path_is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _score_artifact_dir(submission_id: str) -> Path:
@@ -255,44 +292,33 @@ def _save_scoring_result(submission_id: str, result: dict) -> None:
 # NIfTI map metadata + QC analysis
 # ---------------------------------------------------------------------------
 
-_PERFUSION_MAP_TYPES: dict[str, dict[str, object]] = {
-    "cbf": {
-        "short": "CBF",
-        "label": "Cerebral blood flow",
-        "units": "mL/100g/min",
-        "tokens": {"cbf", "cerebralbloodflow"},
-    },
-    "att": {
-        "short": "ATT",
-        "label": "Arterial transit time",
-        "units": "seconds",
-        "tokens": {"att", "arterialtransittime", "arrivaltransittime"},
-    },
-    "ktrans": {
-        "short": "Ktrans",
-        "label": "Volume transfer constant",
-        "units": "min^-1",
-        "tokens": {"ktrans", "k-trans", "k_trans"},
-    },
-    "ve": {
-        "short": "ve",
-        "label": "Extravascular extracellular volume fraction",
-        "units": None,
-        "tokens": {"ve", "v_e"},
-    },
-    "kep": {
-        "short": "Kep",
-        "label": "Rate constant",
-        "units": None,
-        "tokens": {"kep"},
-    },
-    "vp": {
-        "short": "Vp",
-        "label": "Plasma volume fraction",
-        "units": None,
-        "tokens": {"vp"},
-    },
-}
+def _perfusion_map_types() -> dict[str, dict[str, object]]:
+    return {
+        key: {
+            "short": str(spec.get("display") or key),
+            "label": str(spec.get("label") or key),
+            "units": spec.get("units"),
+            "dimensions": spec.get("dimensions"),
+            "tokens": set(str(item).lower() for item in (spec.get("patterns") or [key])),
+        }
+        for key, spec in map_type_specs().items()
+    }
+
+
+def _expected_dimensions(map_type_short: str) -> Optional[int]:
+    """Configured expected dimensionality for a parameter map (e.g. 3 for CBF/ATT).
+
+    Returns None when the map type has no configured dimension rule, in which
+    case dimensionality is not enforced.
+    """
+    for spec in _perfusion_map_types().values():
+        if str(spec.get("short")) == str(map_type_short):
+            dims = spec.get("dimensions")
+            try:
+                return int(dims) if dims is not None else None
+            except (TypeError, ValueError):
+                return None
+    return None
 
 _FALLBACK_DTYPE_MAP: dict[int, tuple[str, str, int]] = {
     2: ("uint8", "B", 1),
@@ -333,20 +359,13 @@ def _mean(values: list[float]):
 
 
 def _detect_map_type(path: Path) -> dict:
-    name = path.name.lower()
-    if name.endswith(".nii.gz"):
-        stem = name[:-7]
-    elif name.endswith(".nii"):
-        stem = name[:-4]
-    else:
-        stem = path.stem.lower()
+    stem = _strip_nifti_suffix(path.name)
 
     tokenized = re.sub(r"[^a-z0-9]+", " ", stem).strip()
     tokens = set(tokenized.split())
     compact = tokenized.replace(" ", "")
 
-    for key in ("cbf", "att", "ktrans", "ve", "kep", "vp"):
-        spec = _PERFUSION_MAP_TYPES[key]
+    for spec in _perfusion_map_types().values():
         aliases = set(spec["tokens"])  # type: ignore[arg-type]
         compact_aliases = [
             alias.replace("-", "").replace("_", "")
@@ -423,7 +442,7 @@ def _analyse_nifti_with_nibabel(path: Path) -> dict:
     import nibabel as nib  # type: ignore
 
     img = nib.load(str(path))
-    data = np.asarray(img.dataobj, dtype=np.float64)
+    data = np.asarray(img.dataobj, dtype=np.float32)
     flat = data.ravel()
     total_voxel_count = int(flat.size)
 
@@ -435,9 +454,9 @@ def _analyse_nifti_with_nibabel(path: Path) -> dict:
     negative_count = int((finite_values < 0).sum()) if finite_count else 0
 
     if finite_count:
-        mean = float(np.mean(finite_values))
+        mean = float(np.mean(finite_values, dtype=np.float64))
         median = float(np.median(finite_values))
-        std = float(np.std(finite_values))
+        std = float(np.std(finite_values, dtype=np.float64))
         min_val = float(np.min(finite_values))
         max_val = float(np.max(finite_values))
         cv = std / abs(mean) if mean else None
@@ -629,8 +648,8 @@ def _nifti_file_list(root: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted(
-        f for f in root.rglob("*")
-        if f.is_file() and (f.suffix == ".nii" or f.name.endswith(".nii.gz"))
+        f for f in manifest_files(root, refresh_if_stale=True, submission_id=root.name)
+        if _is_nifti_path(f)
     )
 
 
@@ -646,9 +665,13 @@ def _load_nifti_values(path: Path) -> dict:
 
         img = nib.load(str(path))
         data = np.asarray(img.dataobj, dtype=np.float64)
+        affine = [[float(v) for v in row] for row in np.asarray(img.affine, dtype=np.float64).tolist()]
+        zooms = [float(z) for z in img.header.get_zooms()[: len(data.shape)]]
         return {
             "shape": [int(v) for v in data.shape],
             "values": [float(v) for v in data.ravel()],
+            "affine": affine,
+            "voxel_size": zooms,
             "reader": "nibabel",
         }
     except Exception:
@@ -697,13 +720,69 @@ def _load_nifti_values(path: Path) -> dict:
             float(item[0]) * slope + intercept
             for item in struct.iter_unpack(endian + fmt_code, payload)
         ]
-        return {"shape": shape, "values": values, "reader": "nifti_header_fallback"}
+        # Best-effort affine/voxel size from the fallback header (sform srows if
+        # present, else pixdim). None when unavailable — callers must treat a
+        # missing affine as "cannot verify grid" rather than "grids match".
+        affine = None
+        try:
+            srow_x = struct.unpack(endian + "4f", raw[280:296])
+            srow_y = struct.unpack(endian + "4f", raw[296:312])
+            srow_z = struct.unpack(endian + "4f", raw[312:328])
+            if any(any(v for v in row) for row in (srow_x, srow_y, srow_z)):
+                affine = [list(srow_x), list(srow_y), list(srow_z), [0.0, 0.0, 0.0, 1.0]]
+        except Exception:
+            affine = None
+        try:
+            pixdim = struct.unpack(endian + "8f", raw[76:108])
+            voxel_size = [abs(float(v)) for v in pixdim[1 : 1 + len(shape)]]
+        except Exception:
+            voxel_size = None
+        return {
+            "shape": shape,
+            "values": values,
+            "affine": affine,
+            "voxel_size": voxel_size,
+            "reader": "nifti_header_fallback",
+        }
 
 
-def _write_float32_nifti(path: Path, shape: list[int], values: list[float]) -> None:
+def _grids_compatible(a: dict, b: dict, *, vox_tol: float = 1e-3, aff_tol: float = 1e-2) -> Optional[bool]:
+    """Whether two loaded NIfTI maps share a physical-space grid.
+
+    Compares voxel sizes and the affine (rotation + translation) within
+    tolerance. Returns None when either affine is unavailable (grid cannot be
+    verified) so callers can decide whether to proceed. Same shape alone is NOT
+    sufficient: two identically shaped volumes 100 mm apart are not comparable.
+    """
+    aff_a, aff_b = a.get("affine"), b.get("affine")
+    vox_a, vox_b = a.get("voxel_size"), b.get("voxel_size")
+    if aff_a is None or aff_b is None:
+        return None
+    try:
+        for ra, rb in zip(aff_a, aff_b):
+            for va, vb in zip(ra, rb):
+                if abs(float(va) - float(vb)) > aff_tol:
+                    return False
+        if vox_a and vox_b:
+            for va, vb in zip(vox_a, vox_b):
+                if abs(float(va) - float(vb)) > vox_tol:
+                    return False
+    except (TypeError, ValueError):
+        return None
+    return True
+
+
+def _write_float32_nifti(
+    path: Path,
+    shape: list[int],
+    values: list[float],
+    affine: Optional[list[list[float]]] = None,
+) -> None:
     """Write a minimal NIfTI-1 float32 map.
 
-    TODO: preserve source affine/header when adding safe resampling support.
+    When ``affine`` (a 4x4 list, e.g. the submitted map's affine) is provided it
+    is written as the sform so difference maps land in the same physical space as
+    the source in imaging software. Without it, an identity grid is used.
     """
     header = bytearray(348)
     header[0:4] = (348).to_bytes(4, "little")
@@ -715,8 +794,24 @@ def _write_float32_nifti(path: Path, shape: list[int], values: list[float]) -> N
     header[70:72] = (16).to_bytes(2, "little", signed=True)
     header[72:74] = (32).to_bytes(2, "little", signed=True)
     header[108:112] = struct.pack("<f", 352.0)
-    for i in range(1, min(ndim, 3) + 1):
-        header[76 + i * 4 : 76 + i * 4 + 4] = struct.pack("<f", 1.0)
+    if affine is not None and len(affine) >= 3:
+        # Preserve source placement: pixdim from affine columns + sform srows.
+        try:
+            for i in range(3):
+                col = [float(affine[r][i]) for r in range(3)]
+                vox = math.sqrt(sum(c * c for c in col)) or 1.0
+                header[76 + (i + 1) * 4 : 76 + (i + 1) * 4 + 4] = struct.pack("<f", vox)
+            header[252:254] = (1).to_bytes(2, "little", signed=True)  # qform_code
+            header[254:256] = (1).to_bytes(2, "little", signed=True)  # sform_code
+            header[280:296] = struct.pack("<4f", *[float(v) for v in affine[0][:4]])
+            header[296:312] = struct.pack("<4f", *[float(v) for v in affine[1][:4]])
+            header[312:328] = struct.pack("<4f", *[float(v) for v in affine[2][:4]])
+        except Exception:
+            for i in range(1, min(ndim, 3) + 1):
+                header[76 + i * 4 : 76 + i * 4 + 4] = struct.pack("<f", 1.0)
+    else:
+        for i in range(1, min(ndim, 3) + 1):
+            header[76 + i * 4 : 76 + i * 4 + 4] = struct.pack("<f", 1.0)
     path.parent.mkdir(parents=True, exist_ok=True)
     safe_values = [
         float(v) if isinstance(v, (int, float)) and math.isfinite(float(v)) else float("nan")
@@ -726,11 +821,7 @@ def _write_float32_nifti(path: Path, shape: list[int], values: list[float]) -> N
 
 
 def _filename_tokens(path: Path) -> set[str]:
-    name = path.name.lower()
-    if name.endswith(".nii.gz"):
-        name = name[:-7]
-    elif name.endswith(".nii"):
-        name = name[:-4]
+    name = _strip_nifti_suffix(path.name)
     return set(t for t in re.split(r"[^a-z0-9]+", name) if t)
 
 
@@ -738,9 +829,8 @@ def _is_mask_like(path: Path) -> bool:
     name = path.name.lower()
     parts = {part.lower() for part in path.parts}
     return (
-        "masks" in parts
-        or "mask" in parts
-        or any(token in name for token in ("mask", "roi", "gray", "grey", "white", "gm", "wm"))
+        bool(parts.intersection(_PRIVATE_PATH_PARTS).intersection({"mask", "masks"}))
+        or any(pattern in name for pattern in _MASK_NAME_PATTERNS)
     )
 
 
@@ -795,6 +885,17 @@ def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
     return by_type
 
 
+def _mask_label_for_name(name: str) -> str:
+    low = name.lower()
+    stem = _strip_nifti_suffix(name).replace("_", " ").replace("-", " ").strip()
+    for rule in mask_label_rules():
+        label = str(rule.get("label") or "").strip()
+        patterns = rule.get("patterns") or ()
+        if label and any(str(pattern).lower() in low for pattern in patterns):
+            return label
+    return stem or name
+
+
 def _reference_masks(root: Path) -> list[dict]:
     mask_dirs = [root / "masks", root / "Masks"]
     paths: list[Path] = []
@@ -810,17 +911,7 @@ def _reference_masks(root: Path) -> list[dict]:
             continue
         seen.add(path)
         name = path.name
-        low = name.lower()
-        if "gray" in low or "grey" in low or re.search(r"(^|[_-])gm([_.-]|$)", low):
-            label = "gray matter"
-        elif "white" in low or re.search(r"(^|[_-])wm([_.-]|$)", low):
-            label = "white matter"
-        elif "brain" in low:
-            label = "brain mask"
-        elif "roi" in low:
-            label = name.replace(".nii.gz", "").replace(".nii", "").replace("_", " ")
-        else:
-            label = name.replace(".nii.gz", "").replace(".nii", "").replace("_", " ")
+        label = _mask_label_for_name(name)
         masks.append({"name": name, "label": label, "path": path})
     return masks
 
@@ -933,7 +1024,11 @@ def _comparison_metrics(
         "mae": _json_float(mae),
         "rmse": _json_float(rmse),
         "standard_deviation_error": _json_float(std_error),
-        "coefficient_of_variation": _json_float(cov),
+        # Spread of voxelwise errors over the reference mean. This is an accuracy
+        # spread ratio, NOT a repeatability CoV (which needs repeated datasets).
+        "error_coefficient_of_variation": _json_float(cov),
+        "coefficient_of_variation": _json_float(cov),  # backward-compat alias
+        "cov_kind": "error_cov",
         "correlation": _json_float(_correlation(sub_finite, ref_finite)),
     }
 
@@ -1024,6 +1119,28 @@ def _score_reference_maps(
             result["maps"].append(row)
             continue
 
+        # Parameter maps (CBF/ATT) must be exactly the configured dimensionality
+        # (3-D). A 4-D file with a parameter-map name is a fitted model / time
+        # series, not a parameter map, and must not be scored voxelwise here.
+        expected_dims = _expected_dimensions(map_type)
+        sub_ndim = len(sub_data["shape"])
+        row["submitted_dimensions"] = sub_ndim
+        if expected_dims is not None and sub_ndim != expected_dims:
+            row["status"] = "unexpected_dimensions"
+            if sub_ndim == 4:
+                row["file_role"] = "fitted_model"
+                row["error"] = (
+                    f"{map_type} map is {sub_ndim}-D; parameter maps must be {expected_dims}-D. "
+                    "A 4-D file is treated as a fitted model / time series and is not scored "
+                    "against the 3-D reference parameter map."
+                )
+            else:
+                row["error"] = (
+                    f"{map_type} map is {sub_ndim}-D; parameter maps must be {expected_dims}-D."
+                )
+            result["maps"].append(row)
+            continue
+
         if sub_data["shape"] != ref_data["shape"]:
             row["status"] = "shape_mismatch"
             row["error"] = (
@@ -1035,6 +1152,25 @@ def _score_reference_maps(
             # TODO: add explicit, affine-aware optional resampling before enabling shape reconciliation.
             result["maps"].append(row)
             continue
+
+        # Same shape is not enough: verify the submitted and reference maps share
+        # a physical-space grid (affine + voxel size) before voxelwise scoring.
+        # Two identically shaped volumes offset in space would otherwise produce
+        # misleading metrics. We do not silently resample.
+        grid_ok = _grids_compatible(sub_data, ref_data)
+        if grid_ok is False:
+            row["status"] = "spatial_grid_mismatch"
+            row["error"] = (
+                "Submitted and reference maps have the same shape but different spatial grids "
+                "(affine/voxel size). Voxelwise comparison was skipped to avoid misleading metrics. "
+                "Resampling is not performed yet."
+            )
+            row["submitted_voxel_size"] = sub_data.get("voxel_size")
+            row["reference_voxel_size"] = ref_data.get("voxel_size")
+            result["maps"].append(row)
+            continue
+        if grid_ok is None:
+            row["grid_check"] = "unverified_no_affine"
 
         sub_values = sub_data["values"]
         ref_values = ref_data["values"]
@@ -1059,7 +1195,9 @@ def _score_reference_maps(
                 diff_name = diff_name[:-4]
             diff_path = diff_dir / f"{diff_name}_difference.nii"
             try:
-                _write_float32_nifti(diff_path, sub_data["shape"], diff_values)
+                _write_float32_nifti(
+                    diff_path, sub_data["shape"], diff_values, affine=sub_data.get("affine")
+                )
                 row["difference_map"] = str(diff_path.relative_to(artifact_dir))
             except Exception as exc:
                 row["difference_map_error"] = str(exc)
@@ -1096,15 +1234,82 @@ def _score_reference_maps(
 
     compared_count = len(compared_metrics)
     result["summary"]["compared_map_count"] = compared_count
-    result["summary"]["mean_rmse"] = _json_float(_mean([m.get("rmse") for m in compared_metrics if m.get("rmse") is not None]))
-    result["summary"]["mean_mae"] = _json_float(_mean([m.get("mae") for m in compared_metrics if m.get("mae") is not None]))
-    result["summary"]["mean_bias"] = _json_float(_mean([m.get("bias") for m in compared_metrics if m.get("bias") is not None]))
-    result["summary"]["mean_coefficient_of_variation"] = _json_float(_mean([
-        m.get("coefficient_of_variation") for m in compared_metrics if m.get("coefficient_of_variation") is not None
-    ]))
+
+    # Aggregate metrics PER MAP TYPE. CBF (mL/100g/min) and ATT (seconds) have
+    # different units, so averaging their RMSE/MAE/bias together is meaningless.
+    # Only same-map-type values (across subjects/repeats) may be averaged.
+    by_map_type: dict[str, dict] = {}
+    for map_row in result["maps"]:
+        whole = map_row.get("whole_map") or {}
+        if whole.get("status") != "compared":
+            continue
+        mt = str(map_row.get("detected_map_type") or "Unknown")
+        bucket = by_map_type.setdefault(mt, {"rmse": [], "mae": [], "bias": [], "error_cov": []})
+        if whole.get("rmse") is not None:
+            bucket["rmse"].append(whole.get("rmse"))
+        if whole.get("mae") is not None:
+            bucket["mae"].append(whole.get("mae"))
+        if whole.get("bias") is not None:
+            bucket["bias"].append(whole.get("bias"))
+        cov_val = whole.get("error_coefficient_of_variation", whole.get("coefficient_of_variation"))
+        if cov_val is not None:
+            bucket["error_cov"].append(cov_val)
+
+    summary_by_map_type = {
+        mt: {
+            "units": next((str(s.get("units")) for s in _perfusion_map_types().values() if str(s.get("short")) == mt and s.get("units")), None),
+            "compared_count": len(vals["rmse"]),
+            "mean_rmse": _json_float(_mean(vals["rmse"])),
+            "mean_mae": _json_float(_mean(vals["mae"])),
+            "mean_bias": _json_float(_mean(vals["bias"])),
+            "mean_error_coefficient_of_variation": _json_float(_mean(vals["error_cov"])),
+        }
+        for mt, vals in by_map_type.items()
+    }
+    result["summary"]["by_map_type"] = summary_by_map_type
+
+    # Flat cross-map aggregates are only meaningful within a single map type/unit.
+    # With more than one compared map type present, expose them as None (reports
+    # render "Not available") and rely on by_map_type instead of mixing units.
+    distinct_types = list(summary_by_map_type.keys())
+    if len(distinct_types) == 1:
+        only = summary_by_map_type[distinct_types[0]]
+        result["summary"]["mean_rmse"] = only["mean_rmse"]
+        result["summary"]["mean_mae"] = only["mean_mae"]
+        result["summary"]["mean_bias"] = only["mean_bias"]
+        result["summary"]["mean_coefficient_of_variation"] = only["mean_error_coefficient_of_variation"]
+        result["summary"]["aggregate_map_type"] = distinct_types[0]
+    else:
+        result["summary"]["mean_rmse"] = None
+        result["summary"]["mean_mae"] = None
+        result["summary"]["mean_bias"] = None
+        result["summary"]["mean_coefficient_of_variation"] = None
+        if len(distinct_types) > 1:
+            result["summary"]["aggregate_map_type"] = "mixed"
+            result["warnings"].append(
+                "Multiple map types were scored (e.g. CBF and ATT). They have different units, "
+                "so no combined average is reported — see per-map-type results in summary.by_map_type."
+            )
+
+    # Repeatability/ICC require repeated (e.g. noise-varied) datasets, which a
+    # single submitted map cannot provide. State this explicitly so the reported
+    # coefficient of variation is never mistaken for a repeatability measure.
+    result["repeatability_status"] = "unavailable_requires_repeated_datasets"
+    result["metric_definitions"] = {
+        "rmse": "Root-mean-square voxelwise error vs. reference (same units as the map).",
+        "mae": "Mean absolute voxelwise error vs. reference.",
+        "bias": "Mean signed voxelwise error (submitted minus reference).",
+        "error_coefficient_of_variation": "Std. dev. of voxelwise errors divided by the reference mean; a spread-of-error ratio, NOT a repeatability CoV.",
+        "correlation": "Pearson correlation between submitted and reference voxels.",
+        "repeatability_cov": "Not computed: requires repeated (noise-varied) datasets provided by the challenge.",
+        "icc": "Not computed: requires repeated datasets and a challenge-approved ICC model.",
+    }
+
     map_statuses = [str(m.get("status") or "") for m in result["maps"]]
     error_statuses = {
         "shape_mismatch",
+        "spatial_grid_mismatch",
+        "unexpected_dimensions",
         "scoring_error",
         "reference_invalid",
         "submitted_invalid",
@@ -1223,7 +1428,10 @@ def _build_nifti_summary(maps: list[dict]) -> dict:
 
     means_by_map_type: dict[str, float | None] = {}
     std_by_map_type: dict[str, float | None] = {}
-    for short in ("CBF", "ATT", "Ktrans"):
+    for spec in _perfusion_map_types().values():
+        short = str(spec.get("short") or "")
+        if not short:
+            continue
         mean_vals = [
             float((m.get("stats") or {}).get("mean"))
             for m in maps
@@ -1264,18 +1472,21 @@ def _build_nifti_summary(maps: list[dict]) -> dict:
             "raw_value": negative_percent,
         },
         {
-            "label": "Coefficient of variation",
+            "label": "Spatial CoV (map variability)",
             "value": str(_json_float(mean_cv, 3)) if mean_cv is not None else "not available",
-            "raw_key": "mean_coefficient_of_variation",
+            "raw_key": "spatial_coefficient_of_variation",
             "raw_value": mean_cv,
         },
     ]
 
-    for short, label in (("CBF", "Mean CBF"), ("ATT", "Mean ATT"), ("Ktrans", "Mean Ktrans")):
+    for spec in _perfusion_map_types().values():
+        short = str(spec.get("short") or "")
+        if not short:
+            continue
+        label = f"Mean {short}"
         value = means_by_map_type.get(short)
         if value is None:
             continue
-        spec = next((v for v in _PERFUSION_MAP_TYPES.values() if v["short"] == short), {})
         units = spec.get("units") if isinstance(spec, dict) else None
         visible_metrics.append({
             "label": label,
@@ -1307,7 +1518,9 @@ def _build_nifti_summary(maps: list[dict]) -> dict:
         "mean_finite_percent": finite_percent,
         "negative_voxel_percent": negative_percent,
         "mean_negative_voxel_percent": negative_percent,
-        "mean_coefficient_of_variation": mean_cv,
+        "mean_coefficient_of_variation": mean_cv,  # backward-compat (spatial CoV)
+        "spatial_coefficient_of_variation": mean_cv,
+        "coefficient_of_variation_kind": "spatial_map_variability",
         "mean_standard_deviation": mean_std,
         "means_by_map_type": means_by_map_type,
         "standard_deviation_by_map_type": std_by_map_type,
@@ -1417,21 +1630,18 @@ def _check_tf62_infrastructure() -> dict:
 
     ref_nifti: list[Path] = []
     if ref_dir.exists():
-        ref_nifti = [
-            f for f in ref_dir.rglob("*")
-            if (f.suffix == ".nii" or f.name.endswith(".nii.gz")) and f.is_file()
-        ]
+        ref_nifti = [f for f in ref_dir.rglob("*") if _is_nifti_path(f)]
     if not ref_nifti:
         missing.append("reference_data (NIfTI maps in DROKtransNifti/)")
 
     # Masks: prefer dedicated masks/ dir, fall back to reference/ search
     mask_files: list[Path] = []
     if masks_dir.exists():
-        mask_files = [f for f in masks_dir.rglob("*") if f.is_file()]
+        mask_files = [f for f in masks_dir.rglob("*") if _is_nifti_path(f)]
     if not mask_files and ref_dir.exists():
         mask_files = [
             f for f in ref_dir.rglob("*")
-            if "mask" in f.name.lower() and f.is_file()
+            if _is_nifti_path(f) and any(pattern in f.name.lower() for pattern in _MASK_NAME_PATTERNS)
         ]
     if not mask_files:
         missing.append("mask_files (NIfTI masks in Masks/ or DROKtransNifti/)")
@@ -1598,7 +1808,7 @@ def _check_submission_prerequisites(
             "nifti_files":   [],
         }
 
-    nifti_files   = [f for f in exec_out.rglob("*") if (f.suffix == ".nii" or f.name.endswith(".nii.gz")) and f.is_file()]
+    nifti_files   = [f for f in exec_out.rglob("*") if _is_nifti_path(f)]
     outputs_ready = len(nifti_files) > 0
     if not outputs_ready:
         missing.append("Execution outputs (no NIfTI files found — run the submission first)")
@@ -2169,7 +2379,7 @@ def _collect_artifacts(score_dir: Path) -> list[str]:
     extensions = {".json", ".csv", ".png", ".pdf", ".txt", ".html", ".nii"}
     artifacts: list[str] = []
     for f in sorted(score_dir.rglob("*")):
-        if f.is_file() and (f.suffix.lower() in extensions or f.name.endswith(".nii.gz")):
+        if f.is_file() and (f.suffix.lower() in extensions or f.name.lower().endswith(NIFTI_SUFFIXES)):
             artifacts.append(str(f.relative_to(score_dir)))
     return artifacts
 

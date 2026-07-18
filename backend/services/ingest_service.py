@@ -10,32 +10,30 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 from services.path_config import EXTRACTED_DIR, INCOMING_DIR, safe_relative_path
+from osipi_pipeline.config.rules import app_settings, map_type_patterns, settings_tuple, tuple_setting
+from osipi_pipeline.ingestion.detector import detect_challenge_type
+from osipi_pipeline.ingestion.manifest import load_manifest, manifest_files, refresh_manifest
 
 # ── Map type detection ─────────────────────────────────────────────────────────
 
-NIFTI_SUFFIXES = (".nii", ".nii.gz")
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 
-MAP_TYPE_PATTERNS = {
-    "CBF":    ("cbf", "cerebral_blood_flow", "perfmap", "perfusion", "perf"),
-    "Ktrans": ("ktrans", "k_trans", "transfer_constant"),
-    "ATT":    ("att", "arterial_transit_time", "attmap"),
-    "Kep":    ("kep", "k_ep", "rate_constant"),
-    "Vp":     ("vp", "v_p", "plasma_volume"),
-    "CBV":    ("cbv", "cerebral_blood_volume"),
-    "MTT":    ("mtt", "mean_transit_time"),
-}
+
+def _map_type_patterns() -> dict[str, tuple[str, ...]]:
+    return map_type_patterns(display_keys=True)
 
 # ── Safety limits (override via environment variables) ─────────────────────────
 
 import os as _os
 
-ZIP_MAX_BYTES     = int(_os.environ.get("OSIPI_ZIP_MAX_BYTES",     str(500  * 1024 * 1024)))        # 500 MB
-EXTRACT_MAX_BYTES = int(_os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(2    * 1024 * 1024 * 1024))) # 2 GB
-EXTRACT_MAX_FILES = int(_os.environ.get("OSIPI_EXTRACT_MAX_FILES", "10000"))
+_LIMITS = app_settings().get("limits", {})
+ZIP_MAX_BYTES = int(_os.environ.get("OSIPI_ZIP_MAX_BYTES", str(_LIMITS.get("zip_max_bytes", 500 * 1024 * 1024))))
+EXTRACT_MAX_BYTES = int(_os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(_LIMITS.get("extract_max_bytes", 2 * 1024 * 1024 * 1024))))
+EXTRACT_MAX_FILES = int(_os.environ.get("OSIPI_EXTRACT_MAX_FILES", str(_LIMITS.get("extract_max_files", 10000))))
 
 # Paths/filenames to silently skip when extracting ZIPs
-_SKIP_PREFIXES = {"__MACOSX", "__pycache__"}
-_SKIP_NAMES    = {".DS_Store", "Thumbs.db", "desktop.ini", ".gitkeep"}
+_SKIP_PREFIXES = set(settings_tuple("ingestion", "skip_prefixes"))
+_SKIP_NAMES    = set(settings_tuple("ingestion", "skip_names"))
 
 
 # ── Public API — single submission (legacy) ───────────────────────────────────
@@ -336,8 +334,10 @@ def reset_submission_dir(submission_id: str) -> Path:
 
 def count_submission_files(submission_id: str) -> int:
     """Count files in an internal submission folder."""
-    folder = EXTRACTED_DIR / _safe_id(submission_id)
-    return sum(1 for p in folder.rglob("*") if p.is_file())
+    safe_id = _safe_id(submission_id)
+    folder = EXTRACTED_DIR / safe_id
+    manifest = load_manifest(folder, refresh_if_stale=True, submission_id=safe_id)
+    return int((manifest or {}).get("file_count") or 0)
 
 
 def detect_submission_metadata(submission_id: str) -> Dict:
@@ -351,7 +351,7 @@ def detect_submission_metadata(submission_id: str) -> Dict:
             "detection_warning": "Submission files were not found for auto-detection.",
         }
 
-    files = [p for p in folder.rglob("*") if p.is_file()]
+    files = manifest_files(folder, refresh_if_stale=True, submission_id=_safe_id(submission_id))
     nifti_count = sum(1 for p in files if p.name.lower().endswith(NIFTI_SUFFIXES))
     detected = _detect_parameter_map_type(files)
     confidence = "high"
@@ -364,11 +364,20 @@ def detect_submission_metadata(submission_id: str) -> Dict:
         confidence = "low"
         warning = "Multiple parameter map types were detected from filenames."
 
+    # Per-submission challenge detection so a mixed upload (e.g. ASL + DCE) can
+    # tag each submission with its own challenge. "unknown" means the user must
+    # pick/confirm; downstream steps must scope by challenge, never mix them.
+    try:
+        detected_challenge = detect_challenge_type(folder)
+    except Exception:
+        detected_challenge = "unknown"
+
     return {
         "nifti_count": nifti_count,
         "detected_parameter_map_type": detected,
         "detected_map_type_confidence": confidence,
         "detection_warning": warning,
+        "detected_challenge_type": detected_challenge,
     }
 
 
@@ -472,6 +481,7 @@ def _finalize_staged_dir(
             shutil.rmtree(temp_dir, ignore_errors=True)
         else:
             temp_dir.rename(final_dir)
+        manifest = refresh_manifest(final_dir, submission_id=batch_stem, original_path=display_filename)
         detection = detect_submission_metadata(batch_stem)
         return {
             "success": True,
@@ -479,7 +489,7 @@ def _finalize_staged_dir(
             "source_type": source_type,
             "submission_id": batch_stem,
             "original_filename": display_filename,
-            "file_count": file_count,
+            "file_count": int(manifest.get("file_count") or file_count),
             **detection,
             "message": f"Extracted {file_count} file(s).",
         }
@@ -492,11 +502,12 @@ def _finalize_staged_dir(
             sub_dir = _reset_submission_dir(sub_id)
             for item in sorted(batch_dir.iterdir()):
                 shutil.move(str(item), str(sub_dir / item.name))
+            manifest = refresh_manifest(sub_dir, submission_id=sub_id, original_path=batch_dir.name)
             detection = detect_submission_metadata(sub_id)
             submissions.append({
                 "submission_id": sub_id,
                 "source_folder": batch_dir.name,
-                "file_count": sum(1 for f in sub_dir.rglob("*") if f.is_file()),
+                "file_count": int(manifest.get("file_count") or 0),
                 **detection,
             })
     finally:
@@ -518,18 +529,9 @@ def _finalize_staged_dir(
 # If ALL inner directories of a folder have names from this set, the parent is
 # ONE submission (input/results/maps are its internal data layout), not a batch.
 # A real multi-team batch would have names like "Team_A", "submission_001", etc.
-_STRUCTURAL_SUBDIRS: frozenset = frozenset({
-    "input", "inputs",
-    "result", "results",
-    "output", "outputs",
-    "reference", "ref", "references",
-    "masks", "mask",
-    "maps", "map",
-    "data", "raw", "processed",
-    "src", "source", "sources", "code", "scripts",
-    "logs", "log", "tmp", "temp",
-    "docs", "doc", "analysis",
-})
+_STRUCTURAL_SUBDIRS: frozenset = frozenset(
+    item.lower() for item in settings_tuple("ingestion", "structural_subdirs")
+)
 
 
 def _is_structural_layout(dirs: List[Path]) -> bool:
@@ -653,7 +655,7 @@ def _detect_parameter_map_type(files: Iterable[Path]) -> str:
     found: set = set()
     for file_path in files:
         name = file_path.name.lower()
-        for map_type, patterns in MAP_TYPE_PATTERNS.items():
+        for map_type, patterns in _map_type_patterns().items():
             if any(pattern in name for pattern in patterns):
                 found.add(map_type)
 

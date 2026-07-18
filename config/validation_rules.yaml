@@ -1,0 +1,158 @@
+version: 1
+default_challenge_type: dce
+
+nifti_suffixes:
+  - .nii
+  - .nii.gz
+
+metadata_suffixes:
+  - .json
+  - .yaml
+  - .yml
+  - .csv
+  - .tsv
+
+readme_names:
+  - readme.md
+  - readme.txt
+  - readme
+  - sop.pdf
+  - metadata.json
+
+code_file_names:
+  - dockerfile
+  - requirements.txt
+  - environment.yml
+  - main.py
+  - run.py
+  - setup.py
+
+code_extensions:
+  - .py
+  - .sh
+  - .m
+  - .r
+  - .ipynb
+  - .jl
+  - .c
+  - .cpp
+  - .h
+  - .hpp
+
+code_folder_names:
+  - scripts
+  - code
+  - src
+
+map_types:
+  cbf:
+    display: CBF
+    label: Cerebral blood flow
+    units: mL/100g/min
+    # Parameter maps are single-volume 3-D images. A 4-D file with this name is
+    # not a parameter map (it is a fitted model / time series) and must not be
+    # scored voxelwise against a 3-D reference. See fitted_model_role below.
+    dimensions: 3
+    patterns:
+      - cbf
+      - cerebral_blood_flow
+      - cerebralbloodflow
+      - perfmap
+      - perfusion
+      - perf
+  att:
+    display: ATT
+    label: Arterial transit time
+    units: seconds
+    dimensions: 3
+    patterns:
+      - att
+      - arterial_transit_time
+      - arterialtransittime
+      - arrivaltransittime
+      - attmap
+  ktrans:
+    display: Ktrans
+    label: Volume transfer constant
+    units: min^-1
+    patterns:
+      - ktrans
+      - k-trans
+      - k_trans
+      - transfer_constant
+  ve:
+    display: ve
+    label: Extravascular extracellular volume fraction
+    units:
+    patterns:
+      - ve
+      - v_e
+  kep:
+    display: Kep
+    label: Rate constant
+    units:
+    patterns:
+      - kep
+      - k_ep
+      - rate_constant
+  vp:
+    display: Vp
+    label: Plasma volume fraction
+    units:
+    patterns:
+      - vp
+      - v_p
+      - plasma_volume
+  cbv:
+    display: CBV
+    label: Cerebral blood volume
+    units:
+    patterns:
+      - cbv
+      - cerebral_blood_volume
+  mtt:
+    display: MTT
+    label: Mean transit time
+    units:
+    patterns:
+      - mtt
+      - mean_transit_time
+
+challenges:
+  dce:
+    label: DCE
+    description: Dynamic contrast enhanced MRI
+    expected_maps:
+      - ktrans
+      - kep
+      - vp
+    keywords:
+      - ktrans
+      - kep
+      - vp
+      - dce
+      - dynamic contrast enhanced
+  asl:
+    label: ASL
+    description: Arterial spin labeling MRI
+    expected_maps:
+      - cbf
+      - att
+    keywords:
+      - cbf
+      - att
+      - asl
+      - arterial spin labeling
+  dsc:
+    label: DSC
+    description: Dynamic susceptibility contrast MRI
+    expected_maps:
+      - cbv
+      - cbf
+      - mtt
+    keywords:
+      - cbv
+      - cbf
+      - mtt
+      - dsc
+      - dynamic susceptibility contrast

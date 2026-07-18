@@ -15,6 +15,7 @@ to isolated temporary directories via monkeypatching of path_config constants.
 from __future__ import annotations
 
 import io
+import csv
 import json
 import gzip
 import math
@@ -127,13 +128,19 @@ def _first_reference_map(reference_scoring: dict, map_type: str = "CBF") -> dict
     raise AssertionError(f"No {map_type} reference scoring row found: {reference_scoring}")
 
 
-def _make_result_only_zip(filename: str = "team_result.zip") -> tuple[bytes, str]:
-    """Build an in-memory ZIP with Ktrans + README (result-only submission)."""
+def _make_maps_zip(filename: str, map_names: list[str], readme: str = "# Submission\n") -> tuple[bytes, str]:
+    """Build an in-memory ZIP with the requested NIfTI map filenames."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("Ktrans_map.nii", _tiny_nifti_bytes())
-        zf.writestr("README.md", "# Submission\n")
+        for name in map_names:
+            zf.writestr(name, _tiny_nifti_bytes())
+        zf.writestr("README.md", readme)
     return buf.getvalue(), filename
+
+
+def _make_result_only_zip(filename: str = "team_result.zip") -> tuple[bytes, str]:
+    """Build an in-memory ZIP with Ktrans + README (result-only submission)."""
+    return _make_maps_zip(filename, ["Ktrans_map.nii"])
 
 
 def _make_reproducible_zip(filename: str = "team_repro.zip") -> tuple[bytes, str]:
@@ -208,6 +215,7 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
             ("OSIPI_TF62_DIR",       tmp_path / "tf62"),
             ("CODECOLLECTION_DIR",   tmp_path / "codecol"),
             ("VALIDATION_SUBDIR",    tmp_path / "outputs" / "validation"),
+            ("PREVIEW_ROOT",         tmp_path / "outputs" / "previews"),
             ("SCORING_PACKAGES_DIR", scoring_packages_dir),
             ("SCORING_ACTIVE_CONFIG",scoring_active_cfg),
         ]:
@@ -246,6 +254,210 @@ def test_execution_status_returns_docker_info(client: TestClient) -> None:
     assert "docker_available" in data
     assert isinstance(data["docker_available"], bool)
     assert "message" in data
+
+
+def test_app_config_exposes_configured_challenges_and_maps(client: TestClient) -> None:
+    r = client.get("/api/config")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["defaults"]["challenge_type"] == "dce"
+    challenges = {item["id"]: item for item in body["challenge_types"]}
+    assert {"dce", "asl", "dsc"}.issubset(challenges)
+    assert challenges["asl"]["expected_maps"] == ["cbf", "att"]
+    map_displays = {item["display"] for item in body["map_types"]}
+    assert {"CBF", "ATT", "Ktrans"}.issubset(map_displays)
+    assert "Ktrans" in body["map_type_patterns"]
+
+
+def _warning_codes(result: dict) -> set[str]:
+    return {item.get("code") for item in result.get("warnings", [])}
+
+
+def test_configured_dce_and_dsc_expected_maps_validate_without_code_changes(client: TestClient) -> None:
+    """DCE and DSC expected maps come from YAML, not ASL-specific code paths."""
+    dce_data, dce_name = _make_maps_zip(
+        "dce_full.zip",
+        ["Ktrans_map.nii", "kep_map.nii", "vp_map.nii"],
+    )
+    dce_sid = _upload_and_get_id(client, dce_data, dce_name)
+    dce = client.post("/api/validate", json={
+        "submission_id": dce_sid, "challenge_type": "dce", "mode": "result_only",
+    }).json()
+    assert "EXPECTED_MAP_MISSING" not in _warning_codes(dce)
+
+    dsc_data, dsc_name = _make_maps_zip(
+        "dsc_full.zip",
+        ["cbv_map.nii", "cbf_map.nii", "mtt_map.nii"],
+    )
+    dsc_sid = _upload_and_get_id(client, dsc_data, dsc_name)
+    dsc = client.post("/api/validate", json={
+        "submission_id": dsc_sid, "challenge_type": "dsc", "mode": "result_only",
+    }).json()
+    assert "EXPECTED_MAP_MISSING" not in _warning_codes(dsc)
+
+
+def test_configured_missing_maps_are_reported_for_each_challenge(client: TestClient) -> None:
+    dce_data, dce_name = _make_maps_zip("dce_missing.zip", ["Ktrans_map.nii"])
+    dce_sid = _upload_and_get_id(client, dce_data, dce_name)
+    dce = client.post("/api/validate", json={
+        "submission_id": dce_sid, "challenge_type": "dce", "mode": "result_only",
+    }).json()
+    dce_missing = [w["message"].lower() for w in dce.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
+    assert any("kep" in msg for msg in dce_missing)
+    assert any("vp" in msg for msg in dce_missing)
+
+    dsc_data, dsc_name = _make_maps_zip("dsc_missing.zip", ["cbv_map.nii", "cbf_map.nii"])
+    dsc_sid = _upload_and_get_id(client, dsc_data, dsc_name)
+    dsc = client.post("/api/validate", json={
+        "submission_id": dsc_sid, "challenge_type": "dsc", "mode": "result_only",
+    }).json()
+    dsc_missing = [w["message"].lower() for w in dsc.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
+    assert any("mtt" in msg for msg in dsc_missing)
+
+
+def test_config_only_pet_perfusion_challenge_end_to_end(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    """A fictional challenge should work by overriding config only."""
+    pytest.importorskip("numpy")
+    pytest.importorskip("nibabel")
+    import copy
+    import yaml
+    from osipi_pipeline.config import rules as config_rules
+
+    request.addfinalizer(config_rules.clear_config_cache)
+
+    rules = copy.deepcopy(config_rules.validation_rules())
+    settings = copy.deepcopy(config_rules.app_settings())
+    rules["default_challenge_type"] = "pet_perfusion"
+    rules["map_types"] = {
+        "flow": {
+            "display": "Flow",
+            "label": "Flow",
+            "units": "mL/min",
+            "patterns": ["flow"],
+        },
+        "volume": {
+            "display": "Volume",
+            "label": "Volume",
+            "units": "mL",
+            "patterns": ["volume"],
+        },
+        "delay": {
+            "display": "Delay",
+            "label": "Delay",
+            "units": "seconds",
+            "patterns": ["delay"],
+        },
+    }
+    rules["challenges"] = {
+        "pet_perfusion": {
+            "label": "PET Perfusion",
+            "description": "Fictional config-only perfusion challenge",
+            "expected_maps": ["flow", "volume", "delay"],
+            "keywords": ["pet_perfusion", "flow", "volume", "delay"],
+        }
+    }
+    settings["defaults"]["challenge_type"] = "pet_perfusion"
+    settings["defaults"]["scoring_map_type"] = "Flow"
+
+    rules_path = tmp_path / "validation_rules.yaml"
+    settings_path = tmp_path / "settings.yaml"
+    rules_path.write_text(yaml.safe_dump(rules, sort_keys=False), encoding="utf-8")
+    settings_path.write_text(yaml.safe_dump(settings, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(config_rules, "VALIDATION_RULES_PATH", rules_path)
+    monkeypatch.setattr(config_rules, "SETTINGS_PATH", settings_path)
+    config_rules.clear_config_cache()
+
+    config_body = client.get("/api/config").json()
+    assert config_body["defaults"]["challenge_type"] == "pet_perfusion"
+    assert config_body["challenge_types"] == [{
+        "id": "pet_perfusion",
+        "label": "PET Perfusion",
+        "expected_maps": ["flow", "volume", "delay"],
+    }]
+    assert {item["id"] for item in config_body["map_types"]} == {"flow", "volume", "delay"}
+
+    full_data, full_name = _make_maps_zip(
+        "pet_full.zip",
+        ["results/maps/flow_map.nii", "results/maps/volume_map.nii", "results/maps/delay_map.nii"],
+    )
+    sid = _upload_and_get_id(client, full_data, full_name)
+    validation = client.post("/api/validate", json={
+        "submission_id": sid,
+        "challenge_type": "pet_perfusion",
+        "mode": "result_only",
+    })
+    assert validation.status_code == 200, validation.text
+    assert "EXPECTED_MAP_MISSING" not in _warning_codes(validation.json())
+
+    missing_data, missing_name = _make_maps_zip(
+        "pet_missing.zip",
+        ["results/maps/flow_map.nii"],
+    )
+    missing_sid = _upload_and_get_id(client, missing_data, missing_name)
+    missing = client.post("/api/validate", json={
+        "submission_id": missing_sid,
+        "challenge_type": "pet_perfusion",
+        "mode": "result_only",
+    }).json()
+    missing_messages = [
+        warning["message"]
+        for warning in missing.get("warnings", [])
+        if warning.get("code") == "EXPECTED_MAP_MISSING"
+    ]
+    assert any("Volume" in message for message in missing_messages)
+    assert any("Delay" in message for message in missing_messages)
+
+    previews = client.get(f"/api/submissions/{sid}/previews?challenge_type=pet_perfusion")
+    assert previews.status_code == 200, previews.text
+    detected = {item.get("detected_map_type") for item in previews.json().get("maps", [])}
+    assert {"Flow", "Volume", "Delay"}.issubset(detected)
+
+    combined = client.get(f"/api/export-combined?submission_id={sid}&blinded=true")
+    assert combined.status_code == 200, combined.text
+    header = next(csv.reader(io.StringIO(combined.text)))
+    assert {"mean_flow", "mean_volume", "mean_delay"}.issubset(set(header))
+
+    html_report = client.get(f"/api/report?submission_id={sid}&blinded=true")
+    assert html_report.status_code == 200, html_report.text
+    assert "PET_PERFUSION" in html_report.text
+    assert "Mean Flow" in html_report.text
+
+    pdf_report = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
+    assert pdf_report.status_code == 200, pdf_report.text
+    pdf_text = pdf_report.content.decode("latin-1", errors="ignore")
+    assert "PET_PERFUSION" in pdf_text
+    assert "Flow" in pdf_text
+
+    package = _make_scoring_package_zip(
+        "pet_demo_scoring",
+        challenge_type="pet_perfusion",
+        map_type="flow",
+        metric_name="pet_demo_metric",
+        metric_value=0.42,
+    )
+    install = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("pet_demo_scoring.zip", package, "application/zip")},
+    )
+    assert install.status_code == 200, install.text
+    active = client.post("/api/scoring/set-active", json={
+        "challenge_type": "pet_perfusion",
+        "mode": "custom",
+        "package_id": "pet_demo_scoring",
+    })
+    assert active.status_code == 200, active.text
+    score = client.post("/api/score", json={
+        "submission_id": sid,
+        "challenge_type": "pet_perfusion",
+        "map_type": "flow",
+    })
+    assert score.status_code == 200, score.text
+    assert score.json()["metrics"]["pet_demo_metric"] == pytest.approx(0.42)
 
 
 def test_scoring_status_providers_only(client: TestClient) -> None:
@@ -600,16 +812,24 @@ def test_nifti_files_unknown_submission(client: TestClient) -> None:
 # Helpers — build scoring package ZIPs
 # ---------------------------------------------------------------------------
 
-def _make_scoring_package_zip(package_id: str = "demo_dce_scoring") -> bytes:
+def _make_scoring_package_zip(
+    package_id: str = "demo_dce_scoring",
+    *,
+    challenge_type: str = "dce",
+    map_type: str = "ktrans",
+    metric_name: str = "demo_rmse",
+    metric_value: float = 0.1,
+    display_name: str | None = None,
+) -> bytes:
     """Return a minimal but valid scoring package ZIP in memory."""
     manifest = {
         "package_id":     package_id,
-        "name":           "Test DCE Scoring Package",
+        "name":           display_name or f"Test {challenge_type.upper()} Scoring Package",
         "version":        "1.0.0",
-        "challenge_type": "dce",
-        "map_type":       "ktrans",
+        "challenge_type": challenge_type,
+        "map_type":       map_type,
         "description":    "DEMO/TEST package only.",
-        "metrics":        ["demo_rmse"],
+        "metrics":        [metric_name],
         "entry_point":    "scoring.py",
         "call_mode":      "standard",
     }
@@ -619,7 +839,7 @@ def _make_scoring_package_zip(package_id: str = "demo_dce_scoring") -> bytes:
         "p.add_argument('--submission-dir'); p.add_argument('--output-dir'); p.add_argument('--reference-dir', default='')\n"
         "a = p.parse_args()\n"
         "out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
-        "(out / 'metrics.json').write_text(json.dumps({'demo_rmse': 0.1}))\n"
+        f"(out / 'metrics.json').write_text(json.dumps({{{metric_name!r}: {metric_value!r}}}))\n"
         "sys.exit(0)\n"
     )
     buf = io.BytesIO()
@@ -985,8 +1205,45 @@ def test_custom_asl_score_runs_without_exec_outputs(client: TestClient) -> None:
     )
 
 
+def test_custom_dsc_scoring_uses_same_config_driven_package_framework(client: TestClient) -> None:
+    """DSC can plug into custom scoring through config/manifest only."""
+    data, fname = _make_maps_zip(
+        "dsc_submission.zip",
+        ["results/maps/cbv_map.nii", "results/maps/cbf_map.nii", "results/maps/mtt_map.nii"],
+    )
+    sid = _upload_and_get_id(client, data, fname)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dsc", "mode": "result_only"})
+
+    pkg = _make_scoring_package_zip(
+        "demo_dsc_scoring",
+        challenge_type="dsc",
+        map_type="cbv",
+        metric_name="demo_cbv_error",
+        metric_value=0.2,
+    )
+    install = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("demo_dsc_scoring.zip", pkg, "application/zip")},
+    )
+    assert install.status_code == 200, install.text
+    active = client.post("/api/scoring/set-active", json={
+        "challenge_type": "dsc", "mode": "custom", "package_id": "demo_dsc_scoring",
+    })
+    assert active.status_code == 200, active.text
+
+    scored = client.post("/api/score", json={
+        "submission_id": sid, "challenge_type": "dsc", "map_type": "cbv",
+    })
+    assert scored.status_code == 200, scored.text
+    body = scored.json()
+    assert body["status"] == "scored"
+    assert body["metrics"]["demo_cbv_error"] == pytest.approx(0.2)
+    detected = body["nifti_analysis"]["summary"]["parameter_maps_detected"]
+    assert {"CBV", "CBF", "MTT"}.issubset(set(detected))
+
+
 # ---------------------------------------------------------------------------
-# Proposal-coverage tests added for Results Summary + full workflow pass
+# Proposal-coverage tests for Score & Preview, export, and full workflow behavior
 # ---------------------------------------------------------------------------
 
 def test_local_zip_upload_succeeds(client: TestClient) -> None:
@@ -1085,6 +1342,31 @@ def test_reference_scoring_perfect_cbf_zero_errors(client: TestClient, tmp_path:
     assert row["whole_map"]["rmse"] == pytest.approx(0.0)
     assert row["whole_map"]["bias"] == pytest.approx(0.0)
     assert row["whole_map"]["mae"] == pytest.approx(0.0)
+
+
+def test_report_separates_cbf_att_and_flags_repeatability_unavailable(
+    client: TestClient, tmp_path: Path
+) -> None:
+    # CBF differs from ref (bias) and ATT matches ref (bias 0): the report must
+    # show them as SEPARATE rows and must not average them into one number.
+    data, fname = _make_asl_result_maps_zip("asl_cbf_att.zip", [3, 4, 5, 6], att_values=[10, 10, 10, 10])
+    sid = _upload_and_get_id(client, data, fname)
+    _write_reference_map(tmp_path, "sub-001_cbf.nii.gz", [1, 2, 3, 4])
+    _write_reference_map(tmp_path, "sub-001_att.nii.gz", [10, 10, 10, 10])
+
+    ref = _reference_scoring_status(client, sid)
+    summary = ref["summary"]
+    assert set(summary["by_map_type"]) == {"CBF", "ATT"}
+    # No cross-unit average across CBF (mL/100g/min) and ATT (seconds):
+    assert summary["mean_rmse"] is None
+    assert summary["aggregate_map_type"] == "mixed"
+    assert ref["repeatability_status"] == "unavailable_requires_repeated_datasets"
+
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl"})
+    html = client.get(f"/api/report?submission_id={sid}").text
+    assert "CBF" in html and "ATT" in html
+    assert "Error CoV" in html
+    assert "Repeatability CoV and ICC are unavailable" in html
 
 
 def test_reference_scoring_constant_offset_expected_bias_rmse(client: TestClient, tmp_path: Path) -> None:
@@ -1320,35 +1602,101 @@ def test_zero_byte_nifti_flagged(client: TestClient) -> None:
     assert "EMPTY_NIFTI_FILE" in warn_codes, f"Zero-byte NIfTI not flagged. Warnings: {v.get('warnings')}"
 
 
-def test_export_combined_csv_has_all_sections(client: TestClient) -> None:
-    """Combined CSV includes validation + execution + scoring columns in one row."""
+def test_export_combined_csv_is_researcher_facing(client: TestClient) -> None:
+    """Main combined CSV is a clean MRI evaluation summary, not a workflow log."""
     data, fname = _make_result_only_zip("combined_test.zip")
     sid = _upload_and_get_id(client, data, fname)
-    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
+    client.post("/api/validate", json={
+        "submission_id": sid,
+        "challenge_type": "dce",
+        "mode": "result_only",
+        "team_name": "Perfusion Lab",
+        "contact_email": "pi@example.org",
+    })
 
     r = client.get(f"/api/export-combined?submission_id={sid}&blinded=false")
     assert r.status_code == 200, r.text
     assert "text/csv" in r.headers.get("content-type", "")
-    text = r.text
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    assert len(rows) == 1
+    header = rows[0].keys()
     for col in (
-        "validation_passed", "execution_status", "scoring_status", "official_scoring",
-        "reference_based_scoring_available", "map_count", "parameter_maps_detected",
-        "finite_voxels_percent", "per_map_metadata_json", "per_map_stats_json",
-        "overall_qc_summary_json",
+        "team_name", "contact_email", "original_submission_name", "submission_id",
+        "blinded_submission_id", "challenge_type", "map_types", "map_count",
+        "warning_count", "error_count", "reference_status",
+        "finite_voxels_percent", "nan_count", "inf_count", "negative_voxels_percent",
+        "mean_cbf", "mean_att", "mean_ktrans", "mean_cbv", "mean_mtt",
+        "rmse", "mae", "bias", "cov", "icc", "notes",
     ):
-        assert col in text, f"Combined CSV missing column {col!r}"
-    assert sid in text
-    assert "Ktrans" in text
+        assert col in header, f"Combined CSV missing researcher-facing column {col!r}"
+    for old_col in (
+        "validation_status", "validation_passed", "execution_status", "scoring_status",
+        "ran", "skipped", "result_maps_provided", "metrics_json",
+        "overall_qc_summary_json", "per_map_metadata_json", "per_map_stats_json",
+    ):
+        assert old_col not in header, f"Main CSV should not expose workflow/debug column {old_col!r}"
+    row = rows[0]
+    assert row["team_name"] == "Perfusion Lab"
+    assert row["contact_email"] == "pi@example.org"
+    assert row["submission_id"] == sid
+    assert row["blinded_submission_id"] == "submission_001"
+    assert row["map_types"] == "Ktrans"
+    assert row["reference_status"] == "Not available"
+    assert "Reference maps were not available" in row["notes"]
 
 
 def test_export_combined_blinded_strips_pii(client: TestClient) -> None:
-    """Blinded combined CSV must not contain team_name / contact_email columns."""
+    """Blinded combined CSV must not contain private identifier columns."""
     data, fname = _make_result_only_zip("combined_blind.zip")
     sid = _upload_and_get_id(client, data, fname)
-    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
+    client.post("/api/validate", json={
+        "submission_id": sid,
+        "challenge_type": "dce",
+        "mode": "result_only",
+        "team_name": "Private Team",
+        "contact_email": "secret@example.org",
+    })
     r = client.get(f"/api/export-combined?submission_id={sid}&blinded=true")
     assert r.status_code == 200, r.text
-    assert "team_name" not in r.text and "contact_email" not in r.text
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    assert len(rows) == 1
+    header = rows[0].keys()
+    assert "team_name" not in header
+    assert "contact_email" not in header
+    assert "original_submission_name" not in header
+    assert "submission_id" not in header
+    assert "Private Team" not in r.text
+    assert "secret@example.org" not in r.text
+    assert sid not in r.text
+    assert rows[0]["blinded_submission_id"] == "submission_001"
+
+
+def test_export_combined_json_blinded_summary(client: TestClient) -> None:
+    """Combined JSON is machine-readable and respects blinded mode."""
+    data, fname = _make_result_only_zip("combined_json.zip")
+    sid = _upload_and_get_id(client, data, fname)
+    client.post("/api/validate", json={
+        "submission_id": sid,
+        "challenge_type": "dce",
+        "mode": "result_only",
+        "team_name": "Private JSON Team",
+        "contact_email": "json-secret@example.org",
+    })
+    r = client.get(f"/api/export-combined?submission_id={sid}&blinded=true&format=json")
+    assert r.status_code == 200, r.text
+    assert "application/json" in r.headers.get("content-type", "")
+    body = r.json()
+    assert body["report_type"] == "blinded"
+    assert body["submission_count"] == 1
+    item = body["submissions"][0]
+    assert item["blinded_submission_id"] == "submission_001"
+    assert item["submission_id"] is None
+    assert item["team_name"] is None
+    assert item["contact_email"] is None
+    assert item["qc"]["map_count"] >= 1
+    assert item["reference"]["status"] == "Not available"
+    assert "Private JSON Team" not in r.text
+    assert "json-secret@example.org" not in r.text
 
 
 def test_report_html_generated(client: TestClient) -> None:
@@ -1359,24 +1707,127 @@ def test_report_html_generated(client: TestClient) -> None:
     r = client.get(f"/api/report?submission_id={sid}")
     assert r.status_code == 200, r.text
     assert "text/html" in r.headers.get("content-type", "")
-    assert "Evaluation Report" in r.text
-    # No scoring configured → report must say so honestly.
-    assert "Scoring is not configured" in r.text
-    assert "NIfTI map technical details" in r.text
-    assert "View technical details" in r.text
-    assert "Reference-based scoring available: no" in r.text
+    assert "OSIPI Perfusion Pipeline Report" in r.text
+    assert "Executive Summary" in r.text
+    assert "Key Metrics" in r.text
+    assert "Visual Summary" in r.text
+    assert "Submission Metadata" in r.text
+    assert "QC / Evaluation Summary" in r.text
+    assert "Scoring Summary" in r.text
+    assert "Map Preview Gallery" in r.text
+    assert "Per-Submission Results" in r.text
+    assert "Errors, Warnings, and Recommended Actions" in r.text
+    assert "Notes / Limitations" in r.text
+    assert "Validation outcome summary" in r.text
+    assert "Voxel validity summary" in r.text
+    assert "Basic NIfTI QC" in r.text
+    assert "not full BIDS validation" in r.text
+    assert "Challenge type:" in r.text
+    assert "Number of submissions:" in r.text
+    assert "Number of maps:" in r.text
+    assert "Map types detected:" in r.text
+    assert "Finite voxels" in r.text
+    assert "Reference status" in r.text
+    assert r.text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
+    # Plain printable report — no purple-heavy app/dashboard styling.
+    assert "#4c2a86" not in r.text
+    assert 'class="cards"' not in r.text
+    assert 'class="metrics"' not in r.text
+    for forbidden in (
+        "Validation summary", "Execution summary", "Result maps provided",
+        "<th>Validation</th>", "<th>Execution</th>", "<th>Scoring</th>",
+        "Scoring is not configured", "reference_not_available",
+    ):
+        assert forbidden not in r.text
 
 
-def test_combined_export_reflects_result_only_skip(client: TestClient) -> None:
-    """Result-only submissions show execution_status=skipped_result_maps in combined CSV."""
+def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> None:
+    """/api/export/report/pdf returns a researcher-facing PDF without workflow labels."""
+    data, fname = _make_result_only_zip("report_pdf_test.zip")
+    sid = _upload_and_get_id(client, data, fname)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
+
+    r = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
+    assert r.status_code == 200, r.text
+    assert "application/pdf" in r.headers.get("content-type", "")
+    content_disposition = r.headers.get("content-disposition", "")
+    assert ".pdf" in content_disposition
+    assert r.content.startswith(b"%PDF")
+    assert len(r.content) > 500
+    pdf_text = r.content.decode("latin-1", errors="ignore")
+    for expected in (
+        "OSIPI Perfusion Pipeline Report", "Executive Summary", "Status and Key QC Metrics",
+        "Small QC Charts", "QC / Evaluation Summary",
+        "Submission Metadata", "Scoring Summary", "Per-Submission Results",
+        "Notes / Limitations", "Challenge type", "Export date",
+        "Number of submissions", "Number of maps", "Map types detected",
+        "Finite voxels", "Reference status", "Validation status", "Execution status",
+    ):
+        assert expected in pdf_text
+    assert pdf_text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
+    for forbidden in (
+        "Execution summary", "Validation summary", "Result maps provided",
+        "Ran", "Skipped", "reference_not_available",
+    ):
+        assert forbidden not in pdf_text
+
+
+def test_pdf_report_includes_cached_map_previews_when_available(client: TestClient) -> None:
+    pytest.importorskip("numpy")
+    pytest.importorskip("nibabel")
+    data, fname = _make_result_only_zip("report_pdf_preview.zip")
+    sid = _upload_and_get_id(client, data, fname)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
+
+    previews = client.get(f"/api/submissions/{sid}/previews?challenge_type=dce")
+    assert previews.status_code == 200, previews.text
+    preview_body = previews.json()
+    assert preview_body.get("maps"), preview_body
+    assert any(item.get("preview_available") for item in preview_body["maps"]), preview_body
+
+    pdf = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
+    assert pdf.status_code == 200, pdf.text
+    pdf_text = pdf.content.decode("latin-1", errors="ignore")
+    assert "Map Previews" in pdf_text
+    assert "Ktrans" in pdf_text
+
+
+def test_pdf_report_blinded_vs_unblinded_labels() -> None:
+    """Blinded PDF uses generic submission labels; unblinded may reveal the folder name."""
+    import sys
+    from pathlib import Path as _Path
+    sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "backend"))
+    from services.pdf_report_service import generate_pdf_report
+
+    summaries = [{
+        "submission_id": "sub_xyz", "source_folder": "team_alpha_asl_submission",
+        "challenge_type": "asl", "warning_count": 0, "error_count": 0,
+        "analysis_fields": {
+            "parameter_maps_detected": "CBF, ATT", "map_count": 2,
+            "finite_voxels_percent": 100.0, "nan_count": 0, "inf_count": 0,
+            "negative_voxels_percent": 0.0, "mean_coefficient_of_variation": 0.4,
+            "reference_based_scoring_available": False, "reference_compared_map_count": 0,
+            "reference_scoring_status": "reference_not_available",
+        },
+        "nifti_analysis": {"summary": {"means_by_map_type": {"CBF": 15.3, "ATT": 480.8}}, "maps": []},
+    }]
+
+    blinded = generate_pdf_report(summaries, tag="t", blinded=True).decode("latin-1", "ignore")
+    unblinded = generate_pdf_report(summaries, tag="t", blinded=False).decode("latin-1", "ignore")
+    assert "Submission 1" in blinded
+    assert "team_alpha_asl_submission" not in blinded   # blinded strips identifying folder name
+    assert "team_alpha_asl_submission" in unblinded       # unblinded may include it
+
+
+def test_combined_export_hides_result_only_workflow_status(client: TestClient) -> None:
+    """Main combined CSV keeps result-only workflow status out of researcher exports."""
     zip_bytes, fname = _make_asl_structural_zip("lena_skip.zip")
     r = client.post("/api/upload-submission", files={"file": (fname, zip_bytes, "application/zip")})
     sid = r.json()["submission_id"]
     client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl", "mode": "result_only"})
     csv_text = client.get(f"/api/export-combined?submission_id={sid}&blinded=true").text
-    assert "skipped_result_maps" in csv_text, (
-        "Result-only submission should report execution_status=skipped_result_maps in combined CSV"
-    )
+    assert "skipped_result_maps" not in csv_text
+    assert "execution_status" not in csv_text
 
 
 def test_custom_asl_scoring_status_case_insensitive(client: TestClient) -> None:

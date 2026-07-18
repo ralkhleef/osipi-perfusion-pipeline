@@ -89,8 +89,9 @@ ok("mixed batch with one passing enables Continue", _isStepReady("validate") ===
 batchState.validationData = { results: [] };
 ok("no results blocks with 'Run validation' reason", _isStepReady("validate") === false && /run validation/i.test(_stepBlockedReason("validate")));
 
-// E — downstream steps never trap the user
-["run", "score", "summary"].forEach((s) => ok(s + " Continue always enabled", _isStepReady(s) === true));
+// E — downstream steps never trap the user. The "summary" step was retired
+// (its content folds into Score & Preview); Run and Score always allow Continue.
+["run", "score"].forEach((s) => ok(s + " Continue always enabled", _isStepReady(s) === true));
 ok("export has no next", _isStepReady("export") === false);
 
 // ── Upload readiness: footer CTA enables only when a source is selected ─────
@@ -111,16 +112,21 @@ __source = "local"; state.pendingLocalFiles = null; state.mode = "edit"; state.s
 ok("upload enabled in edit mode (re-validate existing)", _isStepReady("upload") === true);
 state.mode = "new"; state.submissionId = null;
 
-// ── Footer visibility + disabled-not-hidden (source-level guarantees) ───────
-console.log("\n=== Footer visibility rules ===\n");
-ok("footer is shown on the upload step (shared footer everywhere)", /if \(step === "upload"\)/.test(src) && /footer\.style\.display = "flex"/.test(src));
-ok("footer is never display:none in JS (only [hidden] toggling)", !/footer\.style\.display = "none"/.test(src));
+// ── Nav visibility + disabled-not-hidden (source-level guarantees) ──────────
+// The legacy single wizard-footer was retired in favour of per-step action
+// rows pinned to each step card (data-step-action-row). These checks assert
+// the "buttons stay visible, only disabled" invariant against that design.
+console.log("\n=== Nav visibility rules ===\n");
+ok("legacy single footer is retired (hidden) via _hideLegacyWizardFooter", /function _hideLegacyWizardFooter/.test(src) && /footer\.style\.display = "none"/.test(src));
+ok("per-step action rows drive navigation (data-step-action-row)", /data-step-action-row/.test(src) && /step-action-primary/.test(src));
+ok("active row shown, inactive rows hidden via display (not removed)", /row\.style\.display = isActive \? "" : "none"/.test(src));
+ok("blocked step keeps Continue visible but disabled (never hidden)", /primaryBtn\.disabled\s*=\s*!canProceed/.test(src) && /if \(primaryBtn\.disabled\) return;/.test(src));
+ok("upload uses in-card submit button wired to handleSubmit", /submitBtn\.addEventListener\("click", handleSubmit\)/.test(src));
+ok("upload submit is disabled-not-hidden when no source chosen", /submitBtn\.disabled = !canUpload/.test(src));
 ok("upload Back hidden via visibility (keeps CTA right-aligned)", /backBtn\.style\.visibility = "hidden"/.test(src));
-ok("upload Next drives the upload action", /if \(!nextBtn\.disabled\) handleSubmit\(\)/.test(src));
-ok("blocked step keeps button visible but disabled (never hidden)", /nextBtn\.disabled\s*=\s*!canProceed/.test(src));
 ok("validate gate uses error count, not run-readiness", extract("_isStepReady").includes('issueCount(r, "errors") === 0'));
 ok("validate gate (in _isStepReady) does not call inferredRunReadiness", !extract("_isStepReady").includes("inferredRunReadiness"));
-ok("footer refreshed after async steps (_refreshWizardFooter present)", /function _refreshWizardFooter/.test(src) && (src.match(/_refreshWizardFooter\(\)/g) || []).length >= 3);
+ok("nav refreshed after async steps (_refreshWizardFooter present)", /function _refreshWizardFooter/.test(src) && (src.match(/_refreshWizardFooter\(\)/g) || []).length >= 3);
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);
