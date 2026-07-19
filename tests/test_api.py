@@ -1757,13 +1757,16 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     pdf_text = r.content.decode("latin-1", errors="ignore")
     for expected in (
         "OSIPI Perfusion Pipeline Report", "Executive Summary", "Status and Key QC Metrics",
-        "Small QC Charts", "QC / Evaluation Summary",
+        "QC / Evaluation Summary",
         "Submission Metadata", "Scoring Summary", "Per-Submission Results",
         "Notes / Limitations", "Challenge type", "Export date",
+        "Pipeline version", "Configuration version",
         "Number of submissions", "Number of maps", "Map types detected",
         "Finite voxels", "Reference status", "Validation status", "Execution status",
     ):
         assert expected in pdf_text
+    # The decorative "Small QC Charts" section was removed to reduce noise.
+    assert "Small QC Charts" not in pdf_text
     assert pdf_text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
     for forbidden in (
         "Execution summary", "Validation summary", "Result maps provided",
@@ -1907,8 +1910,16 @@ def test_long_csv_one_metric_per_row(client, tmp_path):
             "repeatability_coefficient_of_variation", "icc"} <= names
     assert all("," not in r["metric_name"] for r in rows)
     from collections import Counter
-    per_map_roi = Counter((r["map_type"], r["roi"]) for r in rows)
-    assert all(count == 7 for count in per_map_roi.values())   # 7 metric rows per (map, ROI)
+    # Accuracy metrics: exactly 5 rows per (map, real ROI). Repeatability/ICC are
+    # emitted once per submission (submission-level), not repeated per map/ROI.
+    per_map_roi = Counter(
+        (r["map_type"], r["roi"]) for r in rows if r["roi"] != "(submission-level)"
+    )
+    assert per_map_roi and all(count == 5 for count in per_map_roi.values())
+    sub_level = [r for r in rows if r["roi"] == "(submission-level)"]
+    assert {r["metric_name"] for r in sub_level} == {
+        "repeatability_coefficient_of_variation", "icc"}
+    assert len(sub_level) == 2   # exactly one each, not repeated per map/ROI
 
 
 def test_long_csv_missing_metrics_are_blank_not_zero(client, tmp_path):
@@ -2004,3 +2015,38 @@ def test_wide_csv_and_json_exports_still_compatible(client, tmp_path):
     # JSON export unaffected by the shape parameter.
     j = client.get("/api/export-combined", params={"submission_id": sid, "format": "json"})
     assert j.status_code == 200 and "submissions" in j.json()
+
+
+# ---------------------------------------------------------------------------
+# PDF / HTML report improvements (versions, per-map sections, voxel counts)
+# ---------------------------------------------------------------------------
+
+def test_html_report_has_versions_permap_and_voxel_counts(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    _write_reference_mask(tmp_path, "gray_matter.nii.gz", [1, 1, 0, 1])
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
+                                       "force_validation_refresh": True})
+    html = client.get(f"/api/report?submission_id={sid}").text
+    # versions
+    assert "Pipeline version" in html and "Configuration version" in html
+    # per-map submitted-outputs properties
+    assert "Submitted outputs" in html and ">Units<" in html and "Voxel size" in html
+    # reference comparison per map/ROI with valid/excluded voxel counts
+    assert "Reference comparison" in html
+    assert "Valid voxels" in html and "Excluded voxels" in html
+    assert "<th>ROI</th>" in html
+    # unavailable-metric note, CBF and ATT both present
+    assert "Repeatability CoV and ICC are unavailable" in html
+    assert "CBF" in html and "ATT" in html
+    # offline + no internal path leakage / decorative map-mean chart removed
+    assert "<script src=\"http" not in html and "/sessions/" not in html
+    assert "submissions/extracted" not in html
+    assert "Map mean summary" not in html
+
+
+def test_pdf_report_has_versions_and_permap_sections(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl"})
+    pdf = client.get(f"/api/export/report/pdf?submission_id={sid}")
+    assert pdf.status_code == 200
+    assert pdf.content[:5] == b"%PDF-" and len(pdf.content) > 3000

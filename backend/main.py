@@ -2235,11 +2235,13 @@ def _analysis_summary_fields(analysis: dict) -> dict:
         if not isinstance(item, dict):
             continue
         whole = item.get("whole_map") if isinstance(item.get("whole_map"), dict) else {}
+        _wv, _wt = whole.get("voxel_count"), whole.get("total_voxel_count")
+        _wex = (_wt - _wv) if isinstance(_wt, (int, float)) and isinstance(_wv, (int, float)) else None
         reference_rows.append({
             "submitted_file": item.get("submitted_file", ""),
             "reference_file": item.get("reference_file", ""),
             "detected_map_type": item.get("detected_map_type", ""),
-            "scope": "whole map",
+            "scope": "whole image",
             "mask_name": "",
             "status": item.get("status", ""),
             "rmse": whole.get("rmse"),
@@ -2247,7 +2249,8 @@ def _analysis_summary_fields(analysis: dict) -> dict:
             "bias": whole.get("bias"),
             "coefficient_of_variation": whole.get("error_coefficient_of_variation", whole.get("coefficient_of_variation")),
             "correlation": whole.get("correlation"),
-            "voxel_count": whole.get("voxel_count"),
+            "voxel_count": _wv,
+            "excluded_voxel_count": _wex,
             "finite_voxel_percent": whole.get("finite_voxel_percent"),
             "difference_map": item.get("difference_map"),
         })
@@ -2268,6 +2271,11 @@ def _analysis_summary_fields(analysis: dict) -> dict:
                 "coefficient_of_variation": metrics.get("error_coefficient_of_variation", metrics.get("coefficient_of_variation")),
                 "correlation": metrics.get("correlation"),
                 "voxel_count": metrics.get("voxel_count"),
+                "excluded_voxel_count": (
+                    (metrics.get("total_voxel_count") - metrics.get("voxel_count"))
+                    if isinstance(metrics.get("total_voxel_count"), (int, float))
+                    and isinstance(metrics.get("voxel_count"), (int, float)) else None
+                ),
                 "finite_voxel_percent": metrics.get("finite_voxel_percent"),
                 "difference_map": item.get("difference_map"),
             })
@@ -2555,8 +2563,21 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                     if region_status != "compared":
                         value = None  # no comparison → blank, never zero
                     _emit(metric_name, value, status)
-                for metric_name in _LONG_UNAVAILABLE_METRICS:
-                    _emit(metric_name, None, "unavailable_requires_repeated_datasets")
+
+        # Repeatability CoV and ICC are unavailable for the whole submission
+        # (they need repeated noise-varied datasets). Emit ONE submission-level
+        # row each instead of repeating an identical unavailable row per map/ROI,
+        # keeping the tidy table machine-readable without noise.
+        for metric_name in _LONG_UNAVAILABLE_METRICS:
+            sci = [
+                blinded_id, challenge, "", "",
+                "(all maps)", "", "", "(submission-level)",
+                metric_name, "", "unavailable_requires_repeated_datasets",
+                "", "", "", "", "", "",
+                "not_applicable", validation_status, warning_codes,
+                pipeline_version, config_version, export_date,
+            ]
+            rows.append(identity_cells + sci)
 
     return header, rows
 
@@ -3050,7 +3071,8 @@ def export_report(
         for display, value in mean_by_map_type.items()
         if value is not None
     ])
-    charts_html = "".join([validation_chart_html, voxel_chart_html, negative_chart_html, map_mean_chart_html])
+    # Keep only informative charts; drop the decorative map-mean bars.
+    charts_html = "".join([validation_chart_html, voxel_chart_html, negative_chart_html])
     if not charts_html:
         charts_html = '<p class="report-muted">Not enough numeric data was available to render charts.</p>'
     preview_gallery_html = _report_preview_gallery(summaries, blinded=blinded)
@@ -3125,10 +3147,17 @@ def export_report(
             meta = item.get("metadata") or {}
             stats = item.get("stats") or {}
             map_label = f"Map {map_idx}" if blinded else item.get("file_name", f"Map {map_idx}")
+            _shape = meta.get("shape") or []
+            _vox = meta.get("voxel_size") or []
+            _units = item.get("units") or "not provided"
             map_rows.append(
                 "<tr>"
                 f"<td>{_esc(map_label)}</td>"
                 f"<td>{_esc(item.get('detected_map_type', 'Unknown'))}</td>"
+                f"<td>{_esc(_units)}</td>"
+                f"<td>{_esc(str(len(_shape)) + 'D' if _shape else 'n/a')}</td>"
+                f"<td>{_esc('×'.join(str(x) for x in _shape) if _shape else 'n/a')}</td>"
+                f"<td>{_esc('×'.join(str(x) for x in _vox) if _vox else 'n/a')}</td>"
                 f"<td>{_esc(_fmt_report_cell(stats.get('finite_percent')))}</td>"
                 f"<td>{_esc(meta.get('nan_count', 0))} / {_esc(meta.get('inf_count', 0))}</td>"
                 f"<td>{_esc(_fmt_report_cell(stats.get('negative_voxel_percent')))}</td>"
@@ -3149,23 +3178,28 @@ def export_report(
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('bias')))}</td>"
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('coefficient_of_variation')))}</td>"
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('correlation')))}</td>"
+                    f"<td>{_esc(_fmt_report_cell(ref_row.get('voxel_count'), 0))}</td>"
+                    f"<td>{_esc(_fmt_report_cell(ref_row.get('excluded_voxel_count'), 0))}</td>"
                     "</tr>"
                 )
         map_table = (
+            "<h3>Submitted outputs <span style=\"font-weight:normal\">(per map — CBF and ATT separate)</span></h3>"
             "<table class=\"detail-table\"><thead><tr>"
-            "<th>Map</th><th>Type</th><th>Finite voxels</th><th>NaN / Inf</th>"
+            "<th>Map</th><th>Type</th><th>Units</th><th>Dims</th><th>Shape</th><th>Voxel size</th>"
+            "<th>Finite voxels</th><th>NaN / Inf</th>"
             "<th>Negative voxels</th><th>Mean</th><th>CoV</th>"
             "</tr></thead><tbody>"
-            + ("".join(map_rows) if map_rows else '<tr><td colspan="7">No readable NIfTI maps found.</td></tr>')
+            + ("".join(map_rows) if map_rows else '<tr><td colspan="11">No readable NIfTI maps found.</td></tr>')
             + "</tbody></table>"
         )
         reference_table = ""
         if reference_rows:
             reference_table = (
-                "<h3>Reference metrics <span style=\"font-weight:normal\">(per map type — CBF and ATT are never combined)</span></h3>"
+                "<h3>Reference comparison <span style=\"font-weight:normal\">(per map and ROI — CBF and ATT are never combined)</span></h3>"
                 "<table class=\"detail-table\"><thead><tr>"
-                "<th>Map type</th><th>Scope</th><th>Reference status</th>"
+                "<th>Map type</th><th>ROI</th><th>Reference status</th>"
                 "<th>RMSE</th><th>MAE</th><th>Bias</th><th>Error CoV</th><th>Correlation</th>"
+                "<th>Valid voxels</th><th>Excluded voxels</th>"
                 "</tr></thead><tbody>"
                 + "".join(reference_rows)
                 + "</tbody></table>"
@@ -3295,6 +3329,8 @@ def export_report(
     <div><strong>Map types detected:</strong> {_esc(', '.join(map_types) if map_types else 'Not available')}</div>
     <div><strong>Reference status:</strong> {_esc(reference_status)}</div>
     <div><strong>Export date:</strong> {_esc(export_date)}</div>
+    <div><strong>Pipeline version:</strong> {_esc(_pipeline_version())}</div>
+    <div><strong>Configuration version:</strong> {_esc(_configuration_version())}</div>
   </div>
   <h2>Executive Summary</h2>
   <div class="metric-grid">{status_cards_html}</div>

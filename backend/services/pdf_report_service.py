@@ -18,6 +18,100 @@ REFERENCE_UNAVAILABLE_NOTE = (
     "Reference maps were not available, so this report shows QC metrics only."
 )
 
+UNAVAILABLE_METRICS_NOTE = (
+    "Repeatability CoV and ICC are unavailable: they require repeated "
+    "(noise-varied) datasets, which have not been provided."
+)
+
+
+def _pipeline_version() -> str:
+    try:
+        import re as _re
+        text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+        m = _re.search(r'^version\s*=\s*"([^"]+)"', text, _re.M)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _configuration_version() -> str:
+    try:
+        from osipi_pipeline.config.rules import validation_rules as _vr
+        v = _vr().get("version")
+        return str(v) if v is not None else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _err_cov(metrics: Mapping[str, Any]):
+    return metrics.get("error_coefficient_of_variation", metrics.get("coefficient_of_variation"))
+
+
+def _per_map_sections(summaries: Sequence[Mapping[str, Any]], *, blinded: bool) -> list[dict]:
+    """Per-submission, per-map scientific detail: submitted-output properties
+    (units/dimensions/shape/voxel size + QC) and reference metrics per ROI, with
+    valid/excluded voxel counts. CBF and ATT are always separate map entries."""
+    sections: list[dict] = []
+    for idx, s in enumerate(summaries, start=1):
+        analysis = s.get("nifti_analysis") if isinstance(s.get("nifti_analysis"), dict) else {}
+        ref = analysis.get("reference_scoring") if isinstance(analysis.get("reference_scoring"), dict) else {}
+        ref_by_type = {}
+        for row in ref.get("maps") or []:
+            if isinstance(row, dict) and row.get("detected_map_type"):
+                ref_by_type.setdefault(str(row["detected_map_type"]), row)
+        maps_out = []
+        for qc in analysis.get("maps") or []:
+            if not isinstance(qc, dict):
+                continue
+            mtype = str(qc.get("detected_map_type") or "Unknown")
+            if mtype == "Unknown":
+                continue
+            meta = qc.get("metadata") or {}
+            stats = qc.get("stats") or {}
+            shape = meta.get("shape") or []
+            ref_row = ref_by_type.get(mtype, {})
+            roi_rows = []
+            scopes = []
+            if ref_row.get("whole_map"):
+                scopes.append(("Whole image", ref_row.get("whole_map")))
+            for mask in ref_row.get("masks") or []:
+                if isinstance(mask, dict):
+                    scopes.append((str(mask.get("mask_label") or mask.get("mask_name") or "ROI"),
+                                   mask.get("metrics") or {}))
+            for roi_name, m in scopes:
+                valid = m.get("voxel_count")
+                total = m.get("total_voxel_count")
+                excluded = (total - valid) if isinstance(total, (int, float)) and isinstance(valid, (int, float)) else None
+                roi_rows.append({
+                    "roi": roi_name,
+                    "rmse": m.get("rmse"), "mae": m.get("mae"), "bias": m.get("bias"),
+                    "error_cov": _err_cov(m), "correlation": m.get("correlation"),
+                    "valid": valid, "excluded": excluded,
+                    "status": m.get("status"),
+                })
+            maps_out.append({
+                "map_type": mtype,
+                "display": qc.get("parameter_label") or mtype,
+                "units": qc.get("units") or "not provided",
+                "dimensions": len(shape) if shape else None,
+                "shape": "×".join(str(x) for x in shape) if shape else "Not available",
+                "voxel_size": "×".join(str(x) for x in (meta.get("voxel_size") or [])) or "Not available",
+                "finite_percent": stats.get("finite_percent"),
+                "nan_count": meta.get("nan_count"),
+                "inf_count": meta.get("inf_count"),
+                "negative_percent": stats.get("negative_voxel_percent"),
+                "reference_status": ref_row.get("status") or "reference_not_available",
+                "difference_map": bool(ref_row.get("difference_map")),
+                "roi_rows": roi_rows,
+            })
+        if maps_out:
+            sections.append({
+                "label": _submission_label(s, idx, blinded=blinded),
+                "challenge": str(s.get("challenge_type") or "").upper(),
+                "maps": maps_out,
+            })
+    return sections
+
 
 def _fmt(value: Any, digits: int = 3) -> str:
     if value is None or value == "":
@@ -403,6 +497,9 @@ def _build_report_model(
         "challenge_type": _challenge_text(summaries),
         "generated": generated.strftime("%Y-%m-%d %H:%M UTC"),
         "export_date": generated.strftime("%Y-%m-%d"),
+        "pipeline_version": _pipeline_version(),
+        "configuration_version": _configuration_version(),
+        "per_map_sections": _per_map_sections(summaries, blinded=blinded),
         "blinded": blinded,
         "submission_count": len(summaries),
         "map_count": map_count,
@@ -452,8 +549,10 @@ def _build_report_model(
             "Generic reference metrics are not official OSIPI scoring unless an official provider is configured.",
             "Reference maps, masks, and official metric definitions may be unavailable.",
             "CBF and ATT are reported separately and never averaged together (different units).",
-            "The reported coefficient of variation is an accuracy error-CoV. Repeatability CoV and ICC are unavailable until repeated (noise-varied) datasets are provided.",
+            UNAVAILABLE_METRICS_NOTE,
+            "The reported coefficient of variation is an accuracy error-CoV, not a repeatability CoV.",
             "Missing values are shown as Not available, not zero.",
+            "No official overall ASL score has been defined; no pass/fail scientific threshold is applied.",
         ],
         "table_headers": (
             ["Submission"]
@@ -693,6 +792,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             "Date/time generated": model["generated"],
             "Export date": model["export_date"],
             "Report type": "Blinded report" if model["blinded"] else "Unblinded report",
+            "Pipeline version": model["pipeline_version"],
+            "Configuration version": model["configuration_version"],
             "Number of submissions": model["submission_count"],
             "Number of maps": model["map_count"],
             "Map types detected": model["map_types"],
@@ -706,22 +807,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         kv_table(model["status_cards"]),
         Spacer(1, 0.06 * inch),
         kv_table(model["key_metrics"]),
-        para("Small QC Charts", heading_style),
-    ])
-    chart_rows = [[para(cell, table_header_style) for cell in ["Chart", "Metric", "Value", "Metric", "Value", "Metric", "Value"]]]
-    chart_rows.extend([[para(cell, table_cell_style) for cell in row] for row in model["chart_rows"]])
-    chart_table = Table(chart_rows, repeatRows=1, hAlign="LEFT", colWidths=[1.55 * inch, 1.2 * inch, 0.8 * inch, 1.2 * inch, 0.8 * inch, 1.25 * inch, 0.8 * inch])
-    chart_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-    ]))
-    story.extend([
-        chart_table,
         para("Submission Metadata", heading_style),
     ])
     metadata_rows = [[para(h, table_header_style) for h in model["submission_metadata_headers"]]]
@@ -748,6 +833,50 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         para("Scoring Summary", heading_style),
         kv_table(model["scoring"]),
     ])
+
+    # ── Submitted outputs & reference comparison, per submission and per map ──
+    ref_cols = ["ROI", "RMSE", "MAE", "Bias", "Error CoV", "Corr", "Valid vox", "Excl vox"]
+    for section in model.get("per_map_sections") or []:
+        story.append(para(f"Submitted Outputs — {section['label']}"
+                          + (f" ({section['challenge']})" if section.get("challenge") else ""),
+                          heading_style))
+        for m in section["maps"]:
+            story.append(kv_table({
+                "Map type": m["map_type"],
+                "Parameter": m["display"],
+                "Units": m["units"],
+                "Dimensions": f"{m['dimensions']}D" if m.get("dimensions") else "Not available",
+                "Shape": m["shape"],
+                "Voxel size": m["voxel_size"],
+                "Finite voxels %": _fmt(m["finite_percent"]),
+                "NaN / Inf": f"{m.get('nan_count') if m.get('nan_count') is not None else 0} / {m.get('inf_count') if m.get('inf_count') is not None else 0}",
+                "Negative voxels %": _fmt(m["negative_percent"]),
+                "Reference status": str(m["reference_status"]).replace("_", " "),
+            }))
+            if m["roi_rows"]:
+                rrows = [[para(h, table_header_style) for h in ref_cols]]
+                for r in m["roi_rows"]:
+                    rrows.append([para(v, table_cell_style) for v in [
+                        r["roi"], _fmt(r["rmse"]), _fmt(r["mae"]), _fmt(r["bias"]),
+                        _fmt(r["error_cov"]), _fmt(r["correlation"]),
+                        _fmt(r["valid"], 0), _fmt(r["excluded"], 0),
+                    ]])
+                rtable = Table(rrows, repeatRows=1, hAlign="LEFT",
+                               colWidths=[1.7 * inch] + [1.05 * inch] * 7)
+                rtable.setStyle(TableStyle([
+                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f2f2")),
+                    ("FONTSIZE", (0, 0), (-1, -1), 6.5),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]))
+                story.append(rtable)
+            if m.get("difference_map"):
+                story.append(para("- Difference map generated (submitted − reference), preserving the source affine."))
+            story.append(Spacer(1, 0.05 * inch))
 
     preview_rows = []
     for item in model.get("previews") or []:
