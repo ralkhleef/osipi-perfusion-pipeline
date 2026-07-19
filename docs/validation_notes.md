@@ -1,48 +1,39 @@
 # Validation Notes
 
-Validation checks whether an ingested submission looks ready for later pipeline steps.
+Validation checks whether an ingested submission can continue through the pipeline. It does not fabricate scores or require official reference data.
 
-It does not score results, run Docker, or inspect real image contents yet.
+These are basic repository-owned NIfTI/layout checks. They should not be described as full BIDS compliance until mentors define the required BIDS level and challenge-specific metadata requirements.
 
-## What Validation v1.1 Checks
+## What Validation Checks
 
 | Check | Result |
-| --- | --- |
-| Submission folder exists | Error if missing |
-| Submission folder has files | Error if empty |
-| At least one `.nii` or `.nii.gz` file exists | Error if missing |
-| README or metadata file exists | Error if missing |
-| Challenge type is `asl` or `dce` | Error if unknown |
-| Dockerfile exists | Warning if missing |
-| Code files exist | Warning if missing |
-| Expected DCE maps: `Ktrans`, `kep`, `vp` | Warning if missing |
-| Expected ASL maps: `CBF`, `ATT` | Warning if missing |
-| NIfTI files are not empty | Warning if size is 0 |
-| Filenames are unique | Warning if duplicated |
+|---|---|
+| Submission folder exists and has files | Error if missing or empty |
+| Challenge type exists in `config/validation_rules.yaml` | Error if unknown |
+| Result-only submissions contain configured NIfTI map suffixes | Error if missing |
+| Reproducible submissions contain run instructions | Error if Docker/run instructions are required but missing |
+| README/SOP/metadata files from `readme_names` are present | Warning unless explicitly required |
+| Code indicators from `code_file_names`, `code_extensions`, or `code_folder_names` are present | Warning when expected but missing |
+| Expected maps for the configured challenge are present | Warning if missing |
+| NIfTI files are readable by nibabel | Error if unreadable |
+| NIfTI dimensions, affine/header metadata, finite values, NaN/Inf, and zero-byte files | Error or warning depending on severity |
+| Duplicate filenames across subdirectories | Warning |
+
+Expected maps are configured under `challenges.<id>.expected_maps` in `config/validation_rules.yaml`. DCE, ASL, and DSC are just configured challenge entries; adding another challenge follows the same format.
+
+Challenge-specific parameter ranges, unit rules, accepted outputs, and official metric thresholds are not enforced here unless they are added to config or supplied by an official scoring package.
 
 ## Errors vs Warnings
 
 | Type | Meaning |
-| --- | --- |
-| Error | The submission fails validation. |
-| Warning | The submission can still pass, but something may need attention. |
+|---|---|
+| Error | The submission cannot safely continue until fixed. |
+| Warning | The submission can continue, but reviewers should inspect the issue. |
 
-Warnings are useful for early development because challenge submissions may not all follow the same structure yet.
+Warnings are intentionally non-blocking because challenge submissions may have valid layout differences.
 
-## What Is Not Validated Yet
+## Related Config
 
-- Real NIfTI image contents
-- Image dimensions, affine matrices, or headers
-- BIDS structure
-- Docker build or execution
-- Scoring against reference data
-- Report generation
-
-## Future Ideas
-
-- Read NIfTI headers without loading full image data
-- Add challenge-specific required folder layouts
-- Check metadata schemas
-- Validate Dockerfile and runtime requirements
-- Connect validation results to scoring and reporting
-
+- `config/validation_rules.yaml`: challenge ids, expected maps, map detection patterns, file suffixes, README names, and code indicators.
+- `config/settings.yaml`: defaults, safety limits, submitted-map search paths, private preview paths, mask patterns, and ingestion structural folders.
+- `docs/configuration.md`: full guide for adding challenges and configuring reference/custom scoring.

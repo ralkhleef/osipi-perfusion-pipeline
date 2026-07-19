@@ -26,6 +26,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
        -r /tmp/backend-requirements.txt
 
 COPY backend ./backend
+COPY config ./config
 COPY frontend ./frontend
 COPY src ./src
 COPY pyproject.toml README.md ./

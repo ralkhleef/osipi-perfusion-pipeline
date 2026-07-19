@@ -8,13 +8,13 @@ A scoring package is a ZIP archive or directory containing:
     README.md         (optional)
 
 manifest.json required fields:
-    package_id      — filesystem-safe identifier, e.g. "my_dce_v1"
+    package_id      — filesystem-safe identifier, e.g. "my_challenge_v1"
     name            — human-readable display name
-    challenge_type  — "dce" | "asl" | "dsc"
+    challenge_type  — any challenge id configured in config/validation_rules.yaml
 
 manifest.json optional fields:
     version         — semver string, default "1.0.0"
-    map_type        — "ktrans" | "cbf" | etc.
+    map_type        — configured map id/display, e.g. "ktrans" or "cbf"
     description     — free-text description
     metrics         — list of metric names the script produces
     entry_point     — filename of the scoring script, default "scoring.py"
@@ -26,9 +26,7 @@ manifest.json optional fields:
 
 Active configuration (data/scoring/active.json):
     {
-      "dce": { "mode": "none" | "builtin" | "custom", "package_id": null | "..." },
-      "asl": { "mode": "none" },
-      "dsc": { "mode": "none" }
+      "<challenge_id>": { "mode": "none" | "builtin" | "custom", "package_id": null | "..." }
     }
 
 NEVER fabricates scoring results.
@@ -52,12 +50,20 @@ from services.path_config import (
     SCORING_OUTPUTS_DIR,
     SCORING_PACKAGES_DIR,
 )
+from osipi_pipeline.config.rules import challenge_types, default_challenge_type, output_map_subpaths, tuple_setting
 
-# Challenge types the app supports
-KNOWN_CHALLENGE_TYPES = ("dce", "asl", "dsc")
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 
-# Default active config (all disabled)
-_DEFAULT_ACTIVE: dict = {ct: {"mode": "none", "package_id": None} for ct in KNOWN_CHALLENGE_TYPES}
+def _known_challenge_types() -> tuple[str, ...]:
+    return tuple(challenge_types())
+
+
+def _default_challenge_type() -> str:
+    return default_challenge_type()
+
+
+def _default_active_config() -> dict:
+    return {ct: {"mode": "none", "package_id": None} for ct in _known_challenge_types()}
 
 
 # ---------------------------------------------------------------------------
@@ -71,9 +77,10 @@ def _validate_manifest(manifest: dict) -> list[str]:
         if not manifest.get(field, "").strip():
             errors.append(f"manifest.json missing required field: {field!r}")
     ct = manifest.get("challenge_type", "").lower().strip()
-    if ct and ct not in KNOWN_CHALLENGE_TYPES:
+    known = _known_challenge_types()
+    if ct and ct not in known:
         errors.append(
-            f"challenge_type must be one of {KNOWN_CHALLENGE_TYPES}, got {ct!r}"
+            f"challenge_type must be one of {known}, got {ct!r}"
         )
     pid = manifest.get("package_id", "")
     if pid and not re.match(r"^[a-zA-Z0-9_\-]+$", pid):
@@ -89,7 +96,7 @@ def _normalise_manifest(raw: dict) -> dict:
         "package_id":     raw.get("package_id", "").strip().lower(),
         "name":           raw.get("name", "").strip(),
         "version":        raw.get("version", "1.0.0").strip(),
-        "challenge_type": raw.get("challenge_type", "dce").strip().lower(),
+        "challenge_type": raw.get("challenge_type", _default_challenge_type()).strip().lower(),
         "map_type":       raw.get("map_type", "").strip().lower(),
         "description":    raw.get("description", ""),
         "metrics":        raw.get("metrics") or [],
@@ -110,12 +117,12 @@ def load_active_config() -> dict:
     try:
         if SCORING_ACTIVE_CONFIG.exists():
             raw = json.loads(SCORING_ACTIVE_CONFIG.read_text(encoding="utf-8"))
-            config = dict(_DEFAULT_ACTIVE)
+            config = _default_active_config()
             config.update(raw)
             return config
     except Exception:
         pass
-    return dict(_DEFAULT_ACTIVE)
+    return _default_active_config()
 
 
 def save_active_config(config: dict) -> None:
@@ -351,9 +358,9 @@ def _check_package_ready_internal(pkg_dir: Path, manifest: dict) -> dict:
     # Reference data is advisory — don't mark as missing unless package has a reference/ dir placeholder
     ref_dir = pkg_dir / "reference"
     mask_dir = pkg_dir / "masks"
-    if ref_dir.exists() and not any(ref_dir.rglob("*.nii*")):
+    if ref_dir.exists() and not _count_niftis_in(ref_dir):
         missing.append("reference/ directory is empty (no NIfTI files found)")
-    if mask_dir.exists() and not any(mask_dir.rglob("*.nii*")):
+    if mask_dir.exists() and not _count_niftis_in(mask_dir):
         missing.append("masks/ directory is empty (no NIfTI mask files found)")
 
     return {
@@ -367,7 +374,7 @@ def _check_package_ready_internal(pkg_dir: Path, manifest: dict) -> dict:
 def _count_niftis_in(path: Path) -> int:
     if not path.exists():
         return 0
-    return sum(1 for f in path.rglob("*") if (f.suffix == ".nii" or f.name.endswith(".nii.gz")) and f.is_file())
+    return sum(1 for f in path.rglob("*") if f.is_file() and f.name.lower().endswith(NIFTI_SUFFIXES))
 
 
 def check_package_ready(package_id: str) -> dict:
@@ -417,12 +424,11 @@ def run_package_scoring(
             "artifacts":  [],
         }
 
-    # Fall back to extracted submission dir if exec outputs don't exist yet.
-    # For ASL result-only submissions, check results/maps/ then results/ then root.
+    # Fall back to configured submitted-map locations if exec outputs don't exist yet.
     if not exec_output_dir.exists():
         extracted_base = EXTRACTED_DIR / submission_id
         fallback = None
-        for subpath in ("results/maps", "results", ""):
+        for subpath in output_map_subpaths():
             candidate = (extracted_base / subpath) if subpath else extracted_base
             if candidate.exists():
                 fallback = candidate

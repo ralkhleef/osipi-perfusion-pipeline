@@ -190,6 +190,65 @@ def test_mask_based_scoring_uses_only_mask_voxels(scoring_workspace: Path) -> No
     assert mask["metrics"]["rmse"] == pytest.approx(math.sqrt(10.0))
 
 
+def test_configured_known_mask_alias_is_used(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 1, 0, 0], name="brain_mask.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    mask = next(item for item in row["masks"] if item["mask_name"] == "brain_mask.nii.gz")
+
+    assert mask["mask_label"] == "brain mask"
+    assert mask["status"] == "compared"
+
+
+def test_arbitrary_custom_roi_mask_is_accepted(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 0, 0, 1], name="tumor_roi.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    mask = next(item for item in row["masks"] if item["mask_name"] == "tumor_roi.nii.gz")
+
+    assert mask["mask_label"] == "ROI"
+    assert mask["metrics"]["voxel_count"] == 2
+
+
+def test_multiple_masks_are_all_reported(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 1, 0, 0], name="brain_mask.nii.gz")
+    _write_mask(scoring_workspace, [0, 0, 1, 1], name="custom_region.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    names = {item["mask_name"] for item in row["masks"]}
+
+    assert {"brain_mask.nii.gz", "custom_region.nii.gz"}.issubset(names)
+
+
+def test_unknown_mask_filename_gets_clean_label(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 1, 0, 0], name="left_hippocampus.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    mask = next(item for item in row["masks"] if item["mask_name"] == "left_hippocampus.nii.gz")
+
+    assert mask["mask_label"] == "left hippocampus"
+
+
+def test_duplicate_mask_display_labels_do_not_drop_masks(scoring_workspace: Path) -> None:
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 0, 0, 0], name="tumor_roi.nii.gz")
+    _write_mask(scoring_workspace, [0, 1, 0, 0], name="organ_roi.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    roi_masks = [item for item in row["masks"] if item["mask_label"] == "ROI"]
+
+    assert {item["mask_name"] for item in roi_masks} == {"tumor_roi.nii.gz", "organ_roi.nii.gz"}
+
+
 def test_negative_voxel_percent_uses_scored_finite_overlap_denominator(scoring_workspace: Path) -> None:
     _write_submitted(scoring_workspace, [-1, -2, -3, -4])
     _write_reference(scoring_workspace, [0, float("nan"), float("nan"), float("nan")])

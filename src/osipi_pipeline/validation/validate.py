@@ -8,19 +8,37 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from osipi_pipeline.config.rules import (
+    challenge_types,
+    default_challenge_type,
+    expected_maps_by_challenge,
+    map_type_specs,
+    tuple_setting,
+)
 from osipi_pipeline.validation.models import ValidationIssue, ValidationResult
 from osipi_pipeline.validation.nifti_validator import validate_nifti_files
 
 DEFAULT_VALIDATION_DIR = Path("data/outputs/validation")
-KNOWN_CHALLENGE_TYPES = {"asl", "dce", "dsc"}
-NIFTI_SUFFIXES = (".nii", ".nii.gz")
-METADATA_SUFFIXES = {".json", ".yaml", ".yml", ".csv", ".tsv"}
-CODE_SUFFIXES = {".py", ".m", ".r", ".sh", ".ipynb"}
-EXPECTED_PARAMETER_MAPS = {
-    "dce": ("ktrans", "kep", "vp"),
-    "asl": ("cbf", "att"),
-    "dsc": ("cbv", "cbf", "mtt"),
-}
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
+METADATA_SUFFIXES = set(tuple_setting("metadata_suffixes"))
+CODE_SUFFIXES = set(tuple_setting("code_extensions"))
+
+
+def _known_challenge_types() -> tuple[str, ...]:
+    return tuple(challenge_types())
+
+
+def _default_challenge_type() -> str:
+    return default_challenge_type()
+
+
+def _expected_parameter_maps() -> dict[str, tuple[str, ...]]:
+    return expected_maps_by_challenge()
+
+
+def _map_display_name(map_id: str) -> str:
+    spec = map_type_specs().get(str(map_id).lower(), {})
+    return str(spec.get("display") or map_id)
 
 def validate_submission(
     submission_path: str | Path,
@@ -31,17 +49,17 @@ def validate_submission(
     """Validate one already-ingested submission folder and save JSON output."""
 
     path = Path(submission_path).expanduser()
-    normalized_challenge = challenge_type.lower()
+    normalized_challenge = (challenge_type or _default_challenge_type()).lower()
     errors: list[ValidationIssue] = []
     warnings: list[ValidationIssue] = []
     nifti_summary: list[dict[str, Any]] = []
 
-    if normalized_challenge not in KNOWN_CHALLENGE_TYPES:
+    if normalized_challenge not in _known_challenge_types():
         errors.append(
             ValidationIssue(
                 severity="error",
                 code="UNKNOWN_CHALLENGE_TYPE",
-                message="Challenge type must be 'asl', 'dce', or 'dsc'.",
+                message=f"Challenge type must be one of: {', '.join(_known_challenge_types())}.",
             )
         )
 
@@ -86,7 +104,7 @@ def validate_submission(
             ValidationIssue(
                 severity="error",
                 code="NO_NIFTI_FILES",
-                message="At least one .nii or .nii.gz file is required.",
+                message=f"At least one parameter map file is required ({_suffix_help(NIFTI_SUFFIXES)}).",
                 path=str(path),
             )
         )
@@ -150,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Validate an ingested OSIPI submission")
     parser.add_argument("--input", required=True, help="Path to an already-ingested submission folder")
-    parser.add_argument("--challenge", required=True, help="Challenge type, such as asl or dce")
+    parser.add_argument("--challenge", required=True, help=f"Configured challenge type ({', '.join(_known_challenge_types())})")
     args = parser.parse_args(argv)
 
     result = validate_submission(args.input, challenge_type=args.challenge)
@@ -214,11 +232,15 @@ def _is_nifti(path: Path) -> bool:
     return path.name.lower().endswith(NIFTI_SUFFIXES)
 
 def _is_readme(path: Path) -> bool:
-    return path.name.lower().startswith("readme")
+    name = path.name.lower()
+    for configured in tuple_setting("readme_names"):
+        if name == configured or (("." not in configured) and name.startswith(configured)):
+            return True
+    return False
 
 def _is_docker_file(path: Path) -> bool:
     name = path.name.lower()
-    return name == "dockerfile" or name == ".dockerignore" or name.startswith("docker-compose")
+    return name == "dockerfile" or name.startswith("docker-compose")
 
 def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
     warnings: list[ValidationIssue] = []
@@ -228,18 +250,21 @@ def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
                 ValidationIssue(
                     severity="warning",
                     code="EMPTY_NIFTI_FILE",
-                    message=".nii or .nii.gz file is empty.",
+                    message="Parameter map file is empty.",
                     path=str(file_path),
                 )
             )
     return warnings
+
+def _suffix_help(suffixes: tuple[str, ...]) -> str:
+    return ", ".join(suffixes) if suffixes else "configured NIfTI suffixes"
 
 def _missing_expected_map_warnings(
     nifti_files: list[Path],
     challenge_type: str,
     submission_path: Path,
 ) -> list[ValidationIssue]:
-    expected_maps = EXPECTED_PARAMETER_MAPS.get(challenge_type, ())
+    expected_maps = _expected_parameter_maps().get(challenge_type, ())
     file_names = " ".join(file_path.name.lower() for file_path in nifti_files)
     warnings: list[ValidationIssue] = []
     for expected_map in expected_maps:
@@ -248,7 +273,7 @@ def _missing_expected_map_warnings(
                 ValidationIssue(
                     severity="warning",
                     code="EXPECTED_MAP_MISSING",
-                    message=f"Expected {expected_map} parameter map was not found.",
+                    message=f"Expected {_map_display_name(expected_map)} parameter map was not found.",
                     path=str(submission_path),
                 )
             )

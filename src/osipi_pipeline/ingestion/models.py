@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 @dataclass(frozen=True)
 class Manifest:
@@ -23,6 +23,9 @@ class Manifest:
     docker_files: list[str]
     readme_files: list[str]
     timestamp: str
+    files: list[dict[str, object]] = field(default_factory=list)
+    directories: list[dict[str, object]] = field(default_factory=list)
+    config_fingerprint: str = ""
 
     def to_dict(self) -> dict[str, object]:
         """Convert the manifest into a plain dictionary for JSON and CSV."""

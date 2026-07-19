@@ -118,7 +118,7 @@ def execute_submission(
 
     Args:
         submission_path:     Path to the already-ingested submission folder.
-        challenge_type:      Challenge identifier (``"dce"``, ``"asl"``, ``"dsc"``).
+        challenge_type:      Configured challenge identifier.
         command:             Shell command to run inside the container.  ``None``
                              means auto-resolve from ``run_config.json``, then
                              fall back to ``DEFAULT_RUN_COMMAND``.

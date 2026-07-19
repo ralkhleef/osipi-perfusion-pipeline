@@ -275,3 +275,4 @@ __pycache__/
 *.tmp
 test_data/
 data/scoring/
+.codex-ui-audit/

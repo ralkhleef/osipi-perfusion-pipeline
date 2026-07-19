@@ -108,8 +108,8 @@ def test_dce_missing_expected_maps_warns(tmp_path: Path) -> None:
 
     assert result.passed is True
     assert [issue.message for issue in result.warnings] == [
-        "Expected kep parameter map was not found.",
-        "Expected vp parameter map was not found.",
+        "Expected Kep parameter map was not found.",
+        "Expected Vp parameter map was not found.",
     ]
 
 
@@ -119,7 +119,7 @@ def test_asl_missing_expected_maps_warns(tmp_path: Path) -> None:
     result = validate_submission(submission, challenge_type="asl", output_dir=tmp_path / "validation")
 
     assert result.passed is True
-    assert [issue.message for issue in result.warnings] == ["Expected att parameter map was not found."]
+    assert [issue.message for issue in result.warnings] == ["Expected ATT parameter map was not found."]
 
 
 def test_empty_nifti_file_warns(tmp_path: Path) -> None:

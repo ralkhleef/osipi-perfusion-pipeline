@@ -2,14 +2,14 @@
 
 Docker execution is the pipeline step that runs a submitted workflow inside an
 isolated container.  Execution happens after ingestion and validation.  Scoring
-and reporting are implemented in subsequent pipeline phases.
+and reporting consume the output maps that execution writes.
 
 ## How Execution v2 Works
 
 | Step | What happens |
 | --- | --- |
 | Resolve command | Reads `run_config.json` from the submission if present; falls back to `python3 run.py` |
-| Find Dockerfile | Uses `submission/Dockerfile` if present; otherwise uses `docker/Dockerfile.example` |
+| Find Dockerfile | Uses `submission/Dockerfile`; the backend returns a clear preflight error when it is missing |
 | Build image | Runs `docker build -t osipi-<challenge>-<name>:latest` |
 | Mount submission | Mounts the submission folder at `/submission:ro` (read-only) |
 | Mount output dir | Mounts `{run_dir}/outputs/` at `/output:rw` (read-write) |
@@ -59,11 +59,9 @@ POST /api/execute
 Response includes the full `ExecutionResult` fields plus `stdout_preview` and
 `stderr_preview` (first 8 KB of each log file).
 
-## Fallback Dockerfile
+## Dockerfile Handling
 
-`docker/Dockerfile.example` is used when a submission has no `Dockerfile`.
-It is based on `python:3.11-slim` and pre-installs `nibabel` and `numpy` so
-most perfusion-imaging scripts work without modification.
+The backend reviewer workflow requires a submitted `Dockerfile` for reproducible execution and reports a preflight error when it is missing. The lower-level Docker runner still supports `docker/Dockerfile.example` for development/test harnesses. It is based on `python:3.11-slim` and pre-installs `nibabel` and `numpy`.
 
 ## Directory Layout
 
@@ -73,7 +71,7 @@ data/outputs/execution/
     execution_stdout.log      # combined build + run stdout
     execution_stderr.log      # combined build + run stderr
     outputs/                  # mounted at /output inside the container
-      *.nii.gz …              # files written by the submission
+      configured NIfTI maps   # files written by the submission
 ```
 
 ## Security Constraints
@@ -153,5 +151,5 @@ working — check that `/var/run/docker.sock` exists on the host and that the
 | Limitation | Why it matters |
 | --- | --- |
 | Docker must be installed | Execution cannot run without the Docker command |
-| Logs are local files | They are not yet summarised into challenge reports |
-| Scoring is not implemented | Output NIfTI files are collected but not scored yet |
+| Logs are local files | Reports include execution status and previews, while full logs remain local artifacts |
+| Official scoring data is not bundled | Reference metrics require organiser-provided reference maps, masks, or scoring packages |

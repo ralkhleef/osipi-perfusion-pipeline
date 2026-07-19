@@ -14,19 +14,28 @@ from typing import Iterable, Optional
 
 from services.ingest_service import make_safe_id
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
-from scoring import _analyse_nifti_file, _detect_map_type, _safe_name
+from scoring import _detect_map_type, _safe_name
+from osipi_pipeline.ingestion.manifest import config_fingerprint, manifest_files
+from osipi_pipeline.config.rules import (
+    challenge_types,
+    mask_name_patterns,
+    output_map_subpaths,
+    private_path_parts,
+    tuple_setting,
+)
 
-NIFTI_SUFFIXES = (".nii", ".nii.gz")
+NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 PREVIEW_PLANES = ("axial", "coronal", "sagittal")
 PREVIEW_ROOT = OUTPUTS_DIR / "previews"
 MANIFEST_NAME = "preview_manifest.json"
 
-_PRIVATE_PATH_PARTS = {"reference", "references", "ref", "masks"}
+_PRIVATE_PATH_PARTS = private_path_parts()
+_MASK_NAME_PATTERNS = mask_name_patterns()
 
 
 def _is_nifti(path: Path) -> bool:
     name = path.name.lower()
-    return path.is_file() and (name.endswith(".nii") or name.endswith(".nii.gz"))
+    return path.is_file() and any(name.endswith(suffix) for suffix in NIFTI_SUFFIXES)
 
 
 def _is_private_or_mask_path(path: Path, base: Path) -> bool:
@@ -37,7 +46,8 @@ def _is_private_or_mask_path(path: Path, base: Path) -> bool:
     parts = {part.lower() for part in rel.parts}
     if parts.intersection(_PRIVATE_PATH_PARTS):
         return True
-    return "mask" in path.name.lower()
+    name = path.name.lower()
+    return any(pattern in name for pattern in _MASK_NAME_PATTERNS)
 
 
 def _exec_output_dir(submission_id: str, challenge_type: str) -> Path:
@@ -48,17 +58,28 @@ def _exec_output_dir(submission_id: str, challenge_type: str) -> Path:
 def _collect_niftis(base: Path, scan_root: Path) -> list[Path]:
     if not scan_root.exists():
         return []
+    root = base if base.exists() else scan_root
+    files = manifest_files(root, refresh_if_stale=True, submission_id=root.name)
     return sorted(
-        path
-        for path in scan_root.rglob("*")
-        if _is_nifti(path) and not _is_private_or_mask_path(path, base)
+        path for path in files
+        if _is_nifti(path)
+        and _is_under(path, scan_root)
+        and not _is_private_or_mask_path(path, base)
     )
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
 
 
 def _candidate_nifti_paths(submission_id: str, challenge_type: Optional[str]) -> list[Path]:
     """Return submitted/result map paths only, excluding reference/mask data."""
     safe_id = make_safe_id(submission_id)
-    challenges = [challenge_type] if challenge_type else ["asl", "dce", "dsc", "other"]
+    challenges = [challenge_type] if challenge_type else [*challenge_types(), "other"]
     candidates: list[Path] = []
 
     for challenge in challenges:
@@ -68,7 +89,7 @@ def _candidate_nifti_paths(submission_id: str, challenge_type: Optional[str]) ->
         candidates.extend(_collect_niftis(exec_dir, exec_dir))
 
     extracted_base = EXTRACTED_DIR / safe_id
-    for subpath in ("results/maps", "results", ""):
+    for subpath in output_map_subpaths():
         scan_root = extracted_base / subpath if subpath else extracted_base
         found = _collect_niftis(extracted_base, scan_root)
         if found:
@@ -252,10 +273,12 @@ def _cached_item_is_valid(item: dict) -> bool:
         return False
     if item.get("source_mtime") != stat.st_mtime or item.get("source_size") != stat.st_size:
         return False
+    if item.get("preview_config_fingerprint") != config_fingerprint():
+        return False
     if item.get("preview_available"):
         paths = _preview_png_paths(item.get("submission_id") or "", item.get("map_id") or "")
         return all(path.exists() for path in paths.values())
-    return False
+    return True
 
 
 def _read_manifest(submission_id: str) -> Optional[dict]:
@@ -276,11 +299,20 @@ def _write_manifest(submission_id: str, manifest: dict) -> None:
 
 
 def _base_preview_item(submission_id: str, path: Path) -> dict:
-    analysed = _analyse_nifti_file(path)
-    metadata = analysed.get("metadata") or {}
-    stats = analysed.get("stats") or {}
     map_info = _detect_map_type(path)
     map_id = _map_id_for_path(path)
+    shape = []
+    dtype = None
+    voxel_size = []
+    try:
+        import nibabel as nib  # type: ignore
+
+        img = nib.load(str(path))
+        shape = list(img.shape or [])
+        dtype = str(img.get_data_dtype())
+        voxel_size = [float(v) for v in img.header.get_zooms()[: min(3, len(img.shape or []))]]
+    except Exception:
+        pass
     try:
         stat = path.stat()
         source_mtime = stat.st_mtime
@@ -293,18 +325,19 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         "map_id": map_id,
         "file_name": path.name,
         "source_path": str(path),
-        "detected_map_type": analysed.get("detected_map_type") or map_info.get("detected_map_type") or "Unknown",
-        "parameter_label": analysed.get("parameter_label") or map_info.get("parameter_label"),
-        "units": analysed.get("units") or map_info.get("units"),
-        "shape": metadata.get("shape") or [],
-        "voxel_size": metadata.get("voxel_size") or [],
-        "dtype": metadata.get("data_type"),
-        "finite_percent": _safe_stat(stats, "finite_percent"),
-        "negative_percent": _safe_stat(stats, "negative_voxel_percent"),
-        "mean": _safe_stat(stats, "mean"),
-        "std": _safe_stat(stats, "standard_deviation"),
+        "detected_map_type": map_info.get("detected_map_type") or "Unknown",
+        "parameter_label": map_info.get("parameter_label"),
+        "units": map_info.get("units"),
+        "shape": shape,
+        "voxel_size": voxel_size,
+        "dtype": dtype,
+        "finite_percent": None,
+        "negative_percent": None,
+        "mean": None,
+        "std": None,
         "source_mtime": source_mtime,
         "source_size": source_size,
+        "preview_config_fingerprint": config_fingerprint(),
     }
     item.update(_urls(submission_id, map_id, False))
     return item
@@ -317,6 +350,7 @@ def _generate_preview_item(submission_id: str, path: Path) -> dict:
 
     try:
         data, finite_values, volume_index = _load_preview_volume(path)
+        _apply_preview_stats(item, data, finite_values)
         for plane in PREVIEW_PLANES:
             plane_slice = _slice_for_plane(data, plane)
             normalized = _normalize_slice(plane_slice, finite_values)
@@ -338,6 +372,18 @@ def _generate_preview_item(submission_id: str, path: Path) -> dict:
         })
         item.update(_urls(submission_id, map_id, False))
     return item
+
+
+def _apply_preview_stats(item: dict, data, finite_values) -> None:
+    import numpy as np  # type: ignore
+
+    total = int(data.size)
+    finite_count = int(finite_values.size)
+    negative_count = int(np.sum(finite_values < 0)) if finite_count else 0
+    item["finite_percent"] = _json_float((finite_count / total) * 100.0) if total else None
+    item["negative_percent"] = _json_float((negative_count / finite_count) * 100.0) if finite_count else None
+    item["mean"] = _json_float(np.mean(finite_values, dtype=np.float64)) if finite_count else None
+    item["std"] = _json_float(np.std(finite_values, dtype=np.float64)) if finite_count else None
 
 
 def _reuse_or_generate(submission_id: str, path: Path, cached_by_source: dict[str, dict]) -> dict:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from osipi_pipeline.config.rules import challenge_types
 from osipi_pipeline.execution.docker_runner import (
     DEFAULT_CPU_LIMIT,
     DEFAULT_MEMORY_LIMIT,
@@ -24,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--challenge", required=True,
-        help="Challenge type, e.g. asl, dce, or dsc",
+        help=f"Configured challenge type ({', '.join(challenge_types())})",
     )
     parser.add_argument(
         "--command", default=None,

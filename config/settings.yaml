@@ -1,0 +1,98 @@
+version: 1
+
+defaults:
+  challenge_type: dce
+  scoring_map_type: Ktrans
+  validation_mode: auto
+
+limits:
+  zip_max_bytes: 524288000
+  extract_max_bytes: 2147483648
+  extract_max_files: 10000
+
+reporting:
+  default_blinded: true
+  percent_aggregation: voxel_weighted
+  include_pdf_export: true
+
+performance:
+  nifti_validation_workers: 3
+  batch_validation_workers: 2
+  validation_cache_enabled: true
+  manifest_cache_enabled: true
+  preview_cache_enabled: true
+
+paths:
+  output_map_subdirs:
+    - results/maps
+    - results
+    - ''
+  private_path_parts:
+    - reference
+    - references
+    - ref
+    - masks
+    - mask
+  mask_name_patterns:
+    - mask
+    - roi
+    - gray
+    - grey
+    - white
+    - gm
+    - wm
+  mask_label_rules:
+    - label: gray matter
+      patterns:
+        - gray
+        - grey
+        - gm
+    - label: white matter
+      patterns:
+        - white
+        - wm
+    - label: brain mask
+      patterns:
+        - brain
+    - label: ROI
+      patterns:
+        - roi
+
+ingestion:
+  skip_prefixes:
+    - __MACOSX
+    - __pycache__
+  skip_names:
+    - .DS_Store
+    - Thumbs.db
+    - desktop.ini
+    - .gitkeep
+  structural_subdirs:
+    - input
+    - inputs
+    - result
+    - results
+    - output
+    - outputs
+    - reference
+    - ref
+    - references
+    - masks
+    - mask
+    - maps
+    - map
+    - data
+    - raw
+    - processed
+    - src
+    - source
+    - sources
+    - code
+    - scripts
+    - logs
+    - log
+    - tmp
+    - temp
+    - docs
+    - doc
+    - analysis

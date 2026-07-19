@@ -3,6 +3,28 @@
    ============================================================ */
 
 :root {
+  /* ── Design tokens (v78): one source of truth for the worklist system ──
+     Shared spacing, sizing, and typography so every step renders identically.
+     Referenced by the shared .worklist-*, .status-chip, and section rules. */
+  --wl-gutter:       18px;    /* horizontal content gutter on every step */
+  --wl-row-pad-y:    10px;    /* worklist row vertical padding */
+  --wl-row-pad-x:    12px;    /* worklist row horizontal padding */
+  --wl-row-gap:      8px;     /* gap between worklist rows */
+  --wl-row-radius:   10px;    /* worklist row corner radius */
+  --wl-card-radius:  12px;    /* outer step card radius */
+  --wl-icon:         34px;    /* worklist row icon tile */
+  --chip-h:          22px;    /* status chip height */
+  --chip-pad-y:      2px;
+  --chip-pad-x:      8px;
+  --btn-h:           30px;    /* compact action button height */
+  /* Typography scale */
+  --fs-page-title:   1rem;    /* step header title */
+  --fs-intro-title:  0.9rem;  /* intro/card title inside a step */
+  --fs-section:      0.72rem; /* uppercase section titles */
+  --fs-row-title:    0.8rem;  /* worklist row title */
+  --fs-meta:         0.71rem; /* metadata / helper text */
+  --fw-title:        800;     /* shared title weight */
+
   --purple:         #5e42a6;
   --purple-hover:   #4a3190;
   --purple-light:   #ede8f8;
@@ -209,8 +231,9 @@ html, body {
 
 .brand-logo {
   width: 58px;
-  height: auto;
+  height: 58px;
   flex-shrink: 0;
+  object-fit: contain;
 }
 
 .heading-text { flex: 1; min-width: 0; }
@@ -349,6 +372,15 @@ input[type="file"] {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.config-placeholder {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  color: var(--subtle);
+  font-size: 0.75rem;
+  line-height: 1.3;
 }
 
 .pill {
@@ -725,7 +757,7 @@ input[type="file"] {
 }
 
 .issue-list li::before {
-  content: "›";
+  content: "";
   position: absolute;
   left: 7px;
   font-weight: 700;
@@ -756,10 +788,14 @@ input[type="file"] {
 .inventory-summary::-webkit-details-marker { display: none; }
 
 .inventory-summary::before {
-  content: "▸";
-  font-size: 0.58rem;
-  transition: transform 0.15s;
+  content: "";
   display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--muted);
+  transition: transform 0.15s;
 }
 
 .inventory-details[open] .inventory-summary::before { transform: rotate(90deg); }
@@ -1471,25 +1507,6 @@ details.exec-card[open] .exec-toggle { transform: rotate(90deg); }
   /* inherits .form-section padding from HTML class combo */
 }
 
-.step-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  list-style: none;
-  gap: 8px;
-}
-
-.step-summary::-webkit-details-marker { display: none; }
-.step-summary::marker { display: none; }
-
-.step-summary .section-heading {
-  margin-bottom: 0;
-  padding-bottom: 0;
-  border-bottom: none;
-  flex: 1;
-}
-
 .step-arrow {
   font-size: 0.62rem;
   color: var(--muted);
@@ -2032,21 +2049,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   line-height: 1.6;
 }
 
-.export-group {
-  margin-bottom: 16px;
-}
-
-.export-group:last-child { margin-bottom: 0; }
-
-.export-group-label {
-  font-size: 0.63rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--subtle);
-  margin-bottom: 8px;
-}
-
 .export-btn-row {
   display: flex;
   gap: 8px;
@@ -2168,8 +2170,19 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   transform: translateY(-50%);
   width: 13px;
   height: 13px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%239ea3b0' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") no-repeat center;
-  background-size: contain;
+  border: 2px solid #9ea3b0;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.batch-search-wrap::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 21px;
+  width: 7px;
+  height: 2px;
+  background: #9ea3b0;
+  transform: rotate(45deg);
   pointer-events: none;
 }
 
@@ -2337,8 +2350,16 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   padding: 5px 0;
   user-select: none;
 }
-.val-detail-toggle > summary::before { content: "▸"; font-size: 8px; }
-.val-detail-toggle[open] > summary::before { content: "▾"; }
+.val-detail-toggle > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--subtle);
+}
+.val-detail-toggle[open] > summary::before { transform: rotate(90deg); }
 .val-detail-toggle > summary::-webkit-details-marker { display: none; }
 
 /* Technical checks sub-toggle inside details */
@@ -2357,8 +2378,16 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   padding: 3px 0;
   user-select: none;
 }
-.tech-checks-toggle > summary::before { content: "▸"; font-size: 8px; }
-.tech-checks-toggle[open] > summary::before { content: "▾"; }
+.tech-checks-toggle > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--subtle);
+}
+.tech-checks-toggle[open] > summary::before { transform: rotate(90deg); }
 .tech-checks-toggle > summary::-webkit-details-marker { display: none; }
 
 /* Issue summary in batch table Issues column */
@@ -3213,25 +3242,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .vr-action-run:hover { background: #bee3f8; }
 .vr-details-btn { color: var(--muted); }
 
-/* ── Export groups ── */
-.export-groups { display: flex; flex-direction: column; gap: 12px; }
-.export-group {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
-}
-.export-group-future {
-  opacity: .65;
-}
-.export-group-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--divider);
-}
 .export-group-icon {
   width: 38px; height: 38px;
   border-radius: 10px;
@@ -3255,11 +3265,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .export-group-body {
   padding: 14px 20px;
-}
-.export-pair {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
 }
 .export-dl-btn {
   display: inline-flex;
@@ -3366,7 +3371,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .sc-detail-val   { font-size: 0.77rem; color: var(--text); font-weight: 500; }
 .sc-missing-list { margin: 8px 0 0; padding: 0; list-style: none; }
 .sc-missing-list li { font-size: 0.72rem; color: #c53030; padding: 2px 0; }
-.sc-missing-list li::before { content: "✕ "; font-weight: 700; }
+.sc-missing-list li::before { content: "Missing "; font-weight: 700; }
 
 /* Provider badge in score settings card */
 .score-provider-ok  { background: #f0fff4; border-color: #9ae6b4; color: #276749; }
@@ -3431,11 +3436,14 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .score-provider-summary::-webkit-details-marker { display: none; }
 .score-provider-summary::before {
-  content: "▶";
-  font-size: 0.6rem;
-  color: var(--muted);
-  transition: transform .15s;
+  content: "";
   display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--muted);
+  transition: transform .15s;
 }
 .score-provider-details[open] > .score-provider-summary::before {
   transform: rotate(90deg);
@@ -3700,9 +3708,12 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .scoring-admin-summary::-webkit-details-marker { display: none; }
 .scoring-admin-summary::before {
-  content: "▶";
-  font-size: 0.55rem;
-  color: var(--muted);
+  content: "";
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--muted);
   transition: transform 0.15s;
   margin-right: 2px;
 }
@@ -4186,7 +4197,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 .upload-form-card .brand-logo {
   width: 62px;
-  height: auto;
+  height: 62px;
   flex-shrink: 0;
 }
 
@@ -4618,7 +4629,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .step-panel > .score-not-configured-card,
 .step-panel > .score-status-card,
 .step-panel > .scoring-admin-panel,
-.step-panel > .export-groups,
 .step-panel > .run-completion-banner,
 .step-panel > .validate-completion-banner,
 .step-panel > .run-skipped-notice,
@@ -4961,22 +4971,22 @@ html, body {
 .rs-pass     { background: var(--success-bg) !important; color: var(--success) !important; border-color: var(--success-border) !important; }
 .rs-fail     { background: var(--error-bg) !important; color: var(--error) !important; border-color: var(--error-border) !important; }
 .rs-timeout  { background: var(--warn-bg) !important; color: var(--warn) !important; border-color: var(--warn-border) !important; }
-.rs-skipped  { background: var(--warn-bg) !important; color: var(--warn) !important; border-color: var(--warn-border) !important; }
+.rs-skipped  { background: var(--gray-bg) !important; color: var(--gray-fg) !important; border-color: var(--gray-border) !important; }
 .rs-na       { color: var(--gray-fg) !important; }
 
-/* 8. Run skipped notice — amber warning tone */
+/* 8. Run skipped notice — calm neutral card (skipping is not a warning) */
 .run-skipped-notice {
-  background: var(--warn-bg) !important;
-  border: 1px solid var(--warn-border) !important;
+  background: #fff !important;
+  border: 1px solid var(--divider) !important;
   border-radius: 10px;
   padding: 24px 28px;
   max-width: 900px;
   margin: 20px auto 0;
   text-align: center;
 }
-.run-skipped-notice .rsn-icon { font-size: 1.5rem; }
-.run-skipped-notice h3 { color: var(--warn) !important; font-size: 1rem; font-weight: 700; margin: 6px 0 8px; }
-.run-skipped-notice p  { color: var(--warn) !important; opacity: 0.85; font-size: 0.84rem; margin-bottom: 16px; line-height: 1.5; }
+.run-skipped-notice .rsn-icon { font-size: 1.6rem; color: var(--success); }
+.run-skipped-notice h3 { color: var(--text) !important; font-size: 1rem; font-weight: 700; margin: 6px 0 8px; }
+.run-skipped-notice p  { color: var(--muted) !important; opacity: 1; font-size: 0.84rem; margin-bottom: 16px; line-height: 1.5; }
 
 /* 9. Step completion banners — semantic vars */
 .step-completion-banner.scb-success { background: var(--success-bg) !important; border-color: var(--success-border) !important; color: var(--success) !important; }
@@ -5031,7 +5041,7 @@ html, body {
 .wf-step.wf-active .wf-step-num { background: var(--purple) !important; border-color: var(--purple) !important; }
 
 
-/* ── v49: Results Summary Step ──────────────────────────────────────────────── */
+/* ── v49: Score & Preview Step ──────────────────────────────────────────────── */
 
 .summary-cards {
   display: grid;
@@ -5246,7 +5256,7 @@ html, body {
   margin: 0;
 }
 
-/* ── v50: Results Summary visual cleanup ─────────────────────────────────────── */
+/* ── v50: Score & Preview visual cleanup ─────────────────────────────────────── */
 
 /* Session chip — subtle, not a badge */
 .session-chip--subtle {
@@ -5393,7 +5403,7 @@ html, body {
   display: block;
 }
 
-/* ── v51: Results Summary — advanced layout & interactivity ──────────────── */
+/* ── v51: Score & Preview — advanced layout & interactivity ──────────────── */
 
 /* Force 2×2 grid; 1 column on narrow screens */
 .summary-cards {
@@ -5710,8 +5720,7 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 #step-score .score-main-card,
 #step-run .run-settings-card,
 #step-run .run-skipped-notice,
-#leaderboard-card,
-.export-group {
+#leaderboard-card {
   background: #fff;
   border: 1px solid var(--border);
   border-radius: var(--card-radius);
@@ -5793,11 +5802,10 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 /* Keep package internals / provider details hidden until expanded */
 .score-provider-details, .scoring-admin-panel { margin-top: 14px; }
 
-/* ── 7. Results Summary → balanced 2×2, neutral zeros (kept, just tidied) ── */
-#step-summary .summary-cards { gap: 14px; }
+/* ── 7. Score & Preview → balanced 2×2, neutral zeros (kept, just tidied) ── */
+#step-score .summary-cards { gap: 14px; }
 
 /* ── 8. Export → consistent card buttons + tooltips, no paragraph walls ──── */
-.export-group { padding: 4px 4px 8px; }
 .export-dl-btn { border-radius: 8px; }
 
 /* ── 9. Tone down old colored banners (no bulky alert bars) ──────────────── */
@@ -5831,8 +5839,8 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 .status-pending { background: var(--gray-bg); color: var(--gray-fg); border-color: var(--gray-border); }
 .status-ready   { background: var(--purple-light); color: var(--purple); border-color: #c5b8ee; }
 .status-complete{ background: var(--success-bg); color: var(--success); border-color: var(--success-border); }
-.status-warning,
-.status-skipped { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.status-warning { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.status-skipped { background: var(--gray-bg); color: var(--gray-fg); border-color: var(--gray-border); }
 .status-error   { background: var(--error-bg); color: var(--error); border-color: var(--error-border); }
 
 /* Review step fields */
@@ -6260,17 +6268,72 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   to { transform: rotate(360deg); }
 }
 
+.workflow-shell {
+  width: min(var(--card-w, 720px), calc(100vw - 40px));
+  margin: 0 auto 12px;
+}
+
+.workflow-session-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid rgba(124, 92, 191, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px rgba(44, 34, 82, 0.05);
+}
+
+.workflow-session-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.workflow-kicker {
+  color: var(--purple);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+#workflow-session-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.84rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#workflow-session-meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-start-new {
+  flex: 0 0 auto;
+}
+
 .compact-progress {
   display: flex;
   align-items: center;
   gap: 8px;
-  max-width: var(--card-w, 980px);
-  margin: 0 auto 14px;
+  max-width: 100%;
+  margin: 0;
   padding: 8px;
   overflow-x: auto;
-  border: 1px solid rgba(124, 92, 191, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(124, 92, 191, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 10px 26px rgba(17, 24, 39, 0.05);
   backdrop-filter: blur(14px);
 }
@@ -6281,7 +6344,7 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   align-items: center;
   gap: 8px;
   min-width: 104px;
-  min-height: 38px;
+  min-height: 42px;
   padding: 0 12px 0 8px;
   border: 1px solid transparent;
   border-radius: 10px;
@@ -6293,6 +6356,42 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   cursor: default;
   white-space: nowrap;
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.compact-progress-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  text-align: left;
+}
+
+.compact-progress-label,
+.compact-progress-state {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-progress-state {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.compact-progress-item.is-current .compact-progress-state {
+  color: #684aa8;
+}
+
+.compact-progress-item.is-complete .compact-progress-state {
+  color: #047857;
+}
+
+.compact-progress-item.is-warning .compact-progress-state {
+  color: #b45309;
+}
+
+.compact-progress-item.is-error .compact-progress-state {
+  color: #b91c1c;
 }
 
 .compact-progress-item.is-clickable {
@@ -6368,27 +6467,6 @@ body[data-step="upload"] .content.step-main {
   padding-bottom: 28px;
 }
 
-.export-groups {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.export-group {
-  padding: 16px !important;
-  border: 1px solid rgba(124, 92, 191, 0.16);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.05);
-}
-
-.export-group-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
 .export-group-title {
   font-size: 0.94rem;
   font-weight: 800;
@@ -6399,12 +6477,6 @@ body[data-step="upload"] .content.step-main {
   margin-top: 2px;
   font-size: 0.76rem;
   color: var(--muted, #6b7280);
-}
-
-.export-pair {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
 }
 
 .export-dl-btn {
@@ -6458,10 +6530,20 @@ body[data-step="upload"] .content.step-main {
 }
 
 @media (max-width: 760px) {
-  .compact-progress {
+  .workflow-shell {
     width: calc(100vw - 24px);
-    margin-left: auto;
-    margin-right: auto;
+  }
+
+  .workflow-session-summary {
+    align-items: flex-start;
+  }
+
+  .workflow-start-new {
+    padding-inline: 10px !important;
+  }
+
+  .compact-progress {
+    width: 100%;
     scrollbar-width: none;
   }
 
@@ -6470,13 +6552,10 @@ body[data-step="upload"] .content.step-main {
   }
 
   .compact-progress-item {
-    min-width: 88px;
+    min-width: 108px;
     padding-right: 10px;
   }
 
-  .export-groups {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 560px) {
@@ -6507,8 +6586,7 @@ body[data-step="upload"] .content.step-main {
   .run-settings-card,
   .score-main-card,
   .summary-page-header,
-  .summary-cards,
-  .export-groups {
+  .summary-cards {
     width: calc(100vw - 24px) !important;
     max-width: calc(100vw - 24px) !important;
     min-width: 0 !important;
@@ -6615,7 +6693,7 @@ body[data-step="upload"] .content.step-main {
 
 .step-shell-header .brand-logo {
   width: 48px !important;
-  height: auto;
+  height: 48px !important;
   flex: 0 0 auto;
 }
 
@@ -6634,28 +6712,27 @@ body[data-step="upload"] .content.step-main {
   white-space: normal;
 }
 
-.step-shell > .step-completion-banner {
+.step-shell .step-body > .step-completion-banner {
   margin: 0 !important;
   border-left: 0 !important;
   border-right: 0 !important;
   border-radius: 0 !important;
 }
 
-.step-shell > .pg-card,
-.step-shell > .run-settings-card,
-.step-shell > .score-main-card,
-.step-shell > .scoring-admin-panel,
-.step-shell > .summary-cards,
-.step-shell > .export-groups,
-.step-shell > .step-action-bar,
-.step-shell > .run-cards-list,
-.step-shell > #run-list-section,
-.step-shell > #run-empty-state,
-.step-shell > #run-show-all-wrap,
-.step-shell > #run-toolbar,
-.step-shell > #batch-exec-status,
-.step-shell > #batch-export-status,
-.step-shell > #download-status {
+.step-shell .step-body > .pg-card,
+.step-shell .step-body > .run-settings-card,
+.step-shell .step-body > .score-main-card,
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > .summary-cards,
+.step-shell .step-body > .step-action-bar,
+.step-shell .step-body > .run-cards-list,
+.step-shell .step-body > #run-list-section,
+.step-shell .step-body > #run-empty-state,
+.step-shell .step-body > #run-show-all-wrap,
+.step-shell .step-body > #run-toolbar,
+.step-shell .step-body > #batch-exec-status,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status {
   width: auto !important;
   max-width: none !important;
   margin: 0 !important;
@@ -6663,33 +6740,32 @@ body[data-step="upload"] .content.step-main {
   box-shadow: none !important;
 }
 
-.step-shell > .pg-card,
-.step-shell > .run-settings-card,
-.step-shell > .score-main-card {
+.step-shell .step-body > .pg-card,
+.step-shell .step-body > .run-settings-card,
+.step-shell .step-body > .score-main-card {
   border: 0 !important;
   background: #fff !important;
 }
 
-.step-shell > .pg-card,
-.step-shell > .run-settings-card,
-.step-shell > .score-main-card,
-.step-shell > .scoring-admin-panel,
-.step-shell > .summary-cards,
-.step-shell > .export-groups,
-.step-shell > .step-action-bar,
-.step-shell > #run-submissions-list,
-.step-shell > #run-list-section,
-.step-shell > #run-empty-state,
-.step-shell > #run-show-all-wrap,
-.step-shell > #run-toolbar,
-.step-shell > #batch-exec-status,
-.step-shell > #batch-export-status,
-.step-shell > #download-status {
+.step-shell .step-body > .pg-card,
+.step-shell .step-body > .run-settings-card,
+.step-shell .step-body > .score-main-card,
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > .summary-cards,
+.step-shell .step-body > .step-action-bar,
+.step-shell .step-body > #run-submissions-list,
+.step-shell .step-body > #run-list-section,
+.step-shell .step-body > #run-empty-state,
+.step-shell .step-body > #run-show-all-wrap,
+.step-shell .step-body > #run-toolbar,
+.step-shell .step-body > #batch-exec-status,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status {
   border-top: 1px solid var(--divider, #e5e7eb) !important;
 }
 
 .step-shell .pg-card-header {
-  padding: 16px 28px 10px !important;
+  padding: 14px 18px 10px !important;
   border-bottom: 1px solid var(--divider, #e5e7eb) !important;
 }
 
@@ -6697,18 +6773,17 @@ body[data-step="upload"] .content.step-main {
 .step-shell .br-table,
 .step-shell .run-settings-card,
 .step-shell .score-main-card,
-.step-shell > .scoring-admin-panel,
-.step-shell > .summary-cards,
-.step-shell > .export-groups,
-.step-shell > .step-action-bar,
-.step-shell > #run-submissions-list,
-.step-shell > #run-empty-state,
-.step-shell > #run-show-all-wrap,
-.step-shell > #run-toolbar,
-.step-shell > #batch-exec-status,
-.step-shell > #batch-export-status,
-.step-shell > #download-status {
-  padding: 18px 28px !important;
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > .summary-cards,
+.step-shell .step-body > .step-action-bar,
+.step-shell .step-body > #run-submissions-list,
+.step-shell .step-body > #run-empty-state,
+.step-shell .step-body > #run-show-all-wrap,
+.step-shell .step-body > #run-toolbar,
+.step-shell .step-body > #batch-exec-status,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status {
+  padding: 14px 18px !important;
 }
 
 .step-shell .pg-card-header .step-label,
@@ -6718,18 +6793,13 @@ body[data-step="upload"] .content.step-main {
   display: none !important;
 }
 
-#step-summary.step-shell > .summary-page-header {
+#step-score.step-shell .step-body > .summary-page-header {
   display: none !important;
 }
 
-.step-shell .summary-cards,
-.step-shell .export-groups {
+.step-shell .summary-cards {
   display: grid;
   gap: 14px;
-}
-
-.step-shell .export-group {
-  border-radius: 8px !important;
 }
 
 .step-shell .scoring-admin-summary {
@@ -6767,24 +6837,20 @@ body[data-step="upload"] .content.step-main {
   .step-shell .br-table,
   .step-shell .run-settings-card,
   .step-shell .score-main-card,
-  .step-shell > .scoring-admin-panel,
-  .step-shell > .summary-cards,
-  .step-shell > .export-groups,
-  .step-shell > .step-action-bar,
-  .step-shell > #run-submissions-list,
-  .step-shell > #run-empty-state,
-  .step-shell > #run-show-all-wrap,
-  .step-shell > #run-toolbar,
-  .step-shell > #batch-exec-status,
-  .step-shell > #batch-export-status,
-  .step-shell > #download-status {
+  .step-shell .step-body > .scoring-admin-panel,
+  .step-shell .step-body > .summary-cards,
+  .step-shell .step-body > .step-action-bar,
+  .step-shell .step-body > #run-submissions-list,
+  .step-shell .step-body > #run-empty-state,
+  .step-shell .step-body > #run-show-all-wrap,
+  .step-shell .step-body > #run-toolbar,
+  .step-shell .step-body > #batch-exec-status,
+  .step-shell .step-body > #batch-export-status,
+  .step-shell .step-body > #download-status {
     padding-left: 28px !important;
     padding-right: 28px !important;
   }
 }
-
-/* Progress stepper removed by request — hide if a stale/baked copy remains */
-.compact-progress { display: none !important; }
 
 /* ==========================================================================
    v62 - In-card wizard actions on every step
@@ -7268,14 +7334,15 @@ body[data-step] .wizard-footer {
 }
 
 #step-index .pg-card-body > .collapsible-section {
-  margin-top: 12px;
-  border: 1px solid var(--divider);
-  border-radius: 10px;
-  overflow: hidden;
+  margin-top: 0;
+  border: 0;
+  border-top: 1px solid var(--divider);
+  border-radius: 0;
+  overflow: visible;
 }
 
 #step-index .collapsible-section-body {
-  padding: 12px;
+  padding: 16px 24px;
 }
 
 #step-index .review-filter-bar {
@@ -7462,8 +7529,10 @@ body[data-step] .wizard-footer {
 
 .leaderboard-row-title {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -7487,12 +7556,8 @@ body[data-step] .wizard-footer {
 }
 
 .leaderboard-meta-line {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  margin-top: 10px;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: var(--fs-meta);
 }
 
 .leaderboard-metric-row {
@@ -7665,7 +7730,7 @@ body[data-step] .wizard-footer {
 	}
 
 /* ==========================================================================
-   Results Summary — clean final-review report (v2)
+   Score & Preview — clean final-review report (v2)
    Fewer boxes, softer separators: one hero, one slim rail, one analytics
    panel (two columns), one compact export block, one collapsed details.
    ========================================================================== */
@@ -7749,30 +7814,23 @@ body[data-step] .wizard-footer {
 .summary-bar-fill  { display: block; height: 100%; background: var(--purple); border-radius: 6px; }
 .summary-bar-val   { font-size: 0.76rem; font-weight: 700; color: var(--text); text-align: right; }
 
-/* Export readiness — compact two-column checklist */
-.summary-export-checklist {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
-}
-.summary-export-checklist .sa-h { margin-bottom: 10px; }
-.summary-check-grid {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px;
-}
-@media (max-width: 480px) { .summary-check-grid { grid-template-columns: 1fr; } }
-.summary-check-item { display: flex; align-items: center; gap: 9px; font-size: 0.8rem; color: var(--text); }
-.summary-check-mark { width: 16px; text-align: center; font-weight: 700; color: var(--subtle); }
-.summary-check-item.is-ready .summary-check-mark { color: var(--success); }
-.summary-check-item.is-muted { color: var(--subtle); }
-.summary-check-name { flex: 1; }
-.summary-check-state { font-size: 0.68rem; color: var(--muted); }
-.summary-check-item.is-ready .summary-check-state { color: var(--success); }
-
 /* Collapsed technical details */
 .summary-details { background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .summary-details > summary { cursor: pointer; padding: 11px 16px; font-size: 0.78rem; font-weight: 600; color: var(--muted); list-style: none; }
 .summary-details > summary::-webkit-details-marker { display: none; }
-.summary-details > summary::before { content: "▸ "; color: var(--subtle); }
-.summary-details[open] > summary::before { content: "▾ "; }
+.summary-details > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 7px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--subtle);
+}
+.summary-details[open] > summary::before {
+  transform: rotate(90deg);
+}
 .summary-details[open] > summary { border-bottom: 1px solid var(--divider); color: var(--text); }
 .summary-details-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
 .summary-detail-block .summary-detail-h { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
@@ -7791,7 +7849,7 @@ body[data-step] .wizard-footer {
 }
 
 /* ==========================================================================
-   Results Summary — final-report hierarchy (v3)
+   Score & Preview — final-report hierarchy (v3)
    ========================================================================== */
 
 .summary-report {
@@ -7865,7 +7923,7 @@ body[data-step] .wizard-footer {
 }
 
 .summary-final-grid,
-.summary-final-metrics,
+.score-final-metrics,
 .summary-vertical-metrics,
 .summary-reference-metrics {
   display: flex;
@@ -7873,7 +7931,7 @@ body[data-step] .wizard-footer {
   gap: 8px;
 }
 
-.summary-final-metrics {
+.score-final-metrics {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--divider);
@@ -8246,63 +8304,6 @@ body.preview-modal-open {
   overflow: hidden;
 }
 
-.summary-export-checklist {
-  background: #fff;
-}
-
-.summary-check-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.summary-check-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  color: var(--text);
-  font-size: 0.81rem;
-  border-bottom: 1px solid var(--divider);
-}
-
-.summary-check-item:last-child {
-  border-bottom: 0;
-}
-
-.summary-check-mark {
-  width: 18px;
-  text-align: center;
-  font-weight: 800;
-  color: var(--subtle);
-}
-
-.summary-check-item.is-ready .summary-check-mark {
-  color: var(--success);
-}
-
-.summary-check-item.is-muted {
-  color: var(--muted);
-}
-
-.summary-check-name {
-  flex: 1;
-  min-width: 0;
-}
-
-.summary-check-state {
-  color: var(--muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.summary-check-item.is-ready .summary-check-state {
-  color: var(--success);
-}
-
 .summary-json-block {
   max-height: 260px;
   margin: 0;
@@ -8408,3 +8409,2660 @@ body.preview-modal-open {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Clinical workbench design system for Steps 2-6
+   Consolidates the previous versioned override stack into one product UI:
+   contained step shell, compact worklists, unified chips, clinical summary,
+   and export file rows. Step 1 Upload markup/layout is intentionally untouched.
+   ========================================================================== */
+
+:root {
+  --card-w: 720px;
+  --card-radius: 12px;
+  --card-shadow: 0 10px 30px rgba(91, 63, 163, 0.08);
+  --surface: #f7f5fc;
+  --surface-strong: #f2eefb;
+  --surface-panel: #fbfaff;
+  --line-soft: rgba(124, 92, 191, 0.14);
+  --line-medium: rgba(124, 92, 191, 0.24);
+  --chip-neutral-bg: #f6f4fb;
+  --chip-neutral-fg: #647084;
+  --chip-info-bg: #eef4ff;
+  --chip-info-fg: #285a9d;
+  --chip-success-bg: #edf8f1;
+  --chip-success-fg: #1b6b42;
+  --chip-warning-bg: #fff7e8;
+  --chip-warning-fg: #865a12;
+  --chip-danger-bg: #fff0f1;
+  --chip-danger-fg: #a92835;
+}
+
+html,
+body {
+  background: linear-gradient(160deg, #fbf8fc 0%, #f7f4fb 52%, #f4f7fc 100%) fixed;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+}
+
+.content,
+.content.step-main,
+.step-main {
+  background: transparent !important;
+}
+
+/* App shell: one contained clinical console card for Steps 2-6. */
+body:not([data-step="upload"]) .app {
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+body:not([data-step="upload"]) .content,
+body:not([data-step="upload"]) .content.step-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden !important;
+  padding: 18px 20px !important;
+}
+
+body:not([data-step="upload"]) .restore-banner {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: var(--card-w);
+  margin: 0 auto 12px;
+}
+
+.step-shell {
+  max-width: var(--card-w) !important;
+  margin: 0 auto 24px !important;
+  padding: 0 !important;
+  background: #fff;
+  border: 1px solid var(--line-soft) !important;
+  border-top: 6px solid var(--purple, #5b3fa3) !important;
+  border-radius: var(--card-radius) !important;
+  overflow: hidden;
+  box-shadow: var(--card-shadow) !important;
+}
+
+body:not([data-step="upload"]) .step-shell:not([hidden]) {
+  display: flex !important;
+  flex-direction: column;
+  flex: 0 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0 auto !important;
+}
+
+.step-shell[hidden] {
+  display: none !important;
+}
+
+.step-shell-header {
+  flex: 0 0 auto;
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 14px 28px 12px !important;
+  background: #fff;
+  border-bottom: 1px solid var(--line-soft) !important;
+}
+
+.step-shell-header .brand-logo {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 auto;
+}
+
+.step-shell-header .card-title {
+  margin: 0 0 4px;
+  font-size: 1rem !important;
+  line-height: 1.3;
+}
+
+.step-shell-header .card-desc {
+  max-width: 100%;
+  margin: 0;
+  color: var(--muted, #6b7280);
+  font-size: 0.74rem !important;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.step-shell .step-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 0 0 22px !important;
+  background: var(--surface-panel);
+}
+
+.step-shell > .step-action-row {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  padding: 14px 28px 16px !important;
+  border-top: 1px solid var(--line-soft) !important;
+  background: #fff;
+}
+
+.step-action-row .btn {
+  min-height: 36px;
+  border-radius: 8px !important;
+}
+
+.step-action-primary {
+  min-width: 150px;
+}
+
+body[data-step] .wizard-footer,
+.wizard-footer:not([hidden]),
+#run-skipped-continue-btn,
+#btn-score-continue,
+#btn-score-continue-nc,
+#batch-back-to-batch-btn {
+  display: none !important;
+}
+
+/* Flatten nested legacy cards into step sections. */
+.step-shell .step-body > .pg-card,
+.step-shell .step-body > .run-settings-card,
+.step-shell .step-body > .score-main-card,
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > .summary-report,
+.step-shell .step-body > .export-file-list,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status,
+.step-shell .step-body > #run-list-section,
+.step-shell .step-body > #run-empty-state,
+.step-shell .step-body > #run-show-all-wrap,
+.step-shell .step-body > #run-toolbar,
+.step-shell .step-body > #batch-exec-status {
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.step-shell .step-body > .pg-card,
+.step-shell .step-body > .run-settings-card,
+.step-shell .step-body > .score-main-card,
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > #run-list-section,
+.step-shell .step-body > #batch-exec-status,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status {
+  border: 0 !important;
+  border-top: 1px solid var(--line-soft) !important;
+  background: #fff !important;
+}
+
+.step-shell .step-body > .pg-card:first-child,
+.step-shell .step-body > .run-settings-card:first-child,
+.step-shell .step-body > .score-main-card:first-child,
+.step-shell .step-body > .scoring-admin-panel:first-child {
+  border-top: 0 !important;
+}
+
+.step-shell .pg-card-header {
+  padding: 15px 28px 11px !important;
+  border-bottom: 1px solid var(--line-soft) !important;
+  background: #fff;
+}
+
+.step-shell .pg-card-title {
+  font-size: var(--fs-intro-title) !important;
+  font-weight: var(--fw-title) !important;
+  color: var(--text);
+}
+
+.step-shell .pg-card-sub,
+.run-summary-line {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.74rem !important;
+  line-height: 1.45;
+}
+
+.step-shell .pg-card-body,
+.step-shell .br-table,
+.step-shell .run-settings-card,
+.step-shell .score-main-card,
+.step-shell .step-body > .scoring-admin-panel,
+.step-shell .step-body > #run-submissions-list,
+.step-shell .step-body > #run-empty-state,
+.step-shell .step-body > #run-show-all-wrap,
+.step-shell .step-body > #run-toolbar,
+.step-shell .step-body > #batch-exec-status,
+.step-shell .step-body > #batch-export-status,
+.step-shell .step-body > #download-status {
+  padding: 14px 28px !important;
+}
+
+/* Section headers and collapsible regions. */
+.step-section {
+  padding: 18px 28px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.step-section:first-of-type {
+  border-top: 0;
+}
+
+.step-section-header,
+.collapsible-section-header,
+.sdc-head,
+.section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collapsible-section {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.collapsible-section-header {
+  width: 100%;
+  min-height: 40px;
+  padding: 12px 18px !important;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft) !important;
+  background: #fff !important;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.collapsible-section-header:hover,
+.collapsible-section-header:focus-visible {
+  background: #fbfaff !important;
+}
+
+.collapsible-section-title,
+.step-section-title,
+.sdc-head h3,
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--purple, #5b3fa3) !important;
+  font-size: var(--fs-section) !important;
+  font-weight: 850 !important;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.collapsible-section-body {
+  padding: 12px 18px 16px !important;
+  background: var(--surface-panel);
+}
+
+.collapse-chevron {
+  color: var(--muted);
+}
+
+.collapsible-count,
+.section-count,
+.list-summary-chip,
+.list-chip,
+.metric-chip,
+.score-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--chip-neutral-bg);
+  color: var(--chip-neutral-fg);
+  font-size: 0.66rem;
+  font-weight: 750;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.list-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 28px !important;
+  border-bottom: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.list-summary-chip.is-success,
+.list-summary-chip.success,
+.list-chip-strong {
+  background: var(--chip-success-bg);
+  border-color: #cde8d6;
+  color: var(--chip-success-fg);
+}
+
+.list-summary-chip.is-warning,
+.list-summary-chip.warning {
+  background: var(--chip-warning-bg);
+  border-color: #f4dfb7;
+  color: var(--chip-warning-fg);
+}
+
+.list-summary-chip.is-error,
+.list-summary-chip.error {
+  background: var(--chip-danger-bg);
+  border-color: #f3c6cd;
+  color: var(--chip-danger-fg);
+}
+
+.list-summary-latest {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.7;
+}
+
+.section-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Unified status chip system. */
+.status-chip,
+.status-pill,
+.status-badge,
+.br-badge,
+.rs-badge,
+.vs-badge,
+.smc-badge,
+.leaderboard-status-badge,
+.scoring-admin-badge,
+.score-status-badge {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--chip-h);
+  padding: var(--chip-pad-y) var(--chip-pad-x) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 999px !important;
+  background: var(--chip-neutral-bg) !important;
+  color: var(--chip-neutral-fg) !important;
+  font-size: 0.66rem !important;
+  font-weight: 800 !important;
+  line-height: 1.1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.status-complete,
+.status-chip-success,
+.status-ready,
+.status-badge-pass,
+.badge-pass,
+.badge-ready,
+.badge-exec-pass,
+.rs-pass,
+.rs-ready,
+.smc-badge--ready,
+.leaderboard-status-scored,
+.leaderboard-status-ready,
+.scoring-admin-badge.badge-ready {
+  background: var(--chip-success-bg) !important;
+  border-color: #cde8d6 !important;
+  color: var(--chip-success-fg) !important;
+}
+
+.status-warning,
+.status-chip-warning,
+.status-badge-warn,
+.badge-warn,
+.badge-exec-warn,
+.rs-timeout,
+.leaderboard-status-partial_reference_scoring,
+.leaderboard-status-reference_not_available,
+.leaderboard-status-not_configured {
+  background: var(--chip-warning-bg) !important;
+  border-color: #f4dfb7 !important;
+  color: var(--chip-warning-fg) !important;
+}
+
+.status-error,
+.status-chip-danger,
+.status-badge-fail,
+.badge-fail,
+.badge-exec-fail,
+.rs-fail,
+.rs-cannot,
+.leaderboard-status-failed,
+.leaderboard-status-scoring_error,
+.leaderboard-status-reference_invalid,
+.leaderboard-status-no_finite_overlap {
+  background: var(--chip-danger-bg) !important;
+  border-color: #f3c6cd !important;
+  color: var(--chip-danger-fg) !important;
+}
+
+.status-skipped,
+.status-chip-neutral,
+.badge-exec-na,
+.rs-skipped,
+.leaderboard-status-unknown,
+.leaderboard-status-not_ready {
+  background: var(--chip-neutral-bg) !important;
+  border-color: var(--line-soft) !important;
+  color: var(--chip-neutral-fg) !important;
+}
+
+.status-info,
+.status-chip-info,
+.status-badge-run,
+.badge-exec-run,
+.rs-running {
+  background: var(--chip-info-bg) !important;
+  border-color: #c9dcff !important;
+  color: var(--chip-info-fg) !important;
+}
+
+/* Filter bars: integrated, not floating. */
+.filter-bar,
+.compact-filter-bar,
+.review-filter-bar,
+.validation-filter-bar,
+.run-filter-bar,
+.leaderboard-filter-bar {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px !important;
+  width: 100%;
+  padding: 0 !important;
+  margin: 0 0 10px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.filter-search,
+.filter-pill {
+  min-height: 32px;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: var(--text);
+  box-shadow: none !important;
+}
+
+.filter-pill.is-active,
+.filter-pill:hover,
+.filter-search:focus-within {
+  border-color: var(--line-medium) !important;
+  background: #fbfaff !important;
+}
+
+.filter-menu {
+  border-color: var(--line-soft) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 14px 34px rgba(44, 34, 82, 0.14) !important;
+}
+
+.batch-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.batch-controls-left,
+.batch-controls-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-shell .batch-controls .btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+}
+
+/* Worklist rows shared by Review, Validate, Run, Score, and Export. */
+.worklist,
+.sub-row-list,
+.run-cards-list,
+.leaderboard-list,
+.export-file-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--wl-row-gap) !important;
+  width: 100%;
+  min-width: 0;
+}
+
+.worklist-row,
+.sub-row,
+.validation-card,
+.run-sub-card,
+.leaderboard-row,
+.export-file-row {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+  padding: var(--wl-row-pad-y) var(--wl-row-pad-x) !important;
+  border: 1px solid var(--line-soft) !important;
+  border-left: 3px solid transparent !important;
+  border-radius: var(--wl-row-radius) !important;
+  background: #fff !important;
+  box-shadow: 0 1px 2px rgba(44, 34, 82, 0.03) !important;
+  overflow: visible !important;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.worklist-row:hover,
+.sub-row:hover,
+.validation-card:hover,
+.run-sub-card:hover,
+.leaderboard-row:hover,
+.export-file-row:hover {
+  border-color: var(--line-medium) !important;
+  background: #fefcff !important;
+}
+
+.worklist-row.is-selected,
+.sub-row.is-selected {
+  border-left-color: var(--purple, #5b3fa3) !important;
+  border-color: var(--line-medium) !important;
+  background: #fbf8ff !important;
+}
+
+.worklist-row-main,
+.validation-card-main,
+.run-card-main {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+}
+
+.worklist-icon,
+.submission-file-icon,
+.export-file-icon {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--wl-icon);
+  min-width: var(--wl-icon) !important;
+  width: var(--wl-icon) !important;
+  height: var(--wl-icon) !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 9px !important;
+  background: var(--surface-strong) !important;
+  color: var(--purple, #5b3fa3) !important;
+  font-size: 0.58rem !important;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.worklist-main,
+.sub-row-main,
+.validation-card-content,
+.run-card-info,
+.leaderboard-row-main,
+.export-file-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.worklist-title,
+.sub-row-name,
+.validation-card-title,
+.run-card-name,
+.leaderboard-submission-name,
+.export-group-title {
+  min-width: 0;
+  color: var(--text) !important;
+  font-size: var(--fs-row-title) !important;
+  font-weight: 820 !important;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worklist-meta,
+.sub-row-meta,
+.validation-card-meta,
+.run-card-outputs,
+.leaderboard-meta-line,
+.export-group-sub {
+  color: var(--muted) !important;
+  font-size: var(--fs-meta) !important;
+  line-height: 1.4;
+}
+
+.worklist-row-head,
+.sub-row-top,
+.validation-card-heading,
+.leaderboard-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sub-row-meta,
+.validation-card-reason,
+.run-card-status-row,
+.leaderboard-meta-line,
+.export-group-sub {
+  margin-top: 3px !important;
+}
+
+.validation-card-reason,
+.run-card-reason,
+.run-card-reason-warn,
+.sdc-reason {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.run-card-reason-warn {
+  color: var(--chip-warning-fg);
+}
+
+.validation-card-meta,
+.leaderboard-metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+/* Score row status slot holds a single chip in the head — no cluster margin */
+.leaderboard-row-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0;
+}
+
+.worklist-status {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sub-row-top .worklist-status,
+.validation-card-heading .worklist-status {
+  margin-left: auto;
+}
+
+.validation-card-meta > span:not(.status-pill):not(.status-chip):not(.br-badge) {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--chip-neutral-bg);
+  color: var(--chip-neutral-fg);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.worklist-actions,
+.validation-card-actions,
+.run-card-right,
+.leaderboard-actions,
+.export-file-actions {
+  display: flex !important;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px !important;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.validation-card-actions,
+.leaderboard-actions,
+.export-file-actions {
+  margin-left: auto !important;
+}
+
+.worklist-actions .btn,
+.validation-card-actions .btn,
+.run-card-actions .btn,
+.leaderboard-actions .btn,
+.export-file-actions .btn,
+.export-compact-btn,
+.export-dl-btn {
+  width: auto !important;
+  min-width: 0;
+  min-height: 30px !important;
+  padding: 5px 10px !important;
+  border-radius: 7px !important;
+  background: #fff !important;
+  border-color: var(--line-medium) !important;
+  color: var(--purple, #5b3fa3) !important;
+  box-shadow: none !important;
+  font-size: 0.72rem !important;
+  font-weight: 780 !important;
+  line-height: 1.2;
+  white-space: normal;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.worklist-actions .btn,
+.details-toggle,
+.structure-trigger {
+  white-space: nowrap !important;
+}
+
+.worklist-actions .btn:hover:not(:disabled),
+.validation-card-actions .btn:hover:not(:disabled),
+.run-card-actions .btn:hover:not(:disabled),
+.leaderboard-actions .btn:hover:not(:disabled),
+.export-file-actions .btn:hover:not(:disabled) {
+  background: var(--surface-strong) !important;
+  color: var(--purple-hover, #4a3190) !important;
+}
+
+.worklist-checkbox,
+.sub-row-check {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin-top: 9px;
+  accent-color: var(--purple, #5b3fa3);
+}
+
+.worklist-details,
+.sub-row-detail,
+.vr-row-detail,
+.run-card-detail,
+.leaderboard-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.sub-row-detail .sub-card-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+}
+
+.display-name-editor {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.display-name-label {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.display-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.display-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.display-name-save {
+  flex: 0 0 auto;
+}
+
+.display-name-note {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.sub-field-wide {
+  grid-column: 1 / -1;
+}
+
+.sub-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sub-field-value {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.original-submission-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.sub-detail-files {
+  margin-top: 10px;
+}
+
+.sub-row-warning {
+  margin: 8px 0 0;
+  color: var(--chip-warning-fg);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* Step 3 uses the header summary line instead of dashboard/stat tiles. */
+.validation-summary-stats {
+  display: none !important;
+}
+
+/* Step 4 process screen. */
+#step-run .run-settings-card {
+  display: block !important;
+  padding: 14px 28px !important;
+}
+
+.rsc-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.rsc-actions,
+#run-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.rsc-docker-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--chip-neutral-bg);
+  color: var(--chip-neutral-fg);
+  font-size: 0.68rem;
+  font-weight: 780;
+}
+
+.rsc-docker-badge.ok {
+  background: var(--chip-success-bg);
+  border-color: #cde8d6;
+  color: var(--chip-success-fg);
+}
+
+.rsc-docker-badge.err {
+  background: var(--chip-warning-bg);
+  border-color: #f4dfb7;
+  color: var(--chip-warning-fg);
+}
+
+.run-progress-panel {
+  margin: 12px 28px !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+}
+
+.run-skipped-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 28px !important;
+  text-align: left !important;
+  background: #fff !important;
+  border: 0 !important;
+  border-top: 1px solid var(--line-soft) !important;
+}
+
+.run-skipped-notice .rsn-icon {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 !important;
+  border-radius: 9px;
+  border: 1px solid #cde8d6;
+  background: var(--chip-success-bg);
+  color: var(--chip-success-fg);
+}
+
+.run-skipped-notice h3 {
+  margin: 0 0 3px !important;
+  font-size: 0.86rem !important;
+}
+
+.run-skipped-notice p {
+  margin: 0 !important;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+/* Step 5 scoring workbench. */
+#step-score .score-main-card {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 32px !important;
+}
+
+#step-score .smc-icon,
+#step-score .smc-icon--ready {
+  flex: 0 0 28px;
+  width: 28px !important;
+  height: 28px !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 9px !important;
+  background: var(--surface-strong) !important;
+  color: var(--purple, #5b3fa3) !important;
+  font-size: 0.82rem !important;
+}
+
+#step-score .smc-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+#step-score .smc-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+#step-score .smc-title {
+  font-size: var(--fs-intro-title) !important;
+  font-weight: var(--fw-title) !important;
+}
+
+#step-score .smc-desc {
+  grid-column: 1;
+  margin: 0 !important;
+  color: var(--muted);
+  font-size: 0.76rem !important;
+}
+
+#step-score .smc-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#step-score .smc-hint,
+#step-score .score-metric-preview {
+  display: none !important;
+}
+
+.score-metric-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+#leaderboard-card {
+  border-top: 1px solid var(--line-soft) !important;
+}
+
+#leaderboard-card .pg-card-header {
+  align-items: center;
+}
+
+.leaderboard-row {
+  align-items: flex-start;
+}
+
+.leaderboard-actions {
+  align-self: center;
+}
+
+.leaderboard-detail {
+  flex-basis: 100%;
+  margin-left: 45px;
+}
+
+/* Step 5 Score & Preview clinical review panel. */
+#step-score .step-body {
+  padding-bottom: 22px !important;
+  background: var(--surface-panel);
+}
+
+#step-score .summary-report {
+  padding: 14px 18px 18px !important;
+}
+
+#step-score #score-preview-panel {
+  display: none !important;
+}
+
+#step-score .score-preview-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+#step-score .sdc,
+#step-score .score-case-bar,
+#step-score .technical-details-drawer,
+#step-score .summary-details {
+  background: #fff;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 1px 2px rgba(44, 34, 82, 0.03);
+}
+
+#step-score .sdc {
+  padding: 12px 14px;
+}
+
+#step-score .sdc-head {
+  margin-bottom: 5px;
+}
+
+#step-score .sdc-reason {
+  margin: 0;
+}
+
+#step-score .score-case-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px !important;
+}
+
+#step-score .sch-main {
+  min-width: 0;
+}
+
+#step-score .sch-name {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-intro-title);
+  font-weight: var(--fw-title);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+#step-score .sch-meta,
+#step-score .summary-qc-only-note {
+  margin: 3px 0 0 !important;
+  color: var(--muted) !important;
+  font-size: 0.72rem !important;
+  line-height: 1.4;
+}
+
+#step-score .score-final-metrics,
+#step-score .summary-vertical-metrics,
+#step-score .summary-reference-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+#step-score .summary-kv {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.8fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(124, 92, 191, 0.08);
+  font-size: 0.74rem;
+}
+
+#step-score .summary-kv-label {
+  color: var(--muted);
+}
+
+#step-score .summary-kv-value {
+  color: var(--text);
+  font-weight: 780;
+  text-align: right;
+}
+
+#step-score .qc-results-table {
+  display: flex;
+  flex-direction: column;
+}
+
+#step-score .qc-result-row {
+  display: grid;
+  grid-template-columns: minmax(118px, 1.05fr) minmax(0, 0.9fr) minmax(0, 0.85fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(124, 92, 191, 0.08);
+  font-size: 0.76rem;
+}
+
+#step-score .qc-result-row:last-child {
+  border-bottom: 0;
+}
+
+#step-score .qc-result-head {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom-color: var(--line-soft);
+}
+
+#step-score .qc-cell-result {
+  color: var(--text);
+  font-weight: 800;
+}
+
+#step-score .qc-cell-status {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+#step-score .qc-result-row.is-good .qc-cell-status {
+  color: var(--chip-success-fg);
+  font-weight: 800;
+}
+
+#step-score .qc-result-row.is-warn .qc-cell-status {
+  color: var(--chip-warning-fg);
+  font-weight: 800;
+}
+
+#step-score .qc-quality-bar {
+  margin: -1px 0 5px;
+}
+
+#step-score .qc-bar-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+#step-score .qc-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--purple, #5b3fa3);
+}
+
+#step-score .qc-bar-fill.is-good {
+  background: var(--chip-success-fg);
+}
+
+#step-score .imaging-preview-panel {
+  padding: 12px 14px;
+}
+
+#step-score .imaging-preview-strip,
+#step-score .nifti-preview-list {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#step-score .imaging-preview-item,
+#step-score .nifti-preview-card {
+  display: flex !important;
+  flex: 1 1 100%;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+#step-score .imaging-thumb,
+#step-score .nifti-preview-thumb {
+  flex: 0 0 72px;
+  width: 72px !important;
+  height: 72px !important;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #272d38;
+  border-radius: 8px;
+  background: #10131a;
+}
+
+#step-score .imaging-thumb img,
+#step-score .nifti-preview-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+#step-score .imaging-item-info,
+#step-score .nifti-preview-card-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#step-score .imaging-item-label,
+#step-score .nifti-preview-map {
+  color: var(--purple, #5b3fa3);
+  font-size: 0.62rem !important;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#step-score .nifti-preview-file {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#step-score .nifti-preview-actions {
+  margin-top: 5px;
+  margin-left: 0 !important;
+  flex-basis: auto;
+  justify-content: flex-start;
+  gap: 5px;
+}
+
+#step-score .nifti-preview-actions .btn {
+  min-height: 26px !important;
+  padding: 3px 8px !important;
+  font-size: 0.68rem !important;
+}
+
+#step-score .reference-export-row,
+#step-score .scoring-export-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+#step-score .summary-details {
+  margin: 8px 0 0;
+  overflow: hidden;
+}
+
+#step-score .summary-details > summary,
+#step-score .technical-details-drawer > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 12px;
+  color: var(--purple, #5b3fa3);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+#step-score .summary-details > summary::-webkit-details-marker,
+#step-score .technical-details-drawer > summary::-webkit-details-marker {
+  display: none;
+}
+
+#step-score .summary-details-body {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+#step-score .summary-json-block {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fbfaff;
+  color: #293042;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+/* Step 6 polished download worklist. */
+#step-export .step-body {
+  padding: 14px 18px 22px !important;
+  overflow-x: hidden !important;
+  background: var(--surface-panel);
+}
+
+#step-export .export-summary-panel {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px !important;
+  padding: 12px 14px !important;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(44, 34, 82, 0.03);
+}
+
+#step-export .export-summary-panel::after {
+  content: "Reports identify limitations, reference availability, and whether results are blinded. Generic QC metrics are not official OSIPI scoring.";
+  display: block;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+#step-export .esp-main {
+  min-width: 0;
+}
+
+#step-export .esp-title {
+  color: var(--text);
+  font-size: var(--fs-intro-title);
+  font-weight: var(--fw-title);
+  line-height: 1.25;
+}
+
+#step-export .esp-sub {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+#step-export .export-file-list {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow-x: hidden !important;
+}
+
+#step-export .export-main-list {
+  gap: 8px !important;
+  margin-bottom: 10px !important;
+}
+
+#step-export .export-file-row {
+  align-items: center;
+  border-left-width: 1px !important;
+}
+
+#step-export .export-main-row {
+  min-height: 58px;
+  padding: 11px 12px !important;
+  border-left-color: rgba(124, 92, 191, 0.34) !important;
+}
+
+#step-export .export-main-row .export-file-icon {
+  background: #f6f1ff !important;
+  border-color: rgba(124, 92, 191, 0.18) !important;
+  font-size: 0.62rem !important;
+  letter-spacing: 0;
+}
+
+#step-export .export-file-actions {
+  align-items: center;
+}
+
+#step-export .export-primary-action {
+  min-width: 112px;
+  white-space: nowrap;
+}
+
+#step-export .export-main-reference {
+  white-space: nowrap;
+}
+
+#step-export .export-compact-btn:disabled,
+#step-export .export-dl-btn:disabled {
+  color: var(--subtle, #9ea3b0) !important;
+  background: #f8f6fc !important;
+  border-color: var(--line-soft) !important;
+  opacity: 1;
+}
+
+#step-export #batch-export-status,
+#step-export #download-status,
+#step-export #export-combined-status,
+#step-export .export-file-actions .submit-status {
+  width: 100% !important;
+  margin-top: 8px !important;
+}
+
+/* Upload selected-file card behavior retained, scoped to Step 1 source area. */
+.file-label.has-upload-card {
+  display: block;
+  margin-top: 10px;
+}
+
+.upload-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(44, 34, 82, 0.04);
+}
+
+.ufc-icon {
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 9px;
+  background: var(--surface-strong);
+  color: var(--purple, #5b3fa3);
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.ufc-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ufc-name {
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 820;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ufc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.ufc-status {
+  font-weight: 760;
+}
+
+.upload-file-card[data-status="completed"] .ufc-status {
+  color: var(--chip-success-fg);
+}
+
+.upload-file-card[data-status="failed"] .ufc-status,
+.upload-file-card[data-status="failed"] {
+  color: var(--chip-danger-fg);
+  border-color: #f3c6cd;
+}
+
+.upload-file-card[data-status="uploading"] .ufc-status,
+.upload-file-card[data-status="detecting"] .ufc-status {
+  color: var(--purple, #5b3fa3);
+}
+
+.ufc-progress {
+  margin-top: 7px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+
+.ufc-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--purple, #5b3fa3), #8d6fd1);
+  transition: width 160ms ease;
+}
+
+.upload-file-card[data-status="completed"] .ufc-progress-fill {
+  background: var(--chip-success-fg);
+}
+
+.ufc-progress--indeterminate .ufc-progress-fill {
+  width: 40% !important;
+  animation: ufc-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes ufc-indeterminate {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
+.ufc-error {
+  margin-top: 6px;
+  color: var(--chip-danger-fg);
+  font-size: 0.71rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ufc-remove {
+  flex: 0 0 auto;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.ufc-remove:hover:not(:disabled) {
+  background: var(--surface-strong);
+  border-color: var(--line-soft);
+  color: var(--chip-danger-fg);
+}
+
+.ufc-remove:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Responsive polishing for contained workbench. */
+@media (max-width: 720px) {
+  body:not([data-step="upload"]) .content,
+  body:not([data-step="upload"]) .content.step-main {
+    padding: 12px !important;
+  }
+
+  .step-shell,
+  body:not([data-step="upload"]) .step-shell:not([hidden]) {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  .step-shell-header,
+  .step-shell .pg-card-header,
+  .step-shell .pg-card-body,
+  .step-shell .br-table,
+  .step-shell .run-settings-card,
+  .step-shell .score-main-card,
+  .step-shell .step-body > .scoring-admin-panel,
+  .collapsible-section-header,
+  .collapsible-section-body,
+  .list-summary-strip,
+  .step-shell > .step-action-row {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .rsc-top,
+  #step-score .reference-export-row,
+  #step-score .scoring-export-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .worklist-row,
+  .sub-row,
+  .validation-card,
+  .run-sub-card,
+  .leaderboard-row,
+  .export-file-row,
+  .worklist-row-main,
+  .validation-card-main,
+  .run-card-main {
+    gap: 9px;
+  }
+
+  .worklist-actions,
+  .validation-card-actions,
+  .run-card-right,
+  .leaderboard-actions,
+  .export-file-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-left: 45px !important;
+  }
+
+  #step-export .export-summary-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #step-score .score-final-metrics,
+  #step-score .summary-vertical-metrics,
+  #step-score .summary-reference-metrics,
+  #step-score .qc-result-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #step-score .summary-kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #step-score .summary-kv-value {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .sub-row-detail .sub-card-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sub-row-meta,
+  .worklist-title,
+  .sub-row-name,
+  .validation-card-title,
+  .run-card-name,
+  .leaderboard-submission-name,
+  .export-group-title {
+    white-space: normal;
+  }
+
+  .worklist-actions,
+  .validation-card-actions,
+  .run-card-right,
+  .leaderboard-actions,
+  .export-file-actions {
+    margin-left: 0 !important;
+  }
+
+  #step-score .imaging-preview-item,
+  #step-score .nifti-preview-card {
+    max-width: none;
+    flex-basis: 100%;
+  }
+}
+
+/* ==========================================================================
+   v75 — Step 5 Map Preview: one-at-a-time panel + modal gallery
+   Compact tabbed preview (one map visible at a time, ~92px thumbnail,
+   tight padding) and Prev/Next gallery controls with a counter inside the
+   existing preview modal. Scoped to Step 5 / the shared modal only.
+   ========================================================================== */
+
+/* Map tabs: small chips above the single preview item */
+#step-score .map-preview-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+#step-score .map-preview-tab {
+  min-height: 26px;
+  padding: 3px 12px;
+  border: 1px solid var(--border, #d8dee8);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted, #6b7280);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+#step-score .map-preview-tab:hover {
+  border-color: var(--purple-light, #cfc3ec);
+  color: var(--purple, #5b3fa3);
+}
+#step-score .map-preview-tab.is-active {
+  background: var(--purple-faint, #f1edff);
+  border-color: var(--purple, #5b3fa3);
+  color: var(--purple, #5b3fa3);
+}
+
+/* One selected preview at a time: single tight row, no stacked cards */
+#step-score .map-preview-single {
+  display: block !important;
+  max-height: none;
+  overflow: visible;
+}
+#step-score .map-preview-single .imaging-preview-item {
+  display: flex !important;
+  width: 100%;
+  max-width: none;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px !important;
+  min-height: 0;
+}
+#step-score .map-preview-single .imaging-thumb {
+  width: 92px !important;
+  height: 92px;
+}
+#step-score .map-preview-single .nifti-preview-actions { margin-top: 5px; }
+#step-score .imaging-preview-panel { padding-bottom: 12px; }
+#step-score .imaging-preview-panel .nifti-preview-note { margin: -2px 0 8px !important; }
+
+/* Modal gallery: Prev / counter / Next row under the header */
+.nifti-preview-modal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 20px 0;
+}
+.nifti-preview-modal-nav .btn {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: 0.72rem;
+}
+.nifti-preview-counter {
+  color: var(--muted, #6b7280);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ==========================================================================
+   v77 — Submission Structure popover (click-to-open file tree)
+   Clinical, OSIPI-purple styled. Normal CSS (no Tailwind). Lives inside the
+   shared worklist details area; does not replace worklist rows.
+   ========================================================================== */
+
+.structure-control {
+  position: relative;
+  margin-top: 10px;
+}
+
+.structure-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--purple-light, #cfc3ec);
+  border-radius: 8px;
+  background: var(--purple-faint, #f1edff);
+  color: var(--purple, #5b3fa3);
+  font-size: 0.73rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.structure-trigger:hover,
+.structure-trigger[aria-expanded="true"] {
+  background: #e9e2fb;
+  border-color: var(--purple, #5b3fa3);
+}
+.structure-trigger-icon { font-size: 0.82rem; line-height: 1; }
+
+.structure-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(320px, calc(100vw - 48px));
+  max-height: 260px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--purple-light, #cfc3ec);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(44, 34, 82, 0.16);
+}
+.structure-popover[hidden] { display: none; }
+
+.structure-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.structure-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--text, #241b3d);
+}
+.structure-tree-item:hover { background: var(--purple-faint, #f5f2fd); }
+.structure-tree-indent { flex: 0 0 auto; display: inline-block; }
+.structure-tree-icon { flex: 0 0 auto; font-size: 0.8rem; }
+.structure-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--text, #241b3d);
+}
+
+.structure-empty,
+.structure-loading {
+  padding: 8px 6px;
+  color: var(--muted, #6b7280);
+  font-size: 0.73rem;
+}
+
+/* ==========================================================================
+   v83 — Step 2 mirrors Step 3: card header, section row, toolbar, worklist.
+   ========================================================================== */
+
+.page-summary-line {
+  margin: 0 0 10px;
+  color: var(--muted, #6b7280);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+#step-index .batch-controls {
+  display: none !important;
+}
+
+#step-index .pg-card-body {
+  padding: 0 !important;
+}
+
+#step-index .pg-card-body > .collapsible-section,
+#step-index #index-list-section {
+  margin-top: 0 !important;
+  border: 0 !important;
+  border-top: 1px solid var(--divider, #e5e7eb) !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+#step-index #index-list-body {
+  padding: 16px 24px !important;
+}
+
+#step-index .batch-table-wrap {
+  margin-top: 0 !important;
+  max-width: 100% !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+#step-index .sub-row-list {
+  margin-top: 0;
+}
+
+#step-index .review-filter-bar {
+  padding: 0 0 12px !important;
+}
+
+#step-index .sub-row .worklist-actions {
+  align-items: center;
+}
+
+#step-index .sub-row-name {
+  max-width: 100%;
+}
+
+#step-index .sub-row-detail {
+  width: 100%;
+}
+
+#step-validate .validation-card-reason {
+  display: none !important;
+}
+
+#step-export .export-summary-panel {
+  margin: 0 0 10px !important;
+  padding: 0 0 10px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--line-soft) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+#step-export .esp-title {
+  display: none !important;
+}
+
+#step-export .export-main-row,
+#step-export .export-file-row {
+  min-height: 0 !important;
+  padding: 10px 12px !important;
+  border-left-color: transparent !important;
+}
+
+#step-export .export-main-row .export-file-icon {
+  background: var(--surface-strong) !important;
+  border-color: var(--line-soft) !important;
+}
+
+/* ==========================================================================
+   v80 — Visible mirroring: remove old Score table/setup UI, flatten Step 3
+   stats into a compact summary row. Score/Validate/Export rows now share the
+   exact worklist row layout (title left, single chip + actions on the right).
+   ========================================================================== */
+
+/* Remove the old table-style Score UI + Reviewer/Admin setup from the flow. */
+#step-score #score-table-card,
+#step-score #scoring-admin-panel,
+#step-score .scoring-admin-panel {
+  display: none !important;
+}
+
+/* Step 3 validation stats/dashboard UI is intentionally removed. */
+#step-validate .validation-summary-stats,
+#step-validate .validation-summary-stats.val-stat-tiles {
+  display: none !important;
+}
+
+/* Score row mirrors Review exactly: one status chip in the head, actions right. */
+#step-score .leaderboard-row .worklist-row-head,
+#step-score .leaderboard-row .leaderboard-row-title {
+  align-items: center;
+}
+#step-score .leaderboard-actions {
+  flex-wrap: nowrap;
+}
+#step-score #leaderboard-refresh-btn {
+  display: none !important;
+}
+#step-score .leaderboard-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+#step-score #score-not-configured-card {
+  display: none !important;
+}
+
+/* ==========================================================================
+   v81 — One shared Details / Hide details control + trimmed collapsed rows
+   Every row uses the same .details-toggle button (right side, after any
+   primary action). Secondary info lives inside .worklist-details.
+   ========================================================================== */
+
+.details-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--btn-h);
+  padding: 4px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.73rem;
+  font-weight: 750;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.details-toggle:hover {
+  border-color: var(--purple-light, #cfc3ec);
+  color: var(--purple, #5b3fa3);
+  background: var(--purple-faint, #f5f2fd);
+}
+.details-toggle[aria-expanded="true"] {
+  border-color: var(--purple-light, #cfc3ec);
+  color: var(--purple, #5b3fa3);
+  background: var(--purple-faint, #f1edff);
+}
+
+/* Validate meta is now a single compact line like every other row. */
+.validation-card-meta {
+  display: block !important;
+  margin-top: 3px !important;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+/* The old validate chips now live inside Details. */
+.validation-detail-chips {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px !important;
+}
+
+/* ==========================================================================
+   v84 — Upload-size wizard shell + always-visible worklists.
+   Steps 2-6 match the Upload card width/header/action rhythm while keeping the
+   list area open; only per-row Details panels collapse.
+   ========================================================================== */
+
+:root {
+  --card-w: 720px;
+  --wizard-card-h: 760px;
+  --wizard-card-top-gap: 20px;
+}
+
+body:not([data-step="upload"]) .content,
+body:not([data-step="upload"]) .content.step-main {
+  padding: var(--wizard-card-top-gap) 20px !important;
+}
+
+body:not([data-step="upload"]) .step-shell:not([hidden]) {
+  width: 100% !important;
+  max-width: var(--card-w, 720px) !important;
+  height: min(var(--wizard-card-h), calc(100vh - (var(--wizard-card-top-gap) * 2))) !important;
+  min-height: min(680px, calc(100vh - (var(--wizard-card-top-gap) * 2))) !important;
+  max-height: calc(100vh - (var(--wizard-card-top-gap) * 2)) !important;
+  margin: 0 auto !important;
+}
+
+.step-shell-header {
+  gap: 20px !important;
+  padding: 26px 32px 24px !important;
+}
+
+.step-shell-header .brand-logo {
+  width: 62px !important;
+  height: 62px !important;
+}
+
+.step-shell-header .card-title {
+  margin: 0 0 4px !important;
+  font-size: 1.05rem !important;
+  line-height: 1.3 !important;
+}
+
+.step-shell-header .card-desc {
+  font-size: 0.78rem !important;
+  line-height: 1.5 !important;
+}
+
+.step-shell .step-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0 !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-padding-bottom: 32px;
+}
+
+.step-shell > .step-action-row {
+  padding: 20px 32px 28px !important;
+}
+
+.step-shell .pg-card-header {
+  padding: 18px 32px 14px !important;
+}
+
+.collapsible-section,
+.collapsible-section.is-collapsed {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.collapsible-section-header {
+  min-height: 40px !important;
+  padding: 12px 32px !important;
+  cursor: default !important;
+}
+
+.collapsible-section-header:hover,
+.collapsible-section-header:focus-visible {
+  background: #fff !important;
+}
+
+.collapse-chevron {
+  display: none !important;
+}
+
+.collapsible-section-body,
+.collapsible-section-body[hidden] {
+  display: block !important;
+  padding: 16px 32px 32px !important;
+  background: var(--surface-panel);
+}
+
+.list-summary-strip,
+.list-summary-strip[hidden] {
+  display: none !important;
+}
+
+#step-index .pg-card-body {
+  padding: 0 !important;
+}
+
+#step-index #index-list-body,
+#leaderboard-section-body {
+  padding: 16px 32px 32px !important;
+}
+
+#validation-list-section .br-table,
+#run-list-section .run-cards-list {
+  padding: 0 !important;
+}
+
+#index-toolbar,
+#val-toolbar,
+#run-toolbar,
+#leaderboard-filter-bar {
+  margin: 0 0 12px !important;
+}
+
+#step-index .review-filter-bar,
+.validation-filter-bar,
+.run-filter-bar,
+.leaderboard-filter-bar {
+  padding: 0 0 12px !important;
+}
+
+#step-export .step-body {
+  padding: 24px 32px 36px !important;
+  overflow-x: hidden !important;
+}
+
+#step-score .summary-report {
+  padding: 24px 32px 36px !important;
+}
+
+@media (max-width: 720px) {
+  body:not([data-step="upload"]) .content,
+  body:not([data-step="upload"]) .content.step-main {
+    padding: 12px !important;
+  }
+
+  body:not([data-step="upload"]) .step-shell:not([hidden]) {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    height: calc(100vh - 24px) !important;
+    min-height: 0 !important;
+    max-height: calc(100vh - 24px) !important;
+  }
+
+  .step-shell-header,
+  .step-shell .pg-card-header,
+  .collapsible-section-header,
+  .collapsible-section-body,
+  #step-index #index-list-body,
+  #leaderboard-section-body,
+  #step-export .step-body,
+  #step-score .summary-report,
+  .step-shell > .step-action-row {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .step-shell-header {
+    gap: 14px !important;
+    padding-top: 18px !important;
+    padding-bottom: 18px !important;
+  }
+
+  .step-shell-header .brand-logo {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  #step-score .smc-body {
+    grid-template-columns: 1fr;
+  }
+
+  #step-score .smc-actions {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}
+
+/* ==========================================================================
+   v85 — Step 2 toolbar parity + non-overlapping filter menus.
+   Review uses the same compact filter row as Validate; selection is a small
+   inline text group, and dropdown labels/values/menu items cannot collide.
+   ========================================================================== */
+
+#step-index .pg-card-sub#batch-header-desc {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-dropdown {
+  position: relative;
+  flex: 0 0 auto !important;
+  min-width: 96px;
+  z-index: 20;
+}
+
+.filter-dropdown:focus-within {
+  z-index: 1200;
+}
+
+.filter-pill {
+  width: 100%;
+  min-width: 96px;
+  min-height: 32px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  padding: 0 10px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.filter-pill-label,
+.filter-pill-value,
+.filter-pill-chevron {
+  position: static !important;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.filter-pill-label {
+  flex: 0 0 auto;
+}
+
+.filter-pill-value {
+  flex: 0 1 auto;
+  max-width: 76px;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.filter-menu {
+  top: calc(100% + 6px) !important;
+  left: 0 !important;
+  right: auto !important;
+  z-index: 1300 !important;
+  min-width: max(100%, 184px) !important;
+  max-width: min(260px, calc(100vw - 32px));
+}
+
+.filter-option {
+  min-height: 34px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  padding: 8px 10px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+
+.filter-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-option-check {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: 0 !important;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-strong, #f2eefb);
+  color: var(--purple, #5b3fa3);
+  font-size: 0.6rem !important;
+  font-weight: 800;
+  line-height: 1.1 !important;
+  white-space: nowrap !important;
+}
+
+.filter-option-check:empty {
+  display: none !important;
+}
+
+#step-index .review-filter-bar {
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 0 10px !important;
+  padding: 0 0 10px !important;
+}
+
+#step-index .review-filter-bar .filter-search {
+  flex: 1 1 150px;
+  min-width: 150px;
+}
+
+#step-index .review-filter-bar .filter-dropdown {
+  min-width: 92px;
+}
+
+#step-index .review-filter-bar .filter-clear-btn {
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 7px !important;
+  font-size: 0.68rem;
+}
+
+.index-selection-group {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  margin-left: auto;
+  color: var(--muted, #6b7280);
+  font-size: 0.68rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.index-selection-meta {
+  color: var(--muted, #6b7280);
+}
+
+.index-selection-link {
+  appearance: none;
+  min-height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--purple, #5b3fa3);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.index-selection-link:hover,
+.index-selection-link:focus-visible {
+  color: var(--purple-hover, #4a3190);
+}
+
+@media (max-width: 720px) {
+  .index-selection-group {
+    margin-left: 0;
+  }
+}
+
+/* ==========================================================================
+   v86 — Compact shared toolbars + neutral submission row icon.
+   Sort is no longer visible in the main worklist toolbars, Step 2 selection
+   actions sit inline with filters, and submission rows use one file mark.
+   ========================================================================== */
+
+#step-index .review-filter-bar,
+.validation-filter-bar,
+.run-filter-bar,
+.leaderboard-filter-bar {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 32px !important;
+  margin: 0 0 10px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+#step-index .review-filter-bar .filter-search,
+.validation-filter-bar .filter-search,
+.run-filter-bar .filter-search,
+.leaderboard-filter-bar .filter-search {
+  flex: 1 1 160px !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+#step-index .review-filter-bar .filter-dropdown,
+.validation-filter-bar .filter-dropdown,
+.run-filter-bar .filter-dropdown,
+.leaderboard-filter-bar .filter-dropdown {
+  flex: 0 0 94px !important;
+  min-width: 94px !important;
+  max-width: 112px !important;
+}
+
+#step-index .review-filter-bar .filter-pill,
+.validation-filter-bar .filter-pill,
+.run-filter-bar .filter-pill,
+.leaderboard-filter-bar .filter-pill {
+  min-width: 94px !important;
+  min-height: 32px !important;
+}
+
+#step-index .review-filter-bar .filter-clear-btn,
+.validation-filter-bar .filter-clear-btn,
+.run-filter-bar .filter-clear-btn,
+.leaderboard-filter-bar .filter-clear-btn {
+  flex: 0 0 auto !important;
+  min-height: 32px !important;
+  padding: 0 9px !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+}
+
+.index-selection-group {
+  flex: 0 0 auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  min-height: 32px !important;
+  margin-left: 0 !important;
+  white-space: nowrap !important;
+}
+
+.index-selection-meta {
+  display: none !important;
+}
+
+.index-selection-link {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: var(--muted) !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.index-selection-link:hover,
+.index-selection-link:focus-visible {
+  border-color: var(--line-medium) !important;
+  background: #fbfaff !important;
+  color: var(--purple, #5b3fa3) !important;
+}
+
+.worklist-icon.submission-file-icon {
+  position: relative !important;
+  flex: 0 0 28px !important;
+  min-width: 28px !important;
+  width: 28px !important;
+  height: 28px !important;
+  margin-top: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+/* Shared IMG document icon — never stretches, blurs, or grows the row. */
+.submission-file-icon img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+}
+
+@media (max-width: 720px) {
+  #step-index .review-filter-bar,
+  .validation-filter-bar,
+  .run-filter-bar,
+  .leaderboard-filter-bar {
+    flex-wrap: wrap !important;
+  }
+
+  #step-index .review-filter-bar .filter-search,
+  .validation-filter-bar .filter-search,
+  .run-filter-bar .filter-search,
+  .leaderboard-filter-bar .filter-search {
+    flex: 1 1 100% !important;
+  }
+}
+
+/* ==========================================================================
+   v90 — Filter dropdown: open as a fixed overlay so it is never clipped by
+   the card / step scroll container, and always stays inside the viewport.
+   The higher-specificity selector beats the base .filter-menu !important rules.
+   Applies to every filter dropdown (Status / Map / Sort / shared menus).
+   ========================================================================== */
+.filter-menu.filter-menu--floating {
+  position: fixed !important;
+  top: var(--fm-top) !important;
+  left: var(--fm-left) !important;
+  right: auto !important;
+  bottom: auto !important;
+  min-width: var(--fm-min-w, 184px) !important;
+  max-width: min(280px, calc(100vw - 16px)) !important;
+  max-height: var(--fm-max-h, 260px) !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  z-index: 1400 !important;
+}
+
+/* ==========================================================================
+   v92 — Researcher-facing calm styling
+   Replace loud OK/success + yellow warning styling in the visible UI with
+   neutral gray. Red is reserved for true blocking errors only.
+   ========================================================================== */
+
+/* "Items to review" list — calm neutral, not a loud yellow warning box. */
+.review-section .vp-section-heading,
+.review-section .section-heading {
+  color: var(--text) !important;
+  border-color: var(--divider) !important;
+}
+.review-section .issue-list li,
+.issue-list li.review-item {
+  background: #f7f7f9 !important;
+  color: var(--text) !important;
+  border: 1px solid var(--divider) !important;
+}
+
+/* Run step result-only notice: plain white panel, no green icon/success block. */
+#step-run .run-skipped-notice { text-align: left; }
+#step-run .run-skipped-notice .rsn-icon { display: none; }
+#step-run .run-skipped-notice h3 { color: var(--text) !important; }
+
+/* Run detail body: simple stacked lines, comfortable spacing. */
+.run-card-detail-body { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--text); }
+.run-card-detail-body p { color: var(--muted); }
+
+/* Run completion banner stays neutral regardless of pass/fail counts. */
+#run-completion-banner.step-completion-banner,
+#run-completion-banner.step-completion-banner.success,
+#run-completion-banner.step-completion-banner.warn {
+  background: #f7f7f9 !important;
+  border: 1px solid var(--divider) !important;
+  color: var(--text) !important;
+}
+
+/* Challenge group header in the Review list (shown only for mixed-challenge batches) */
+.sub-challenge-group-header {
+  margin: 12px 0 4px;
+  padding: 4px 2px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted, #555);
+  border-bottom: 1px solid var(--divider, #e2e2e8);
+}
+.sub-challenge-group-header:first-child { margin-top: 0; }

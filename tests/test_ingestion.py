@@ -4,10 +4,6 @@ The tests use tiny fake submissions so the repo stays lightweight and does not
 need real MRI challenge data.
 """
 
-# TODO: This file tests the ingestion stage with small fake submissions.
-# TODO: Later, add tests for validation, scoring, reporting, and new source types.
-# TODO: Keep tests lightweight so contributors can run them on normal laptops.
-
 from __future__ import annotations
 
 import json

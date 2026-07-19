@@ -1,7 +1,4 @@
-"""
-Challenge type detection means deciding whether a submission looks like ASL,
-DCE, or something unknown. For now we only inspect file and folder names.
-"""
+"""Detect the configured challenge type from submission file and folder names."""
 
 from __future__ import annotations
 

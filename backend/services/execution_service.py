@@ -71,7 +71,7 @@ def run_submission(
 
     Args:
         submission_id:   ID returned by the ingestion API.
-        challenge_type:  Challenge string (``"dce"``, ``"asl"``, ``"dsc"``).
+        challenge_type:  Configured challenge identifier.
         timeout_seconds: Override the per-container timeout (seconds).
                          Pass ``None`` to let ``run_config.json`` decide.
         memory_limit:    Docker ``--memory`` value (e.g. ``"4g"``).
