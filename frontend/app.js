@@ -7356,11 +7356,12 @@ function _makeCombinedExportHandler(btn, blinded) {
     setLoading(btn, true, label);
     if (statusEl) statusEl.style.display = "none";
     try {
-      const res = await fetch(`${API}/api/export-combined?${q}&blinded=${blinded}`);
+      // Researcher CSV downloads use the tidy long format (one row per map/ROI/metric).
+      const res = await fetch(`${API}/api/export-combined?${q}&blinded=${blinded}&shape=long`);
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
       const blob  = await res.blob();
       const cd    = res.headers.get("Content-Disposition") || "";
-      const fname = cd.match(/filename="([^"]+)"/)?.[1] || `osipi_combined_${blinded ? "blinded" : "unblinded"}.csv`;
+      const fname = cd.match(/filename="([^"]+)"/)?.[1] || `osipi_results_long_${blinded ? "blinded" : "unblinded"}.csv`;
       triggerDownload(blob, fname);
     } catch (err) {
       if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "Export failed."; }

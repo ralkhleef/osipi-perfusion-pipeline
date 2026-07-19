@@ -2364,23 +2364,227 @@ def _combined_header_unblinded() -> list[str]:
     ] + _combined_header_blinded()
 
 
+# ---------------------------------------------------------------------------
+# Long-format (tidy) researcher CSV — one row per
+#   submission × subject × session/repeat × map × ROI × metric
+# ---------------------------------------------------------------------------
+
+# Scientific metrics emitted per (map, ROI). Accuracy metrics carry the computed
+# value (or blank when a comparison did not run); repeatability CoV and ICC are
+# always emitted as explicitly unavailable (they need repeated noise-varied
+# datasets), because that "unavailable" status is useful to the researcher.
+_LONG_ACCURACY_METRICS = [
+    ("rmse", "rmse"),
+    ("mae", "mae"),
+    ("bias", "bias"),
+    ("error_coefficient_of_variation", "error_coefficient_of_variation"),
+    ("correlation", "correlation"),
+]
+_LONG_UNAVAILABLE_METRICS = [
+    "repeatability_coefficient_of_variation",
+    "icc",
+]
+
+_LONG_SCIENTIFIC_COLUMNS = [
+    "blinded_submission_id", "challenge", "subject_id", "session_or_repeat_id",
+    "map_type", "map_display_name", "units", "roi",
+    "metric_name", "metric_value", "metric_status",
+    "valid_voxel_count", "excluded_voxel_count",
+    "finite_voxel_percent", "nan_voxel_count", "inf_voxel_count",
+    "negative_voxel_percent", "reference_status", "validation_status",
+    "warning_codes", "pipeline_version", "configuration_version", "export_date",
+]
+
+# Organiser-only identity columns, prepended for the unblinded long CSV.
+_LONG_IDENTITY_COLUMNS = [
+    "submission_id", "team_name", "contact_name", "contact_email", "institution",
+    "submission_source", "original_archive_name", "repository_url", "submitted_at",
+]
+
+
+def _pipeline_version() -> str:
+    try:
+        text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+        import re as _re
+        m = _re.search(r'^version\s*=\s*"([^"]+)"', text, _re.M)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _configuration_version() -> str:
+    try:
+        from osipi_pipeline.config.rules import validation_rules as _vr
+        v = _vr().get("version")
+        return str(v) if v is not None else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _subject_from_name(name: str) -> str:
+    import re as _re
+    m = _re.search(r"sub-([A-Za-z0-9]+)", str(name or ""))
+    return m.group(1) if m else ""
+
+
+def _warning_codes(summary: dict) -> str:
+    codes = []
+    for w in summary.get("warnings") or []:
+        if isinstance(w, dict) and w.get("code"):
+            codes.append(str(w.get("code")))
+    return ";".join(codes)
+
+
+def _validation_status_text(summary: dict) -> str:
+    passed = summary.get("val_passed")
+    if passed is True:
+        return "passed"
+    if passed is False:
+        return "failed"
+    return "not_validated"
+
+
+def _long_metric_status(region_status: str, value) -> str:
+    if region_status != "compared":
+        return region_status or "reference_not_available"
+    return "computed" if value is not None else "not_available"
+
+
+def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[list, list]:
+    """Return (header, rows) for the tidy long-format researcher CSV.
+
+    One row per submission × subject × session/repeat × map × ROI × metric.
+    CBF and ATT stay in separate rows; each ROI is a separate row; each metric is
+    a separate row. Missing metric values are left blank (never zero). No
+    cross-map or cross-challenge aggregation is performed.
+    """
+    header = (([] if blinded else list(_LONG_IDENTITY_COLUMNS)) + list(_LONG_SCIENTIFIC_COLUMNS))
+    pipeline_version = _pipeline_version()
+    config_version = _configuration_version()
+    export_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    rows: list[list] = []
+    for idx, sid in enumerate(sids, start=1):
+        s = gathered_by_sid[sid]
+        blinded_id = f"SUB-{idx:04d}"
+        challenge = str(s.get("challenge_type") or "").strip().upper()
+        validation_status = _validation_status_text(s)
+        warning_codes = _warning_codes(s)
+        analysis = s.get("nifti_analysis") if isinstance(s.get("nifti_analysis"), dict) else {}
+        ref = analysis.get("reference_scoring") if isinstance(analysis.get("reference_scoring"), dict) else {}
+        ref_maps = ref.get("maps") or []
+        # QC per-map lookup for nan/inf/finite/negative fallback (keyed by map type).
+        qc_by_type: dict[str, dict] = {}
+        for qm in analysis.get("maps") or []:
+            if isinstance(qm, dict) and qm.get("detected_map_type"):
+                qc_by_type.setdefault(str(qm["detected_map_type"]), qm)
+
+        identity_cells = [] if blinded else [
+            s.get("submission_id", ""),
+            s.get("team_name", ""),
+            "",  # contact_name — not captured in current submission metadata
+            s.get("contact_email", ""),
+            "",  # institution — not captured
+            (s.get("mode") or "local"),  # submission_source (best available)
+            s.get("source_folder", ""),  # original_archive_name
+            "",  # repository_url — not captured for local uploads
+            (s.get("scored_at") or ""),  # submitted_at (best available timestamp)
+        ]
+
+        for ref_row in ref_maps:
+            if not isinstance(ref_row, dict):
+                continue
+            map_type = str(ref_row.get("detected_map_type") or "Unknown")
+            display = str(ref_row.get("parameter_label") or map_type)
+            units = ref_row.get("units") or ""
+            if units == "units not provided":
+                units = ""
+            map_ref_status = str(ref_row.get("status") or "reference_not_available")
+            subject_id = _subject_from_name(ref_row.get("submitted_file"))
+            qc = qc_by_type.get(map_type, {})
+            qc_meta = qc.get("metadata") or {}
+            qc_stats = qc.get("stats") or {}
+            nan_count = qc_meta.get("nan_count")
+            inf_count = qc_meta.get("inf_count")
+
+            scopes = [("whole_image", ref_row.get("whole_map") or {})]
+            for mask in ref_row.get("masks") or []:
+                if isinstance(mask, dict):
+                    roi_name = mask.get("mask_label") or mask.get("mask_name") or "roi"
+                    scopes.append((str(roi_name), mask.get("metrics") or {}))
+
+            for roi_name, metrics in scopes:
+                region_status = str(metrics.get("status") or map_ref_status)
+                valid = metrics.get("voxel_count")
+                total = metrics.get("total_voxel_count")
+                excluded = (total - valid) if isinstance(total, (int, float)) and isinstance(valid, (int, float)) else None
+                finite_pct = metrics.get("finite_voxel_percent")
+                if finite_pct is None and roi_name == "whole_image":
+                    finite_pct = qc_stats.get("finite_percent")
+                neg_pct = metrics.get("negative_voxel_percent")
+                if neg_pct is None and roi_name == "whole_image":
+                    neg_pct = qc_stats.get("negative_voxel_percent")
+
+                def _emit(metric_name: str, value, status: str):
+                    sci = [
+                        blinded_id, challenge, subject_id, "",  # session_or_repeat_id — no repeats yet
+                        map_type, display, units, roi_name,
+                        metric_name,
+                        _fmt_export_cell(value),
+                        status,
+                        _fmt_export_cell(valid, digits=0),
+                        _fmt_export_cell(excluded, digits=0),
+                        _fmt_export_cell(finite_pct),
+                        _fmt_export_cell(nan_count, digits=0),
+                        _fmt_export_cell(inf_count, digits=0),
+                        _fmt_export_cell(neg_pct),
+                        region_status,
+                        validation_status,
+                        warning_codes,
+                        pipeline_version,
+                        config_version,
+                        export_date,
+                    ]
+                    rows.append(identity_cells + sci)
+
+                for metric_name, key in _LONG_ACCURACY_METRICS:
+                    value = metrics.get(key)
+                    if key == "error_coefficient_of_variation":
+                        value = metrics.get("error_coefficient_of_variation", metrics.get("coefficient_of_variation"))
+                    status = _long_metric_status(region_status, value)
+                    if region_status != "compared":
+                        value = None  # no comparison → blank, never zero
+                    _emit(metric_name, value, status)
+                for metric_name in _LONG_UNAVAILABLE_METRICS:
+                    _emit(metric_name, None, "unavailable_requires_repeated_datasets")
+
+    return header, rows
+
+
 @app.get("/api/export-combined")
 def export_combined(
     submission_id: Optional[str] = Query(None),
     batch_id:      Optional[str] = Query(None),
     blinded:       bool          = Query(False, description="True to strip team_name and contact_email"),
     format:        str           = Query("csv", description="'csv' or 'json'"),
+    shape:         str           = Query("wide", description="CSV shape: 'wide' (one row per submission) or 'long' (tidy: one row per map/ROI/metric)"),
 ):
-    """Export a researcher-facing summary: one row/object per submission.
+    """Export a researcher-facing summary.
 
-    Blinded export omits team/contact/original submission identifiers. Raw
-    validation, execution, and scoring exports remain available from their
-    dedicated backend endpoints.
+    CSV ``shape=wide`` (default) returns one row per submission. ``shape=long``
+    returns a tidy table with one row per submission × subject × session/repeat ×
+    map × ROI × metric — CBF and ATT stay in separate rows and no cross-map or
+    cross-challenge averages are introduced. Blinded export omits team/contact/
+    original submission identifiers. Raw validation, execution, and scoring
+    exports remain available from their dedicated backend endpoints.
     """
     sids = _collect_export_ids(batch_id, submission_id)
     export_format = (format or "csv").strip().lower()
+    csv_shape = (shape or "wide").strip().lower()
     if export_format not in {"csv", "json"}:
         raise HTTPException(status_code=400, detail="format must be 'csv' or 'json'.")
+    if csv_shape not in {"wide", "long"}:
+        raise HTTPException(status_code=400, detail="shape must be 'wide' or 'long'.")
 
     # Gather once and group submissions by challenge (stable within a challenge)
     # so exports are challenge-grouped. Every row/object carries its own
@@ -2457,6 +2661,22 @@ def export_combined(
             }, indent=2),
             media_type="application/json",
             headers={"Content-Disposition": f'attachment; filename="osipi_combined_{tag}_{suffix}.json"'},
+        )
+
+    # ── Long (tidy) CSV: one row per submission × subject × session × map × ROI × metric ──
+    if csv_shape == "long":
+        header, long_rows = _long_csv_rows(gathered_by_sid, sids, blinded)
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(header)
+        for r in long_rows:
+            w.writerow(r)
+        suffix = "blinded" if blinded else "unblinded"
+        tag = (batch_id or submission_id or "export").replace("/", "_")
+        return Response(
+            content=out.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="osipi_results_long_{tag}_{suffix}.csv"'},
         )
 
     output = io.StringIO()

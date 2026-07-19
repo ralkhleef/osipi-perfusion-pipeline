@@ -1845,3 +1845,162 @@ def test_custom_asl_scoring_status_case_insensitive(client: TestClient) -> None:
     assert body.get("status") == "ready", (
         f"Uppercase 'ASL' did not match 'asl' package: status={body.get('status')!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Long-format (tidy) researcher CSV export
+# ---------------------------------------------------------------------------
+
+def _long_csv(client, *, sid=None, batch_id=None, blinded=False):
+    params = {"format": "csv", "shape": "long", "blinded": str(blinded).lower()}
+    if sid:
+        params["submission_id"] = sid
+    if batch_id:
+        params["batch_id"] = batch_id
+    r = client.get("/api/export-combined", params=params)
+    assert r.status_code == 200, r.text
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    return r.text, rows
+
+
+def _asl_with_ref(client, tmp_path, fname="asl_long.zip", cbf=(3, 4, 5, 6), att=(1, 2, 3, 4),
+                  team=None, email=None):
+    data, name = _make_asl_result_maps_zip(fname, list(cbf), att_values=list(att))
+    sid = _upload_and_get_id(client, data, name)
+    _write_reference_map(tmp_path, "sub-001_cbf.nii.gz", [1, 2, 3, 4])
+    _write_reference_map(tmp_path, "sub-001_att.nii.gz", [1, 2, 3, 4])
+    body = {"submission_id": sid, "challenge_type": "asl"}
+    if team:
+        body["team_name"] = team
+    if email:
+        body["contact_email"] = email
+    client.post("/api/validate", json=body)
+    return sid
+
+
+def test_long_csv_cbf_and_att_separate_rows(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    _, rows = _long_csv(client, sid=sid)
+    assert {"CBF", "ATT"} <= {r["map_type"] for r in rows}
+    cbf_rmse = [r for r in rows if r["map_type"] == "CBF" and r["metric_name"] == "rmse"]
+    att_rmse = [r for r in rows if r["map_type"] == "ATT" and r["metric_name"] == "rmse"]
+    assert cbf_rmse and att_rmse            # separate CBF and ATT rows
+    assert cbf_rmse[0] is not att_rmse[0]
+
+
+def test_long_csv_whole_image_and_roi_are_separate_rows(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    _write_reference_mask(tmp_path, "gray_matter.nii.gz", [1, 1, 0, 1])
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
+                                       "force_validation_refresh": True})
+    _, rows = _long_csv(client, sid=sid)
+    cbf_rois = {r["roi"] for r in rows if r["map_type"] == "CBF"}
+    assert "whole_image" in cbf_rois
+    assert any(roi != "whole_image" for roi in cbf_rois)   # at least one ROI/mask row
+
+
+def test_long_csv_one_metric_per_row(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    _, rows = _long_csv(client, sid=sid)
+    names = {r["metric_name"] for r in rows}
+    assert {"rmse", "mae", "bias", "error_coefficient_of_variation", "correlation",
+            "repeatability_coefficient_of_variation", "icc"} <= names
+    assert all("," not in r["metric_name"] for r in rows)
+    from collections import Counter
+    per_map_roi = Counter((r["map_type"], r["roi"]) for r in rows)
+    assert all(count == 7 for count in per_map_roi.values())   # 7 metric rows per (map, ROI)
+
+
+def test_long_csv_missing_metrics_are_blank_not_zero(client, tmp_path):
+    # CBF submitted but NO reference written -> comparison metrics unavailable.
+    data, name = _make_asl_result_maps_zip("noref.zip", [3, 4, 5, 6])
+    sid = _upload_and_get_id(client, data, name)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl"})
+    _, rows = _long_csv(client, sid=sid)
+    rmse_rows = [r for r in rows if r["metric_name"] == "rmse"]
+    assert rmse_rows
+    for r in rmse_rows:
+        assert r["metric_value"] == ""              # blank, never "0"
+        assert r["metric_status"] != "computed"
+    rep = [r for r in rows if r["metric_name"] == "repeatability_coefficient_of_variation"]
+    assert rep and all(r["metric_value"] == "" and "unavailable" in r["metric_status"] for r in rep)
+    icc = [r for r in rows if r["metric_name"] == "icc"]
+    assert icc and all(r["metric_value"] == "" for r in icc)
+
+
+def test_long_csv_blinded_has_no_identity_or_paths(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path, fname="secret_team_zip.zip",
+                        team="Secret Team", email="person@hospital.org")
+    text, rows = _long_csv(client, sid=sid, blinded=True)
+    for bad in ["Secret Team", "person@hospital.org", "secret_team_zip", sid,
+                ".nii", "submissions/extracted", "/Users", "sessions/"]:
+        assert bad not in text, f"blinded CSV leaked: {bad!r}"
+    assert rows and rows[0]["blinded_submission_id"].startswith("SUB-")
+    header = list(rows[0].keys())
+    for col in ["team_name", "contact_email", "contact_name", "institution",
+                "submission_id", "original_archive_name", "repository_url"]:
+        assert col not in header
+
+
+def test_long_csv_unblinded_has_permitted_identity_fields(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path, team="My Team", email="me@lab.org")
+    _, rows = _long_csv(client, sid=sid, blinded=False)
+    header = list(rows[0].keys())
+    for col in ["submission_id", "team_name", "contact_name", "contact_email",
+                "institution", "submission_source", "original_archive_name",
+                "repository_url", "submitted_at"]:
+        assert col in header
+    assert rows[0]["team_name"] == "My Team"
+    assert rows[0]["contact_email"] == "me@lab.org"
+
+
+def test_long_csv_mixed_challenges_no_cross_challenge_rows(client, tmp_path):
+    a, an = _make_asl_result_maps_zip("aslmix.zip", [3, 4, 5, 6])
+    asid = _upload_and_get_id(client, a, an)
+    d, dn = _make_maps_zip("dcemix.zip", ["results/maps/Ktrans_map.nii"])
+    dsid = _upload_and_get_id(client, d, dn)
+    _write_reference_map(tmp_path, "sub-001_cbf.nii.gz", [1, 2, 3, 4])
+    vb = client.post("/api/validate-batch", json={
+        "submission_ids": [asid, dsid], "challenge_type": "asl",
+        "challenge_types": {asid: "asl", dsid: "dce"},
+    }).json()
+    _, rows = _long_csv(client, batch_id=vb["batch_id"])
+    challenges = {r["challenge"] for r in rows}
+    assert challenges <= {"ASL", "DCE"}
+    assert "ASL" in challenges and "DCE" in challenges
+    # every row belongs to exactly one challenge; no aggregate/total sentinel row
+    assert all(r["challenge"] in {"ASL", "DCE"} for r in rows)
+    assert not any(r["blinded_submission_id"].lower() in {"total", "all", "combined"} for r in rows)
+    # no row mixes a CBF metric under the DCE challenge
+    assert not any(r["challenge"] == "DCE" and r["map_type"] == "CBF" for r in rows)
+
+
+def test_long_csv_arbitrary_roi_names_preserved(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    _write_reference_mask(tmp_path, "custom_region_7.nii.gz", [1, 1, 0, 1])
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
+                                       "force_validation_refresh": True})
+    _, rows = _long_csv(client, sid=sid)
+    rois = {r["roi"] for r in rows}
+    assert any("custom" in roi.lower() or "region" in roi.lower() for roi in rois), rois
+
+
+def test_long_csv_has_versions_and_export_date(client, tmp_path):
+    import re
+    sid = _asl_with_ref(client, tmp_path)
+    _, rows = _long_csv(client, sid=sid)
+    assert rows[0]["pipeline_version"] and rows[0]["pipeline_version"] != "unknown"
+    assert rows[0]["configuration_version"] not in ("", None)
+    assert re.match(r"\d{4}-\d{2}-\d{2}", rows[0]["export_date"])
+
+
+def test_wide_csv_and_json_exports_still_compatible(client, tmp_path):
+    sid = _asl_with_ref(client, tmp_path)
+    # Wide is still the default shape (existing consumers unaffected).
+    wide = client.get("/api/export-combined", params={"submission_id": sid, "format": "csv"})
+    assert wide.status_code == 200
+    header = next(csv.reader(io.StringIO(wide.text)))
+    assert "mean_cbf" in header and "rmse" in header      # wide columns preserved
+    # JSON export unaffected by the shape parameter.
+    j = client.get("/api/export-combined", params={"submission_id": sid, "format": "json"})
+    assert j.status_code == 200 and "submissions" in j.json()
