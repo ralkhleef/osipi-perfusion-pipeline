@@ -394,6 +394,37 @@ def _reuse_or_generate(submission_id: str, path: Path, cached_by_source: dict[st
     return _generate_preview_item(submission_id, path)
 
 
+_UNRECOGNIZED_MAP_TYPES = {"", "unknown", "mixed/other"}
+
+
+def _classify_preview_role(item: dict) -> dict:
+    """Tag a preview item with its role so galleries can show only 3-D parameter maps.
+
+    A file is a scored parameter map when it is exactly 3-D and has a recognized
+    configured map type (CBF/Perfmap, ATT, …). 4-D files are ASL/model/time-series
+    data (kept for download, never scored as a parameter map); anything else is
+    an unrecognized submitted file. This is display metadata only — it does not
+    change ingestion, validation, or scoring.
+    """
+    shape = [d for d in (item.get("shape") or []) if d]
+    ndim = len(shape)
+    map_type = str(item.get("detected_map_type") or "").strip()
+    recognized = map_type.lower() not in _UNRECOGNIZED_MAP_TYPES
+    if ndim == 3 and recognized:
+        item["file_role"] = "parameter_map"
+        item["is_parameter_map"] = True
+        item["role_label"] = map_type
+    elif ndim >= 4:
+        item["file_role"] = "fitted_model"
+        item["is_parameter_map"] = False
+        item["role_label"] = "4D ASL data"
+    else:
+        item["file_role"] = "unknown"
+        item["is_parameter_map"] = False
+        item["role_label"] = "Other submitted file"
+    return item
+
+
 def list_submission_previews(submission_id: str, challenge_type: Optional[str] = None) -> dict:
     """Return a manifest for safely previewable submitted/result NIfTI maps."""
     safe_id = make_safe_id(submission_id)
@@ -404,12 +435,13 @@ def list_submission_previews(submission_id: str, challenge_type: Optional[str] =
         if isinstance(item, dict) and item.get("source_path")
     }
     paths = _candidate_nifti_paths(safe_id, challenge_type)
-    maps = [_reuse_or_generate(safe_id, path, cached_by_source) for path in paths]
+    maps = [_classify_preview_role(_reuse_or_generate(safe_id, path, cached_by_source)) for path in paths]
     manifest = {
         "submission_id": safe_id,
         "challenge_type": challenge_type,
         "preview_count": len(maps),
         "available_count": sum(1 for item in maps if item.get("preview_available")),
+        "parameter_map_count": sum(1 for item in maps if item.get("is_parameter_map")),
         "maps": maps,
     }
     _write_manifest(safe_id, manifest)

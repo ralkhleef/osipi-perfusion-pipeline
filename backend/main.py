@@ -2848,6 +2848,19 @@ def _stacked_percent_svg(title: str, values: list[tuple[str, float | int | None,
     )
 
 
+def _preview_is_parameter_map(item: dict) -> bool:
+    """True when a preview item is a 3-D recognized parameter map (CBF/ATT/…).
+
+    Prefers the ``is_parameter_map`` flag set by the preview service; falls back
+    to shape + map type for manifests written before that flag existed.
+    """
+    if isinstance(item.get("is_parameter_map"), bool):
+        return item["is_parameter_map"]
+    shape = [d for d in (item.get("shape") or []) if d]
+    map_type = str(item.get("detected_map_type") or "").strip().lower()
+    return len(shape) == 3 and map_type not in {"", "unknown", "mixed/other"}
+
+
 def _report_preview_gallery(summaries: list[dict], *, blinded: bool) -> str:
     cards: list[str] = []
     for idx, summary in enumerate(summaries, start=1):
@@ -2861,6 +2874,11 @@ def _report_preview_gallery(summaries: list[dict], *, blinded: bool) -> str:
             continue
         for item in manifest.get("maps") or []:
             if not item.get("preview_available"):
+                continue
+            # Only 3-D recognized parameter maps (CBF/ATT/…) belong in the gallery.
+            # 4-D ASL/model data and unrecognized files are excluded so no
+            # "Unknown" card appears beside CBF and ATT.
+            if not _preview_is_parameter_map(item):
                 continue
             map_id = str(item.get("map_id") or "")
             image_path = OUTPUTS_DIR / "previews" / make_safe_id(sid) / f"{map_id}_axial.png"
@@ -2883,7 +2901,7 @@ def _report_preview_gallery(summaries: list[dict], *, blinded: bool) -> str:
         if len(cards) >= 8:
             break
     if not cards:
-        return '<p class="report-muted">Map previews were not generated for this export. Open the app preview panel once to populate the local preview cache.</p>'
+        return '<p class="report-muted">No parameter-map previews are available.</p>'
     return '<div class="preview-gallery">' + "".join(cards) + '</div>'
 
 
@@ -3359,7 +3377,7 @@ def export_report(
     {reference_summary_rows_html}
     <tr><td>Reference comparisons</td><td>{_esc('Available' if reference_available else 'Not available')}</td></tr>
   </tbody></table>
-  <h2>Map Preview Gallery</h2>
+  <h2>Parameter Map Previews</h2>
   {preview_gallery_html}
   <h2>Per-Submission Results</h2>
   {table_html}

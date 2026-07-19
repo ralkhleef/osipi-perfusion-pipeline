@@ -140,3 +140,66 @@ def test_download_endpoint_does_not_serve_private_reference_maps(preview_workspa
     blocked = client.get(f"/api/submissions/sub-001/maps/{reference_map_id}/download")
     assert blocked.status_code == 404
     assert fastapi is not None
+
+
+# ---------------------------------------------------------------------------
+# Parameter Map Previews — gallery must show only 3-D recognized parameter maps
+# ---------------------------------------------------------------------------
+
+def _lena_style_manifest(workspace: Path) -> dict:
+    """4-D ASL input (Unknown) + 3-D Perfmap (CBF) + 3-D ATTmap (ATT)."""
+    _write_nifti(_result_path(workspace, "sub-001_acq-001_asl_32float.nii.gz"),
+                 np.ones((3, 3, 2, 3), dtype=np.float32))
+    _write_nifti(_result_path(workspace, "sub-001_acq-002_Perfmap_32float.nii.gz"),
+                 np.arange(18, dtype=np.float32).reshape(3, 3, 2))
+    _write_nifti(_result_path(workspace, "sub-001_acq-002_ATTmap_32float.nii.gz"),
+                 np.arange(18, dtype=np.float32).reshape(3, 3, 2))
+    return _manifest(workspace)
+
+
+def test_lena_gallery_has_exactly_cbf_and_att(preview_workspace: Path) -> None:
+    manifest = _lena_style_manifest(preview_workspace)
+    params = [m for m in manifest["maps"] if m.get("is_parameter_map")]
+    assert {m["detected_map_type"] for m in params} == {"CBF", "ATT"}
+    assert len(params) == 2
+    assert manifest["parameter_map_count"] == 2
+
+
+def test_no_unknown_parameter_map_card(preview_workspace: Path) -> None:
+    manifest = _lena_style_manifest(preview_workspace)
+    for m in manifest["maps"]:
+        if m.get("is_parameter_map"):
+            assert str(m["detected_map_type"]) not in ("Unknown", "", "Mixed/Other")
+
+
+def test_4d_asl_file_kept_but_not_a_parameter_map(preview_workspace: Path) -> None:
+    manifest = _lena_style_manifest(preview_workspace)
+    four_d = [m for m in manifest["maps"] if len([d for d in m.get("shape") or [] if d]) == 4]
+    assert four_d, "4D ASL file must remain listed (for Technical Details / download)"
+    f = four_d[0]
+    assert f["is_parameter_map"] is False
+    assert f["file_role"] == "fitted_model"
+    assert f["role_label"] == "4D ASL data"
+    assert f.get("download_url")             # still available for download
+
+
+def test_masks_and_reference_not_in_submission_gallery(preview_workspace: Path) -> None:
+    _write_nifti(preview_workspace / "extracted" / "sub-001" / "reference" / "maps" / "sub-001_cbf.nii.gz",
+                 np.ones((3, 3, 2), dtype=np.float32))
+    _write_nifti(preview_workspace / "extracted" / "sub-001" / "reference" / "masks" / "gray_matter.nii.gz",
+                 np.ones((3, 3, 2), dtype=np.float32))
+    manifest = _lena_style_manifest(preview_workspace)
+    names = {m["file_name"].lower() for m in manifest["maps"]}
+    assert not any("mask" in n or "gray" in n for n in names)
+    # the reference copy is not previewed as a submitted parameter map
+    assert not any(m.get("source_path", "").replace("\\", "/").find("/reference/") >= 0 for m in manifest["maps"])
+
+
+def test_parameter_map_preview_and_download_still_work(preview_workspace: Path) -> None:
+    manifest = _lena_style_manifest(preview_workspace)
+    cbf = next(m for m in manifest["maps"] if m["detected_map_type"] == "CBF")
+    for plane in previews.PREVIEW_PLANES:
+        png = previews.get_preview_png_path("sub-001", cbf["map_id"], plane)
+        assert png.exists() and png.read_bytes().startswith(b"\x89PNG")
+    dl = previews.get_preview_download_path("sub-001", cbf["map_id"])
+    assert Path(dl).exists()

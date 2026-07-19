@@ -211,6 +211,13 @@ checkEqual("Functional image tags in JS (2 preview + 1 submission icon)", countO
 checkContains("The extra image tag is the submission IMG icon", appJs, '<img src="/static/assets/submission-img-icon.png"');
 checkContains("Functional NIfTI thumbnail image remains", appJs, 'src="${escapeHtml(item.thumbnail_url)}"');
 checkContains("Functional preview modal image remains", appJs, 'class="nifti-preview-modal-image"');
+// Parameter Map Previews: gallery filtered to 3-D recognized maps; no "Unknown"
+checkContains("Preview gallery filters to parameter maps", appJs, "function _isParameterMapPreview");
+checkContains("Preview section renamed to Parameter Map Previews", appJs, "<h3>Parameter Map Previews</h3>");
+checkNotContains("Old 'Map Preview' heading removed", appJs, "<h3>Map Preview</h3>");
+checkContains("Empty state uses parameter-map wording", appJs, "No parameter-map previews are available.");
+checkContains("4D ASL data label kept for non-parameter files", appJs, "4D ASL data");
+checkContains("Non-parameter files listed under collapsed details", appJs, "submitted-files-details");
 checkNotContains("No decorative CSS url assets", css, "url(");
 checkNotContains("No decorative CSS background-image", css, "background-image");
 

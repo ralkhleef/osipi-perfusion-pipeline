@@ -233,6 +233,15 @@ def _preview_image_path(submission_id: str, map_id: str, plane: str = "axial") -
     return OUTPUTS_DIR / "previews" / make_safe_id(submission_id) / f"{map_id}_{plane}.png"
 
 
+def _preview_is_parameter_map(item: Mapping[str, Any]) -> bool:
+    """True when a preview item is a 3-D recognized parameter map (CBF/ATT/…)."""
+    if isinstance(item.get("is_parameter_map"), bool):
+        return bool(item["is_parameter_map"])
+    shape = [d for d in (item.get("shape") or []) if d]
+    map_type = str(item.get("detected_map_type") or "").strip().lower()
+    return len(shape) == 3 and map_type not in {"", "unknown", "mixed/other"}
+
+
 def _cached_preview_items(summaries: Sequence[Mapping[str, Any]], *, blinded: bool) -> list[dict[str, Any]]:
     previews: list[dict[str, Any]] = []
     for idx, summary in enumerate(summaries, start=1):
@@ -249,6 +258,10 @@ def _cached_preview_items(summaries: Sequence[Mapping[str, Any]], *, blinded: bo
         for item in manifest.get("maps") or []:
             map_id = str(item.get("map_id") or "")
             if not map_id or not item.get("preview_available"):
+                continue
+            # Only 3-D recognized parameter maps (CBF/ATT/…) — no 4-D ASL/model
+            # data or unrecognized files in the report gallery.
+            if not _preview_is_parameter_map(item):
                 continue
             image_path = _preview_image_path(sid, map_id)
             if not image_path.exists():
@@ -594,7 +607,7 @@ def _report_lines(model: Mapping[str, Any]) -> list[str]:
     lines.extend(["", "Scoring Summary"])
     lines.extend(f"- {k}: {v}" for k, v in model["scoring"].items())
     if model.get("previews"):
-        lines.extend(["", "Map Previews"])
+        lines.extend(["", "Parameter Map Previews"])
         for item in model["previews"]:
             lines.append(f"- {item['submission']} | {item['map']} | {item['file']}")
     lines.extend(["", "Per-submission results"])
@@ -888,7 +901,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             para(f"{item.get('submission', '')}<br/>{item.get('map', '')}<br/>{item.get('file', '')}", table_cell_style),
         ])
     if preview_rows:
-        story.extend([para("Map Previews", heading_style)])
+        story.extend([para("Parameter Map Previews", heading_style)])
         preview_table = Table(preview_rows, colWidths=[1.35 * inch, 3.3 * inch], hAlign="LEFT")
         preview_table.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),

@@ -5772,17 +5772,37 @@ function _previewNote() {
   return `<p class="nifti-preview-note">Open full NIfTI files in ITK-SNAP, FSLeyes, or 3D Slicer.</p>`;
 }
 
+// A preview item is a scored parameter map only when it is exactly 3-D and has
+// a recognized configured map type (CBF/ATT/…). 4-D ASL/model data and
+// unrecognized files are never shown in the gallery. Prefers the backend flag;
+// falls back to shape + map type for older cached manifests.
+function _isParameterMapPreview(item) {
+  if (typeof item?.is_parameter_map === "boolean") return item.is_parameter_map;
+  const shape = Array.isArray(item?.shape) ? item.shape.filter(Boolean) : [];
+  const mt = String(item?.detected_map_type || "").trim().toLowerCase();
+  return shape.length === 3 && mt !== "" && mt !== "unknown" && mt !== "mixed/other";
+}
+
+// Display label for a non-parameter-map submitted file (e.g. the 4-D ASL input).
+function _nonParameterFileLabel(item) {
+  if (item?.role_label) return item.role_label;
+  const shape = Array.isArray(item?.shape) ? item.shape.filter(Boolean) : [];
+  return shape.length >= 4 ? "4D ASL data" : "Other submitted file";
+}
+
 function _storePreviewItems(manifest) {
   Object.keys(_previewItemsById).forEach((key) => delete _previewItemsById[key]);
   _previewMapOrder = [];
   (manifest?.maps || []).forEach((item) => {
     if (item?.map_id) {
       _previewItemsById[item.map_id] = item;
-      _previewMapOrder.push(item.map_id);
+      // Only parameter maps join the gallery/modal navigation order.
+      if (_isParameterMapPreview(item)) _previewMapOrder.push(item.map_id);
     }
   });
   // Keep the current tab selection when still valid, else fall back to first.
-  if (!_previewSelectedMapId || !_previewItemsById[_previewSelectedMapId]) {
+  if (!_previewSelectedMapId || !_previewItemsById[_previewSelectedMapId]
+      || !_isParameterMapPreview(_previewItemsById[_previewSelectedMapId])) {
     _previewSelectedMapId = _previewMapOrder[0] || null;
   }
 }
@@ -5832,7 +5852,11 @@ function _previewTabLabel(item, idx) {
 function _renderImagePreviewSection(manifest, options = {}) {
   const loading = options.loading === true;
   const submissionId = options.submissionId || manifest?.submission_id || "";
-  const maps = manifest?.maps || [];
+  const allItems = manifest?.maps || [];
+  // Gallery shows only 3-D recognized parameter maps (CBF/ATT/…). 4-D ASL/model
+  // data and unrecognized files are kept out of the gallery and listed below.
+  const maps = allItems.filter(_isParameterMapPreview);
+  const otherFiles = allItems.filter((m) => !_isParameterMapPreview(m));
   const selected = maps.find((m) => m.map_id === _previewSelectedMapId) || maps[0] || null;
   if (selected) _previewSelectedMapId = selected.map_id;
   const tabs = maps.length > 1
@@ -5847,13 +5871,29 @@ function _renderImagePreviewSection(manifest, options = {}) {
     ? `<div class="nifti-preview-loading">Generating cached NIfTI previews…</div>`
     : selected
       ? `${tabs}<div class="worklist nifti-preview-list imaging-preview-strip map-preview-single">${_renderPreviewCard(selected)}</div>`
-      : `<div class="nifti-preview-empty">No submitted/result NIfTI maps are available for preview yet.</div>`;
+      : `<div class="nifti-preview-empty">No parameter-map previews are available.</div>`;
+  // Non-parameter-map files (e.g. the 4-D ASL input) remain available for
+  // download in a collapsed section, never treated as scored parameter maps.
+  const otherFilesHtml = otherFiles.length ? `
+    <details class="submitted-files-details">
+      <summary>Submitted files (not scored as parameter maps)</summary>
+      <ul class="submitted-files-list">
+        ${otherFiles.map((m) => {
+          const dl = m.download_url
+            ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(m.download_url)}" title="Download the original submitted NIfTI file.">Download NIfTI</a>`
+            : "";
+          return `<li><span class="submitted-file-role">${escapeHtml(_nonParameterFileLabel(m))}</span>
+            <span class="submitted-file-name" title="${escapeHtml(m.file_name || "")}">${escapeHtml(m.file_name || "NIfTI file")}</span>${dl}</li>`;
+        }).join("")}
+      </ul>
+    </details>` : "";
   return `<section id="score-image-preview-section" class="imaging-preview-panel sdc score-image-preview" data-submission-id="${escapeHtml(submissionId)}">
     <div class="sdc-head">
-      <h3>Map Preview</h3>
+      <h3>Parameter Map Previews</h3>
     </div>
     ${_previewNote()}
     ${body}
+    ${otherFilesHtml}
   </section>`;
 }
 
@@ -5886,7 +5926,7 @@ async function _loadAndRenderImagePreviews(submissionId, challengeType) {
     if (current && current.dataset.submissionId === String(submissionId)) {
       current.outerHTML = `<section id="score-image-preview-section" class="imaging-preview-panel sdc score-image-preview" data-submission-id="${escapeHtml(submissionId)}">
         <div class="sdc-head">
-          <h3>Map Preview</h3>
+          <h3>Parameter Map Previews</h3>
         </div>
         ${_previewNote()}
         <div class="nifti-preview-empty">Preview unavailable: ${escapeHtml(err.message || String(err))}</div>

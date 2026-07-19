@@ -1714,7 +1714,7 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Submission Metadata" in r.text
     assert "QC / Evaluation Summary" in r.text
     assert "Scoring Summary" in r.text
-    assert "Map Preview Gallery" in r.text
+    assert "Parameter Map Previews" in r.text
     assert "Per-Submission Results" in r.text
     assert "Errors, Warnings, and Recommended Actions" in r.text
     assert "Notes / Limitations" in r.text
