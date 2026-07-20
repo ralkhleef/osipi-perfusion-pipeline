@@ -36,17 +36,17 @@ docker compose up -d
 ## Workflow (6 steps)
 
 ```
-Upload → Index → Validate → Run → Score & Preview → Export
+Upload → Review → Validate → Run → QC & Preview → Export
 ```
 
 | Step | What it does |
 |------|-------------|
 | **Upload** | Accepts a ZIP file. Also supports GitHub URLs and Zenodo links. |
-| **Index** | Detects submission type: result-only (NIfTI maps only) or reproducible (has Dockerfile + code). Batch ZIPs (multiple sub-directories) are split automatically. Structural ZIPs with internal folders such as `input/` + `results/maps/` are correctly detected as a single submission. |
-| **Validate** | Checks NIfTI readability (nibabel), map names, README, Dockerfile, code files. Issues are classified as errors (fail) or warnings (pass with notes). |
-| **Run** | Reproducible submissions execute in Docker. Result-only submissions (maps already in ZIP) skip execution and move forward. No code and no maps: shows "Cannot continue." |
-| **Score & Preview** | Shows scoring/QC status, ranked/scored rows, key metrics, NIfTI map previews, and technical details. Without a configured scorer, it stays honest and never fabricates scores. |
-| **Export** | Downloads **HTML report**, **PDF report**, **blinded combined CSV**, and **unblinded combined CSV**. Raw validation, execution, and scoring export endpoints remain available for automation. |
+| **Review** | Detects submission type: result-only (NIfTI maps only) or reproducible (has Dockerfile + code), and the challenge (ASL/DCE/DSC) per submission. Batch ZIPs (multiple sub-directories) are split automatically; several ZIPs can be uploaded at once. Structural ZIPs with internal folders such as `input/` + `results/maps/` are correctly detected as a single submission. |
+| **Validate** | Checks NIfTI readability (nibabel), map names, dimensions (parameter maps must be 3-D), README, Dockerfile, code files. Issues are classified as errors (fail) or warnings (pass with notes). |
+| **Run** | Reproducible submissions execute in Docker. Result-only submissions (maps already in ZIP) skip execution and show "Execution not required." No code and no maps: shows "Cannot continue." |
+| **QC & Preview** | Shows QC statistics and *generic reference comparisons* per parameter map (CBF and ATT reported separately, never averaged), NIfTI previews, and technical details. These are **not** official OSIPI scores; ASL results are **not** ranked and there is no pass/fail. Repeatability CoV and ICC are shown as unavailable until repeated datasets are provided. Without configured reference maps it stays honest and never fabricates scores. |
+| **Export** | Downloads **HTML report**, **PDF report**, and **long-format researcher CSV** (blinded and unblinded — one row per map/ROI/metric). Raw validation, execution, and scoring export endpoints remain available for automation. |
 
 ### Execution Output Definition
 

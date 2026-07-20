@@ -51,7 +51,7 @@ This document compares the proposal, "Python Pipeline for Evaluating OSIPI Perfu
 - Raw validation JSON and CSV exports.
 - Execution CSV exports.
 - Scoring CSV exports.
-- Combined blinded and unblinded CSV exports with one row per submission.
+- Combined blinded and unblinded CSV exports. The researcher CSV is long/tidy format (one row per submission x subject x session x map x ROI x metric); a wide one-row-per-submission CSV remains available via the API `shape=wide` option.
 - HTML report (`GET /api/report`) with validation, execution, QC/scoring summaries, per-submission rows, technical details, and explicit reference-availability status.
 - PDF report (`GET /api/export/report/pdf`) generated from the same report model.
 - PDF reports include export date, submission metadata, challenge name, QC summary, scoring summary, and cached map previews when previews have been generated.
@@ -62,10 +62,10 @@ This document compares the proposal, "Python Pipeline for Evaluating OSIPI Perfu
 - Six-step guided workflow:
 
 ```text
-Upload -> Index -> Validate -> Run -> Score & Preview -> Export
+Upload -> Review -> Validate -> Run -> QC & Preview -> Export
 ```
 
-- Score & Preview combines scoring/QC status, ranked/scored rows, key metrics, NIfTI previews, and technical details.
+- QC & Preview combines QC status and generic reference comparisons (CBF and ATT reported separately, never averaged), key metrics, NIfTI previews, and technical details. These are not official OSIPI scores; ASL results are not ranked and there is no pass/fail.
 - Export presents the four reviewer-facing deliverables: HTML report, PDF report, blinded CSV, and unblinded CSV.
 - Session restore and Start New flows clear persisted state cleanly without saving a blank restored session.
 - Mobile-friendly single-card workflow layout.
@@ -94,7 +94,7 @@ These proposal items are implemented as framework behavior but require OSIPI-own
 | Accepted scientific test outputs | Not bundled; needed for end-to-end official validation. |
 | Required BIDS compliance level | Not defined in repository. Current checks are basic NIfTI/layout checks, not full BIDS compliance. |
 | Challenge-specific parameter ranges and units | Config supports labels/units; official ranges and unit rules require confirmation. |
-| Leaderboard/rankings | Endpoints and UI support ranked results once scored submissions with reference metrics exist. |
+| Leaderboard/rankings | Not used for ASL (no public ranking, no pass/fail, per Lena). Any ranking endpoints remain dormant unless a challenge team defines an official composite score. |
 | Full sample imaging submissions | Demo packages and test fixtures exist; real OSIPI imaging data is not redistributed in this repository. |
 
 The pipeline intentionally never fabricates official scores. When references are missing, it reports QC metrics and clearly labels reference scoring as unavailable.
