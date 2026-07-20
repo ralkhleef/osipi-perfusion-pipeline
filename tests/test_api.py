@@ -1713,8 +1713,10 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Visual Summary" in r.text
     assert "Submission Metadata" in r.text
     assert "QC / Evaluation Summary" in r.text
-    assert "Scoring Summary" in r.text
-    assert "Parameter Map Previews" in r.text
+    # Scoring Summary (duplicate of the QC reference rows) and the map preview
+    # gallery were removed from the printable report to reduce clutter.
+    assert "Scoring Summary" not in r.text
+    assert "Parameter Map Previews" not in r.text
     assert "Per-Submission Results" in r.text
     assert "Errors, Warnings, and Recommended Actions" in r.text
     assert "Notes / Limitations" in r.text
@@ -1775,24 +1777,26 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
         assert forbidden not in pdf_text
 
 
-def test_pdf_report_includes_cached_map_previews_when_available(client: TestClient) -> None:
+def test_pdf_report_excludes_map_previews_even_when_available(client: TestClient) -> None:
+    """Map preview thumbnails were removed from the printable PDF (kept in the app)."""
     pytest.importorskip("numpy")
     pytest.importorskip("nibabel")
     data, fname = _make_result_only_zip("report_pdf_preview.zip")
     sid = _upload_and_get_id(client, data, fname)
     client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
 
+    # Previews are generated and available in the app...
     previews = client.get(f"/api/submissions/{sid}/previews?challenge_type=dce")
     assert previews.status_code == 200, previews.text
     preview_body = previews.json()
-    assert preview_body.get("maps"), preview_body
-    assert any(item.get("preview_available") for item in preview_body["maps"]), preview_body
+    assert any(item.get("preview_available") for item in preview_body.get("maps", [])), preview_body
 
+    # ...but the PDF must not embed a preview section.
     pdf = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
     assert pdf.status_code == 200, pdf.text
     pdf_text = pdf.content.decode("latin-1", errors="ignore")
-    assert "Map Previews" in pdf_text
-    assert "Ktrans" in pdf_text
+    assert "Map Previews" not in pdf_text
+    assert "Parameter Map Previews" not in pdf_text
 
 
 def test_pdf_report_blinded_vs_unblinded_labels() -> None:

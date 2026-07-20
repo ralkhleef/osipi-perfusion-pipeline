@@ -522,7 +522,9 @@ def _build_report_model(
             + ([] if blinded else ["Team", "Contact"])
         ),
         "submission_metadata_rows": _submission_metadata_rows(summaries, blinded=blinded),
-        "previews": _cached_preview_items(summaries, blinded=blinded),
+        # Map preview thumbnails removed from the printable report at researcher
+        # request (previews remain in the interactive app).
+        "previews": [],
         "summary_lines": summary_lines,
         "status_cards": {
             "Validation status": validation_status,

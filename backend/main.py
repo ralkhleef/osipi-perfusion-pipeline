@@ -3093,7 +3093,8 @@ def export_report(
     charts_html = "".join([validation_chart_html, voxel_chart_html, negative_chart_html])
     if not charts_html:
         charts_html = '<p class="report-muted">Not enough numeric data was available to render charts.</p>'
-    preview_gallery_html = _report_preview_gallery(summaries, blinded=blinded)
+    # Map preview thumbnails were removed from the report at researcher request
+    # (kept in the interactive app, not the printable report).
     issues_html = _issue_rows_html(summaries, blinded=blinded)
 
     metadata_rows_html = []
@@ -3281,8 +3282,8 @@ def export_report(
 <style>
   body {{ font-family: Arial, Helvetica, "Segoe UI", sans-serif;
           color:#1a1a1a; max-width:960px; margin:28px auto; padding:0 26px; line-height:1.5; }}
-  h1 {{ color:#111; font-size:1.4rem; margin:0 0 2px; }}
-  h2 {{ color:#111; font-size:1.02rem; margin:22px 0 8px; border-bottom:1px solid #cfcfcf; padding-bottom:4px; }}
+  h1 {{ color:#5e42a6; font-size:1.4rem; margin:0 0 2px; }}
+  h2 {{ color:#5e42a6; font-size:1.02rem; margin:22px 0 8px; border-bottom:1px solid #d9d2ec; padding-bottom:4px; }}
   h3 {{ color:#111; font-size:0.9rem; margin:14px 0 6px; }}
   .sub {{ color:#555; font-size:0.86rem; margin:0 0 14px; }}
   .meta {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 24px; font-size:0.85rem; color:#222; margin:0 0 4px; }}
@@ -3312,7 +3313,7 @@ def export_report(
   .summary-list {{ margin:6px 0 0; padding-left:20px; font-size:0.9rem; color:#222; }}
   table {{ width:100%; border-collapse:collapse; margin-top:8px; font-size:0.8rem; }}
   th,td {{ text-align:left; padding:6px 8px; border:1px solid #d2d2d2; vertical-align:top; }}
-  th {{ background:#f2f2f2; color:#111; font-weight:600; }}
+  th {{ background:#f5f3fb; color:#111; font-weight:600; }}
   td {{ color:#222; }}
   table.kv {{ width:auto; min-width:340px; max-width:560px; }}
   table.kv td:first-child {{ color:#555; width:55%; }}
@@ -3371,14 +3372,6 @@ def export_report(
     <tr><td>Reference status</td><td>{_esc(reference_status)}</td></tr>
     {reference_summary_rows_html}
   </tbody></table>
-  <h2>Scoring Summary{" (per challenge)" if is_mixed_challenge else ""}</h2>
-  <table class="kv"><tbody>
-    <tr><td>Reference status</td><td>{_esc(reference_status)}</td></tr>
-    {reference_summary_rows_html}
-    <tr><td>Reference comparisons</td><td>{_esc('Available' if reference_available else 'Not available')}</td></tr>
-  </tbody></table>
-  <h2>Parameter Map Previews</h2>
-  {preview_gallery_html}
   <h2>Per-Submission Results</h2>
   {table_html}
   {detail_html}
