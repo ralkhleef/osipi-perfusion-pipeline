@@ -2,7 +2,6 @@
 
 A web application for reviewing OSIPI perfusion MRI challenge submissions. Reviewers upload a ZIP, and the app validates NIfTI files, detects submission type, optionally runs reproducible submissions in Docker, scores/QCs outputs when a provider is configured, and exports results as CSV, HTML, or PDF.
 
-**GitHub:** https://github.com/ralkhleef/osipi-perfusion-pipeline
 
 ---
 
@@ -33,20 +32,6 @@ docker compose up -d
 
 ---
 
-## Workflow (6 steps)
-
-```
-Upload → Review → Validate → Run → QC & Preview → Export
-```
-
-| Step | What it does |
-|------|-------------|
-| **Upload** | Accepts a ZIP file. Also supports GitHub URLs and Zenodo links. |
-| **Review** | Detects submission type: result-only (NIfTI maps only) or reproducible (has Dockerfile + code), and the challenge (ASL/DCE/DSC) per submission. Batch ZIPs (multiple sub-directories) are split automatically; several ZIPs can be uploaded at once. Structural ZIPs with internal folders such as `input/` + `results/maps/` are correctly detected as a single submission. |
-| **Validate** | Checks NIfTI readability (nibabel), map names, dimensions (parameter maps must be 3-D), README, Dockerfile, code files. Issues are classified as errors (fail) or warnings (pass with notes). |
-| **Run** | Reproducible submissions execute in Docker. Result-only submissions (maps already in ZIP) skip execution and show "Execution not required." No code and no maps: shows "Cannot continue." |
-| **QC & Preview** | Shows QC statistics and *generic reference comparisons* per parameter map (CBF and ATT reported separately, never averaged), NIfTI previews, and technical details. These are **not** official OSIPI scores; ASL results are **not** ranked and there is no pass/fail. Repeatability CoV and ICC are shown as unavailable until repeated datasets are provided. Without configured reference maps it stays honest and never fabricates scores. |
-| **Export** | Downloads **HTML report**, **PDF report**, and **long-format researcher CSV** (blinded and unblinded — one row per map/ROI/metric). Raw validation, execution, and scoring export endpoints remain available for automation. |
 
 ### Execution Output Definition
 
@@ -185,49 +170,8 @@ my_scoring_package.zip
 - `"standard"` — script called with `--submission-dir`, `--output-dir`, `[--reference-dir]`
 - `"osipi_cwd"` — script run with `cwd=package_dir` (legacy TF6.2 `challengeScoring.py` style)
 
-Two non-official packages are included for testing the workflow:
 
-- `data/sample_submissions/demo_scoring_package.zip` — a minimal DCE demo that writes placeholder test metrics.
-- `asl_qc_demo_scoring_package.zip` (in `submissions/incoming/`) — the **ASL QC Demo Scoring Package**. It reads the real submitted ASL NIfTI maps with nibabel and computes genuine quality-control metrics (finite %, coefficient of variation, negative fraction, and — only when a reference folder is present — RMSE/bias). It is **QC/demo only, not official OSIPI scoring**, and labels itself as such in every output (`official_osipi_scoring: false`).
 
-Neither package produces official OSIPI scores. Official scoring requires the OSIPI reference data described below.
-
-> ⚠ **Security:** Only trusted reviewers/admins should upload scoring packages. A scoring package is Python code that runs on the server. Review `scoring.py` before uploading. Never upload packages from untrusted sources.
-
-### Official vs. demo scoring
-
-| | Official OSIPI scoring | Demo / QC package |
-|---|---|---|
-| Metrics | Official challenge metrics (accuracy, repeatability, reproducibility, OSIPI silver/gold) | QC metrics (finite %, CoV, RMSE/bias only if a reference is supplied) |
-| Reference data | OSIPI DRO/reference NIfTI maps + masks | None required (RMSE/bias appear only if you add a reference) |
-| Use | Challenge evaluation | Pipeline testing / sanity QC |
-| Status | 🔑 Requires OSIPI-owned data | ✅ Included in repo, clearly labelled non-official |
-
----
-
-## Validation Checks
-
-Errors block continuation only when the pipeline truly cannot proceed; warnings never block.
-
-| Check | Severity |
-|-------|----------|
-| Submission folder exists and is not empty | Error |
-| At least one `.nii` or `.nii.gz` file (result-only mode) | Error |
-| Challenge type is present in `config/validation_rules.yaml` | Error |
-| NIfTI files are readable by nibabel | Error |
-| Reproducible mode: a Dockerfile / run instructions present | Error (reproducible mode only) |
-| README or metadata file present | Warning (Error only if marked as included) |
-| NIfTI files have ≥ 3 dimensions and valid affine | Warning |
-| Dockerfile present (result-only mode) | Warning |
-| Code files present | Warning |
-| Expected map names from `config/validation_rules.yaml` | Warning |
-| NIfTI files are not zero bytes | Warning |
-| No duplicate filenames across sub-directories | Warning |
-| NaN or Inf values in NIfTI data | Warning |
-
-> A stray `.gz` archive (e.g. `notes.tar.gz`) is **not** treated as a NIfTI file — only `.nii` and `.nii.gz` count.
-
----
 
 ## Running Tests
 
@@ -256,22 +200,6 @@ Tests cover: NIfTI validation, nibabel integration, ingestion/extraction (single
 
 ---
 
-## CLI Commands
-
-Validate a submission from the command line:
-```bash
-PYTHONPATH=src python3 -m osipi_pipeline.validation.validate \
-  --input submissions/extracted/dce/dce_team_alpha \
-  --challenge dce
-```
-
-Ingest a ZIP:
-```bash
-PYTHONPATH=src python3 -m osipi_pipeline.ingestion.ingest \
-  --input submissions/incoming/team_alpha.zip
-```
-
----
 
 ## Handoff Notes
 
@@ -280,22 +208,3 @@ PYTHONPATH=src python3 -m osipi_pipeline.ingestion.ingest \
 - **Adding a new challenge type** (or changing expected maps): edit `config/validation_rules.yaml`. Defaults, submitted-map search paths, preview exclusions, and ingestion layout rules live in `config/settings.yaml`. See `docs/configuration.md`.
 - **Changing ports**: edit the `ports` entry in `docker-compose.yml`.
 - **All generated outputs** (validation JSONs, CSVs, reports, execution logs) live in `data/outputs/` on the host, mounted into the container.
-
----
-
-## Official OSIPI references
-
-This pipeline is an independent evaluation harness. It does **not** redistribute official OSIPI scoring code or reference data — those must be obtained from OSIPI directly and installed as described under "Enabling the default OSIPI scoring package." Authoritative sources:
-
-- OSIPI organization (GitHub): https://github.com/OSIPI
-- OSIPI Task Force 6.2 — DCE/DSC challenges (page): https://osipi.org/task-force-6-2/
-- OSIPI TF6.2 DCE/DSC Challenges (code/data): https://github.com/OSIPI/TF6.2_DCE-DSC-MRI_Challenges
-- OSIPI DCE-MRI Challenge data (OSF): https://osf.io/u7a6f
-- OSIPI–DCE challenge results (Shalom et al., *Magn Reson Med*, 2024): https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.29909
-- OSIPI Task Force 6.1 — ASL challenges: https://osipi.github.io/task-force-6-1/
-- OSIPI TF2.2 ASL toolbox: https://github.com/OSIPI/TF2.2_OSIPI-ASL-toolbox
-- OSIPI DCE-DSC-MRI CodeCollection: https://github.com/OSIPI/DCE-DSC-MRI_CodeCollection
-- NIfTI-1 format: https://nifti.nimh.nih.gov/nifti-1
-- BIDS specification: https://bids.neuroimaging.io/
-
-The **ASL QC Demo Scoring Package** and the DCE demo package included in this repository are for workflow testing only and are **not** official OSIPI scoring.
