@@ -3070,29 +3070,10 @@ def export_report(
         _metric_card_html("Negative voxels", negative),
         _metric_card_html("Reference availability", reference_status),
     ])
-    validation_chart_html = _bar_svg("Validation outcome summary", [
-        ("Passed checks", max(0, n - error_count), "#047857"),
-        ("Warnings", warning_count, "#b45309"),
-        ("Blocking errors", error_count, "#b91c1c"),
-    ])
-    voxel_chart_html = _stacked_percent_svg("Voxel validity summary", [
-        ("Finite", sum(int(af.get("finite_voxel_count") or 0) for af in fields), "#047857"),
-        ("NaN", sum(int(af.get("nan_count") or 0) for af in fields), "#b45309"),
-        ("Inf", sum(int(af.get("inf_count") or 0) for af in fields), "#b91c1c"),
-    ])
-    negative_chart_html = _bar_svg("Negative voxel percentage by submission", [
-        (_submission_display_name(s, idx, blinded=blinded), (s.get("analysis_fields") or {}).get("negative_voxels_percent"), "#684aa8")
-        for idx, s in enumerate(summaries, start=1)
-    ])
-    map_mean_chart_html = _bar_svg("Map mean summary", [
-        (display, value, "#4b7bec")
-        for display, value in mean_by_map_type.items()
-        if value is not None
-    ])
-    # Keep only informative charts; drop the decorative map-mean bars.
-    charts_html = "".join([validation_chart_html, voxel_chart_html, negative_chart_html])
-    if not charts_html:
-        charts_html = '<p class="report-muted">Not enough numeric data was available to render charts.</p>'
+    # Generic QC bar charts were removed at researcher request: for single
+    # submissions they are trivial, and they are not the submitted-vs-reference
+    # agreement plot the challenge team wants (that is a future, mentor-defined
+    # deliverable). The report stays table-focused.
     # Map preview thumbnails were removed from the report at researcher request
     # (kept in the interactive app, not the printable report).
     issues_html = _issue_rows_html(summaries, blinded=blinded)
@@ -3356,8 +3337,6 @@ def export_report(
   <ul class="summary-list">{summary_html}</ul>
   <h2>Key Metrics</h2>
   <div class="metric-grid">{key_metric_cards_html}</div>
-  <h2>Visual Summary</h2>
-  <div class="chart-grid">{charts_html}</div>
   <h2>Submission Metadata</h2>
   {metadata_html}
   <h2>QC / Evaluation Summary</h2>
