@@ -495,6 +495,17 @@ def _finalize_staged_dir(
         }
 
     # ── Batch: carve per-team submission dirs ─────────────────────────────────
+    #
+    # Files sitting *beside* the batch directories belong to every submission in
+    # the batch — a shared methods document, README, or licence. The carve moves
+    # only the contents of each batch directory, and the staging directory is
+    # then deleted, so without this those files are destroyed and each
+    # submission is later reported as missing a required artifact it did supply.
+    # See CODE_WALKTHROUGH.md §B2.
+    shared_files = sorted(
+        item for item in batch_dirs[0].parent.iterdir() if item.is_file()
+    )
+
     submissions = []
     try:
         for batch_dir in batch_dirs:
@@ -502,6 +513,12 @@ def _finalize_staged_dir(
             sub_dir = _reset_submission_dir(sub_id)
             for item in sorted(batch_dir.iterdir()):
                 shutil.move(str(item), str(sub_dir / item.name))
+            # Copied, not moved: every submission needs its own copy, and the
+            # submission's own file of the same name always wins.
+            for shared in shared_files:
+                target = sub_dir / shared.name
+                if not target.exists():
+                    shutil.copy2(str(shared), str(target))
             manifest = refresh_manifest(sub_dir, submission_id=sub_id, original_path=batch_dir.name)
             detection = detect_submission_metadata(sub_id)
             submissions.append({
@@ -534,23 +551,58 @@ _STRUCTURAL_SUBDIRS: frozenset = frozenset(
 )
 
 
-def _is_structural_layout(dirs: List[Path]) -> bool:
-    """Return True if every directory name is a well-known structural subdirectory.
+def _dataset_dir_names() -> frozenset:
+    """Dataset directory names declared by any challenge, lowercased.
 
-    Example — treat as ONE submission (not a batch)::
+    A challenge such as DCE-2026 lays a submission out as
+    ``<team>/Synthetic/…`` and ``<team>/Clinical/…``, so its dataset
+    directories sit at exactly the level batch detection inspects. They name a
+    *partition of one submission*, not separate teams, and are read from the
+    challenge configuration rather than hardcoded so a challenge that declares
+    its own dataset names is handled automatically.
+    """
+    from osipi_pipeline.config.rules import datasets_by_challenge
+
+    return frozenset(
+        str(name).lower()
+        for spec in datasets_by_challenge().values()
+        for name in spec
+    )
+
+
+def _is_structural_layout(dirs: List[Path]) -> bool:
+    """Return True if every directory name is structural rather than a team.
+
+    Two kinds of name qualify:
+
+    *Layout* subdirectories — treat as ONE submission (not a batch)::
 
         lena_realistic_asl_osipi_named/
             input/        ← structural
             results/      ← structural
                 maps/
 
-    A batch would have team-named subdirectories::
+    *Dataset* subdirectories declared by a challenge — also ONE submission::
+
+        dce_team_alpha/
+            Synthetic/    ← dataset partition
+            Clinical/     ← dataset partition
+
+    Splitting on dataset directories moves the dataset name *above* the
+    submission root, where the identity parser can never see it again; every
+    file then fails identity resolution and dataset-count validation is
+    silently disabled. See CODE_WALKTHROUGH.md §B1.
+
+    A real batch has team-named subdirectories::
 
         batch_upload/
             Team_A/
             Team_B/
     """
-    return bool(dirs) and all(d.name.lower() in _STRUCTURAL_SUBDIRS for d in dirs)
+    if not dirs:
+        return False
+    known = _STRUCTURAL_SUBDIRS | _dataset_dir_names()
+    return all(d.name.lower() in known for d in dirs)
 
 
 def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:

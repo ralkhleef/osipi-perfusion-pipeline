@@ -44,7 +44,7 @@ import struct
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from services.path_config import (
     CODECOLLECTION_DIR,
@@ -669,7 +669,10 @@ def _load_nifti_values(path: Path) -> dict:
         zooms = [float(z) for z in img.header.get_zooms()[: len(data.shape)]]
         return {
             "shape": [int(v) for v in data.shape],
-            "values": [float(v) for v in data.ravel()],
+            # Keep the flat float64 NumPy array (not a Python list): the previous
+            # per-element list conversion cost seconds per map on full-resolution
+            # data. Consumers (_comparison_metrics, diff maps) handle arrays.
+            "values": data.reshape(-1),
             "affine": affine,
             "voxel_size": zooms,
             "reader": "nibabel",
@@ -813,11 +816,18 @@ def _write_float32_nifti(
         for i in range(1, min(ndim, 3) + 1):
             header[76 + i * 4 : 76 + i * 4 + 4] = struct.pack("<f", 1.0)
     path.parent.mkdir(parents=True, exist_ok=True)
-    safe_values = [
-        float(v) if isinstance(v, (int, float)) and math.isfinite(float(v)) else float("nan")
-        for v in values
-    ]
-    path.write_bytes(bytes(header) + b"\x00\x00\x00\x00" + struct.pack(f"<{len(safe_values)}f", *safe_values))
+    try:
+        import numpy as np  # type: ignore
+        arr = np.asarray(values, dtype=np.float32).reshape(-1)
+        arr = np.where(np.isfinite(arr), arr, np.float32("nan")).astype("<f4")
+        payload = arr.tobytes()
+    except Exception:
+        safe_values = [
+            float(v) if isinstance(v, (int, float)) and math.isfinite(float(v)) else float("nan")
+            for v in values
+        ]
+        payload = struct.pack(f"<{len(safe_values)}f", *safe_values)
+    path.write_bytes(bytes(header) + b"\x00\x00\x00\x00" + payload)
 
 
 def _filename_tokens(path: Path) -> set[str]:
@@ -832,6 +842,42 @@ def _is_mask_like(path: Path) -> bool:
         bool(parts.intersection(_PRIVATE_PATH_PARTS).intersection({"mask", "masks"}))
         or any(pattern in name for pattern in _MASK_NAME_PATTERNS)
     )
+
+
+def canonical_path_key(path: Path):
+    """A key that is equal for two paths naming the same physical file.
+
+    ``Path`` equality is textual, and ``Path.resolve()`` does not normalise
+    case on macOS, so ``reference/masks/t.nii.gz`` and
+    ``reference/Masks/t.nii.gz`` compare as different paths while being the
+    same file on any case-insensitive filesystem — macOS APFS by default, and
+    Windows. Deduplicating on ``Path`` therefore admits every reference map
+    and every ROI mask twice, and because ROI identity is derived from the
+    mask *filename*, the duplicate statistics are indistinguishable in the
+    CSV, the report tables, and any aggregate. See CODE_WALKTHROUGH.md §B4.
+
+    ``(st_dev, st_ino)`` is the filesystem's own answer to "is this the same
+    file", so it also collapses symlinks and hard links. Where stat is not
+    available the case-normalised real path is a sound fallback.
+    """
+    try:
+        stat = path.stat()
+        return (stat.st_dev, stat.st_ino)
+    except OSError:
+        return os.path.normcase(os.path.realpath(str(path)))
+
+
+def _dedupe_paths(paths: Iterable[Path]) -> list[Path]:
+    """Keep the first path naming each distinct physical file, in order."""
+    seen: set = set()
+    unique: list[Path] = []
+    for path in paths:
+        key = canonical_path_key(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
 
 
 def _reference_roots(submission_id: str, challenge_type: str) -> list[Path]:
@@ -855,33 +901,42 @@ def _reference_roots(submission_id: str, challenge_type: str) -> list[Path]:
     except Exception:
         pass
 
-    seen: set[str] = set()
+    # Case-insensitive filesystems make two spellings of one directory look
+    # like two roots; canonical_path_key collapses them.
+    seen: set = set()
     existing: list[Path] = []
     for root in roots:
-        try:
-            resolved = str(root.resolve())
-        except Exception:
-            resolved = str(root)
-        if resolved in seen or not root.exists():
+        if not root.exists():
             continue
-        seen.add(resolved)
+        key = canonical_path_key(root)
+        if key in seen:
+            continue
+        seen.add(key)
         existing.append(root)
     return existing
 
 
 def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
-    map_dirs = [root / "maps", root / "Maps", root]
+    """Reference maps grouped by detected type, one entry per physical file.
+
+    Both spellings of the maps directory are searched because either may be
+    what a provider shipped; on a case-insensitive filesystem they are the
+    same directory, so results are deduplicated by physical file identity
+    rather than by path text.
+    """
+    map_dirs = _dedupe_paths([root / "maps", root / "Maps", root])
     by_type: dict[str, list[Path]] = {}
+    seen: set = set()
     for map_dir in map_dirs:
         for path in _nifti_file_list(map_dir):
-            if _is_mask_like(path):
+            key = canonical_path_key(path)
+            if key in seen or _is_mask_like(path):
                 continue
             detected = _detect_map_type(path).get("detected_map_type")
             if not detected or detected == "Unknown":
                 continue
-            by_type.setdefault(str(detected), [])
-            if path not in by_type[str(detected)]:
-                by_type[str(detected)].append(path)
+            seen.add(key)
+            by_type.setdefault(str(detected), []).append(path)
     return by_type
 
 
@@ -896,8 +951,138 @@ def _mask_label_for_name(name: str) -> str:
     return stem or name
 
 
+import logging as _logging
+
+_LOGGER = _logging.getLogger(__name__)
+
+
+def submission_artifacts(submission_id: str) -> list:
+    """Normalized artifacts for a submission, from the existing manifest.
+
+    Reuses the manifest the scoring path has already refreshed — no second
+    traversal of the submission tree.
+    """
+    from osipi_pipeline.ingestion.manifest import load_manifest
+    from osipi_pipeline.ingestion.models import SubmissionArtifact
+
+    root = EXTRACTED_DIR / submission_id
+    manifest = load_manifest(root, refresh_if_stale=False) or {}
+    return [
+        SubmissionArtifact(**item)
+        for item in manifest.get("artifacts", [])
+        if isinstance(item, dict)
+    ]
+
+
+def _attach_roi_descriptives(
+    reference_scoring: dict, submission_id: str, challenge_type: str
+) -> None:
+    """Populate ROI descriptive statistics on the reference-scoring result.
+
+    Distinguishes *expected scientific unavailability* — no masks, no
+    eligible Ktrans — from an unexpected internal error. The former is a
+    normal outcome recorded as a status, not an application fault, so it is
+    not logged as a crash.
+    """
+    from services.roi_descriptive_service import (
+        eligible_artifacts,
+        roi_definitions_from_masks,
+    )
+
+    try:
+        artifacts = submission_artifacts(submission_id)
+        eligible = eligible_artifacts(artifacts, challenge=challenge_type)
+        reference_root = reference_scoring.get("reference_root")
+        masks = _reference_masks(Path(reference_root)) if reference_root else []
+
+        if not masks:
+            reference_scoring["roi_descriptive_status"] = "no_roi_configured"
+            return
+        if not eligible:
+            reference_scoring["roi_descriptive_status"] = "no_eligible_maps"
+            return
+
+        attach_roi_descriptive_statistics(
+            reference_scoring, artifacts,
+            challenge_type=challenge_type,
+            root=EXTRACTED_DIR / submission_id,
+        )
+        reference_scoring["roi_descriptive_status"] = "available"
+    except Exception:
+        # Unexpected only. Existing QC and reference metrics are preserved;
+        # the ROI layer degrades to an explicit unavailable status.
+        _LOGGER.exception(
+            "ROI descriptive statistics failed for %s", submission_id)
+        reference_scoring.setdefault("roi_descriptive_statistics", [])
+        reference_scoring["roi_descriptive_status"] = "calculation_error"
+
+
+def _reference_scoring_result_keys_probe() -> dict:
+    """Return an empty reference-scoring result. Test seam for shape checks.
+
+    Calls the real builder with no maps, so the asserted key set is the one
+    production actually produces rather than a copy that could drift.
+    """
+    return _score_reference_maps("__probe__", "dce", [])
+
+
+def _roi_methodology() -> dict:
+    """Formula conventions for the ROI descriptive statistics.
+
+    Emitted once per result rather than repeated on every row.
+    """
+    from services.roi_descriptive_service import methodology
+
+    return methodology()
+
+
+def attach_roi_descriptive_statistics(
+    reference_result: dict,
+    artifacts,
+    *,
+    challenge_type: str,
+    root: Path,
+) -> dict:
+    """Populate ``roi_descriptive_statistics`` on a reference-scoring result.
+
+    Reuses the masks the reference scoring already discovered, so ROI
+    definitions come from one place. Computed once here; the API, JSON, CSV
+    and report model all read these records rather than recomputing.
+
+    Failure is non-fatal: descriptive statistics are additive, and existing
+    reference metrics must not be lost because an ROI could not be read.
+    """
+    from services.roi_descriptive_service import (
+        compute_roi_descriptive_statistics,
+        roi_definitions_from_masks,
+    )
+
+    reference_root = reference_result.get("reference_root")
+    masks = _reference_masks(Path(reference_root)) if reference_root else []
+    rois = roi_definitions_from_masks(masks)
+    # Deliberately not wrapped in try/except here. The caller owns failure
+    # handling and sets the status; catching it twice meant the inner handler
+    # swallowed the error and the caller then recorded "available" for a run
+    # that had actually failed.
+    results = compute_roi_descriptive_statistics(
+        artifacts, rois, challenge=challenge_type, root=root,
+    )
+    reference_result["roi_descriptive_statistics"] = [
+        item.to_dict() for item in results
+    ]
+    return reference_result
+
+
 def _reference_masks(root: Path) -> list[dict]:
-    mask_dirs = [root / "masks", root / "Masks"]
+    """ROI masks under a reference root, one entry per physical file.
+
+    Both spellings of the masks directory are searched, so deduplication must
+    be by physical file identity: on a case-insensitive filesystem the two
+    spellings are one directory, and keying on ``Path`` admitted every mask
+    twice — doubling every ROI statistic in every output. See
+    CODE_WALKTHROUGH.md §B4.
+    """
+    mask_dirs = _dedupe_paths([root / "masks", root / "Masks"])
     paths: list[Path] = []
     for mask_dir in mask_dirs:
         paths.extend(_nifti_file_list(mask_dir))
@@ -905,14 +1090,13 @@ def _reference_masks(root: Path) -> list[dict]:
         paths = [p for p in _nifti_file_list(root) if _is_mask_like(p)]
 
     masks = []
-    seen: set[Path] = set()
-    for path in paths:
-        if path in seen:
-            continue
-        seen.add(path)
+    for path in _dedupe_paths(paths):
         name = path.name
-        label = _mask_label_for_name(name)
-        masks.append({"name": name, "label": label, "path": path})
+        masks.append({
+            "name": name,
+            "label": _mask_label_for_name(name),
+            "path": path,
+        })
     return masks
 
 
@@ -946,6 +1130,107 @@ def _correlation(xs: list[float], ys: list[float]):
 
 
 def _comparison_metrics(
+    submitted_values,
+    reference_values,
+    selector=None,
+) -> dict:
+    """Voxelwise comparison metrics.
+
+    Uses a vectorised NumPy path (100x+ faster on full-resolution maps) and falls
+    back to the pure-Python implementation when NumPy is unavailable. The two
+    paths compute the identical statistics (verified by the reference-scoring
+    tests), so scoring values are unchanged — only faster.
+    """
+    try:
+        import numpy as np  # type: ignore
+    except Exception:
+        return _comparison_metrics_py(submitted_values, reference_values, selector)
+
+    sub = np.asarray(submitted_values, dtype=np.float64).reshape(-1)
+    ref = np.asarray(reference_values, dtype=np.float64).reshape(-1)
+    if selector is None:
+        sel = np.ones(sub.shape[0], dtype=bool)
+    else:
+        sel = np.asarray(selector, dtype=bool).reshape(-1)
+    total_count = int(sel.sum())
+
+    m = min(sub.shape[0], ref.shape[0], sel.shape[0])
+    sub_s = sub[:m][sel[:m]]
+    ref_s = ref[:m][sel[:m]]
+    sub_fin = np.isfinite(sub_s)
+    ref_fin = np.isfinite(ref_s)
+    submitted_finite_count = int(sub_fin.sum())
+    reference_finite_count = int(ref_fin.sum())
+    both = sub_fin & ref_fin
+    sf = sub_s[both]
+    rf = ref_s[both]
+    n = int(sf.shape[0])
+
+    if not n:
+        status = "no_finite_overlap"
+        error = "No finite submitted/reference voxel pairs were available in the scored region."
+        if total_count > 0 and reference_finite_count == 0:
+            status = "reference_invalid"
+            error = "Reference map has no finite voxels in the scored region."
+        elif total_count > 0 and submitted_finite_count == 0:
+            status = "submitted_invalid"
+            error = "Submitted map has no finite voxels in the scored region."
+        return {
+            "status": status,
+            "error": error,
+            "voxel_count": 0,
+            "total_voxel_count": total_count,
+            "finite_voxel_percent": _pct(0, total_count),
+            "negative_voxel_percent": None,
+            "bias": None,
+            "mean_error": None,
+            "mae": None,
+            "rmse": None,
+            "standard_deviation_error": None,
+            "coefficient_of_variation": None,
+            "correlation": None,
+        }
+
+    errors = sf - rf
+    negative_count = int((sf < 0).sum())
+    bias = float(errors.mean())
+    mae = float(np.abs(errors).mean())
+    rmse = float(np.sqrt(np.mean(errors * errors)))
+    std_error = float(np.sqrt(np.mean((errors - bias) ** 2)))
+    ref_mean = float(rf.mean())
+    cov = std_error / abs(ref_mean) if ref_mean else None
+
+    # Pearson correlation (sample form, matching _correlation()).
+    corr = None
+    if n >= 2:
+        dx = sf - sf.mean()
+        dy = rf - rf.mean()
+        sx = float(np.sqrt(np.sum(dx * dx)))
+        sy = float(np.sqrt(np.sum(dy * dy)))
+        if sx and sy:
+            corr = float(np.sum(dx * dy) / (sx * sy))
+
+    return {
+        "status": "compared",
+        "voxel_count": n,
+        "total_voxel_count": total_count,
+        "finite_voxel_percent": _pct(n, total_count),
+        "negative_voxel_percent": _pct(negative_count, n),
+        "mean_submitted": _json_float(float(sf.mean())),
+        "mean_reference": _json_float(ref_mean),
+        "bias": _json_float(bias),
+        "mean_error": _json_float(bias),
+        "mae": _json_float(mae),
+        "rmse": _json_float(rmse),
+        "standard_deviation_error": _json_float(std_error),
+        "error_coefficient_of_variation": _json_float(cov),
+        "coefficient_of_variation": _json_float(cov),  # backward-compat alias
+        "cov_kind": "error_cov",
+        "correlation": _json_float(corr),
+    }
+
+
+def _comparison_metrics_py(
     submitted_values: list[float],
     reference_values: list[float],
     selector: Optional[list[bool]] = None,
@@ -1033,6 +1318,35 @@ def _comparison_metrics(
     }
 
 
+def _difference_values(submitted_values, reference_values):
+    """Voxelwise (submitted - reference); NaN where either voxel is non-finite."""
+    try:
+        import numpy as np  # type: ignore
+        s = np.asarray(submitted_values, dtype=np.float64).reshape(-1)
+        r = np.asarray(reference_values, dtype=np.float64).reshape(-1)
+        m = min(s.shape[0], r.shape[0])
+        s, r = s[:m], r[:m]
+        return np.where(np.isfinite(s) & np.isfinite(r), s - r, np.nan)
+    except Exception:
+        return [
+            (float(s) - float(r)) if math.isfinite(float(s)) and math.isfinite(float(r)) else float("nan")
+            for s, r in zip(submitted_values, reference_values)
+        ]
+
+
+def _mask_selector(mask_values):
+    """Boolean selector for a mask: include voxels that are finite and > 0."""
+    try:
+        import numpy as np  # type: ignore
+        m = np.asarray(mask_values, dtype=np.float64).reshape(-1)
+        return np.isfinite(m) & (m > 0)
+    except Exception:
+        return [
+            isinstance(v, (int, float)) and math.isfinite(float(v)) and float(v) > 0
+            for v in mask_values
+        ]
+
+
 def _score_reference_maps(
     submission_id: str,
     challenge_type: str,
@@ -1049,6 +1363,13 @@ def _score_reference_maps(
         "mask_count": 0,
         "warnings": [],
         "maps": [],
+        # Additive (Phase 4). Within-ROI descriptive statistics for the
+        # submitted maps — distinct from the reference-error metrics below,
+        # and never a substitute for them. Populated by
+        # attach_roi_descriptive_statistics once scan identity is available.
+        "roi_descriptive_statistics": [],
+        "roi_descriptive_methodology": _roi_methodology(),
+        "roi_descriptive_status": "not_calculated",
         "summary": {
             "reference_map_count": 0,
             "compared_map_count": 0,
@@ -1174,10 +1495,6 @@ def _score_reference_maps(
 
         sub_values = sub_data["values"]
         ref_values = ref_data["values"]
-        diff_values = [
-            (float(s) - float(r)) if math.isfinite(float(s)) and math.isfinite(float(r)) else float("nan")
-            for s, r in zip(sub_values, ref_values)
-        ]
         whole_metrics = _comparison_metrics(sub_values, ref_values)
         row["status"] = whole_metrics.get("status", "compared")
         row["whole_map"] = whole_metrics
@@ -1186,6 +1503,8 @@ def _score_reference_maps(
         if whole_metrics.get("status") == "compared":
             compared_metrics.append(whole_metrics)
 
+        # Difference map is only built when an artifact dir is provided (it is not
+        # needed for the report/QC path), so compute it lazily here.
         if artifact_dir is not None:
             diff_dir = artifact_dir / "reference_difference_maps"
             diff_name = submitted_path.name
@@ -1195,6 +1514,7 @@ def _score_reference_maps(
                 diff_name = diff_name[:-4]
             diff_path = diff_dir / f"{diff_name}_difference.nii"
             try:
+                diff_values = _difference_values(sub_values, ref_values)
                 _write_float32_nifti(
                     diff_path, sub_data["shape"], diff_values, affine=sub_data.get("affine")
                 )
@@ -1222,10 +1542,7 @@ def _score_reference_maps(
                 mask_row["error"] = f"Mask shape {mask_data['shape']} does not match submitted/reference shape {sub_data['shape']}."
                 row["masks"].append(mask_row)
                 continue
-            selector = [
-                isinstance(v, (int, float)) and math.isfinite(float(v)) and float(v) > 0
-                for v in mask_data["values"]
-            ]
+            selector = _mask_selector(mask_data["values"])
             mask_row["metrics"] = _comparison_metrics(sub_values, ref_values, selector)
             mask_row["status"] = mask_row["metrics"].get("status", "compared")
             row["masks"].append(mask_row)
@@ -1541,6 +1858,11 @@ def analyze_submission_niftis(
     files = _find_output_niftis(submission_id, challenge_type)
     maps = [_analyse_nifti_file(path) for path in files]
     reference_scoring = _score_reference_maps(submission_id, challenge_type, maps, artifact_dir)
+    # ROI descriptive statistics are computed exactly once, here, using the
+    # masks the reference scoring just discovered. Every downstream consumer
+    # (API, JSON, CSV, HTML, PDF, frontend) reads the records off this result
+    # rather than recomputing them.
+    _attach_roi_descriptives(reference_scoring, submission_id, challenge_type)
     if artifact_dir is not None:
         try:
             _write_reference_scoring_artifacts(artifact_dir, reference_scoring)

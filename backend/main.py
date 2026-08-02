@@ -71,7 +71,30 @@ from services.nifti_preview_service import (
     public_preview_item,
     public_preview_manifest,
 )
-from services.pdf_report_service import generate_pdf_report
+from services.pdf_report_service import (
+    ROI_METHOD_TEXT,
+    _build_report_model,
+    affected_display,
+    build_limitations,
+    generate_pdf_report,
+    report_filename_tag,
+)
+from services.report_branding import (
+    MONO_STACK,
+    BRAND,
+    SANS_STACK,
+    SERIF_STACK,
+    lockup_data_uri,
+    logo_data_uri,
+    status_tone as report_status_tone,
+)
+from osipi_pipeline.scoring.descriptive_statistics import (
+    CSV_COLUMNS as ROI_CSV_COLUMNS,
+)
+from services.report_figures import (
+    bland_altman_figure,
+    to_svg as figure_to_svg,
+)
 from osipi_pipeline.config.rules import (
     app_settings,
     challenge_labels,
@@ -684,8 +707,18 @@ def _find_validation_files(submission_id: Optional[str] = None):
     unique.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     if submission_id:
-        safe = submission_id.replace("/", "_").replace("\\", "_")
-        unique = [f for f in unique if submission_id in f.stem or safe in f.stem]
+        # Exact stem match, never a substring. Files are written as
+        # "<submission_id>_validation.json", so substring matching made any id
+        # that is a *prefix* of a real one resolve to that other submission's
+        # results — and batch carving creates exactly such prefixes
+        # ("team_gamma" vs "team_gamma_Clinical"). A blinded report for a
+        # mistyped id would then render another team's findings under the
+        # requested label. See CODE_WALKTHROUGH.md §B3.
+        wanted = {
+            f"{submission_id}_validation",
+            f"{submission_id.replace('/', '_').replace(chr(92), '_')}_validation",
+        }
+        unique = [f for f in unique if f.stem in wanted]
 
     return unique
 
@@ -1877,6 +1910,62 @@ def scoring_set_active(req: ScoringSetActiveRequest):
     return {"success": True, "challenge_type": ct, "active": entry}
 
 
+@app.get("/api/export-roi-descriptive")
+def export_roi_descriptive(
+    submission_id: Optional[str] = Query(None),
+    batch_id:      Optional[str] = Query(None),
+    blinded:       bool          = Query(False, description="True to use a neutral download filename"),
+):
+    """Export within-ROI Ktrans descriptive statistics as CSV.
+
+    One row per scan and ROI. Values are the canonical records computed once
+    during scoring — this endpoint reads them, it does not recompute.
+
+    Kept separate from the reference-error CSV: within-scan spatial spread
+    and error-against-reference are different quantities, and merging them
+    into one file would invite them being read as the same thing.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(list(ROI_CSV_COLUMNS))
+
+    sids = _collect_export_ids(batch_id, submission_id)
+    for sid in sids:
+        for record in _roi_descriptive_records(sid):
+            writer.writerow([
+                "" if record.get(column) is None else record.get(column)
+                for column in ROI_CSV_COLUMNS
+            ])
+
+    # The ROI columns carry scan identity only (dataset/participant/repeat/site),
+    # never team identity, so the rows are safe in either mode; ``blinded`` only
+    # governs the download filename.
+    tag = report_filename_tag(
+        (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
+    # A header-only CSV is returned when there are no records, rather than a
+    # 404: "no ROI statistics" is a valid outcome, not a missing resource.
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition":
+                 f'attachment; filename="roi_descriptive_statistics_{tag}.csv"'},
+    )
+
+
+def _roi_descriptive_records(submission_id: str) -> list[dict]:
+    """Canonical ROI records for one submission. Never recomputes."""
+    try:
+        summary = _gather_summary(submission_id)
+    except Exception:
+        return []
+    analysis = summary.get("nifti_analysis")
+    analysis = analysis if isinstance(analysis, dict) else {}
+    scoring = analysis.get("reference_scoring")
+    scoring = scoring if isinstance(scoring, dict) else {}
+    records = scoring.get("roi_descriptive_statistics")
+    return [r for r in (records or []) if isinstance(r, dict)]
+
+
 @app.get("/api/export-scoring")
 def export_scoring(
     submission_id:  Optional[str] = Query(None),
@@ -2013,15 +2102,45 @@ def export_scoring(
 # Combined summary export + HTML report
 # ---------------------------------------------------------------------------
 
+def submission_exists(submission_id: str) -> bool:
+    """True when anything on disk belongs to this exact submission id.
+
+    A submission counts as present if it has been extracted, validated,
+    executed, or scored. Any one of those is enough — an export may legitimately
+    run before some stages have.
+    """
+    sid = (submission_id or "").strip()
+    if not sid:
+        return False
+    if (EXTRACTED_DIR / sid).is_dir():
+        return True
+    if _find_validation_files(sid):
+        return True
+    if _exec_result_path(sid).exists():
+        return True
+    # No bare try/except here: swallowing the lookup would silently downgrade
+    # every scored-but-unvalidated submission to "not found".
+    return load_scoring_result(sid) is not None
+
+
 def _collect_export_ids(batch_id: Optional[str], submission_id: Optional[str]) -> List[str]:
-    """Resolve a batch_id or submission_id to a list of submission IDs."""
+    """Resolve a batch_id or submission_id to a list of submission IDs.
+
+    An unknown id is a 404. Previously any string was accepted and the export
+    rendered from empty defaults, so a typo produced a clean, plausible,
+    entirely blank report rather than an error. See CODE_WALKTHROUGH.md §B3.
+    """
     if batch_id:
         batch_result = find_batch_result(batch_id)
         if not batch_result:
             raise HTTPException(status_code=404, detail=f"Batch {batch_id!r} not found.")
         return [r["submission_id"] for r in (batch_result.get("results") or [])]
     if submission_id:
-        return [submission_id.strip()]
+        sid = submission_id.strip()
+        if not submission_exists(sid):
+            raise HTTPException(
+                status_code=404, detail=f"Submission {sid!r} not found.")
+        return [sid]
     raise HTTPException(status_code=400, detail="submission_id or batch_id is required.")
 
 
@@ -2667,7 +2786,8 @@ def export_combined(
             summaries.append(item)
         if not summaries:
             raise HTTPException(status_code=404, detail="No submissions found to export.")
-        tag = (batch_id or submission_id or "export").replace("/", "_")
+        tag = report_filename_tag(
+            (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
         suffix = "blinded" if blinded else "unblinded"
         return Response(
             content=json.dumps({
@@ -2693,7 +2813,8 @@ def export_combined(
         for r in long_rows:
             w.writerow(r)
         suffix = "blinded" if blinded else "unblinded"
-        tag = (batch_id or submission_id or "export").replace("/", "_")
+        tag = report_filename_tag(
+            (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
         return Response(
             content=out.getvalue(),
             media_type="text/csv",
@@ -2747,7 +2868,8 @@ def export_combined(
         raise HTTPException(status_code=404, detail="No submissions found to export.")
 
     suffix = "blinded" if blinded else "unblinded"
-    tag    = (batch_id or submission_id or "export").replace("/", "_")
+    tag    = report_filename_tag(
+        (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
@@ -2779,130 +2901,20 @@ def _report_status(value: object) -> str:
     return raw.replace("_", " ").replace("-", " ").title()
 
 
-def _status_chip_html(label: str, tone: str) -> str:
-    return f'<span class="r-chip r-chip-{_esc(tone)}">{_esc(label)}</span>'
+def _status_chip_html(label: str, tone: str | None = None) -> str:
+    """Status as a coloured dot plus plain text.
 
-
-def _metric_card_html(label: str, value: object, note: str = "") -> str:
-    note_html = f'<span class="metric-note">{_esc(note)}</span>' if note else ""
-    return (
-        '<div class="metric-card">'
-        f'<span class="metric-label">{_esc(label)}</span>'
-        f'<strong>{_esc(_fmt_report_cell(value))}</strong>'
-        f'{note_html}</div>'
-    )
-
-
-def _bar_svg(title: str, values: list[tuple[str, float | int | None, str]], *, width: int = 520) -> str:
-    numeric = [(label, max(0.0, float(value or 0)), color) for label, value, color in values]
-    if not numeric:
-        return ""
-    max_value = max((value for _label, value, _color in numeric), default=0.0)
-    if max_value <= 0:
-        return ""
-    row_h = 30
-    label_w = 155
-    chart_w = width - label_w - 58
-    height = 34 + row_h * len(numeric)
-    rows: list[str] = []
-    for idx, (label, value, color) in enumerate(numeric):
-        y = 28 + idx * row_h
-        bar_w = 0 if max_value <= 0 else max(1, (value / max_value) * chart_w)
-        rows.append(
-            f'<text x="0" y="{y + 13}" class="svg-label">{_esc(label)}</text>'
-            f'<rect x="{label_w}" y="{y}" width="{chart_w}" height="16" rx="3" class="svg-track"/>'
-            f'<rect x="{label_w}" y="{y}" width="{bar_w:.1f}" height="16" rx="3" fill="{_esc(color)}"/>'
-            f'<text x="{label_w + chart_w + 8}" y="{y + 13}" class="svg-value">{_esc(_fmt_report_cell(value))}</text>'
-        )
-    return (
-        f'<figure class="report-chart" role="img" aria-label="{_esc(title)}">'
-        f'<figcaption>{_esc(title)}</figcaption>'
-        f'<svg viewBox="0 0 {width} {height}" aria-hidden="true">'
-        f'<text x="0" y="14" class="svg-title">{_esc(title)}</text>'
-        + "".join(rows)
-        + '</svg></figure>'
-    )
-
-
-def _stacked_percent_svg(title: str, values: list[tuple[str, float | int | None, str]]) -> str:
-    numeric = [(label, max(0.0, float(value or 0)), color) for label, value, color in values]
-    total = sum(value for _label, value, _color in numeric)
-    if total <= 0:
-        return ""
-    x = 0.0
-    segments = []
-    legend = []
-    for label, value, color in numeric:
-        pct = value / total * 100.0
-        segments.append(f'<rect x="{x:.3f}" y="0" width="{pct:.3f}" height="14" fill="{_esc(color)}"/>')
-        legend.append(f'<span><i style="background:{_esc(color)}"></i>{_esc(label)}: {_esc(_fmt_report_cell(value))}</span>')
-        x += pct
-    return (
-        f'<figure class="report-chart compact-chart" role="img" aria-label="{_esc(title)}">'
-        f'<figcaption>{_esc(title)}</figcaption>'
-        '<svg viewBox="0 0 100 14" preserveAspectRatio="none" aria-hidden="true">'
-        + "".join(segments)
-        + '</svg>'
-        f'<div class="chart-legend">{"".join(legend)}</div>'
-        '</figure>'
-    )
-
-
-def _preview_is_parameter_map(item: dict) -> bool:
-    """True when a preview item is a 3-D recognized parameter map (CBF/ATT/…).
-
-    Prefers the ``is_parameter_map`` flag set by the preview service; falls back
-    to shape + map type for manifests written before that flag existed.
+    The journal treatment deliberately avoids filled pills: the dot carries
+    the signal, the text carries the meaning, and both survive a monochrome
+    print (the inks differ enough in value to stay distinguishable in grey).
     """
-    if isinstance(item.get("is_parameter_map"), bool):
-        return item["is_parameter_map"]
-    shape = [d for d in (item.get("shape") or []) if d]
-    map_type = str(item.get("detected_map_type") or "").strip().lower()
-    return len(shape) == 3 and map_type not in {"", "unknown", "mixed/other"}
+    tone = tone or report_status_tone(label)
+    return (
+        f'<span class="stat stat-{_esc(tone)}">'
+        f'<span class="dot" aria-hidden="true"></span>{_esc(label)}</span>'
+    )
 
 
-def _report_preview_gallery(summaries: list[dict], *, blinded: bool) -> str:
-    cards: list[str] = []
-    for idx, summary in enumerate(summaries, start=1):
-        sid = str(summary.get("submission_id") or "")
-        manifest_path = OUTPUTS_DIR / "previews" / make_safe_id(sid) / "preview_manifest.json"
-        if not sid or not manifest_path.exists():
-            continue
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        for item in manifest.get("maps") or []:
-            if not item.get("preview_available"):
-                continue
-            # Only 3-D recognized parameter maps (CBF/ATT/…) belong in the gallery.
-            # 4-D ASL/model data and unrecognized files are excluded so no
-            # "Unknown" card appears beside CBF and ATT.
-            if not _preview_is_parameter_map(item):
-                continue
-            map_id = str(item.get("map_id") or "")
-            image_path = OUTPUTS_DIR / "previews" / make_safe_id(sid) / f"{map_id}_axial.png"
-            if not image_path.exists():
-                continue
-            try:
-                encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
-            except Exception:
-                continue
-            sub_label = _submission_display_name(summary, idx, blinded=blinded)
-            cards.append(
-                '<figure class="preview-card">'
-                f'<img src="data:image/png;base64,{encoded}" alt="Axial preview for {_esc(item.get("detected_map_type") or "map")}">'
-                f'<figcaption><strong>{_esc(item.get("detected_map_type") or "Unknown map")}</strong>'
-                f'<span>{_esc(sub_label)}</span></figcaption>'
-                '</figure>'
-            )
-            if len(cards) >= 8:
-                break
-        if len(cards) >= 8:
-            break
-    if not cards:
-        return '<p class="report-muted">No parameter-map previews are available.</p>'
-    return '<div class="preview-gallery">' + "".join(cards) + '</div>'
 
 
 def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
@@ -2916,11 +2928,13 @@ def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
             for msg in messages:
                 if isinstance(msg, dict):
                     text = str(msg.get("message") or msg.get("code") or "Issue recorded.")
-                    affected = str(msg.get("path") or "")
+                    affected = msg.get("path")
                 else:
                     text = str(msg)
                     affected = ""
-                affected_label = Path(affected).name if affected else "Not specified"
+                # Shared with the PDF renderer so the two cannot disagree about
+                # what a blinded report may show.
+                affected_label = affected_display(affected, summary, label, blinded=blinded)
                 action = (
                     "Fix the blocking issue and validate again."
                     if severity == "Blocking error"
@@ -2928,15 +2942,22 @@ def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
                 )
                 rows.append(
                     "<tr>"
-                    f"<td>{_esc(severity)}</td><td>{_esc(label)}</td><td>{_esc(text)}</td><td>{_esc(affected_label)}</td><td>{_esc(action)}</td>"
+                    f"<td>{_status_chip_html(severity)}</td><td>{_esc(label)}</td><td>{_esc(text)}</td><td>{_esc(affected_label)}</td><td>{_esc(action)}</td>"
                     "</tr>"
                 )
     if not rows:
-        rows.append('<tr><td colspan="5">No blocking errors or warnings were recorded.</td></tr>')
+        rows.append(
+            '<tr><td colspan="5">'
+            + _status_chip_html("None recorded", "ok")
+            + "</td></tr>"
+        )
     return (
-        '<table><caption>Errors, warnings, and recommended actions</caption>'
-        '<thead><tr><th>Severity</th><th>Submission</th><th>Message</th><th>Affected file</th><th>Recommended action</th></tr></thead>'
-        '<tbody>' + "".join(rows) + '</tbody></table>'
+        '<div class="table-wrap"><table>'
+        "<caption>Table 4. Errors and warnings raised during validation, with the "
+        "action required before the submission can be shared.</caption>"
+        '<thead><tr><th>Severity</th><th>Submission</th><th>Message</th>'
+        "<th>Affected file</th><th>Recommended action</th></tr></thead>"
+        "<tbody>" + "".join(rows) + "</tbody></table></div>"
     )
 
 
@@ -2962,10 +2983,7 @@ def export_report(
         s.get("analysis_fields") if isinstance(s.get("analysis_fields"), dict) else {}
         for s in summaries
     ]
-    n = len(summaries)
-    map_count = sum(int(af.get("map_count") or 0) for af in fields)
     warning_count = sum(int(s.get("warning_count") or 0) for s in summaries)
-    error_count = sum(int(s.get("error_count") or 0) for s in summaries)
     map_types = sorted({
         mt.strip()
         for af in fields
@@ -2980,18 +2998,10 @@ def export_report(
     reference_available = any(_reference_available(af) for af in fields)
     reference_status = "Available" if reference_available else "Not available"
     session_name = (
-        f"Batch {batch_id}" if batch_id
+        (f"Batch ({len(summaries)} submissions)" if blinded else f"Batch {batch_id}") if batch_id
         else (_submission_display_name(summaries[0], 1, blinded=blinded) if len(summaries) == 1 else "Export session")
     )
 
-    finite = _weighted_percent(
-        (af.get("finite_voxel_count") for af in fields),
-        (af.get("total_voxel_count") for af in fields),
-    )
-    negative = _weighted_percent(
-        (af.get("negative_voxel_count") for af in fields),
-        (af.get("finite_voxel_count") for af in fields),
-    )
     combined_mean_columns = _combined_mean_columns()
     mean_by_map_type = {
         display: _mean_numeric((af.get("means_by_map_type") or {}).get(display) for af in fields)
@@ -3002,74 +3012,17 @@ def export_report(
         if mean_by_map_type.get(display) is not None
     ]
     cov = _mean_numeric(af.get("mean_coefficient_of_variation") for af in fields)
-    rmse = _mean_numeric(af.get("reference_mean_rmse") for af in fields if _reference_available(af))
-    mae = _mean_numeric(af.get("reference_mean_mae") for af in fields if _reference_available(af))
-    bias = _mean_numeric(af.get("reference_mean_bias") for af in fields if _reference_available(af))
 
-    # ── Challenge scoping ─────────────────────────────────────────────────────
-    # Never compute a single RMSE/MAE/Bias/CoV across different challenges. When
-    # more than one challenge is present, aggregates are reported PER CHALLENGE.
-    is_mixed_challenge = len(challenges) > 1
+    # Built exactly once. This walks every submission, map, and ROI, so the
+    # HTML path used to pay for it twice: once here and once again further
+    # down purely to read the Methods paragraphs off it. Per-challenge
+    # scoping of RMSE/MAE/bias now lives in the model, which is also what
+    # the PDF uses, so the two cannot disagree.
+    report_model = _build_report_model(
+        summaries, tag=(batch_id or submission_id or "report"), blinded=blinded
+    )
 
-    def _fields_for_challenge(ch: str) -> list:
-        return [
-            s["analysis_fields"]
-            for s in summaries
-            if str(s.get("challenge_type") or "").strip().upper() == ch
-            and isinstance(s.get("analysis_fields"), dict)
-        ]
 
-    def _reference_agg(subset: list) -> dict:
-        ref_sub = [af for af in subset if _reference_available(af)]
-        return {
-            "available": bool(ref_sub),
-            "rmse": _mean_numeric(af.get("reference_mean_rmse") for af in ref_sub),
-            "mae": _mean_numeric(af.get("reference_mean_mae") for af in ref_sub),
-            "bias": _mean_numeric(af.get("reference_mean_bias") for af in ref_sub),
-            "cov": _mean_numeric(af.get("mean_coefficient_of_variation") for af in subset),
-        }
-
-    per_challenge_reference = {ch: _reference_agg(_fields_for_challenge(ch)) for ch in challenges}
-
-    def _reference_summary_rows_html() -> str:
-        if not is_mixed_challenge:
-            return (
-                f"<tr><td>RMSE</td><td>{_esc(_fmt_report_cell(rmse) if reference_available else 'Not available')}</td></tr>"
-                f"<tr><td>MAE</td><td>{_esc(_fmt_report_cell(mae) if reference_available else 'Not available')}</td></tr>"
-                f"<tr><td>Bias</td><td>{_esc(_fmt_report_cell(bias) if reference_available else 'Not available')}</td></tr>"
-                f"<tr><td>Spatial CoV</td><td>{_esc(_fmt_report_cell(cov))}</td></tr>"
-            )
-        parts = ['<tr><td colspan="2"><em>Grouped by challenge — no cross-challenge totals are computed.</em></td></tr>']
-        for ch in challenges:
-            agg = per_challenge_reference[ch]
-            avail = agg["available"]
-            parts.append(f'<tr><td colspan="2"><strong>{_esc(ch)}</strong></td></tr>')
-            parts.append(f"<tr><td>{_esc(ch)} RMSE</td><td>{_esc(_fmt_report_cell(agg['rmse']) if avail else 'Not available')}</td></tr>")
-            parts.append(f"<tr><td>{_esc(ch)} MAE</td><td>{_esc(_fmt_report_cell(agg['mae']) if avail else 'Not available')}</td></tr>")
-            parts.append(f"<tr><td>{_esc(ch)} Bias</td><td>{_esc(_fmt_report_cell(agg['bias']) if avail else 'Not available')}</td></tr>")
-            parts.append(f"<tr><td>{_esc(ch)} Spatial CoV</td><td>{_esc(_fmt_report_cell(agg['cov']))}</td></tr>")
-        return "".join(parts)
-
-    reference_summary_rows_html = _reference_summary_rows_html()
-    validation_status = "Unable to continue" if error_count else ("Needs review" if warning_count else "Complete")
-    execution_statuses = [_report_status(s.get("exec_status")) for s in summaries]
-    execution_status = "Mixed" if len(set(execution_statuses)) > 1 else (execution_statuses[0] if execution_statuses else "Not available")
-    qc_status = "Unable to continue" if error_count else ("QC complete" if map_count else "Not available")
-    export_readiness = "Ready with limitations" if error_count or warning_count or not reference_available else "Ready"
-    report_visibility = "Blinded" if blinded else "Unblinded"
-    status_cards_html = "".join([
-        _metric_card_html("Validation status", validation_status, f"{warning_count} warnings, {error_count} blocking errors"),
-        _metric_card_html("Execution status", execution_status, "Result-only submissions do not require execution"),
-        _metric_card_html("QC/reference status", qc_status, reference_status),
-        _metric_card_html("Export readiness", export_readiness, report_visibility),
-    ])
-    key_metric_cards_html = "".join([
-        _metric_card_html("Maps available", map_count, ", ".join(map_types) if map_types else "No map types detected"),
-        _metric_card_html("Finite voxels", finite, "weighted across included maps"),
-        _metric_card_html("NaN / Inf", f"{sum(int(af.get('nan_count') or 0) for af in fields)} / {sum(int(af.get('inf_count') or 0) for af in fields)}"),
-        _metric_card_html("Negative voxels", negative),
-        _metric_card_html("Reference availability", reference_status),
-    ])
     # Generic QC bar charts were removed at researcher request: for single
     # submissions they are trivial, and they are not the submitted-vs-reference
     # agreement plot the challenge team wants (that is a future, mentor-defined
@@ -3090,17 +3043,10 @@ def export_report(
             f"<td>{_esc(_submission_display_name(s, idx, blinded=blinded))}</td>"
             f"<td>{_esc(str(s.get('challenge_type') or '').upper() or 'Not available')}</td>"
             f"<td>{_esc(af.get('parameter_maps_detected') or 'Not available')}</td>"
-            f"<td>{_esc(af.get('map_count') or 0)}</td>"
+            f'<td class="num">{_esc(af.get("map_count") or 0)}</td>'
             f"{unblinded_cells}"
             "</tr>"
         )
-    metadata_html = (
-        "<table><thead><tr><th>Submission</th><th>Challenge</th><th>Map types</th><th>Maps</th>"
-        + ("" if blinded else "<th>Team</th><th>Contact</th>")
-        + "</tr></thead><tbody>"
-        + "".join(metadata_rows_html)
-        + "</tbody></table>"
-    )
 
     rows_html = []
     map_details_html = []
@@ -3121,20 +3067,19 @@ def export_report(
             f"{unblinded_cells}"
             f"<td>{_esc(s['challenge_type'])}</td>"
             f"<td>{_esc(detected)}</td>"
-            f"<td>{_esc(af['map_count'])}</td>"
-            f"<td>{_esc(_fmt_report_cell(af['finite_voxels_percent']))}</td>"
-            f"<td>{_esc(af['nan_count'])} / {_esc(af['inf_count'])}</td>"
-            f"<td>{_esc(_fmt_report_cell(af['negative_voxels_percent']))}</td>"
+            f'<td class="num">{_esc(af["map_count"])}</td>'
+            f'<td class="num">{_esc(_fmt_report_cell(af["finite_voxels_percent"]))}</td>'
+            f'<td class="num">{_esc(af["nan_count"])} / {_esc(af["inf_count"])}</td>'
+            f'<td class="num">{_esc(_fmt_report_cell(af["negative_voxels_percent"]))}</td>'
             + "".join(
-                f"<td>{_esc(_fmt_report_cell((af.get('means_by_map_type') or {}).get(display)))}</td>"
+                f'<td class="num">{_esc(_fmt_report_cell((af.get("means_by_map_type") or {}).get(display)))}</td>'
                 for display in report_mean_types
             )
             +
-            f"<td>{_esc(reference_cell)}</td>"
-            f"<td>{_esc(_fmt_report_cell(af['reference_mean_rmse']) if _reference_available(af) else 'Not available')}</td>"
-            f"<td>{_esc(_fmt_report_cell(af['reference_mean_mae']) if _reference_available(af) else 'Not available')}</td>"
-            f"<td>{_esc(_fmt_report_cell(af['reference_mean_bias']) if _reference_available(af) else 'Not available')}</td>"
-            f"<td>{_esc(notes)}</td>"
+            f"<td>{_status_chip_html(reference_cell)}</td>"
+            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_rmse"]) if _reference_available(af) else "—")}</td>'
+            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_mae"]) if _reference_available(af) else "—")}</td>'
+            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_bias"]) if _reference_available(af) else "—")}</td>'
             "</tr>"
         )
 
@@ -3172,7 +3117,7 @@ def export_report(
                     "<tr>"
                     f"<td>{_esc(ref_row.get('detected_map_type', ''))}</td>"
                     f"<td>{_esc(ref_row.get('scope', ''))}</td>"
-                    f"<td>{_esc(_reference_status_label({'reference_scoring_status': ref_row.get('status'), 'reference_compared_map_count': 1 if ref_row.get('status') == 'compared' else 0}))}</td>"
+                    f"<td>{_status_chip_html(_reference_status_label({'reference_scoring_status': ref_row.get('status'), 'reference_compared_map_count': 1 if ref_row.get('status') == 'compared' else 0}))}</td>"
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('rmse')))}</td>"
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('mae')))}</td>"
                     f"<td>{_esc(_fmt_report_cell(ref_row.get('bias')))}</td>"
@@ -3183,26 +3128,26 @@ def export_report(
                     "</tr>"
                 )
         map_table = (
-            "<h3>Submitted outputs <span style=\"font-weight:normal\">(per map — CBF and ATT separate)</span></h3>"
-            "<table class=\"detail-table\"><thead><tr>"
+            "<h3>Submitted outputs <span class=\"report-muted\">(per map — CBF and ATT separate)</span></h3>"
+            "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
             "<th>Map</th><th>Type</th><th>Units</th><th>Dims</th><th>Shape</th><th>Voxel size</th>"
             "<th>Finite voxels</th><th>NaN / Inf</th>"
             "<th>Negative voxels</th><th>Mean</th><th>CoV</th>"
             "</tr></thead><tbody>"
             + ("".join(map_rows) if map_rows else '<tr><td colspan="11">No readable NIfTI maps found.</td></tr>')
-            + "</tbody></table>"
+            + "</tbody></table></div>"
         )
         reference_table = ""
         if reference_rows:
             reference_table = (
-                "<h3>Reference comparison <span style=\"font-weight:normal\">(per map and ROI — CBF and ATT are never combined)</span></h3>"
-                "<table class=\"detail-table\"><thead><tr>"
+                "<h3>Reference comparison <span class=\"report-muted\">(per map and ROI — CBF and ATT are never combined)</span></h3>"
+                "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
                 "<th>Map type</th><th>ROI</th><th>Reference status</th>"
                 "<th>RMSE</th><th>MAE</th><th>Bias</th><th>Error CoV</th><th>Correlation</th>"
                 "<th>Valid voxels</th><th>Excluded voxels</th>"
                 "</tr></thead><tbody>"
                 + "".join(reference_rows)
-                + "</tbody></table>"
+                + "</tbody></table></div>"
                 + f"<p class=\"report-note\">{_esc(REPEATABILITY_UNAVAILABLE_NOTE)}</p>"
             )
         map_details_html.append(
@@ -3212,162 +3157,457 @@ def export_report(
         )
 
     table_html = (
-        "<table><thead><tr>"
+        '<div class="table-wrap"><table>'
+        "<caption>Table 2. Per-submission quality control and reference agreement. "
+        "Dashes and &ldquo;Not available&rdquo; denote measures that could not be "
+        "computed; they are never reported as zero.</caption>"
+        "<thead><tr>"
         "<th>Submission</th>"
         + ("" if blinded else "<th>Team</th><th>Contact</th>")
-        + "<th>Challenge</th><th>Map types</th><th>Maps</th>"
-        "<th>Finite voxels</th><th>NaN / Inf</th><th>Negative voxels</th>"
-        + "".join(f"<th>Mean {_esc(display)}</th>" for display in report_mean_types)
+        + '<th>Challenge</th><th>Map types</th><th class="num">Maps</th>'
+        '<th class="num">Finite voxels</th><th class="num">NaN / Inf</th>'
+        '<th class="num">Negative voxels</th>'
+        + "".join(f'<th class="num">Mean {_esc(display)}</th>' for display in report_mean_types)
         + "<th>Reference status</th>"
-        "<th>RMSE</th><th>MAE</th><th>Bias</th><th>Notes</th>"
-        "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table>"
+        '<th class="num">RMSE</th><th class="num">MAE</th><th class="num">Bias</th>'
+        "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>"
     )
     detail_html = "".join(map_details_html)
-    mean_summary_rows = "".join(
-        f"<tr><td>Mean {_esc(display)}</td><td>{_esc(_fmt_report_cell(mean_by_map_type.get(display)))}</td></tr>"
-        for display in report_mean_types
-    )
-    summary_items = [
-        f"{n} submission{'s' if n != 1 else ''} reviewed.",
-        f"{map_count} map{'s' if map_count != 1 else ''} included.",
-        f"Detected map types: {', '.join(map_types) if map_types else 'Not available'}.",
-    ]
-    if is_mixed_challenge:
-        summary_items.append(
-            "This batch spans multiple challenges (" + ", ".join(challenges) + "). "
-            "Results are grouped and aggregated per challenge — no cross-challenge totals are computed."
-        )
-    # The reference-availability note appears exactly once, in the summary.
-    if not reference_available:
-        summary_items.append(REFERENCE_UNAVAILABLE_NOTE)
-    else:
-        summary_items.append("Reference maps were available; reference metrics are included.")
-        summary_items.append(REPEATABILITY_UNAVAILABLE_NOTE)
-    if warning_count:
-        summary_items.append(f"{warning_count} warning{'s' if warning_count != 1 else ''} reported.")
-    if error_count:
-        summary_items.append(f"{error_count} error{'s' if error_count != 1 else ''} reported.")
-    summary_html = "".join(f"<li>{_esc(item)}</li>" for item in summary_items)
+    # The bulleted executive summary was replaced by the leader paragraph
+    # under the title, which states the same facts in prose. The repeatability
+    # caveat still has to appear exactly once, so it moves into the notes.
     notes = []
+    if reference_available:
+        notes.append(REPEATABILITY_UNAVAILABLE_NOTE)
     if warning_count:
         notes.append("Warnings indicate files or metadata that may need review but did not prevent QC export.")
     if not notes:
         notes.append("No additional limitations were reported for this export.")
     notes_html = "".join(f"<p>{_esc(note)}</p>" for note in notes)
 
+    # Only the caveats that apply to this run — shared with the PDF so both
+    # reports carry identical wording.
+    limitations_html = "".join(
+        f"<li>{_esc(item)}</li>"
+        for item in build_limitations(
+            reference_available=reference_available,
+            map_types=map_types,
+            challenges=challenges,
+            cov_reported=cov is not None,
+        )
+    )
+
     blind_label = "Blinded report" if blinded else "Unblinded report"
+
+    # The report is downloaded and emailed as a standalone file, so the logo is
+    # embedded as a data URI rather than linked to /static (which would 404 the
+    # moment the file leaves the server). Falls back to a text-only masthead.
+    # Prefer the official full lockup (mark + wordmark + tagline). 760px keeps
+    # it crisp on retina at its ~300px rendered width. Falls back to the
+    # mark-only SVG plus a typeset wordmark if the lockup asset is missing.
+    lockup_uri = lockup_data_uri(760)
+    logo_uri = None if lockup_uri else logo_data_uri(300)
+    if lockup_uri:
+        logo_html = (
+            f'<img class="lockup" src="{lockup_uri}" '
+            f'alt="OSIPI — Open Science Initiative for Perfusion Imaging">'
+        )
+    elif logo_uri:
+        logo_html = (
+            f'<img class="mark" src="{logo_uri}" alt="OSIPI logo">'
+            '<div class="wordmark">OSIPI<span>Perfusion pipeline</span></div>'
+        )
+    else:
+        logo_html = '<div class="wordmark">OSIPI<span>Perfusion pipeline</span></div>'
+
+    # The Summary and Methods prose comes from the shared model so the HTML
+    # and PDF cannot drift. Both used to be written out twice — once here and
+    # once in the model — with no test comparing them, so an edit to either
+    # copy would silently produce two different reports from one dataset.
+    # Table 1 is rendered straight from the model, so the HTML and the PDF
+    # show the same measures in the same order. Building it by hand here is
+    # how the two drifted: the PDF gained the aggregate voxel statistics and
+    # the HTML silently kept showing only the reference rows.
+    summary_rows_html = "".join(
+        f"<tr><td>{_esc(measure)}</td><td>"
+        + (_status_chip_html(value) if measure == "Reference status"
+           else _esc(_fmt_report_cell(value)))
+        + "</td></tr>"
+        for measure, value in {
+            **report_model["qc"], **report_model["scoring"],
+        }.items()
+    )
+
+    # Rendered from the same pre-formatted rows the PDF uses, in the same
+    # order. Nothing is recomputed or refiltered here; a permanently numbered
+    # Table 3 appears even when empty so cross-references stay aligned.
+    _roi_rows = report_model.get("roi_descriptive_rows") or []
+    _roi_headers = report_model.get("roi_descriptive_headers") or []
+    _roi_summary = report_model.get("roi_descriptive_summary") or {}
+    _roi_caption = (
+        f"Table 3. Within-ROI Ktrans statistics: "
+        f"{_roi_summary.get('available_rows', 0)} of "
+        f"{_roi_summary.get('total_rows', 0)} scan-ROI combinations available. "
+        if _roi_rows else
+        "Table 3. Within-ROI Ktrans statistics. None were available for this "
+        "submission. "
+    ) + ROI_METHOD_TEXT
+    _roi_numeric = {5, 6, 7, 8}
+    _num_attr = ' class="num"'
+
+    def _roi_cell(tag: str, index: int, value: object) -> str:
+        attr = _num_attr if index in _roi_numeric else ""
+        return f"<{tag}{attr}>{_esc(value)}</{tag}>"
+
+    roi_table_html = (
+        '<div class="table-wrap"><table>'
+        + f"<caption>{_esc(_roi_caption)}</caption><thead><tr>"
+        + "".join(_roi_cell("th", i, h) for i, h in enumerate(_roi_headers))
+        + "</tr></thead><tbody>"
+        + "".join(
+            "<tr>"
+            + "".join(_roi_cell("td", i, cell) for i, cell in enumerate(row))
+            + "</tr>"
+            for row in (_roi_rows or [["—"] * max(1, len(_roi_headers))])
+        )
+        + "</tbody></table></div>"
+    )
+
+    lead_html = " ".join(_esc(line) for line in report_model["lead_lines"])
+    methods_html = "".join(
+        f'<p class="lead">{_esc(line)}</p>'
+        for line in report_model["methods_lines"]
+    )
+
+    meta_items = [
+        ("Batch / session", session_name),
+        ("Challenge", ", ".join(challenges) if challenges else "Not available"),
+        ("Map types", ", ".join(map_types) if map_types else "Not available"),
+        ("Reference", reference_status),
+        ("Report type", blind_label),
+        ("Generated", generated),
+        # Spelled out rather than "Pipeline" / "Configuration": these are
+        # provenance fields, and a bare version number under an ambiguous
+        # label is the kind of thing that gets misread in a methods section.
+        ("Pipeline version", _pipeline_version()),
+        ("Configuration version", _configuration_version()),
+    ]
+    meta_html = "".join(
+        f"<dt>{_esc(label)}</dt><dd>{_esc(value)}</dd>"
+        for label, value in meta_items
+    )
+
+    # ── Figures ───────────────────────────────────────────────────────────
+    _figure_blocks = []
+    # One figure per parameter: Bland-Altman. The RMSE/MAE dot plot, the
+    # identity plot, and the finite-voxel plot were cut — the first two
+    # restate what this figure and the results table already show, and a
+    # three-point plot of values between 98% and 99% earns nothing.
+    # Reuse the model's points and units rather than recomputing them.
+    _units_by_map = report_model.get("map_units") or {}
+    for _map_type, _pts in (report_model.get("agreement_points") or {}).items():
+        _units = _units_by_map.get(_map_type, "map units")
+        _ba = bland_altman_figure(_pts, units=_units, width=430)
+        if not _ba:
+            continue
+        _limits = _ba.get("limits")
+        _interval = (
+            f" Limits of agreement: {_fmt_report_num(_limits[0], 2)} to "
+            f"{_fmt_report_num(_limits[1], 2)} {_units}." if _limits else ""
+        )
+        _figure_blocks.append((
+            f"Figure {len(_figure_blocks) + 1}. Agreement between submitted and "
+            f"reference {_map_type}. Each point is one region of one "
+            "submission; the solid line is zero bias and the dashed lines are "
+            "the pooled 95% limits of agreement." + _interval,
+            figure_to_svg(_ba),
+        ))
+    figures_html = ""
+    if _figure_blocks:
+        figures_html = (
+            '<h2>Figures</h2><div class="figure-grid">'
+            + "".join(
+                f'<figure class="fig-block">{svg}'
+                f"<figcaption>{_esc(cap)}</figcaption></figure>"
+                for cap, svg in _figure_blocks
+            )
+            + "</div>"
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>OSIPI Perfusion Pipeline Report</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSIPI Perfusion Pipeline &mdash; Evaluation Report &mdash; {_esc(session_name)}</title>
 <style>
-  body {{ font-family: Arial, Helvetica, "Segoe UI", sans-serif;
-          color:#1a1a1a; max-width:960px; margin:28px auto; padding:0 26px; line-height:1.5; }}
-  h1 {{ color:#5e42a6; font-size:1.4rem; margin:0 0 2px; }}
-  h2 {{ color:#5e42a6; font-size:1.02rem; margin:22px 0 8px; border-bottom:1px solid #d9d2ec; padding-bottom:4px; }}
-  h3 {{ color:#111; font-size:0.9rem; margin:14px 0 6px; }}
-  .sub {{ color:#555; font-size:0.86rem; margin:0 0 14px; }}
-  .meta {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:3px 24px; font-size:0.85rem; color:#222; margin:0 0 4px; }}
-  .metric-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0 12px; }}
-  .metric-card {{ border:1px solid #d8d8df; border-radius:8px; padding:10px 11px; background:#fbfbfd; }}
-  .metric-card strong {{ display:block; margin-top:4px; font-size:1rem; color:#111; }}
-  .metric-label {{ display:block; color:#555; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0; }}
-  .metric-note {{ display:block; margin-top:3px; color:#666; font-size:0.72rem; line-height:1.35; }}
-  .chart-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-top:10px; }}
-  .report-chart {{ margin:0; padding:10px; border:1px solid #d8d8df; border-radius:8px; background:#fff; }}
-  .report-chart figcaption {{ font-weight:700; font-size:0.8rem; margin:0 0 7px; }}
-  .report-chart svg {{ display:block; width:100%; height:auto; }}
-  .svg-title {{ font-size:12px; font-weight:700; fill:#111; }}
-  .svg-label,.svg-value {{ font-size:11px; fill:#333; }}
-  .svg-track {{ fill:#f0f0f4; }}
-  .compact-chart svg {{ height:28px; border-radius:5px; overflow:hidden; border:1px solid #ddd; }}
-  .chart-legend {{ display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:8px; color:#444; font-size:0.73rem; }}
-  .chart-legend span {{ display:inline-flex; align-items:center; gap:4px; }}
-  .chart-legend i {{ width:9px; height:9px; border-radius:2px; display:inline-block; }}
-  .preview-gallery {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:10px; }}
-  .preview-card {{ margin:0; border:1px solid #d8d8df; border-radius:8px; overflow:hidden; background:#fff; }}
-  .preview-card img {{ display:block; width:100%; height:120px; object-fit:contain; background:#10131a; }}
-  .preview-card figcaption {{ padding:7px 8px; font-size:0.73rem; color:#444; }}
-  .preview-card figcaption span {{ display:block; color:#666; }}
-  .report-muted {{ color:#666; font-size:0.84rem; }}
-  caption {{ text-align:left; font-weight:700; color:#111; margin-bottom:5px; }}
-  .summary-list {{ margin:6px 0 0; padding-left:20px; font-size:0.9rem; color:#222; }}
-  table {{ width:100%; border-collapse:collapse; margin-top:8px; font-size:0.8rem; }}
-  th,td {{ text-align:left; padding:6px 8px; border:1px solid #d2d2d2; vertical-align:top; }}
-  th {{ background:#f5f3fb; color:#111; font-weight:600; }}
-  td {{ color:#222; }}
-  table.kv {{ width:auto; min-width:340px; max-width:560px; }}
-  table.kv td:first-child {{ color:#555; width:55%; }}
-  .report-details {{ margin:10px 0; }}
-  .report-details > summary {{ cursor:pointer; padding:6px 0; font-weight:600; font-size:0.85rem; color:#111; }}
-  .detail-table {{ margin:6px 0 0; }}
-  .notes {{ font-size:0.88rem; color:#222; }}
-  .notes p {{ margin:0 0 6px; }}
-  .limitations-list {{ margin:6px 0 0; padding-left:18px; font-size:0.86rem; color:#222; }}
-  footer {{ margin-top:22px; color:#666; font-size:0.78rem; border-top:1px solid #d2d2d2; padding-top:8px; }}
-  @media (max-width:640px) {{
-    body {{ padding:0 14px; }}
-    .meta {{ grid-template-columns:1fr; }}
-    table {{ display:block; overflow-x:auto; }}
+  :root {{
+    --ink:{BRAND['ink']}; --ink-soft:{BRAND['ink_soft']}; --muted:{BRAND['muted']};
+    --subtle:{BRAND['subtle']}; --rule:{BRAND['rule']}; --hairline:{BRAND['hairline']};
+    --faint:{BRAND['faint']};
+    --ok:{BRAND['ok']}; --warn:{BRAND['warn']}; --bad:{BRAND['bad']};
+    --neutral:{BRAND['neutral']};
+    --serif:{SERIF_STACK};
+    --sans:{SANS_STACK};
+    --mono:{MONO_STACK};
   }}
+  *, *::before, *::after {{ box-sizing:border-box; }}
+  body {{
+    margin:0; padding:32px 20px 64px; background:#f4f4f2; color:var(--ink);
+    font-family:var(--sans); font-size:14px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }}
+  .sheet {{ max-width:940px; margin:0 auto; background:#fff; padding:44px 56px 52px; }}
+
+  /* ── Masthead ─────────────────────────────────────────────────────────
+     Running head, then the thick/thin rule pair that signals a journal
+     page, then the title block. No colour, no fills. */
+  .runhead {{
+    display:flex; align-items:center; gap:19px;
+    padding-bottom:15px; border-bottom:1px solid var(--rule);
+  }}
+  .lockup {{ display:block; width:340px; max-width:60%; height:auto; flex:none; }}
+  .mark {{ display:block; width:78px; height:78px; object-fit:contain; flex:none; }}
+  .wordmark {{
+    font-family:var(--mono); font-size:15px; letter-spacing:.26em; text-transform:uppercase;
+    color:var(--ink); line-height:1.45;
+  }}
+  .wordmark span {{ display:block; letter-spacing:.15em; color:var(--muted); font-size:11.5px; }}
+  .runhead .issue {{
+    margin-left:auto; text-align:right; font-size:11px; color:var(--muted);
+    font-variant-numeric:tabular-nums; letter-spacing:.03em; line-height:1.5;
+  }}
+  .titleblock {{ padding-top:22px; }}
+  h1 {{
+    font-family:var(--serif); font-size:35px; font-weight:400;
+    letter-spacing:-.014em; line-height:1.14; margin:0;
+  }}
+  .deck {{
+    font-family:var(--serif); font-style:italic; font-size:15px;
+    color:var(--muted); margin:7px 0 0;
+  }}
+  .lead {{
+    font-family:var(--serif); font-size:15.5px; line-height:1.62;
+    color:var(--ink-soft); margin:17px 0 0; max-width:62ch;
+  }}
+
+  /* ── Status line — dots, not pills ────────────────────────────────── */
+  .statusline {{
+    display:flex; flex-wrap:wrap; gap:8px 26px; margin:20px 0 0;
+    padding:11px 0; border-top:1px solid var(--hairline);
+    border-bottom:1px solid var(--hairline);
+  }}
+  .stat-item {{ display:inline-flex; align-items:baseline; gap:7px; font-size:13px; }}
+  .stat-key {{
+    font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--subtle);
+  }}
+  .stat {{ display:inline-flex; align-items:baseline; gap:5px; color:var(--ink); }}
+  .stat .dot {{
+    width:7px; height:7px; border-radius:50%; background:var(--neutral);
+    display:inline-block; flex:none; transform:translateY(-1px);
+  }}
+  .stat-ok .dot {{ background:var(--ok); }}
+  .stat-warn .dot {{ background:var(--warn); }}
+  .stat-bad .dot {{ background:var(--bad); }}
+  .stat-ok {{ color:var(--ok); }}
+  .stat-warn {{ color:var(--warn); }}
+  .stat-bad {{ color:var(--bad); }}
+
+  /* ── Report metadata: a run-in definition list, not a grid of boxes ── */
+  .meta {{
+    display:grid; grid-template-columns:auto 1fr auto 1fr; gap:5px 14px;
+    margin:16px 0 0; font-size:12.5px;
+  }}
+  .meta dt {{
+    font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--subtle); white-space:nowrap; padding-top:1px;
+  }}
+  .meta dd {{ margin:0; color:var(--ink); word-break:break-word; }}
+
+  /* ── Key figures: a rule band, no cards ───────────────────────────── */
+  .figures {{
+    display:flex; flex-wrap:wrap; margin:26px 0 0;
+    border-top:0.75px solid var(--rule); border-bottom:1px solid var(--faint);
+  }}
+  .fig {{ flex:1 1 110px; padding:11px 16px 11px 0; }}
+  .fig + .fig {{ padding-left:16px; border-left:1px solid var(--faint); }}
+  .fig-label {{
+    display:block; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--subtle);
+  }}
+  .fig-value {{
+    display:block; font-size:21px; line-height:1.25; margin-top:3px;
+    font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+  }}
+  .fig-note {{ display:block; font-size:11px; color:var(--muted); margin-top:1px; }}
+
+  /* ── Section headings: small caps over a hairline ─────────────────── */
+  h2 {{
+    font-family:var(--mono); font-size:11px; font-weight:700;
+    letter-spacing:.17em; text-transform:uppercase; color:var(--subtle);
+    margin:36px 0 0; padding-bottom:5px; border-bottom:1px solid var(--hairline);
+  }}
+  h3 {{
+    font-family:var(--serif); font-size:15px; font-weight:400;
+    margin:22px 0 2px; color:var(--ink);
+  }}
+  h3 .report-muted {{ font-style:italic; font-size:13px; color:var(--muted); }}
+
+  /* ── Figures ──────────────────────────────────────────────────────── */
+  .figure-grid {{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:26px 32px; margin:18px 0 0;
+  }}
+  .fig-block {{ margin:0; min-width:0; }}
+  .fig-svg {{ display:block; overflow:visible; }}
+  .fig-block figcaption {{
+    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    color:var(--muted); line-height:1.5; margin-top:9px;
+  }}
+
+  /* ── Tables: booktabs. Horizontal rules only. ─────────────────────── */
+  .table-wrap {{ overflow-x:auto; margin:14px 0 0; }}
+  table {{
+    width:100%; border-collapse:collapse; font-size:12.5px;
+    font-variant-numeric:tabular-nums;
+  }}
+  thead th {{
+    text-align:left; font-weight:500; font-size:11px; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--subtle); vertical-align:bottom;
+    padding:0 10px 6px 0; white-space:nowrap;
+    border-top:1px solid var(--rule); border-bottom:0.75px solid var(--rule);
+    padding-top:7px;
+  }}
+  tbody td {{
+    padding:7px 10px 7px 0; vertical-align:top; color:var(--ink-soft);
+    border-bottom:1px solid var(--faint);
+  }}
+  tbody tr:last-child td {{ border-bottom:1px solid var(--rule); }}
+  tbody td:first-child {{ color:var(--ink); }}
+  th:last-child, td:last-child {{ padding-right:0; }}
+  /* Numerals right-align so magnitudes compare down the column. */
+  td.num, th.num {{ text-align:right; }}
+  caption {{
+    caption-side:bottom; text-align:left; font-family:var(--serif);
+    font-style:italic; font-size:12.5px; color:var(--muted);
+    padding-top:8px; line-height:1.5;
+  }}
+  table.kv thead th {{ border-top:1px solid var(--rule); }}
+  table.kv td:first-child {{ width:46%; color:var(--muted); }}
+  table.kv td:last-child {{ color:var(--ink); }}
+
+  /* ── Per-submission detail ────────────────────────────────────────── */
+  .report-details {{ margin:18px 0 0; }}
+  .report-details > summary {{
+    cursor:pointer; font-family:var(--serif); font-size:14.5px; color:var(--ink);
+    padding:7px 0; border-bottom:1px solid var(--hairline); list-style:none;
+  }}
+  .report-details > summary::-webkit-details-marker {{ display:none; }}
+  .report-details > summary::before {{
+    content:"+"; display:inline-block; width:15px; color:var(--muted);
+    font-family:var(--sans);
+  }}
+  .report-details[open] > summary::before {{ content:"\\2212"; }}
+  .report-details > summary:hover {{ color:var(--muted); }}
+
+  /* ── Notes ────────────────────────────────────────────────────────── */
+  .notes {{ font-size:13.5px; color:var(--ink-soft); margin-top:12px; }}
+  .notes p {{ margin:0 0 6px; }}
+  .report-note {{
+    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    color:var(--muted); margin:8px 0 0;
+  }}
+  .report-muted {{ color:var(--muted); }}
+  .limitations-list {{
+    margin:12px 0 0; padding-left:17px; font-size:12.5px; color:var(--ink-soft);
+    line-height:1.6;
+  }}
+  .limitations-list li {{ margin-bottom:4px; padding-left:3px; }}
+  .limitations-list li::marker {{ color:var(--subtle); }}
+
+  .colophon {{
+    margin-top:40px; padding-top:11px; border-top:1px solid var(--faint);
+    color:var(--muted); font-size:11px; letter-spacing:.04em;
+    display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;
+  }}
+
+  @media (max-width:760px) {{
+    body {{ padding:0; background:#fff; }}
+    .sheet {{ padding:24px 20px 36px; }}
+    .meta {{ grid-template-columns:auto 1fr; }}
+    h1 {{ font-size:24px; }}
+  }}
+
+  /* ── Print ─────────────────────────────────────────────────────────
+     The palette is already ink-on-paper, so printing needs no colour
+     coercion beyond the status dots. */
   @media print {{
-    body {{ margin:0; max-width:none; padding:10mm 12mm; }}
-    h2 {{ page-break-after:avoid; }}
-    table {{ page-break-inside:auto; }}
+    body {{ padding:0; background:#fff; font-size:9.5pt; }}
+    .sheet {{ max-width:none; padding:0; }}
+    h2 {{ page-break-after:avoid; break-after:avoid; margin-top:20pt; }}
+    h3 {{ page-break-after:avoid; break-after:avoid; }}
     thead {{ display:table-header-group; }}
-    tr {{ page-break-inside:avoid; }}
+    tr {{ page-break-inside:avoid; break-inside:avoid; }}
+    caption {{ page-break-before:avoid; }}
+    .table-wrap {{ overflow:visible; }}
+    .report-details[open] > summary::before,
+    .report-details > summary::before {{ content:""; }}
+    .stat .dot {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }}
   }}
 </style></head>
 <body>
-  <h1>OSIPI Perfusion Pipeline Report</h1>
-  <p class="sub">{_esc(blind_label)} &middot; generated {_esc(generated)}</p>
-  <div class="meta">
-    <div><strong>Batch/session name:</strong> {_esc(session_name)}</div>
-    <div><strong>Challenge type:</strong> {_esc(', '.join(challenges) if challenges else 'Not available')}</div>
-    <div><strong>Number of submissions:</strong> {_esc(n)}</div>
-    <div><strong>Number of maps:</strong> {_esc(map_count)}</div>
-    <div><strong>Map types detected:</strong> {_esc(', '.join(map_types) if map_types else 'Not available')}</div>
-    <div><strong>Reference status:</strong> {_esc(reference_status)}</div>
-    <div><strong>Export date:</strong> {_esc(export_date)}</div>
-    <div><strong>Pipeline version:</strong> {_esc(_pipeline_version())}</div>
-    <div><strong>Configuration version:</strong> {_esc(_configuration_version())}</div>
-  </div>
-  <h2>Executive Summary</h2>
-  <div class="metric-grid">{status_cards_html}</div>
-  <ul class="summary-list">{summary_html}</ul>
-  <h2>Key Metrics</h2>
-  <div class="metric-grid">{key_metric_cards_html}</div>
-  <h2>Submission Metadata</h2>
-  {metadata_html}
-  <h2>QC / Evaluation Summary</h2>
-  <table class="kv"><tbody>
-    <tr><td>Submissions reviewed</td><td>{_esc(n)}</td></tr>
-    <tr><td>Maps included</td><td>{_esc(map_count)}</td></tr>
-    <tr><td>Map types</td><td>{_esc(', '.join(map_types) if map_types else 'Not available')}</td></tr>
-    <tr><td>Finite voxels</td><td>{_esc(_fmt_report_cell(finite))}</td></tr>
-    <tr><td>NaN / Inf</td><td>{_esc(sum(int(af.get('nan_count') or 0) for af in fields))} / {_esc(sum(int(af.get('inf_count') or 0) for af in fields))}</td></tr>
-    <tr><td>Negative voxels</td><td>{_esc(_fmt_report_cell(negative))}</td></tr>
-    {"" if is_mixed_challenge else mean_summary_rows}
-    <tr><td>Reference status</td><td>{_esc(reference_status)}</td></tr>
-    {reference_summary_rows_html}
-  </tbody></table>
-  <h2>Per-Submission Results</h2>
+<article class="sheet">
+  <header>
+    <div class="runhead">
+      {logo_html}
+      <div class="issue">{_esc(export_date)}<br>{_esc(blind_label)}</div>
+    </div>
+    <div class="titleblock">
+      <h1>Evaluation report</h1>
+      <p class="deck">{_esc(session_name)}{_esc(' · ' + ', '.join(challenges) if challenges else '')}</p>
+    </div>
+    <dl class="meta">{meta_html}</dl>
+  </header>
+
+  <h2>Summary</h2>
+  <p class="lead">{lead_html}</p>
+
+  <h2>Methods</h2>
+  {methods_html}
+
+  <!-- The submissions table was removed: submission, challenge, map types
+       and map count are all columns of the results table below. -->
+  <h2>Results</h2>
+  <div class="table-wrap"><table class="kv">
+    <caption>Table 1. Aggregate quality-control statistics and reference agreement. Values are weighted across included maps; parameter types with different units are never averaged together.</caption>
+    <thead><tr><th>Measure</th><th>Value</th></tr></thead>
+    <tbody>{summary_rows_html}</tbody>
+  </table></div>
+
+  {figures_html}
+
+  <h2>ROI Ktrans statistics</h2>
+  {roi_table_html}
+
+  <h2>Results by submission</h2>
   {table_html}
   {detail_html}
-  <h2>Errors, Warnings, and Recommended Actions</h2>
+
+  <h2>Errors and warnings</h2>
   {issues_html}
-  <h2>Notes / Limitations</h2>
+
+  <h2>Limitations</h2>
   <div class="notes">{notes_html}</div>
-  <ul class="limitations-list">
-    <li>Basic NIfTI QC checks readability and generic voxel statistics; it is not full BIDS validation.</li>
-    <li>Generic reference metrics are shown only when matching reference maps are available.</li>
-    <li>Generic QC/reference metrics are not official OSIPI scores unless an official scoring provider is configured.</li>
-    <li>Missing values are reported as Not available and are not converted to zero.</li>
-  </ul>
-  <footer>OSIPI Perfusion Pipeline &mdash; automated report.</footer>
+  <ul class="limitations-list">{limitations_html}</ul>
+
+  <div class="colophon">
+    <span>OSIPI Perfusion Pipeline &middot; automated report</span>
+    <span>Pipeline {_esc(_pipeline_version())} &middot; configuration {_esc(_configuration_version())} &middot; {_esc(generated)}</span>
+  </div>
+</article>
 </body></html>"""
 
-    tag = (batch_id or submission_id or "report").replace("/", "_")
+    # Blinded downloads must not carry the team name in the filename either.
+    tag = report_filename_tag(
+        (batch_id or submission_id or "report").replace("/", "_"), blinded=blinded)
     return Response(
         content=html,
         media_type="text/html",
@@ -3385,7 +3625,8 @@ def export_report_pdf(
     sids = _collect_export_ids(batch_id, submission_id)
     with timed("report.pdf.gather", submission_count=len(sids)):
         summaries = [_gather_summary(sid) for sid in sids]
-    tag = (batch_id or submission_id or "report").replace("/", "_")
+    raw_tag = (batch_id or submission_id or "report").replace("/", "_")
+    tag = report_filename_tag(raw_tag, blinded=blinded)
     try:
         with timed("report.pdf.generate", submission_count=len(summaries)):
             pdf = generate_pdf_report(summaries, tag=tag, blinded=blinded)

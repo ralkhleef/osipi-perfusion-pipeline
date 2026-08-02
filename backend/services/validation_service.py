@@ -11,12 +11,23 @@ import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
 from services.ingest_service import detect_submission_metadata, make_safe_id
-from osipi_pipeline.ingestion.manifest import manifest_files, refresh_manifest
+from osipi_pipeline.ingestion.manifest import (
+    load_manifest,
+    manifest_files,
+    refresh_manifest,
+)
+from osipi_pipeline.ingestion.models import IdentityConflict, SubmissionArtifact
+from osipi_pipeline.validation.validate import duplicate_filename_groups
+from osipi_pipeline.validation.completeness import (
+    suppressed_legacy_map_ids,
+    validate_completeness,
+)
 from osipi_pipeline.performance import (
     configured_worker_limit,
     finish_job,
@@ -146,6 +157,8 @@ def _suffix_help(suffixes: tuple[str, ...]) -> str:
 # Output subdirectory — matches the CLI package.
 VALIDATION_SUBDIR = OUTPUTS_DIR / "validation"
 
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Issue helpers
@@ -157,6 +170,35 @@ def _err(code: str, message: str, path: str = "") -> Dict:
 
 def _warn(code: str, message: str, path: str = "") -> Dict:
     return {"severity": "warning", "code": code, "message": message, "path": path or None}
+
+
+def _completeness_issues(folder: Path, challenge: str) -> List[Dict]:
+    """Structural completeness issues from the normalized manifest artifacts.
+
+    Reads the manifest that was just refreshed rather than walking the tree
+    again. Any failure here is non-fatal: completeness is additive, and a
+    manifest problem is already reported by the surrounding checks.
+    """
+    try:
+        manifest = load_manifest(
+            folder, refresh_if_stale=False, challenge_type=challenge
+        ) or {}
+        artifacts = [
+            SubmissionArtifact(**item)
+            for item in manifest.get("artifacts", [])
+            if isinstance(item, dict)
+        ]
+        conflicts = [
+            IdentityConflict(**item)
+            for item in manifest.get("identity_conflicts", [])
+            if isinstance(item, dict)
+        ]
+    except Exception:
+        logger.exception("Could not read normalized artifacts for %s", folder)
+        return []
+    return validate_completeness(
+        artifacts, challenge=challenge, identity_conflicts=conflicts
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +286,10 @@ def validate_submission(
             submission_id=submission_id,
             challenge_type=normalized_challenge,
         )
+    # Completeness runs off the normalized artifacts the manifest already
+    # built, so map detection is not repeated here and filenames are never
+    # re-parsed. Returns nothing for challenges without the new config.
+    completeness_issues = _completeness_issues(folder, normalized_challenge)
     if not all_files:
         errors.append(_err("SUBMISSION_FOLDER_EMPTY", "The submission folder is empty.", str(folder)))
         result = _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
@@ -343,7 +389,14 @@ def validate_submission(
                     for name in expected_maps.get(normalized_challenge, ())
                 ]
 
+            # Challenges that declare required_maps/optional_maps get precise
+            # per-scan errors from the completeness checker instead. Emitting
+            # this warning too would either duplicate the error or, worse,
+            # warn about a map the configuration marks optional.
+            suppressed = suppressed_legacy_map_ids(normalized_challenge)
             for label, patterns in expected_groups:
+                if label in suppressed:
+                    continue
                 if not any(pattern in joined for pattern in patterns):
                     warnings.append(_warn(
                         "EXPECTED_MAP_MISSING",
@@ -430,16 +483,15 @@ def validate_submission(
 
     # ---- Duplicate filenames ------------------------------------------------
 
-    seen: Dict[str, List[Path]] = {}
-    for f in all_files:
-        seen.setdefault(f.name.lower(), []).append(f)
-    for fname, matches in seen.items():
-        if len(matches) > 1:
-            warnings.append(_warn(
-                "DUPLICATE_FILENAME",
-                f"Filename appears more than once: {fname}",
-                ", ".join(str(m) for m in matches),
-            ))
+    # Scoped by scan identity, not bare basename: the DCE-2026 layout reuses
+    # standard filenames in every scan directory by design. Shared with the
+    # library validator so the two cannot drift apart.
+    for fname, matches in duplicate_filename_groups(all_files, folder, normalized_challenge):
+        warnings.append(_warn(
+            "DUPLICATE_FILENAME",
+            f"Filename appears more than once within one scan: {fname}",
+            ", ".join(str(m) for m in matches),
+        ))
 
     blocking_errors = [e for e in errors if e["code"] != "UNKNOWN_CHALLENGE_TYPE"]
     runnable = has_run_instructions and len(blocking_errors) == 0
@@ -453,6 +505,15 @@ def validate_submission(
         and any(part.lower() in ("results", "maps") for part in f.parts)
         for f in all_files
     )
+
+    # Merge structural completeness into the existing issue lists so the
+    # single existing gate (passed = no errors) covers them too. No second
+    # status mechanism is introduced.
+    for issue in completeness_issues:
+        if issue.get("severity") == "error":
+            errors.append(issue)
+        else:
+            warnings.append(issue)
 
     # run_readiness: "runnable" | "result_only" | "not_runnable"
     if runnable:
