@@ -50,8 +50,9 @@ map_types:
     label: Cerebral blood flow
     units: mL/100g/min
     # Parameter maps are single-volume 3-D images. A 4-D file with this name is
-    # not a parameter map (it is a fitted model / time series) and must not be
-    # scored voxelwise against a 3-D reference. See fitted_model_role below.
+    # not a parameter map (it is a fitted signal / time series) and must not be
+    # scored voxelwise against a 3-D reference. Such files are described under
+    # `artifact_types` below, which carries an explicit `role`.
     dimensions: 3
     patterns:
       - cbf
@@ -75,6 +76,7 @@ map_types:
     display: Ktrans
     label: Volume transfer constant
     units: min^-1
+    dimensions: 3
     patterns:
       - ktrans
       - k-trans
@@ -84,6 +86,7 @@ map_types:
     display: ve
     label: Extravascular extracellular volume fraction
     units:
+    dimensions: 3
     patterns:
       - ve
       - v_e
@@ -91,6 +94,7 @@ map_types:
     display: Kep
     label: Rate constant
     units:
+    dimensions: 3
     patterns:
       - kep
       - k_ep
@@ -99,6 +103,7 @@ map_types:
     display: Vp
     label: Plasma volume fraction
     units:
+    dimensions: 3
     patterns:
       - vp
       - v_p
@@ -118,14 +123,70 @@ map_types:
       - mtt
       - mean_transit_time
 
+# Submitted files that are not parameter maps. Each carries a semantic `role`
+# so a 4-D fitted signal is never mistaken for a 3-D parameter map. Declaring
+# an artifact here does not yet cause it to be ingested or required — that
+# arrives in a later phase.
+artifact_types:
+  modelled_st:
+    role: fitted_signal
+    label: Modelled signal-time curve
+    dimensions: 4
+    suffixes:
+      - .nii
+      - .nii.gz
+    patterns:
+      - modelled_st
+      - modeled_st
+      - fitted_signal
+  methods:
+    role: methods
+    label: Methods document
+    suffixes:
+      - .docx
+      - .txt
+    patterns:
+      - methods
+      - methodology
+
 challenges:
   dce:
     label: DCE
     description: Dynamic contrast enhanced MRI
+    # Retained unchanged. Missing entries stay warnings, as documented.
     expected_maps:
       - ktrans
       - kep
       - vp
+    # DCE-2026 split. Described here only; nothing enforces these yet.
+    required_maps:
+      - ktrans
+    optional_maps:
+      - vp
+      - ve
+      - kep
+    required_artifacts:
+      - modelled_st
+      - methods
+    # Fallback identity parsing, used only when the directory layout does not
+    # already supply an identifier. Applied to the filename stem with any
+    # .nii/.nii.gz removed; first match wins. The first entry preserves the
+    # existing TF6.2 Synthetic_P#_Visit# convention, extended with an
+    # optional site so the DCE-2026 three-site layout can be expressed.
+    filename_identity_patterns:
+      - '^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)_Site(?P<site>\d+)$'
+      - '^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)$'
+    datasets:
+      synthetic:
+        # Not finalised by OSIPI. null means "count not yet decided" — an
+        # invented integer would read as a decision that has not been made.
+        participants:
+        repeats: 2
+        sites: 3
+      clinical:
+        participants: 5
+        repeats: 2
+        sites: 1
     keywords:
       - ktrans
       - kep

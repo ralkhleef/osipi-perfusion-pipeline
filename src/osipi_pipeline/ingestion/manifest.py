@@ -17,7 +17,14 @@ from osipi_pipeline.config.rules import (
     tuple_setting,
     validation_rules,
 )
-from osipi_pipeline.ingestion.models import Manifest
+from osipi_pipeline.ingestion.artifact_classifier import classify, detect_map_type
+from osipi_pipeline.ingestion.identity_parser import resolve_identity
+from osipi_pipeline.ingestion.models import (
+    IdentityConflict,
+    Manifest,
+    SubmissionArtifact,
+)
+from osipi_pipeline.ingestion.nifti_header import read_ndim
 from osipi_pipeline.performance import timed
 
 MANIFEST_FILENAME = ".osipi_manifest.json"
@@ -46,6 +53,9 @@ def build_manifest(
         files = sorted(path for path in root.rglob("*") if path.is_file() and path.name != MANIFEST_FILENAME)
         directories = _directory_entries(root, files)
         entries = [_file_entry(path, root) for path in files]
+        # Reuses the entries above rather than walking the tree again, so a
+        # large synthetic submission is still traversed once.
+        artifacts, conflicts = _build_artifacts(entries, root, challenge_type)
 
     return Manifest(
         submission_id=submission_id,
@@ -62,7 +72,74 @@ def build_manifest(
         files=entries,
         directories=directories,
         config_fingerprint=config_fingerprint(),
+        artifacts=artifacts,
+        identity_conflicts=conflicts,
     )
+
+
+def is_reference_path(relative_path: str) -> bool:
+    """True when a path sits inside reference / mask data, not team output.
+
+    Reference maps and ROI masks are commonly staged *inside* the extracted
+    submission — ``submissions/extracted/<sid>/reference`` is the first
+    location production searches — but they are scoring inputs, not something
+    the team submitted. Counting them as artifacts inflates the map count and
+    makes reference files fail participant identity resolution, since they
+    carry no participant or repeat. Directory names come from
+    ``paths.private_path_parts`` rather than being hardcoded.
+    """
+    return any(
+        part.strip().lower() in private_path_parts()
+        for part in relative_path.split("/")[:-1]
+    )
+
+
+def _build_artifacts(
+    entries: list[dict[str, Any]], root: Path, challenge_type: str
+) -> tuple[tuple[SubmissionArtifact, ...], tuple[IdentityConflict, ...]]:
+    """Normalize every submitted file entry into a :class:`SubmissionArtifact`.
+
+    Every submitted file gets a record — duplicates included. Two copies of the
+    same map under one identity produce two artifacts; deciding whether that is
+    valid belongs to a later phase, and dropping one here would hide it.
+
+    Reference and mask directories are excluded: they are scoring inputs rather
+    than submission content. See :func:`is_reference_path`.
+    """
+    challenge = (challenge_type or "").strip().lower() or None
+    artifacts: list[SubmissionArtifact] = []
+    conflicts: list[IdentityConflict] = []
+    for entry in entries:
+        rel = str(entry.get("relative_path") or "")
+        if not rel or is_reference_path(rel):
+            continue
+        filename = rel.rsplit("/", 1)[-1]
+        is_nifti = bool(entry.get("is_nifti"))
+        role, map_type, artifact_type = classify(
+            filename,
+            is_nifti=is_nifti,
+            is_readme=bool(entry.get("is_readme")),
+            is_metadata=bool(entry.get("is_metadata")),
+            is_code=bool(entry.get("is_code")),
+        )
+        identity, file_conflicts = resolve_identity(rel, challenge=challenge)
+        conflicts.extend(file_conflicts)
+        # Header only — never the voxel array. None when unreadable, which
+        # the validation layer reports separately.
+        dimensions = read_ndim(root / rel) if is_nifti else None
+        artifacts.append(SubmissionArtifact(
+            path=rel,
+            role=role,
+            challenge=challenge,
+            dataset=identity.get("dataset"),
+            participant=identity.get("participant"),
+            repeat=identity.get("repeat"),
+            site=identity.get("site"),
+            map_type=map_type,
+            artifact_type=artifact_type,
+            dimensions=dimensions,
+        ))
+    return tuple(artifacts), tuple(conflicts)
 
 
 def manifest_path(root: Path) -> Path:
@@ -269,17 +346,16 @@ def _is_mask(path: Path, parts: Iterable[str]) -> bool:
 
 
 def _detect_parameter_map_id(path: Path) -> str:
-    name = path.name.lower()
-    found = [
-        map_id
-        for map_id, patterns in map_type_patterns().items()
-        if any(str(pattern).lower() in name for pattern in patterns)
-    ]
-    if len(found) == 1:
-        return found[0]
-    if len(found) > 1:
-        return "mixed"
-    return ""
+    """Legacy manifest field, now backed by the boundary-safe classifier.
+
+    This previously asked whether a configured pattern appeared anywhere in
+    the filename, so ``curve.nii.gz`` matched ``ve`` and ``developer.nii.gz``
+    matched it twice (yielding "mixed"). Required-map enforcement cannot rest
+    on that, and keeping two different matchers would guarantee they drift,
+    so both this field and ``SubmissionArtifact.map_type`` now come from
+    :func:`detect_map_type`.
+    """
+    return detect_map_type(path.name) or ""
 
 
 def _metadata_suffixes() -> set[str]:

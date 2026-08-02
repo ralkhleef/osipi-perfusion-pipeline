@@ -34,9 +34,32 @@ _RULE_TOP_LEVEL_KEYS = {
     "code_folder_names",
     "map_types",
     "challenges",
+    # Optional. Describes submitted files that are not parameter maps — a 4-D
+    # fitted signal, a methods document. Absent in older configs.
+    "artifact_types",
 }
 _MAP_TYPE_KEYS = {"display", "label", "units", "patterns", "dimensions"}
-_CHALLENGE_KEYS = {"label", "description", "expected_maps", "keywords"}
+# `expected_maps` is retained unchanged: it means "maps that should be present",
+# and a missing one is a warning. `required_maps` / `optional_maps` are the
+# newer, explicit split. A challenge that declares neither keeps exactly its
+# current behaviour, which is what leaves ASL and DSC untouched.
+_CHALLENGE_KEYS = {
+    "label",
+    "description",
+    "expected_maps",
+    "keywords",
+    "required_maps",
+    "optional_maps",
+    "required_artifacts",
+    "datasets",
+    "filename_identity_patterns",
+}
+# Named groups a filename identity pattern may capture. Anything else is a
+# typo or an attempt to smuggle logic into configuration, so it is rejected
+# rather than silently ignored.
+_IDENTITY_GROUPS = {"dataset", "participant", "repeat", "site"}
+_ARTIFACT_TYPE_KEYS = {"role", "dimensions", "suffixes", "patterns", "label"}
+_DATASET_KEYS = {"participants", "repeats", "sites"}
 
 _SETTINGS_TOP_LEVEL_KEYS = {"version", "defaults", "limits", "reporting", "performance", "paths", "ingestion"}
 _SETTINGS_SECTION_KEYS = {
@@ -315,6 +338,41 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                 if not isinstance(dims, int) or isinstance(dims, bool) or dims < 2 or dims > 7:
                     errors.append(f"{spec_path}.dimensions: must be an integer between 2 and 7")
 
+    # ── artifact_types (optional) ─────────────────────────────────────────
+    # Validated before challenges so required_artifacts can be checked
+    # against the resolved set of artifact ids.
+    artifact_ids: set[str] = set()
+    if "artifact_types" in rules:
+        artifact_types = _require_mapping(rules.get("artifact_types"), "artifact_types", errors)
+        if artifact_types is not None:
+            _check_duplicate_normalized_ids(list(artifact_types.keys()), "artifact_types", errors)
+            for raw_id, spec in artifact_types.items():
+                artifact_id = _validate_identifier(raw_id, f"artifact_types.{raw_id}", errors)
+                if artifact_id:
+                    artifact_ids.add(artifact_id)
+                spec_path = f"artifact_types.{raw_id}"
+                spec_map = _require_mapping(spec, spec_path, errors)
+                if spec_map is None:
+                    continue
+                _reject_unknown_keys(spec_map, _ARTIFACT_TYPE_KEYS, spec_path, errors)
+                for field in ("role", "suffixes", "patterns"):
+                    if field not in spec_map:
+                        errors.append(f"{spec_path}.{field}: required field is missing")
+                if "role" in spec_map:
+                    _require_string(spec_map.get("role"), f"{spec_path}.role", errors)
+                if "label" in spec_map and spec_map.get("label") is not None:
+                    _require_string(spec_map.get("label"), f"{spec_path}.label", errors)
+                if "suffixes" in spec_map:
+                    _require_string_list(spec_map.get("suffixes"), f"{spec_path}.suffixes", errors)
+                if "patterns" in spec_map:
+                    _require_string_list(spec_map.get("patterns"), f"{spec_path}.patterns", errors)
+                # Same bounds as map_types.dimensions, and equally optional:
+                # a methods document has no dimensionality at all.
+                if "dimensions" in spec_map and spec_map.get("dimensions") is not None:
+                    dims = spec_map.get("dimensions")
+                    if not isinstance(dims, int) or isinstance(dims, bool) or dims < 2 or dims > 7:
+                        errors.append(f"{spec_path}.dimensions: must be an integer between 2 and 7")
+
     challenge_ids: set[str] = set()
     if challenge_config is not None:
         _check_duplicate_normalized_ids(list(challenge_config.keys()), "challenges", errors)
@@ -346,6 +404,95 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                     )
             if "keywords" in spec_map:
                 _require_string_list(spec_map.get("keywords"), f"{spec_path}.keywords", errors)
+
+            # ── optional DCE-2026 fields ──────────────────────────────────
+            # Each is independently optional. Absent means "not declared",
+            # which preserves the existing expected_maps-only behaviour.
+            for field in ("required_maps", "optional_maps"):
+                if field not in spec_map:
+                    continue
+                declared = _require_string_list(
+                    spec_map.get(field), f"{spec_path}.{field}", errors
+                )
+                for index, map_id in enumerate(declared):
+                    if map_id.lower() not in map_ids:
+                        errors.append(
+                            f"{spec_path}.{field}[{index}]: unknown map id {map_id!r}"
+                        )
+
+            if "required_artifacts" in spec_map:
+                declared = _require_string_list(
+                    spec_map.get("required_artifacts"),
+                    f"{spec_path}.required_artifacts",
+                    errors,
+                )
+                for index, artifact_id in enumerate(declared):
+                    if artifact_id.lower() not in artifact_ids:
+                        errors.append(
+                            f"{spec_path}.required_artifacts[{index}]: "
+                            f"unknown artifact id {artifact_id!r}"
+                        )
+
+            if "filename_identity_patterns" in spec_map:
+                patterns = _require_string_list(
+                    spec_map.get("filename_identity_patterns"),
+                    f"{spec_path}.filename_identity_patterns",
+                    errors,
+                )
+                for index, pattern in enumerate(patterns):
+                    item_path = f"{spec_path}.filename_identity_patterns[{index}]"
+                    # Compile at load time so a broken pattern fails startup
+                    # rather than silently matching nothing on every upload.
+                    try:
+                        compiled = re.compile(pattern)
+                    except re.error as exc:
+                        errors.append(f"{item_path}: invalid regular expression ({exc})")
+                        continue
+                    groups = set(compiled.groupindex)
+                    unknown = sorted(groups - _IDENTITY_GROUPS)
+                    if unknown:
+                        errors.append(
+                            f"{item_path}: unknown named group(s) "
+                            f"{', '.join(repr(g) for g in unknown)}; allowed: "
+                            f"{', '.join(sorted(_IDENTITY_GROUPS))}"
+                        )
+                    if not groups & _IDENTITY_GROUPS:
+                        errors.append(
+                            f"{item_path}: must capture at least one of "
+                            f"{', '.join(sorted(_IDENTITY_GROUPS))}"
+                        )
+
+            if "datasets" in spec_map:
+                datasets = _require_mapping(
+                    spec_map.get("datasets"), f"{spec_path}.datasets", errors
+                )
+                if datasets is not None:
+                    _check_duplicate_normalized_ids(
+                        list(datasets.keys()), f"{spec_path}.datasets", errors
+                    )
+                    for raw_name, dataset in datasets.items():
+                        ds_path = f"{spec_path}.datasets.{raw_name}"
+                        _validate_identifier(raw_name, ds_path, errors)
+                        ds_map = _require_mapping(dataset, ds_path, errors)
+                        if ds_map is None:
+                            continue
+                        _reject_unknown_keys(ds_map, _DATASET_KEYS, ds_path, errors)
+                        for field in ("repeats", "sites"):
+                            if field not in ds_map:
+                                errors.append(f"{ds_path}.{field}: required field is missing")
+                            else:
+                                _require_positive_int(
+                                    ds_map.get(field), f"{ds_path}.{field}", errors
+                                )
+                        # participants may be null: OSIPI has not finalised the
+                        # synthetic cohort size, and a placeholder integer would
+                        # read as a decision that has not been made.
+                        if "participants" not in ds_map:
+                            errors.append(f"{ds_path}.participants: required field is missing")
+                        elif ds_map.get("participants") is not None:
+                            _require_positive_int(
+                                ds_map.get("participants"), f"{ds_path}.participants", errors
+                            )
 
     if default_challenge and default_challenge.lower() not in challenge_ids:
         errors.append(f"default_challenge_type: unknown challenge id {default_challenge!r}")
@@ -563,6 +710,105 @@ def expected_maps_by_challenge() -> dict[str, tuple[str, ...]]:
     for challenge, config in validation_rules().get("challenges", {}).items():
         maps = config.get("expected_maps") or []
         result[str(challenge).lower()] = tuple(str(item).lower() for item in maps)
+    return result
+
+
+def _challenge_id_list(field: str) -> dict[str, tuple[str, ...]]:
+    """Shared reader for the per-challenge id-list fields.
+
+    Challenges that do not declare ``field`` map to an empty tuple rather
+    than being omitted, so callers can index by challenge without guarding.
+    """
+    result: dict[str, tuple[str, ...]] = {}
+    for challenge, config in validation_rules().get("challenges", {}).items():
+        values = config.get(field) or []
+        result[str(challenge).lower()] = tuple(str(item).lower() for item in values)
+    return result
+
+
+def required_maps_by_challenge() -> dict[str, tuple[str, ...]]:
+    """Map ids a submission must provide, per challenge.
+
+    Empty for any challenge that has not declared ``required_maps``. Nothing
+    enforces this yet — Phase 1 only describes the requirement. Existing
+    ``expected_maps`` behaviour is untouched, which is what keeps ASL and DSC
+    validation identical.
+    """
+    return _challenge_id_list("required_maps")
+
+
+def optional_maps_by_challenge() -> dict[str, tuple[str, ...]]:
+    """Map ids that are accepted but not required, per challenge."""
+    return _challenge_id_list("optional_maps")
+
+
+def required_artifacts_by_challenge() -> dict[str, tuple[str, ...]]:
+    """Artifact ids a submission must provide, per challenge.
+
+    Ids are guaranteed by schema validation to exist in ``artifact_types``.
+    """
+    return _challenge_id_list("required_artifacts")
+
+
+def filename_identity_patterns_by_challenge() -> dict[str, tuple[str, ...]]:
+    """Ordered filename identity regexes per challenge.
+
+    Returns validated pattern *strings*, not compiled objects: the rules
+    mapping is deep-copied and JSON-fingerprinted by the manifest layer, and
+    a compiled pattern is neither copyable nor serialisable. The parser
+    compiles them once behind its own cache.
+
+    Order is significant — the first pattern that matches wins.
+    """
+    return _challenge_id_list_raw("filename_identity_patterns")
+
+
+def _challenge_id_list_raw(field: str) -> dict[str, tuple[str, ...]]:
+    """Like :func:`_challenge_id_list` but preserves original case.
+
+    Regexes are case-sensitive by construction, so lowercasing them would
+    silently change what they match.
+    """
+    result: dict[str, tuple[str, ...]] = {}
+    for challenge, config in validation_rules().get("challenges", {}).items():
+        values = config.get(field) or []
+        result[str(challenge).lower()] = tuple(str(item) for item in values)
+    return result
+
+
+def artifact_type_specs() -> dict[str, dict[str, Any]]:
+    """Non-parameter-map submission artifacts, keyed by lowercase id.
+
+    Covers roles such as a 4-D fitted signal or a methods document. Returns
+    a deep copy so callers cannot mutate the cached configuration, matching
+    :func:`map_type_specs`. Empty when the optional section is absent.
+    """
+    return {
+        str(key).lower(): copy.deepcopy(value)
+        for key, value in (validation_rules().get("artifact_types") or {}).items()
+    }
+
+
+def datasets_by_challenge() -> dict[str, dict[str, dict[str, int | None]]]:
+    """Expected dataset structure per challenge, keyed by dataset name.
+
+    Each dataset yields ``participants``, ``repeats`` and ``sites``.
+    ``participants`` is ``None`` when the organiser has not finalised the
+    cohort size; the schema permits this deliberately so an unknown count is
+    not misrepresented as a decided one. Dataset names are not restricted to
+    synthetic/clinical — a future challenge may define its own.
+    """
+    result: dict[str, dict[str, dict[str, int | None]]] = {}
+    for challenge, config in validation_rules().get("challenges", {}).items():
+        datasets = config.get("datasets") or {}
+        result[str(challenge).lower()] = {
+            str(name).lower(): {
+                "participants": spec.get("participants"),
+                "repeats": spec.get("repeats"),
+                "sites": spec.get("sites"),
+            }
+            for name, spec in datasets.items()
+        }
     return result
 
 

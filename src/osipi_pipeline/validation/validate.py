@@ -15,6 +15,7 @@ from osipi_pipeline.config.rules import (
     map_type_specs,
     tuple_setting,
 )
+from osipi_pipeline.ingestion.identity_parser import resolve_identity
 from osipi_pipeline.validation.models import ValidationIssue, ValidationResult
 from osipi_pipeline.validation.nifti_validator import validate_nifti_files
 
@@ -119,7 +120,7 @@ def validate_submission(
             nifti_summary = validate_nifti_files(non_empty_niftis)
             errors, warnings = _apply_nifti_results(nifti_summary, errors, warnings)
 
-    warnings.extend(_duplicate_filename_warnings(files))
+    warnings.extend(_duplicate_filename_warnings(files, path, normalized_challenge))
 
     if not any(_is_readme(file_path) or file_path.suffix.lower() in METADATA_SUFFIXES for file_path in files):
         errors.append(
@@ -279,24 +280,63 @@ def _missing_expected_map_warnings(
             )
     return warnings
 
-def _duplicate_filename_warnings(files: list[Path]) -> list[ValidationIssue]:
-    seen: dict[str, list[Path]] = {}
-    for file_path in files:
-        seen.setdefault(file_path.name.lower(), []).append(file_path)
+def duplicate_filename_groups(
+    files: list[Path],
+    root: Path | None = None,
+    challenge_type: str | None = None,
+) -> list[tuple[str, list[Path]]]:
+    """Group files that genuinely repeat a filename *within one scan*.
 
-    warnings: list[ValidationIssue] = []
-    for filename, matches in seen.items():
-        if len(matches) > 1:
-            paths = ", ".join(str(path) for path in matches)
-            warnings.append(
-                ValidationIssue(
-                    severity="warning",
-                    code="DUPLICATE_FILENAME",
-                    message=f"Filename appears more than once: {filename}",
-                    path=paths,
-                )
-            )
-    return warnings
+    A basename alone is not evidence of duplication. The DCE-2026 layout
+    requires the same standard names in every scan directory —
+    ``Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz`` and
+    ``…/Repeat2/Ktrans.nii.gz`` are two different scans, not a mistake — so
+    keying on the basename alone warns about every correct submission. See
+    CODE_WALKTHROUGH.md §B6.
+
+    Files are therefore keyed on resolved scan identity plus filename. Where
+    no identity can be resolved (a flat legacy submission) every file falls
+    into one bucket, which reproduces the original behaviour exactly.
+    """
+    challenge = (challenge_type or "").strip().lower() or None
+    seen: dict[tuple, list[Path]] = {}
+    for file_path in files:
+        name = file_path.name.lower()
+        identity: dict[str, str | None] = {}
+        if root is not None:
+            try:
+                relative = file_path.resolve().relative_to(Path(root).resolve())
+                identity, _ = resolve_identity(relative.as_posix(), challenge=challenge)
+            except (ValueError, OSError):
+                identity = {}
+        key = (
+            identity.get("dataset"),
+            identity.get("participant"),
+            identity.get("site"),
+            identity.get("repeat"),
+            name,
+        )
+        seen.setdefault(key, []).append(file_path)
+
+    return [
+        (key[-1], matches) for key, matches in seen.items() if len(matches) > 1
+    ]
+
+
+def _duplicate_filename_warnings(
+    files: list[Path],
+    root: Path | None = None,
+    challenge_type: str | None = None,
+) -> list[ValidationIssue]:
+    return [
+        ValidationIssue(
+            severity="warning",
+            code="DUPLICATE_FILENAME",
+            message=f"Filename appears more than once within one scan: {filename}",
+            path=", ".join(str(path) for path in matches),
+        )
+        for filename, matches in duplicate_filename_groups(files, root, challenge_type)
+    ]
 
 def _safe_submission_id(raw_id: str) -> str:
     safe_id = "".join(character if character.isalnum() or character in "._-" else "_" for character in raw_id)
