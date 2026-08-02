@@ -225,12 +225,15 @@ console.log("\n[ Wizard navigation ]");
 check("Legacy wizard footer holder", "wizard-footer");
 check("Legacy wizard back button",   "wf-back-btn");
 check("Legacy wizard next button",   "wf-next-btn");
-check("Visible compact workflow progress nav", "compact-progress");
-check("Workflow session title", "workflow-session-title");
-check("Workflow Start New button", "workflow-start-new-btn");
-checkContains("Progress nav renders status text", appJs, "compact-progress-state");
-checkContains("Workflow shell sync helper", appJs, "function _syncWorkflowShell");
-checkNotContains("Compact progress is no longer forcibly hidden", css, ".compact-progress { display: none !important; }");
+// The top session-summary card and numbered stepper were removed entirely
+// (HTML + JS render logic + CSS), not just hidden.
+checkNotContains("Compact progress nav removed from HTML", html, 'id="compact-progress"');
+checkNotContains("Session summary card removed from HTML", html, "workflow-session-summary");
+checkNotContains("Session-card Start New removed from HTML", html, "workflow-start-new-btn");
+checkNotContains("Workflow shell render helper removed", appJs, "function _syncWorkflowShell");
+checkNotContains("Compact progress builder removed", appJs, "function _ensureCompactProgress");
+checkNotContains("Compact progress CSS removed", css, ".compact-progress-item {");
+check("Internal step-state holders preserved", "wf-state-holder");
 checkCls("Mirrored step shell", "step-shell");
 checkContains("Sticky footer hidden on every step", css, 'body[data-step] .wizard-footer');
 checkContains("Legacy footer cannot display", css, '.wizard-footer:not([hidden])');
@@ -1072,10 +1075,10 @@ checkContains("PDF report button", appJs, 'id="export-pdf-report-btn"');
 checkContains("JSON report button", appJs, 'id="export-combined-json-btn"');
 checkContains("Export summary panel exists", html, "export-summary-panel");
 checkContains("Export summary title", exportSection, "Final review summary");
-checkContains("Export summary subtitle", exportSection, "Validation, execution, and QC status are summarized");
+checkContains("Export disclaimer moved into a tooltip", exportSection, "Generic QC metrics are not official OSIPI scoring");
 checkContains("Export main list exists", exportSection, "export-main-list");
 checkContains("Export step label is Step 6 of 6", exportSection, "Step 6 of 6: Export");
-checkEqual("Step 6 main UI shows six main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 6);
+checkEqual("Step 6 main UI shows seven main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 7);
 checkContains("Main HTML Report option", mainExportOptions, "HTML Report");
 checkContains("Main PDF Report option", mainExportOptions, "PDF Report");
 checkContains("Main CSV Results option", mainExportOptions, "CSV Results");
@@ -1093,7 +1096,7 @@ checkContains("Main copy explains identifier visibility", mainExportOptions, "or
 checkContains("Main report button label", mainExportOptions, ">Open Report</button>");
 checkContains("Main PDF report button label", mainExportOptions, ">Download PDF</button>");
 checkContains("Main JSON button label", mainExportOptions, ">Download JSON</button>");
-checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 3);
+checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 4);
 checkContains("Main report reuses existing report ID", mainExportOptions, 'id="export-report-btn"');
 checkContains("Main PDF report uses PDF export ID", mainExportOptions, 'id="export-pdf-report-btn"');
 checkContains("Main blinded CSV reuses combined export ID", mainExportOptions, 'id="export-combined-blinded-btn"');
@@ -1320,6 +1323,102 @@ checkContains("Map Preview shows one selected map at a time", appJs, "map-previe
 checkContains("Start New reset helper returns to Upload", appJs, "function _resetToUploadAndClearPersistence()");
 checkContains("Start New reset suppresses blank session save", appJs, "_suppressSessionSave = true;");
 checkContains("Reset clears wizard + session state", appJs, "clearWizardState();");
+
+
+// ── Phase 4C: ROI Ktrans statistics (within-scan descriptive values) ──────
+// Export row
+checkContains("ROI export row present", appJs, "ROI Ktrans Statistics CSV");
+checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
+checkContains("ROI export reuses the session query helper", appJs, "export-roi-descriptive?${q}");
+checkContains("ROI export handles a missing filename header", appJs, '"roi_descriptive_statistics.csv"');
+checkContains("ROI export reports errors through the existing status element", appJs, 'el("export-combined-status")');
+checkNotContains("ROI export is not mislabelled as accuracy", appJs, "ROI Accuracy CSV");
+checkNotContains("ROI export is not mislabelled as repeatability", appJs, "ROI Repeatability CSV");
+
+// Results Summary section
+// check() asserts; hasId() only returns a boolean and would silently pass.
+check("ROI card present", "roi-descriptive-card");
+check("ROI table present", "roi-descriptive-table");
+check("ROI table body present", "roi-descriptive-body");
+check("ROI empty-state element present", "roi-descriptive-empty");
+checkContains("ROI section titled correctly", html, "ROI Ktrans Statistics");
+checkContains("ROI table has a Median column", html, "<th>Median</th>");
+checkContains("ROI table has a CoV column", html, "<th>CoV</th>");
+checkContains("ROI renderer exists", appJs, "function renderRoiDescriptiveStatistics(");
+
+// Display rules
+checkContains("CoV displayed as a percentage", appJs, "(n * 100).toFixed(2)}%");
+checkContains("Numeric unavailable guard covers NaN and null", appJs,
+  'if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";');
+checkNotContains("Unavailable numeric never becomes a zero string", appJs,
+  'if (value === null || value === undefined) return "0";');
+checkContains("Implicit clinical site renders as a dash", appJs, 'value === "" ? "—"');
+checkContains("Empty-state message for missing masks", appJs, "no ROI masks were configured");
+checkContains("Empty-state message for no eligible maps", appJs, "No valid Ktrans scans were available");
+checkContains("Empty-state message for calculation failure", appJs, "could not be calculated");
+checkContains("Neutral fallback when status is unknown", appJs, "No ROI Ktrans statistics are available.");
+checkContains("Empty-state text is actually looked up by status", appJs,
+  "ROI_UNAVAILABLE_MESSAGES[status]");
+checkContains("Methodology text present", appJs, "SD uses the population definition");
+checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio in exports");
+
+// Safety: every dynamic field escaped
+["r.roi_label || r.roi_id", "_roiDatasetLabel(r.dataset)", "_roiIdentity(r.participant)",
+ "_roiNumber(r.roi_median)", "_roiPercent(r.roi_within_scan_cov)"].forEach((expr) => {
+  checkContains(`ROI field escaped: ${expr}`, appJs, `escapeHtml(${expr}`);
+});
+
+// Performance: one table, not a card per scan
+checkContains("ROI rows built as one joined table body", appJs, "}).join(\"\");");
+checkNotContains("ROI does not render a card per scan", appJs, "roi-descriptive-card-per-scan");
+
+// Must not imply grouped statistics. Bound the slice to the ROI card;
+// an unbounded slice picked up unrelated later sections.
+const roiCardStart = html.indexOf('id="roi-descriptive-card"');
+const roiCardHtml = html.slice(roiCardStart, html.indexOf("leaderboard-card", roiCardStart));
+["Repeatability", "Reproducibility", "Inter-participant", "Inter-site"].forEach((term) => {
+  checkNotContains(`ROI section avoids '${term}'`, roiCardHtml, term);
+});
+
+
+// ── Phase 4D: ROI renderer wired into the Results Summary lifecycle ───────
+// The call must live inside the central renderer, not merely exist somewhere.
+// Bounded by the NEXT top-level function after it. An end-marker search is
+// unsafe: the obvious sentinels appear earlier in the file, so the slice
+// silently ran to end-of-file and matched unrelated code.
+const previewPanelStart = appJs.indexOf("function renderScorePreviewPanel()");
+const previewPanelEnd = appJs.indexOf("\nfunction ", previewPanelStart + 1);
+const previewPanelSrc = appJs.slice(
+  previewPanelStart, previewPanelEnd > 0 ? previewPanelEnd : appJs.length);
+checkContains("Central Results Summary renderer calls the ROI renderer",
+  previewPanelSrc, "renderRoiDescriptiveStatistics(");
+// Spread, so BOTH rows and status reach the renderer. Passing only
+// `_roiDescriptivePayload()[0]` would drop the status that explains an
+// empty table, and the static check would otherwise still pass.
+checkContains("ROI call passes rows AND status",
+  previewPanelSrc, "renderRoiDescriptiveStatistics(..._roiDescriptivePayload())");
+
+// The payload helper must read the real canonical path, not a guess.
+checkContains("Payload helper exists", appJs, "function _roiDescriptivePayload()");
+checkContains("Payload reads reference_scoring", appJs, "analysis.reference_scoring");
+checkContains("Payload reads the canonical records key", appJs, "ref.roi_descriptive_statistics");
+checkContains("Payload reads the canonical status key", appJs, "ref.roi_descriptive_status");
+checkContains("Payload sources rows from the score cache", appJs, "_niftiAnalysisEntries()");
+
+// It must pass the raw ratio through, not a pre-formatted percentage.
+checkNotContains("Lifecycle does not pre-format CoV", previewPanelSrc, "* 100");
+
+// Rendering must not issue a network request or re-score.
+checkNotContains("ROI payload helper performs no fetch", 
+  appJs.slice(appJs.indexOf("function _roiDescriptivePayload()"),
+              appJs.indexOf("function _niftiAnalysisEntries()")), "fetch(");
+checkNotContains("Central renderer does not call the CSV endpoint",
+  previewPanelSrc, "/api/export-roi-descriptive");
+checkNotContains("Central renderer does not re-trigger scoring",
+  previewPanelSrc, "/api/score");
+
+// Empty renders must clear stale rows, not just hide the table.
+checkContains("Empty render clears the table body", appJs, 'if (body) body.innerHTML = "";');
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);

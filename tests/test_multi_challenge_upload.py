@@ -171,7 +171,10 @@ def test_mixed_report_grouped_by_challenge_no_cross_total(client):
     batch_id = _validate_mixed(client)
     html = client.get(f"/api/report?batch_id={batch_id}").text
     assert "no cross-challenge totals are computed" in html
-    assert "multiple challenges" in html
+    # The caveat moved from a table row into the leader paragraph when the
+    # report was restyled; assert the meaning, not the old phrasing.
+    assert "spans more than one challenge" in html
+    assert "reported per challenge" in html
     assert "ASL RMSE" in html and "DCE RMSE" in html   # per-challenge rows (in QC summary)
     # No single global RMSE row that would pool challenges:
     assert "<td>RMSE</td>" not in html

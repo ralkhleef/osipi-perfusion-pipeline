@@ -40,16 +40,21 @@ from fastapi.testclient import TestClient  # noqa: E402  (after importorskip)
 # Helpers — build tiny in-memory ZIPs and NIfTI files
 # ---------------------------------------------------------------------------
 
-def _tiny_nifti_bytes() -> bytes:
-    """Return a minimal but valid NIfTI-1 file as bytes (no nibabel required)."""
+def _tiny_nifti_bytes(ndim: int = 3) -> bytes:
+    """Return a minimal but valid NIfTI-1 file as bytes (no nibabel required).
+
+    ``ndim`` lets a caller build the 4-D modelled signal DCE requires.
+    """
     # NIfTI-1 magic header: 348 bytes header + 4 bytes extension = 352 bytes
     header = bytearray(348)
     header[0:4] = (348).to_bytes(4, "little")          # sizeof_hdr
     header[344:348] = b"n+1\x00"                        # magic
-    header[40:42] = (3).to_bytes(2, "little")           # dim[0] = 3
+    header[40:42] = (ndim).to_bytes(2, "little")        # dim[0]
     header[42:44] = (4).to_bytes(2, "little")           # dim[1] = 4
     header[44:46] = (4).to_bytes(2, "little")           # dim[2] = 4
     header[46:48] = (4).to_bytes(2, "little")           # dim[3] = 4
+    if ndim >= 4:
+        header[48:50] = (2).to_bytes(2, "little")       # dim[4] = 2 timepoints
     header[70:72] = (16).to_bytes(2, "little")          # datatype = float32
     header[72:74] = (32).to_bytes(2, "little")          # bitpix = 32
     # vox_offset (4-byte float at offset 108): must be >= 352.0
@@ -302,9 +307,14 @@ def test_configured_missing_maps_are_reported_for_each_challenge(client: TestCli
     dce = client.post("/api/validate", json={
         "submission_id": dce_sid, "challenge_type": "dce", "mode": "result_only",
     }).json()
+    # DCE has migrated to required_maps/optional_maps: kep and vp are now
+    # declared optional, so the legacy "expected map missing" warning is
+    # suppressed for them rather than contradicting the configuration.
+    # Required-map absence is reported as a blocking REQUIRED_MAP_MISSING
+    # error instead — see tests/test_completeness.py.
     dce_missing = [w["message"].lower() for w in dce.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
-    assert any("kep" in msg for msg in dce_missing)
-    assert any("vp" in msg for msg in dce_missing)
+    assert not any("kep" in msg for msg in dce_missing)
+    assert not any("vp" in msg for msg in dce_missing)
 
     dsc_data, dsc_name = _make_maps_zip("dsc_missing.zip", ["cbv_map.nii", "cbf_map.nii"])
     dsc_sid = _upload_and_get_id(client, dsc_data, dsc_name)
@@ -1707,29 +1717,37 @@ def test_report_html_generated(client: TestClient) -> None:
     r = client.get(f"/api/report?submission_id={sid}")
     assert r.status_code == 200, r.text
     assert "text/html" in r.headers.get("content-type", "")
-    assert "OSIPI Perfusion Pipeline Report" in r.text
-    assert "Executive Summary" in r.text
-    assert "Key Metrics" in r.text
-    assert "Visual Summary" in r.text
-    assert "Submission Metadata" in r.text
-    assert "QC / Evaluation Summary" in r.text
+    # Assert on identity and section structure, not on decorative copy: the
+    # headings were renamed when the report moved to a journal layout, and
+    # tests that pin exact section titles break on every restyle.
+    assert "OSIPI" in r.text
+    assert "Evaluation report" in r.text
+    # Generic QC bar charts were removed to keep the report table-focused.
+    assert "Visual Summary" not in r.text
+    # Paper structure: summary, methods, results, limitations.
+    assert "Summary" in r.text
+    assert "Methods" in r.text
+    assert "Results" in r.text
+    assert "Limitations" in r.text
+    # The submissions table was folded into the results table; its columns
+    # must still be reachable somewhere in the document.
+    assert "Challenge" in r.text and "Map types" in r.text
     # Scoring Summary (duplicate of the QC reference rows) and the map preview
     # gallery were removed from the printable report to reduce clutter.
     assert "Scoring Summary" not in r.text
     assert "Parameter Map Previews" not in r.text
-    assert "Per-Submission Results" in r.text
-    assert "Errors, Warnings, and Recommended Actions" in r.text
-    assert "Notes / Limitations" in r.text
-    assert "Validation outcome summary" in r.text
-    assert "Voxel validity summary" in r.text
+    assert "Errors and warnings" in r.text
     assert "Basic NIfTI QC" in r.text
     assert "not full BIDS validation" in r.text
-    assert "Challenge type:" in r.text
-    assert "Number of submissions:" in r.text
-    assert "Number of maps:" in r.text
-    assert "Map types detected:" in r.text
+    # Report metadata: the labels lost their trailing colons when the block
+    # became a definition list, and submission/map counts moved into the
+    # leader sentence and the key-figures band.
+    assert "Challenge" in r.text
+    assert "Map types" in r.text
+    assert "Maps" in r.text
     assert "Finite voxels" in r.text
     assert "Reference status" in r.text
+    assert "Pipeline version" in r.text and "Configuration version" in r.text
     assert r.text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
     # Plain printable report — no purple-heavy app/dashboard styling.
     assert "#4c2a86" not in r.text
@@ -1757,19 +1775,33 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     assert r.content.startswith(b"%PDF")
     assert len(r.content) > 500
     pdf_text = r.content.decode("latin-1", errors="ignore")
+    # These assertions only work while the PDF is written uncompressed (see
+    # pageCompression in pdf_report_service); compression would move page text
+    # into Flate streams. "Notes and limitations" appears only in page
+    # content — never in the document metadata — so it fails loudly if that
+    # ever changes, rather than every check below passing vacuously.
+    # Section headings are set as uppercase small caps, so match them that
+    # way. "NOTES AND LIMITATIONS" appears only in page content, never in the
+    # document metadata, so it fails loudly if page text ever stops being
+    # extractable rather than letting every check below pass vacuously.
+    assert "LIMITATIONS" in pdf_text, (
+        "PDF page text is not extractable; is pageCompression enabled?"
+    )
     for expected in (
-        "OSIPI Perfusion Pipeline Report", "Executive Summary", "Status and Key QC Metrics",
-        "QC / Evaluation Summary",
-        "Submission Metadata", "Scoring Summary", "Per-Submission Results",
-        "Notes / Limitations", "Challenge type", "Export date",
+        "Evaluation report",
+        "SUMMARY", "METHODS", "RESULTS", "LIMITATIONS",
         "Pipeline version", "Configuration version",
-        "Number of submissions", "Number of maps", "Map types detected",
-        "Finite voxels", "Reference status", "Validation status", "Execution status",
+        "Finite voxels", "Reference status",
+        "Table 1. Aggregate quality-control",
     ):
         assert expected in pdf_text
     # The decorative "Small QC Charts" section was removed to reduce noise.
     assert "Small QC Charts" not in pdf_text
-    assert pdf_text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
+    # The reference-unavailable note must appear exactly once (it used to be
+    # repeated in both the summary and the per-row notes). Matched on a short
+    # fragment because ReportLab emits each wrapped line as its own text
+    # operator, so the full sentence is never contiguous in the byte stream.
+    assert pdf_text.count("Reference maps were not available") == 1
     for forbidden in (
         "Execution summary", "Validation summary", "Result maps provided",
         "Ran", "Skipped", "reference_not_available",
@@ -2054,3 +2086,93 @@ def test_pdf_report_has_versions_and_permap_sections(client, tmp_path):
     pdf = client.get(f"/api/export/report/pdf?submission_id={sid}")
     assert pdf.status_code == 200
     assert pdf.content[:5] == b"%PDF-" and len(pdf.content) > 3000
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — completeness enforcement reaches the existing validation gate
+# ---------------------------------------------------------------------------
+
+def _make_dce_zip(filename: str, entries: dict[str, bytes]) -> tuple[bytes, str]:
+    """ZIP with explicit paths, so directory identity can be expressed."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for path, payload in entries.items():
+            zf.writestr(path, payload)
+    return buf.getvalue(), filename
+
+
+def _dce_scan_entries(participant: str = "001") -> dict[str, bytes]:
+    """One complete synthetic participant: 2 repeats x 3 sites."""
+    entries: dict[str, bytes] = {"methods.txt": b"our method"}
+    for site in (1, 2, 3):
+        for repeat in (1, 2):
+            base = f"Synthetic/Participant{participant}/Site{site}/Repeat{repeat}"
+            entries[f"{base}/Ktrans.nii"] = _tiny_nifti_bytes()
+            entries[f"{base}/modelled_st.nii"] = _tiny_nifti_bytes(ndim=4)
+    return entries
+
+
+def _validate_dce(client: TestClient, entries: dict[str, bytes], name: str) -> dict:
+    data, fname = _make_dce_zip(name, entries)
+    sid = _upload_and_get_id(client, data, fname)
+    return client.post("/api/validate", json={
+        "submission_id": sid, "challenge_type": "dce", "mode": "result_only",
+    }).json()
+
+
+def _error_codes(result: dict) -> set[str]:
+    return {e.get("code") for e in result.get("errors", [])}
+
+
+def test_dce_missing_ktrans_blocks_the_gate(client: TestClient) -> None:
+    entries = _dce_scan_entries()
+    del entries["Synthetic/Participant001/Site1/Repeat1/Ktrans.nii"]
+    result = _validate_dce(client, entries, "dce_no_ktrans.zip")
+    assert "REQUIRED_MAP_MISSING" in _error_codes(result)
+    assert result["passed"] is False
+
+
+def test_dce_missing_methods_blocks_the_gate(client: TestClient) -> None:
+    entries = _dce_scan_entries()
+    del entries["methods.txt"]
+    result = _validate_dce(client, entries, "dce_no_methods.zip")
+    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
+    assert result["passed"] is False
+
+
+def test_dce_readme_alone_does_not_satisfy_methods(client: TestClient) -> None:
+    entries = _dce_scan_entries()
+    del entries["methods.txt"]
+    entries["README.md"] = b"# submission"
+    result = _validate_dce(client, entries, "dce_readme_only.zip")
+    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
+
+
+def test_dce_notes_txt_does_not_satisfy_methods(client: TestClient) -> None:
+    entries = _dce_scan_entries()
+    del entries["methods.txt"]
+    entries["notes.txt"] = b"some notes"
+    result = _validate_dce(client, entries, "dce_notes.zip")
+    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
+
+
+def test_dce_methodology_docx_satisfies_methods(client: TestClient) -> None:
+    entries = _dce_scan_entries()
+    del entries["methods.txt"]
+    entries["methodology.docx"] = b"PK\x03\x04 fake docx"
+    result = _validate_dce(client, entries, "dce_methodology.zip")
+    assert "REQUIRED_ARTIFACT_MISSING" not in _error_codes(result)
+
+
+def test_dce_validation_issues_serialize_over_the_api(client: TestClient) -> None:
+    """Structured context must survive JSON without leaking objects."""
+    entries = _dce_scan_entries()
+    del entries["Synthetic/Participant001/Site2/Repeat1/Ktrans.nii"]
+    result = _validate_dce(client, entries, "dce_serialize.zip")
+    issue = next(e for e in result["errors"] if e["code"] == "REQUIRED_MAP_MISSING")
+    assert issue["participant"] == "1"
+    assert issue["site"] == "2"
+    assert json.loads(json.dumps(result)) == result
+    # Existing response shape is untouched.
+    for key in ("submission_id", "challenge_type", "passed", "errors", "warnings"):
+        assert key in result
