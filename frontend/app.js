@@ -830,7 +830,15 @@ function simplifyMessage(item) {
   if (lower.includes("dockerfile") || lower.includes("code file"))
     return "No code files detected";
 
-  if (text.length > 90) return text.slice(0, 87) + "…";
+  // Messages read better whole. The issue list wraps them cleanly, so only
+  // genuinely runaway text — a validator that pastes an entire path list —
+  // needs a cap, and that cap breaks at a word boundary instead of mid-word
+  // ("… because datase…" told the reader nothing).
+  if (text.length > 240) {
+    const cut = text.slice(0, 240);
+    const boundary = cut.lastIndexOf(" ");
+    return (boundary > 160 ? cut.slice(0, boundary) : cut).trimEnd() + "…";
+  }
   return text;
 }
 
@@ -884,49 +892,9 @@ const STEP_TITLES = {
   export:   { title: "Export",             sub: "Download reports, CSV, and JSON summaries" },
 };
 
-const COMPACT_PROGRESS_STEPS = [
-  { id: "upload",   label: "Upload" },
-  { id: "index",    label: "Review" },
-  { id: "validate", label: "Validate" },
-  { id: "run",      label: "Run" },
-  { id: "score",    label: "QC & Preview" },
-  { id: "export",   label: "Export" },
-];
-
-function _syncWorkflowShell() {
-  const titleEl = el("workflow-session-title");
-  const metaEl = el("workflow-session-meta");
-  if (!titleEl && !metaEl) return;
-
-  const valResults = (batchState.validationData && batchState.validationData.results) || [];
-  const uploadSubs = (batchState.uploadData && batchState.uploadData.submissions) || [];
-  const knownCount = valResults.length || uploadSubs.length || (state.submissionId ? 1 : 0);
-  const challenge = challengeLabel(getChallengeType() || defaultChallengeType());
-  const team = getTeamName();
-  const name = knownCount > 1
-    ? `${knownCount} submissions`
-    : valResults[0]?.submission_id
-      ? getSubmissionDisplayName(valResults[0], valResults[0].submission_id)
-      : uploadSubs[0]?.submission_id
-        ? getSubmissionDisplayName(uploadSubs[0], uploadSubs[0].submission_id)
-        : state.submissionId
-          ? getSubmissionDisplayName({ submission_id: state.submissionId }, state.submissionId)
-          : "No submission selected";
-
-  const warningCount = valResults.reduce((sum, r) => sum + issueCount(r, "warnings"), 0);
-  const errorCount = valResults.reduce((sum, r) => sum + issueCount(r, "errors"), 0);
-  const parts = [];
-  if (team) parts.push(team);
-  if (challenge) parts.push(`${challenge} challenge`);
-  if (knownCount) parts.push(`${knownCount} submission${knownCount === 1 ? "" : "s"}`);
-  if (valResults.length) {
-    parts.push(errorCount ? `${errorCount} blocking error${errorCount === 1 ? "" : "s"}` : "No blocking errors");
-    if (warningCount) parts.push(`${warningCount} item${warningCount === 1 ? "" : "s"} to review`);
-  }
-
-  if (titleEl) titleEl.textContent = name;
-  if (metaEl) metaEl.textContent = parts.length ? parts.join(" · ") : "Upload a submission to begin.";
-}
+// The top session-summary card and the numbered workflow stepper were removed;
+// the Upload card is now the first content. Internal step state lives in the
+// hidden wf-btn-* holders + goToStep()/hash navigation below.
 
 function _normalizeWorkflowStep(step, fallback = "upload") {
   if (step === "summary") return fallback === "export" ? "export" : "score";
@@ -1082,14 +1050,8 @@ function _resetToUploadAndClearPersistence() {
   clearWizardState();
 }
 
-const workflowStartNewBtn = el("workflow-start-new-btn");
-if (workflowStartNewBtn) {
-  workflowStartNewBtn.addEventListener("click", () => {
-    const hasSession = !!(state.submissionId || batchState.uploadData || batchState.validationData);
-    if (hasSession && !window.confirm("Start a new review and clear the current local session?")) return;
-    _resetToUploadAndClearPersistence();
-  });
-}
+// The session-card "Start New" button was removed. Start New remains available
+// on the Validate step header (#new-btn) and the Export step.
 
 function _advanceWizardStep(step) {
   const cfg = _WF_FOOTER_CONFIG[step];
@@ -1323,124 +1285,13 @@ function _stepUnlocked(step) {
   return !!btn && !btn.disabled;
 }
 
-function _validationProgressStatus() {
-  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
-  if (!results.length) return null;
-  const hasError = results.some((r) => (issueCount(r, "errors") > 0) || !r.passed);
-  const hasWarning = results.some((r) => issueCount(r, "warnings") > 0);
-  const actionable = results.some((r) =>
-    r.passed && ["runnable", "result_only"].includes(inferredRunReadiness(r))
-  );
-  if (hasError && !actionable) return { state: "error", label: "Blocked" };
-  if (hasError || hasWarning) return { state: "warning", label: "Needs review" };
-  return { state: "complete", label: "Complete" };
-}
+// Per-step progress-status helpers were removed together with the numbered
+// stepper that consumed them.
 
-function _runProgressStatus() {
-  const results = batchState.validationData ? (batchState.validationData.results || []) : [];
-  if (!results.length) return null;
-  if (_allValidationResultsAreResultOnly()) return { state: "skipped", label: "Result maps provided" };
-  const execs = Object.values(_execSummaries);
-  if (execs.some((r) => r.status === "failed" || r.status === "timed-out" || r.timedOut)) {
-    return { state: "error", label: "Needs review" };
-  }
-  if (execs.length > 0) return { state: "complete", label: "Complete" };
-  return { state: "ready", label: "Ready" };
-}
-
-function _scoreProgressStatus() {
-  const scores = Object.values(_scoreCache);
-  if (scores.some((s) => s.status === "failed")) return { state: "error", label: "Needs review" };
-  if (scores.some((s) => s.status === "scored")) return { state: "complete", label: "Complete" };
-  const ncCard = el("score-not-configured-card");
-  if (ncCard && ncCard.style.display !== "none" && _stepUnlocked("score")) {
-    return { state: "warning", label: "Optional" };
-  }
-  return null;
-}
-
-function _compactStatusForStep(step) {
-  const unlocked = _stepUnlocked(step);
-  if (!unlocked) return { state: "locked", label: "Locked" };
-
-  if (step === "upload") {
-    return (batchState.uploadData || batchState.validationData || state.submissionId)
-      ? { state: "complete", label: "Complete" }
-      : { state: "ready", label: "Ready" };
-  }
-  if (step === "index") {
-    return batchState.validationData
-      ? { state: "complete", label: "Complete" }
-      : { state: "ready", label: "Ready" };
-  }
-  if (step === "validate") return _validationProgressStatus() || { state: "ready", label: "Ready" };
-  if (step === "run")      return _runProgressStatus() || { state: "ready", label: "Ready" };
-  if (step === "score")    return _scoreProgressStatus() || { state: "ready", label: "Ready" };
-  if (step === "export")   return { state: "ready", label: "Ready" };
-  return { state: "pending", label: "Pending" };
-}
-
-function _ensureCompactProgress() {
-  const nav = el("compact-progress");
-  if (!nav || nav.dataset.ready === "1") return nav;
-  nav.innerHTML = COMPACT_PROGRESS_STEPS.map((step, idx) => `
-    <button type="button" id="cp-${step.id}" class="compact-progress-item" data-step="${step.id}">
-      <span class="compact-progress-dot" aria-hidden="true">${idx + 1}</span>
-      <span class="compact-progress-text">
-        <span class="compact-progress-label">${escapeHtml(step.label)}</span>
-        <span class="compact-progress-state">Locked</span>
-      </span>
-    </button>
-  `).join("");
-  nav.addEventListener("click", (e) => {
-    const btn = e.target.closest(".compact-progress-item");
-    if (!btn || btn.disabled) return;
-    const targetStep = btn.dataset.step;
-    if (!targetStep || targetStep === wf.step) return;
-    if (targetStep === "run") renderRunStep().catch(() => {});
-    if (targetStep === "score") renderScoreStep().catch(() => {});
-    if (targetStep === "export") _syncExportStep();
-    goToStep(targetStep);
-  });
-  nav.dataset.ready = "1";
-  return nav;
-}
-
-function _syncCompactProgress() {
-  const nav = _ensureCompactProgress();
-  _syncWorkflowShell();
-  if (!nav) return;
-  const currentIdx = WF_STEPS.indexOf(wf.step);
-  COMPACT_PROGRESS_STEPS.forEach((step) => {
-    const btn = el(`cp-${step.id}`);
-    if (!btn) return;
-    const idx = WF_STEPS.indexOf(step.id);
-    const status = _compactStatusForStep(step.id);
-    const isCurrent = step.id === wf.step;
-    const clickableBack = idx < currentIdx && _stepUnlocked(step.id);
-    const disabled = !clickableBack;
-
-    btn.className = [
-      "compact-progress-item",
-      `is-${status.state}`,
-      isCurrent ? "is-current" : "",
-      clickableBack ? "is-clickable" : "is-disabled",
-    ].filter(Boolean).join(" ");
-    btn.disabled = disabled;
-    btn.setAttribute("aria-disabled", String(disabled));
-    if (isCurrent) btn.setAttribute("aria-current", "step");
-    else btn.removeAttribute("aria-current");
-    const stateEl = btn.querySelector(".compact-progress-state");
-    if (stateEl) stateEl.textContent = isCurrent ? "Current" : status.label;
-
-    const future = idx > currentIdx;
-    btn.title = clickableBack
-      ? `Go back to ${step.label}`
-      : isCurrent ? `${step.label}: current step`
-      : future ? `${step.label}: complete previous steps first`
-      : `${step.label}: ${status.label}`;
-  });
-}
+// The visible numbered stepper was removed. This is kept as a safe no-op so the
+// many progress-refresh call sites stay valid; step gating/navigation is handled
+// by the hidden wf-btn-* state holders, _syncWfNav(), and goToStep().
+function _syncCompactProgress() { /* stepper removed — no visible progress nav to sync */ }
 
 // Wire wf-nav button clicks
 document.querySelectorAll(".wf-step[data-step]").forEach((btn) => {
@@ -5579,6 +5430,31 @@ function _cacheScoreStatus(sid, data, row) {
   };
 }
 
+/* Canonical ROI payload for the Results Summary.
+
+   Path, verified against the real API response rather than assumed:
+     /api/scoring-status
+       -> _scorePayload(data).nifti_analysis
+       -> _scoreCache[sid].niftiAnalysis
+       -> .reference_scoring.roi_descriptive_statistics
+
+   Returns [rows, status] for the existing renderer. Both are empty when no
+   submission carries ROI data, which is what clears stale rows when a new
+   submission is opened or an ASL/DSC result is loaded. */
+function _roiDescriptivePayload() {
+  const rows = [];
+  let status = null;
+  for (const analysis of _niftiAnalysisEntries()) {
+    const ref = analysis.reference_scoring;
+    if (!ref || typeof ref !== "object") continue;
+    const records = ref.roi_descriptive_statistics;
+    if (Array.isArray(records)) rows.push(...records);
+    // First explicit status wins; it explains an empty table.
+    if (!status && ref.roi_descriptive_status) status = ref.roi_descriptive_status;
+  }
+  return [rows, status];
+}
+
 function _niftiAnalysisEntries() {
   return Object.values(_scoreCache)
     .map((entry) => entry.niftiAnalysis)
@@ -7086,6 +6962,13 @@ function renderScorePreviewPanel() {
   // Keep the action row in sync so Continue to Export is enabled on Step 5.
   if (typeof _refreshWizardFooter === "function") _refreshWizardFooter();
 
+  // ROI Ktrans statistics come from the canonical scoring result already in
+  // the cache. Rendered here because this is the one function every entry
+  // point funnels through — initial render, each async status resolution,
+  // step navigation, and session restore — so the section updates without a
+  // page reload and without a second request.
+  renderRoiDescriptiveStatistics(..._roiDescriptivePayload());
+
   const container = el("score-preview-panel");
   if (!container) return;
   container.style.display = "";
@@ -7456,6 +7339,9 @@ function _renderExportRows() {
     { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON Results",
       meta: "Machine-readable validation, execution, QC, reference, and limitation summary.",
       btn: `<button type="button" id="export-combined-json-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download JSON results" title="Downloads the blinded combined JSON summary.">Download JSON</button>` },
+    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Ktrans Statistics CSV",
+      meta: "Scan-level median, SD, and CoV for Ktrans within each configured ROI. Descriptive within-scan values, not accuracy or repeatability.",
+      btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI Ktrans statistics CSV" title="Downloads within-ROI Ktrans median, SD, and CoV per scan.">Download CSV</button>` },
     { id: "export-combined-blinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Blinded CSV",
       meta: "CSV without team, contact, or original submission identifiers.",
       btn: `<button type="button" id="export-combined-blinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download blinded combined CSV" title="Blinded export removes team name and contact email.">Download CSV</button>` },
@@ -7473,6 +7359,46 @@ function _renderExportRows() {
   })).join("");
 }
 _renderExportRows();
+
+// ROI descriptive CSV. Reads records already computed during scoring — the
+// download never triggers a recalculation.
+const roiCsvBtn = el("export-roi-descriptive-btn");
+if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
+  const statusEl = el("export-combined-status");
+  const q = _sessionExportQuery();
+  if (!q) {
+    if (statusEl) {
+      statusEl.style.display = "";
+      statusEl.className = "submit-status status-error";
+      statusEl.textContent = "No submission or batch to export. Validate first.";
+    }
+    return;
+  }
+  const label = roiCsvBtn.textContent.trim() || "Download CSV";
+  setLoading(roiCsvBtn, true, label);
+  if (statusEl) statusEl.style.display = "none";
+  try {
+    const res = await fetch(`${API}/api/export-roi-descriptive?${q}`);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || "Export failed.");
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get("Content-Disposition") || "";
+    // A header-only CSV is a valid response when no ROI rows exist.
+    const fname = cd.match(/filename="([^"]+)"/)?.[1]
+      || "roi_descriptive_statistics.csv";
+    triggerDownload(blob, fname);
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.display = "";
+      statusEl.className = "submit-status status-error";
+      statusEl.textContent = err.message || "Export failed.";
+    }
+  } finally {
+    setLoading(roiCsvBtn, false, label);
+  }
+});
 
 _makeCombinedExportHandler(el("export-combined-blinded-btn"),   true);
 _makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
@@ -7606,3 +7532,120 @@ window.addEventListener("hashchange", () => {
     _resetToUploadAndClearPersistence();
   });
 })();
+
+/* ── ROI Ktrans statistics ────────────────────────────────────────────────
+   Renders the canonical records computed once during scoring. Nothing here
+   recalculates a statistic: CoV arrives as a ratio and is only formatted
+   for display, and unavailable values are never shown as zero.
+   These are within-scan spatial summaries — not repeatability,
+   reproducibility, or accuracy.                                          */
+
+const ROI_UNAVAILABLE_MESSAGES = {
+  no_roi_configured: "ROI Ktrans statistics are unavailable because no ROI masks were configured.",
+  no_eligible_maps: "No valid Ktrans scans were available for ROI statistics.",
+  calculation_error: "ROI Ktrans statistics could not be calculated. Existing validation and scoring results are still available.",
+};
+
+const ROI_REASON_LABELS = {
+  empty_roi: "Empty ROI",
+  no_finite_values: "No finite values",
+  mean_near_zero: "Mean near zero",
+  geometry_mismatch: "Geometry mismatch",
+  map_unreadable: "Map unreadable",
+  mask_unreadable: "Mask unreadable",
+  available: "Available",
+};
+
+function _roiNumber(value, digits = 4) {
+  // Unavailable is unavailable. Rendering it as 0 would read as a measurement.
+  if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "Unavailable";
+  return Math.abs(n) >= 0.0001 || n === 0 ? n.toFixed(digits) : n.toExponential(2);
+}
+
+function _roiPercent(value) {
+  // Canonical value is a ratio; the percentage exists only for display.
+  if (value === null || value === undefined) return "Unavailable";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "Unavailable";
+  return `${(n * 100).toFixed(2)}%`;
+}
+
+function _roiIdentity(value) {
+  return value === null || value === undefined || value === "" ? "—" : String(value);
+}
+
+function _roiDatasetLabel(value) {
+  const text = _roiIdentity(value);
+  return text === "—" ? text : text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function renderRoiDescriptiveStatistics(records, status) {
+  const card = el("roi-descriptive-card");
+  if (!card) return;
+  const table = el("roi-descriptive-table");
+  const body = el("roi-descriptive-body");
+  const empty = el("roi-descriptive-empty");
+  const count = el("roi-descriptive-count");
+  const method = el("roi-descriptive-method");
+  const rows = Array.isArray(records) ? records : [];
+
+  // Only shown when the canonical result actually carries ROI data or an
+  // explicit status — ASL and DSC never reach this branch.
+  if (!rows.length && !status) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "";
+  if (count) count.textContent = String(rows.length);
+
+  if (!rows.length) {
+    // Clear, don't just hide. Hiding leaves the previous submission's rows in
+    // the DOM, so opening a new submission or an ASL/DSC result would carry
+    // stale values forward the moment the table was shown again.
+    if (body) body.innerHTML = "";
+    if (table) table.style.display = "none";
+    if (empty) {
+      empty.style.display = "";
+      empty.textContent = ROI_UNAVAILABLE_MESSAGES[status]
+        || "No ROI Ktrans statistics are available.";
+    }
+    if (method) method.textContent = "";
+    return;
+  }
+
+  if (empty) empty.style.display = "none";
+  if (table) table.style.display = "";
+
+  // One table, built as a single string — no card per scan, no per-cell
+  // listeners. Every dynamic field is escaped.
+  if (body) {
+    body.innerHTML = rows.map((r) => {
+      const reason = ROI_REASON_LABELS[r.unavailable_reason || r.status]
+        || String(r.status || "");
+      const voxels = r.mask_voxel_count && r.mask_voxel_count !== r.voxel_count
+        ? `${r.voxel_count} of ${r.mask_voxel_count}`
+        : String(r.voxel_count ?? 0);
+      return `<tr>
+        <td>${escapeHtml(_roiDatasetLabel(r.dataset))}</td>
+        <td>${escapeHtml(_roiIdentity(r.participant))}</td>
+        <td>${escapeHtml(_roiIdentity(r.repeat))}</td>
+        <td>${escapeHtml(_roiIdentity(r.site))}</td>
+        <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
+        <td>${escapeHtml(_roiNumber(r.roi_median))}</td>
+        <td>${escapeHtml(_roiNumber(r.roi_within_scan_sd))}</td>
+        <td>${escapeHtml(_roiPercent(r.roi_within_scan_cov))}</td>
+        <td>${escapeHtml(voxels)}</td>
+        <td>${escapeHtml(reason)}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  if (method) {
+    method.textContent =
+      "Statistics are calculated from finite Ktrans voxels within each configured ROI. "
+      + "SD uses the population definition. CoV is SD divided by the absolute arithmetic mean. "
+      + "CoV is shown as a percentage in this table but stored as a ratio in exports.";
+  }
+}

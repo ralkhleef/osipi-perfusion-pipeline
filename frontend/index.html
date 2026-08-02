@@ -55,20 +55,6 @@
       </div>
     </div>
 
-    <div class="workflow-shell" aria-label="Workflow session">
-      <div class="workflow-session-summary">
-        <div class="workflow-session-copy">
-          <span class="workflow-kicker">Local review session</span>
-          <strong id="workflow-session-title">No submission selected</strong>
-          <span id="workflow-session-meta">Upload a submission to begin.</span>
-        </div>
-        <button id="workflow-start-new-btn" class="btn btn-secondary btn-sm workflow-start-new" type="button">
-          Start New
-        </button>
-      </div>
-      <nav id="compact-progress" class="compact-progress" aria-label="Workflow progress"></nav>
-    </div>
-
     <!-- ════════════════════════════════════════════════════════
          Step 1 — Upload
          ════════════════════════════════════════════════════════ -->
@@ -153,10 +139,6 @@
         <!-- Upload Submission -->
         <div class="form-section">
           <h2 class="section-heading">Upload Submission</h2>
-          <p class="source-note">
-            Accepted formats: ZIP archives, browser folder uploads, GitHub repositories, and Zenodo records.
-            Processing stays on this local/Docker environment. Do not include reference maps or masks in participant archives unless this challenge is explicitly configured for that.
-          </p>
 
           <div class="source-tabs" role="radiogroup" aria-label="Submission source">
             <label class="source-tab active" id="tab-local">
@@ -625,6 +607,37 @@
         </table>
       </div>
 
+      <!-- ROI Ktrans statistics: within-scan descriptive values per ROI.
+           Rendered from the canonical records already computed during
+           scoring; the frontend never recalculates them. -->
+      <div class="pg-card" id="roi-descriptive-card" style="margin-top:16px;display:none">
+        <div class="pg-card-header">
+          <div>
+            <div class="pg-card-title">ROI Ktrans Statistics <span class="collapsible-count section-count" id="roi-descriptive-count">0</span></div>
+            <div class="pg-card-sub" id="roi-descriptive-sub">Within-scan values for each configured ROI</div>
+          </div>
+        </div>
+        <div id="roi-descriptive-empty" class="smc-hint" style="display:none"></div>
+        <table class="sc-table" id="roi-descriptive-table" style="display:none">
+          <thead>
+            <tr class="sc-table-head">
+              <th>Dataset</th>
+              <th>Participant</th>
+              <th>Repeat</th>
+              <th>Site</th>
+              <th>ROI</th>
+              <th>Median</th>
+              <th>SD</th>
+              <th>CoV</th>
+              <th>Voxels</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="roi-descriptive-body"></tbody>
+        </table>
+        <p class="smc-hint" id="roi-descriptive-method" style="margin-top:8px"></p>
+      </div>
+
       <!-- Leaderboard: all previously scored submissions -->
       <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
         <div class="pg-card-header">
@@ -681,8 +694,11 @@
       <!-- Export summary header -->
       <div class="export-summary-panel">
         <div class="esp-main">
-          <div class="esp-title">Final review summary</div>
-          <p class="esp-sub" id="export-session-summary">Validation, execution, and QC status are summarized in each report. Official scoring appears only when a configured official provider is available.</p>
+          <div class="esp-title">Final review summary
+            <button type="button" class="help-tooltip" aria-label="About these reports">?
+              <span class="tooltip-text">Reports summarize validation, execution, and QC status, and note limitations, reference availability, and blinding. Generic QC metrics are not official OSIPI scoring; official scoring appears only when a configured official provider is available.</span>
+            </button>
+          </div>
         </div>
       </div>
 
