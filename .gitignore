@@ -276,3 +276,7 @@ __pycache__/
 test_data/
 data/scoring/
 .codex-ui-audit/
+
+# Local documentation preview renders, produced when checking the Pages site.
+docs-preview.png
+video-preview.png

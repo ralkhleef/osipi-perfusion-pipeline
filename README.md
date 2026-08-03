@@ -279,27 +279,8 @@ PYTHONPATH=src python3 -m osipi_pipeline.ingestion.ingest \
 
 ## Tips
 
-- No scoring data? The app still validates, previews, and exports. Reference scoring stays off until you add the reference data.
-- Docker not running? The Run step turns itself off; validation and export still work.
-- Adding a challenge or changing expected maps: edit `config/validation_rules.yaml`. Defaults, map search paths, and layout rules are in `config/settings.yaml`. See `docs/configuration.md`.
-- Changing the port: edit the `ports` line in `docker-compose.yml`.
-- Everything the app generates (validation JSONs, CSVs, reports, execution logs) lives in `data/outputs/` on your machine.
-
----
-
-## Official OSIPI references
-
-This is an independent evaluation tool. It doesn't ship OSIPI's official scoring code or reference data. You get those from OSIPI and install them as described above. Useful links:
-
-- OSIPI on GitHub: https://github.com/OSIPI
-- OSIPI Task Force 6.2 (DCE/DSC): https://osipi.org/task-force-6-2/
-- TF6.2 DCE/DSC challenge code/data: https://github.com/OSIPI/TF6.2_DCE-DSC-MRI_Challenges
-- DCE-MRI challenge data (OSF): https://osf.io/u7a6f
-- DCE challenge results (Shalom et al., Magn Reson Med, 2024): https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.29909
-- OSIPI Task Force 6.1 (ASL): https://osipi.github.io/task-force-6-1/
-- TF2.2 ASL toolbox: https://github.com/OSIPI/TF2.2_OSIPI-ASL-toolbox
-- DCE-DSC-MRI CodeCollection: https://github.com/OSIPI/DCE-DSC-MRI_CodeCollection
-- NIfTI-1 format: https://nifti.nimh.nih.gov/nifti-1
-- BIDS spec: https://bids.neuroimaging.io/
-
-The ASL QC demo package and the DCE demo package in this repo are for testing the workflow only. They are not official OSIPI scoring.
+- **No scoring data?** The app validates, previews, and exports correctly. Official reference scoring is disabled until OSIPI reference data is installed under the selected provider directory.
+- **Docker not running?** The Run step is disabled automatically. Validation and export still work.
+- **Adding a new challenge type** (or changing expected maps): edit `config/validation_rules.yaml`. Defaults, submitted-map search paths, preview exclusions, and ingestion layout rules live in `config/settings.yaml`. See `docs/configuration.md`.
+- **Changing ports**: edit the `ports` entry in `docker-compose.yml`.
+- **All generated outputs** (validation JSONs, CSVs, reports, execution logs) live in `data/outputs/` on the host, mounted into the container.
