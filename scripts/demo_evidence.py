@@ -26,11 +26,13 @@ import json
 import shutil
 import sys
 import tempfile
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT / "src"), str(ROOT / "backend"), str(ROOT / "tests")]
+sys.path[:0] = [str(ROOT / "src"), str(ROOT / "backend")]
+
+from osipi_pipeline.testing import (  # noqa: E402
+    VOLUME_SHAPE, VOLUME_VALUES, build_dce_submission, write_nifti, zip_directory)
 
 OUT = ROOT / "data" / "outputs" / "demo_evidence"
 TEAM_NAME = "Team Gamma"
@@ -42,29 +44,16 @@ MASK_TUMOUR = [1, 1, 1, 1, 0, 0, 0, 0]
 
 
 def _build_zip(work: Path) -> Path:
-    from test_dce_submission_integrity import _build_submission
-
-    stage = work / "stage"
-    team = _build_submission(stage)
-    # Name the wrapper folder as the challenge expects.
-    renamed = stage / "DCE_Test_Clean"
-    team.rename(renamed)
-
-    archive = OUT / "DCE_Test_Clean.zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(renamed.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(stage))
-    return archive
+    submission = build_dce_submission(work / "stage", "DCE_Test_Clean")
+    return zip_directory(submission, OUT / "DCE_Test_Clean.zip")
 
 
 def _install_reference(root: Path) -> None:
-    from test_dce_submission_integrity import SHAPE, VALUES, _write
-
     reference = root / "reference"
-    _write(reference / "maps" / "Ktrans.nii.gz", [v * 1.05 for v in VALUES], SHAPE)
-    _write(reference / "masks" / "tumour.nii.gz", MASK_TUMOUR, SHAPE)
-    _write(reference / "masks" / "whole_brain.nii.gz", [1] * 8, SHAPE)
+    write_nifti(reference / "maps" / "Ktrans.nii.gz",
+                [v * 1.05 for v in VOLUME_VALUES], VOLUME_SHAPE)
+    write_nifti(reference / "masks" / "tumour.nii.gz", MASK_TUMOUR, VOLUME_SHAPE)
+    write_nifti(reference / "masks" / "whole_brain.nii.gz", [1] * 8, VOLUME_SHAPE)
     # Both spellings of the mask directory: the macOS case-fold condition.
     alias = reference / "Masks"
     if not alias.exists():

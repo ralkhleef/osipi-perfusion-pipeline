@@ -155,8 +155,8 @@ def test_html_and_pdf_render_the_same_row_count(records, label, monkeypatch) -> 
     # The permanently numbered table exists in both, populated or not.
     assert "ROI Ktrans statistics" in html, label
     assert "ROI KTRANS STATISTICS" in pdf, label
-    assert "Table 3. Within-ROI Ktrans statistics" in html, label
-    assert "Table 3. Within-ROI Ktrans statistics" in pdf, label
+    assert "Table 4. Within-ROI Ktrans statistics" in html, label
+    assert "Table 4. Within-ROI Ktrans statistics" in pdf, label
 
     for record in model["roi_descriptive_records"]:
         if record.get("status") == "available":
@@ -169,12 +169,12 @@ def test_table_numbering_stays_aligned_across_formats(monkeypatch) -> None:
     records = [_roi_record()]
     html = _html_text(records, monkeypatch)
     pdf = _pdf_text(records)
-    for number in ("Table 1.", "Table 2.", "Table 3.", "Table 4."):
+    for number in ("Table 1.", "Table 2.", "Table 3.", "Table 4.", "Table 5."):
         assert number in html, number
         assert number in pdf, number
-    # Errors moved to Table 4 when ROI took Table 3 — in both formats.
-    assert "Table 4. Errors and warnings" in html
-    assert "Table 4. Errors and warnings" in pdf
+    # Contents is Table 1, so ROI is Table 4 and errors Table 5 — in both.
+    assert "Table 5. Errors and warnings" in html
+    assert "Table 5. Errors and warnings" in pdf
 
 
 def test_methodology_text_is_shared_not_duplicated(monkeypatch) -> None:

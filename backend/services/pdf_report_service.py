@@ -64,6 +64,56 @@ def _err_cov(metrics: Mapping[str, Any]):
     return metrics.get("error_coefficient_of_variation", metrics.get("coefficient_of_variation"))
 
 
+CONTENTS_CAPTION = (
+    "Table 1. What the submission contains, grouped by dataset and type. Parameter maps, fitted signals and documents are counted separately; organiser reference data is not counted as submitted content."
+)
+
+CAPTION_AGGREGATE_TAIL = (
+    "Values are weighted across included maps; parameter types with different units are reported separately and never averaged together."
+)
+
+
+def _submission_contents_rows(summaries: Sequence[Mapping[str, Any]]) -> list[list[str]]:
+    """What the submission contains, grouped by dataset and artifact type.
+
+    Rows come from the canonical role-based counts computed during validation,
+    so a fitted signal is never counted as a parameter map and reference data
+    is never counted as submitted content. Labels and units are read from
+    configuration; nothing challenge-specific is written here.
+
+    Falls back to an empty table when a summary predates the counts field, so
+    an older stored validation result still renders.
+    """
+    rows: list[list[str]] = []
+    for summary in summaries:
+        counts = summary.get("counts") if isinstance(summary.get("counts"), Mapping) else {}
+        for row in counts.get("contents") or []:
+            rows.append([
+                str(row.get("dataset") or "Not specified"),
+                str(row.get("label") or ""),
+                str(row.get("count") or 0),
+                str(row.get("dimensions") or "—"),
+                _units_display(row.get("units"), row.get("units_configured")),
+                str(row.get("status") or "Valid"),
+            ])
+    return rows
+
+
+def _units_display(units: Any, configured: Any = None) -> str:
+    """Units as configured, distinguishing "unitless" from "not configured".
+
+    A blank in the report should not silently mean the same thing for a
+    quantity that is genuinely dimensionless (a volume fraction) and one whose
+    unit nobody has recorded yet.
+    """
+    text = str(units).strip() if units is not None else ""
+    if text:
+        return text
+    if configured is True:
+        return "Unitless"
+    return "Not configured"
+
+
 def _per_map_sections(summaries: Sequence[Mapping[str, Any]], *, blinded: bool) -> list[dict]:
     """Per-submission, per-map scientific detail: submitted-output properties
     (units/dimensions/shape/voxel size + QC) and reference metrics per ROI, with
@@ -667,6 +717,7 @@ def _build_report_model(
     *,
     tag: str,
     blinded: bool,
+    include_map_appendix: bool = False,
     generated: datetime | None = None,
 ) -> dict[str, Any]:
     generated = generated or datetime.now(timezone.utc)
@@ -903,7 +954,16 @@ def _build_report_model(
         "export_date": generated.strftime("%Y-%m-%d"),
         "pipeline_version": _pipeline_version(),
         "configuration_version": _configuration_version(),
-        "per_map_sections": _per_map_sections(summaries, blinded=blinded),
+        # Submission contents, grouped. A clean 16-scan DCE submission is
+        # eight rows here where the per-map appendix was sixty-seven cards
+        # across a dozen pages, which buried the results it was meant to
+        # support. The detail remains available in JSON and CSV, and the
+        # appendix can still be requested explicitly.
+        "submission_contents": _submission_contents_rows(summaries),
+        "submission_contents_headers": [
+            "Dataset", "Type", "Count", "Dimensions", "Units", "Status"],
+        "per_map_sections": (
+            _per_map_sections(summaries, blinded=blinded) if include_map_appendix else []),
         "blinded": blinded,
         "submission_count": len(summaries),
         "map_count": map_count,
@@ -1631,14 +1691,20 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     # Now that the duplicated voxel rows live only in the figures band, the
     # QC side holds a single row, so the two-column split has been folded
     # back into one table. It stays splittable across pages.
+    # Always emitted, empty or not, so the two formats number tables alike.
+    contents = model.get("submission_contents") or [
+        ["Not available for this submission.", "", "", "", "", ""]]
+    story.append(section("Submission contents"))
+    story.append(data_table(model["submission_contents_headers"], contents))
+    story.append(caption(CONTENTS_CAPTION))
+
     story.append(section("Results"))
     story.append(kv_table({**model["qc"], **model["scoring"]},
                           width=CONTENT_W,
                           tone_keys=["Reference status"]))
     story.append(caption(
-        "Table 1. Aggregate quality-control statistics and reference agreement. "
-        "Values are weighted across included maps; CBF and ATT are reported "
-        "separately and never averaged together."))
+        "Table 2. Aggregate quality-control statistics and reference agreement. "
+        + CAPTION_AGGREGATE_TAIL))
 
     # ── Figures ───────────────────────────────────────────────────────────
     # One agreement figure per challenge: RMSE, MAE, and bias carry the units
@@ -1774,7 +1840,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                             col_widths=[WIDE_CONTENT_W / max(1, len(headers))]
                                        * len(headers)))
     story.append(caption(
-        "Table 2. Per-submission quality control and reference agreement. "
+        "Table 3. Per-submission quality control and reference agreement. "
         "Measures that could not be computed are reported as Not available "
         "and are never converted to zero."))
 
@@ -1790,13 +1856,13 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     ))
     if roi_rows:
         story.append(caption(
-            f"Table 3. Within-ROI Ktrans statistics: "
+            f"Table 4. Within-ROI Ktrans statistics: "
             f"{roi_summary.get('available_rows', 0)} of "
             f"{roi_summary.get('total_rows', 0)} scan-ROI combinations "
             f"available. {ROI_METHOD_TEXT}"))
     else:
         story.append(caption(
-            "Table 3. Within-ROI Ktrans statistics. None were available for "
+            "Table 4. Within-ROI Ktrans statistics. None were available for "
             f"this submission. {ROI_METHOD_TEXT}"))
 
     story.append(NextPageTemplate("later"))
@@ -1818,7 +1884,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         if len(model["issues"]) > 24 else ""
     )
     story.append(caption(
-        "Table 4. Errors and warnings raised during validation, with the "
+        "Table 5. Errors and warnings raised during validation, with the "
         "action required before the submission can be shared." + omitted))
 
     story.append(section("Limitations"))
@@ -1837,11 +1903,20 @@ def generate_pdf_report(
     tag: str,
     blinded: bool = True,
     generated: datetime | None = None,
+    include_map_appendix: bool = False,
 ) -> bytes:
-    """Generate a compact OSIPI PDF report from existing export summaries."""
+    """Generate a compact OSIPI PDF report from existing export summaries.
+
+    ``include_map_appendix`` restores the per-map detail cards. Off by default:
+    a clean 16-scan DCE submission produced a dozen pages of near-identical
+    cards that buried the results they were meant to support. The same detail
+    remains available in the JSON and CSV exports.
+    """
     if not summaries:
         raise ValueError("At least one summary is required.")
-    model = _build_report_model(summaries, tag=tag, blinded=blinded, generated=generated)
+    model = _build_report_model(summaries, tag=tag, blinded=blinded,
+                                generated=generated,
+                                include_map_appendix=include_map_appendix)
     try:
         return _reportlab_pdf_bytes(model)
     except Exception:
