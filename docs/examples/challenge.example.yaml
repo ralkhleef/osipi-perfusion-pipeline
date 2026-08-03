@@ -1,0 +1,89 @@
+# Annotated example of a challenge entry, in the schema the application
+# actually loads.
+#
+# This is a teaching copy. The live file is config/validation_rules.yaml; it is
+# read at runtime and validated on load, so an unknown key, a bad regular
+# expression or a malformed dataset block fails immediately rather than being
+# ignored. Copy a block from here into the live file to change what a challenge
+# requires — no Python is edited.
+
+map_types:
+  # Every parameter map the pipeline can recognise. `patterns` drive filename
+  # detection; `display` and `units` are what reports and tables show.
+  ktrans:
+    display: Ktrans
+    label: Volume transfer constant
+    units: min^-1
+    dimensions: 3          # checked against the NIfTI header
+    patterns:
+      - ktrans
+      - k_trans
+      - transfer_constant
+  vp:
+    display: Vp
+    label: Plasma volume fraction
+    units:                 # empty = not configured; reports say so explicitly
+    dimensions: 3
+    patterns:
+      - vp
+      - plasma_volume
+
+artifact_types:
+  # Submitted files that are not parameter maps. `role` keeps a 4-D fitted
+  # signal from ever being counted as a 3-D parameter map.
+  modelled_st:
+    role: fitted_signal
+    label: Modelled signal-time curve
+    dimensions: 4
+    suffixes: [".nii", ".nii.gz"]
+    patterns: [modelled_st, modeled_st, fitted_signal]
+  methods:
+    role: methods
+    label: Methods document
+    suffixes: [".docx", ".txt"]
+    patterns: [methods, methodology]
+
+challenges:
+  example_dce:
+    label: Example DCE
+    description: Dynamic contrast enhanced MRI
+
+    # Missing a required map is a blocking error.
+    required_maps:
+      - ktrans
+
+    # Accepted, but never reported as missing.
+    optional_maps:
+      - vp
+      - ve
+      - kep
+
+    # Non-map files the submission must include.
+    required_artifacts:
+      - modelled_st
+      - methods
+
+    # The expected scan grid, checked against each file's resolved identity.
+    # A null count means "not yet decided" and is not checked — preferable to
+    # inventing a number that would read as a decision nobody made.
+    datasets:
+      synthetic:
+        participants:
+        repeats: 2
+        sites: 3
+      clinical:
+        participants: 5
+        repeats: 2
+        sites: 1
+
+    # Fallback identity parsing, used only where the directory layout does not
+    # already state participant / repeat / site. Directory structure always
+    # wins; a disagreement is reported rather than silently resolved.
+    filename_identity_patterns:
+      - '^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)_Site(?P<site>\d+)$'
+
+    # Used to auto-detect the challenge from a submission's file and folder names.
+    keywords:
+      - ktrans
+      - dce
+      - dynamic contrast enhanced

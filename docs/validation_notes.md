@@ -23,6 +23,32 @@ Expected maps are configured under `challenges.<id>.expected_maps` in `config/va
 
 Challenge-specific parameter ranges, unit rules, accepted outputs, and official metric thresholds are not enforced here unless they are added to config or supplied by an official scoring package.
 
+## Structural completeness (DCE-2026)
+
+A challenge may additionally declare what a *complete* submission looks like.
+These are enforced — a missing required map or artifact is a blocking error —
+and they are read from configuration, so changing the rules for a future
+challenge does not require a code change.
+
+| Key | Meaning |
+|---|---|
+| `required_maps` | Parameter maps every scan must provide. Missing is an error. |
+| `optional_maps` | Accepted but not required. Missing is not reported. |
+| `required_artifacts` | Non-map files the submission must include, e.g. the modelled signal-time curve and the methods document. |
+| `artifact_types.<id>.dimensions` | Expected NIfTI dimensionality, checked against the file header. |
+| `datasets.<name>` | Expected participants × repeats × sites. A `null` count means "not yet decided by OSIPI" and is not checked. |
+| `filename_identity_patterns` | Fallback identity parsing, used only where the directory layout does not already supply an identifier. |
+
+Issue codes: `REQUIRED_MAP_MISSING`, `REQUIRED_ARTIFACT_MISSING`,
+`MAP_DIMENSION_MISMATCH`, `ARTIFACT_DIMENSION_MISMATCH`,
+`DUPLICATE_PARAMETER_MAP`, `DUPLICATE_REQUIRED_ARTIFACT`,
+`DUPLICATE_METHODS_DOCUMENT`, `INCOMPLETE_ARTIFACT_IDENTITY`,
+`DATASET_COUNT_MISMATCH`, `IDENTITY_CONFLICT`, `UNKNOWN_DATASET`.
+
+Duplicate-filename warnings are scoped by resolved scan identity, so the same
+standard filename appearing once per scan directory — which the DCE-2026
+layout requires — is not reported.
+
 ## Errors vs Warnings
 
 | Type | Meaning |
