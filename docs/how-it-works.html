@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it works · Perfusion Challenge Pipeline</title>
+<meta name="description" content="Documentation for the OSIPI Perfusion Challenge Pipeline: a configurable local web application for importing, validating, running, reviewing and exporting ASL, DCE and DSC challenge submissions.">
+<link rel="icon" href="assets/images/osipi-logo.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<link rel="stylesheet" href="assets/stylesheets/site.css">
+</head>
+<body data-page="how-it-works">
+
+<a class="docs-skip" href="#main">Skip to content</a>
+
+<nav class="navbar navbar-expand-lg docs-navbar sticky-top" aria-label="Main">
+  <div class="container-fluid px-3 px-lg-4">
+    <button class="navbar-toggler border-0 me-2 d-lg-none" type="button"
+            data-bs-toggle="offcanvas" data-bs-target="#docsMenu" aria-controls="docsMenu"
+            aria-label="Open documentation menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+      <img src="assets/images/osipi-logo.png"
+           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           class="docs-brand-logo">
+    </a>
+
+    <!-- Tabs are rendered by assets/scripts/nav.js so all pages share one list. -->
+    <ul class="navbar-nav ms-auto flex-row gap-3 align-items-center" data-navbar-tabs></ul>
+  </div>
+</nav>
+
+<div class="container-fluid px-0">
+  <div class="docs-layout">
+
+    <aside class="docs-sidebar ps-3 ps-xl-4">
+      <nav id="sidebar-nav" aria-label="Documentation sections"></nav>
+    </aside>
+
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="docsMenu" aria-labelledby="docsMenuLabel">
+      <div class="offcanvas-header border-bottom">
+        <h2 class="offcanvas-title h6 mb-0" id="docsMenuLabel">Documentation</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body">
+        <nav id="sidebar-nav-mobile" aria-label="Documentation sections"></nav>
+      </div>
+    </div>
+
+    <main class="docs-main" id="main">
+      <div class="docs-content">
+
+        <section>
+          <h2 id="how-it-works" data-toc-title="How it works">How it works</h2>
+
+          <h3 id="indexing">Indexing</h3>
+          <p>An archive is extracted once and indexed into a manifest. Each file becomes an artifact
+            record with a role — parameter map, fitted signal or methods document — and a scan
+            identity: dataset, participant, site, repeat.</p>
+          <p>Identity is read from the directory structure first; a path such as
+            <code>Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz</code> gives all four values.
+            Configured filename patterns fill gaps. Where the two disagree the directory wins and the
+            conflict is reported. Identity is never inferred from file ordering. Reference and mask
+            directories are excluded from the submission's artifacts.</p>
+
+          <h3 id="validation">Validation</h3>
+          <p>File-level checks cover NIfTI readability, dimensions, finite values, zero-byte files and
+            documentation. Structural completeness checks the submission against its challenge
+            configuration. Errors block the submission; warnings do not.</p>
+          <p>Structural codes: <code>REQUIRED_MAP_MISSING</code>,
+            <code>REQUIRED_ARTIFACT_MISSING</code>, <code>MAP_DIMENSION_MISMATCH</code>,
+            <code>ARTIFACT_DIMENSION_MISMATCH</code>, <code>DUPLICATE_PARAMETER_MAP</code>,
+            <code>DUPLICATE_REQUIRED_ARTIFACT</code>, <code>DUPLICATE_METHODS_DOCUMENT</code>,
+            <code>INCOMPLETE_ARTIFACT_IDENTITY</code>, <code>DATASET_COUNT_MISMATCH</code>,
+            <code>IDENTITY_CONFLICT</code>, <code>UNKNOWN_DATASET</code>.</p>
+
+          <h3 id="execution">Execution</h3>
+          <p>A submission with a Dockerfile runs in a container with a configurable timeout; the
+            command comes from <code>run_config.json</code> inside the submission. Result-only
+            submissions skip this step. If Docker is unavailable the step is disabled and validation
+            and export still work.</p>
+
+          <h3 id="statistics">Statistics</h3>
+          <p>QC reports finite-voxel percentage, NaN and infinity counts, negative-voxel percentage
+            and per-map summary statistics. Parameter types have different units, so they are reported
+            separately and never averaged.</p>
+          <p>Where reference maps exist, within-ROI Ktrans statistics are computed: median,
+            population SD (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|). These
+            measure the spatial spread of one map in one ROI of one scan — not repeatability,
+            reproducibility or inter-participant variability. Unavailable values are reported as
+            unavailable, not as zero.</p>
+
+          <h3 id="outputs">Outputs</h3>
+          <p>All formats are built from one result, so the numbers are computed once. HTML and PDF
+            contain the same sections, rows and table numbers. Exports are the HTML report, the PDF
+            report, an ROI statistics CSV with one row per scan and ROI, and a combined CSV or JSON in
+            wide or long form.</p>
+          <p>Blinded exports omit team name, contact address, submission id and archive name from the
+            body, the metadata and the download filename.</p>
+        </section>
+
+      </div>
+
+      <footer class="docs-footer mt-5">
+        <div class="docs-content d-flex flex-wrap gap-3 justify-content-between">
+          <span>OSIPI Perfusion Challenge Pipeline · Google Summer of Code 2026</span>
+          <span class="d-flex gap-3">
+            <a href="https://osipi.github.io/" target="_blank" rel="noopener">OSIPI</a>
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub repository</a>
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <aside class="docs-toc-col">
+      <p class="docs-toc-title">On this page</p>
+      <nav class="docs-toc" data-toc aria-label="On this page"></nav>
+    </aside>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="assets/scripts/nav.js"></script>
+<script src="assets/scripts/site.js"></script>
+</body>
+</html>

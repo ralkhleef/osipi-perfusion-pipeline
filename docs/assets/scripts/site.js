@@ -1,52 +1,180 @@
+/* Documentation site behaviour: on-this-page navigation, scroll tracking,
+ * copy buttons and the screenshot lightbox.
+ *
+ * No build step and no framework — Bootstrap's own JS bundle handles the
+ * offcanvas menu; everything below is plain DOM work.
+ */
+
 (() => {
-  const menu = document.querySelector('[data-menu]');
-  const sidebar = document.querySelector('.sidebar');
-  menu?.addEventListener('click', () => sidebar?.classList.toggle('open'));
-  sidebar?.querySelectorAll('a').forEach((link) => {
-    link.addEventListener('click', () => sidebar.classList.remove('open'));
+  "use strict";
+
+  const content = document.querySelector(".docs-content");
+  if (!content) return;
+
+  // ── On this page ───────────────────────────────────────────────────────
+  // Built from the headings that are actually present, so the list can never
+  // drift from the document the way a hand-maintained one would.
+  const headings = Array.from(content.querySelectorAll("h2[id], h3[id]"));
+  const toc = document.querySelector("[data-toc]");
+
+  if (toc && headings.length) {
+    for (const heading of headings) {
+      const link = document.createElement("a");
+      link.href = `#${heading.id}`;
+      link.textContent = heading.dataset.tocTitle || heading.textContent.trim();
+      if (heading.tagName === "H3") link.style.paddingLeft = "1.5rem";
+      toc.appendChild(link);
+    }
+  }
+
+  // ── Heading anchors ────────────────────────────────────────────────────
+  for (const heading of headings) {
+    const anchor = document.createElement("a");
+    anchor.className = "docs-anchor";
+    anchor.href = `#${heading.id}`;
+    anchor.setAttribute("aria-label", `Link to ${heading.textContent.trim()}`);
+    anchor.textContent = "#";
+    heading.appendChild(anchor);
+  }
+
+  // ── Active-section tracking ────────────────────────────────────────────
+  // IntersectionObserver alone marks a section active as soon as any part of
+  // it is visible, which flickers between neighbours on a fast scroll. Taking
+  // the last heading above the reading line is stable and matches what the
+  // reader is actually looking at.
+  const sidebarLinks = Array.from(document.querySelectorAll(".docs-nav-link[href^='#']"));
+  const tocLinks = () => Array.from(document.querySelectorAll(".docs-toc a"));
+
+  // Track whatever the sidebar actually points at. Some entries target a
+  // heading inside a section rather than the section itself, and matching on
+  // sections alone left those links permanently unhighlighted.
+  const targets = sidebarLinks
+    .map((link) => document.getElementById(link.getAttribute("href").slice(1)))
+    .filter(Boolean)
+    .sort((a, b) => a.offsetTop - b.offsetTop);
+
+  function setActive() {
+    const line = window.scrollY + window.innerHeight * 0.25;
+
+    let currentTarget = targets[0];
+    for (const target of targets) {
+      if (target.offsetTop <= line) currentTarget = target;
+    }
+    let currentHeading = headings[0];
+    for (const heading of headings) {
+      if (heading.offsetTop <= line) currentHeading = heading;
+    }
+
+    for (const link of sidebarLinks) {
+      const active = currentTarget && link.getAttribute("href") === `#${currentTarget.id}`;
+      link.classList.toggle("active", Boolean(active));
+      if (active) link.setAttribute("aria-current", "true");
+      else link.removeAttribute("aria-current");
+    }
+    for (const link of tocLinks()) {
+      link.classList.toggle(
+        "active",
+        Boolean(currentHeading) && link.getAttribute("href") === `#${currentHeading.id}`
+      );
+    }
+  }
+
+  let ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(() => { setActive(); ticking = false; });
+  }
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll, { passive: true });
+  setActive();
+
+  // Close the mobile menu after a jump, or the target is hidden behind it.
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest(".offcanvas .docs-nav-link");
+    if (!link) return;
+    const panel = link.closest(".offcanvas");
+    const instance = window.bootstrap && window.bootstrap.Offcanvas.getInstance(panel);
+    if (instance) instance.hide();
   });
 
-  const sections = [...document.querySelectorAll('main section[id]')];
-  const navLinks = [...document.querySelectorAll('.sidebar a[href^="#"]')];
-  const observer = new IntersectionObserver((entries) => {
-    const visible = entries.filter((entry) => entry.isIntersecting)
-      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-    if (!visible) return;
-    navLinks.forEach((link) => {
-      link.classList.toggle('active', link.getAttribute('href') === `#${visible.target.id}`);
-    });
-  }, { rootMargin: '-15% 0px -70% 0px', threshold: [0, .25, .6] });
-  sections.forEach((section) => observer.observe(section));
+  // ── Copy buttons ───────────────────────────────────────────────────────
+  document.addEventListener("click", async (event) => {
+    const button = event.target.closest(".docs-copy");
+    if (!button) return;
+    const block = button.closest(".docs-code");
+    const code = block && block.querySelector("pre");
+    if (!code) return;
 
-  document.querySelectorAll('.copy-button').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const pre = button.closest('.code-title')?.nextElementSibling;
-      if (!pre) return;
-      try {
-        await navigator.clipboard.writeText(pre.innerText);
-        const old = button.textContent;
-        button.textContent = 'Copied';
-        setTimeout(() => { button.textContent = old; }, 1200);
-      } catch (_) {
-        button.textContent = 'Select text';
-      }
-    });
+    const label = button.textContent;
+    try {
+      await navigator.clipboard.writeText(code.innerText);
+      button.textContent = "Copied";
+      button.classList.add("copied");
+    } catch {
+      // Clipboard access is refused on insecure origins and in some browsers;
+      // select the text so the reader can copy it manually rather than
+      // leaving the button looking broken.
+      const range = document.createRange();
+      range.selectNodeContents(code);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      button.textContent = "Press ⌘C";
+    }
+    setTimeout(() => {
+      button.textContent = label;
+      button.classList.remove("copied");
+    }, 2000);
   });
 
-  const lightbox = document.querySelector('.lightbox');
-  const lightboxImage = lightbox?.querySelector('img');
-  document.querySelectorAll('.screenshot img').forEach((image) => {
-    image.addEventListener('click', () => {
-      if (!lightbox || !lightboxImage) return;
-      lightboxImage.src = image.src;
-      lightboxImage.alt = image.alt;
-      lightbox.classList.add('open');
-    });
+  // ── Screenshot lightbox ────────────────────────────────────────────────
+  const lightbox = document.querySelector("[data-lightbox]");
+  const lightboxImage = lightbox && lightbox.querySelector("img");
+  let lastFocused = null;
+
+  function openLightbox(source, alt) {
+    if (!lightbox || !lightboxImage) return;
+    lastFocused = document.activeElement;
+    lightboxImage.src = source;
+    lightboxImage.alt = alt || "";
+    lightbox.classList.add("open");
+    lightbox.setAttribute("aria-hidden", "false");
+    const close = lightbox.querySelector(".docs-lightbox-close");
+    if (close) close.focus();
+  }
+
+  function closeLightbox() {
+    if (!lightbox) return;
+    lightbox.classList.remove("open");
+    lightbox.setAttribute("aria-hidden", "true");
+    lightboxImage.src = "";
+    if (lastFocused) lastFocused.focus();
+  }
+
+  document.addEventListener("click", (event) => {
+    const image = event.target.closest(".docs-figure img, .docs-thumbs img");
+    if (image) {
+      openLightbox(image.dataset.full || image.src, image.alt);
+      return;
+    }
+    if (event.target.closest("[data-lightbox]")) closeLightbox();
   });
-  const closeLightbox = () => lightbox?.classList.remove('open');
-  lightbox?.addEventListener('click', closeLightbox);
-  lightbox?.querySelector('button')?.addEventListener('click', closeLightbox);
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeLightbox();
+
+  // Screenshots are focusable, so they must open from the keyboard too.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeLightbox();
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const image = event.target.closest(".docs-figure img, .docs-thumbs img");
+    if (!image) return;
+    event.preventDefault();
+    openLightbox(image.dataset.full || image.src, image.alt);
   });
+
+  for (const image of document.querySelectorAll(".docs-figure img, .docs-thumbs img")) {
+    image.tabIndex = 0;
+    image.setAttribute("role", "button");
+    image.setAttribute("aria-label", `Enlarge: ${image.alt || "screenshot"}`);
+  }
 })();

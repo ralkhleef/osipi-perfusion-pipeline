@@ -280,3 +280,67 @@ data/scoring/
 # Local documentation preview renders, produced when checking the Pages site.
 docs-preview.png
 video-preview.png
+
+# ── Organiser-owned and hidden challenge assets ───────────────────────────────
+# Answer keys, blinded lookup tables and ground truth are not always imaging
+# files, so the medical-image rules below do not cover them. These directories
+# are excluded by name, whatever they contain.
+data/hidden/
+data/organizer_data/
+data/organiser_data/
+data/ground_truth/
+data/ground-truth/
+data/challenge_data/
+data/masks/
+data/measured_st/
+data/scoring_results/
+
+# Provider and package payloads: reference maps, masks and DRO data that ship
+# with an installed scoring package. Named explicitly rather than with a broad
+# **/masks/** rule, which would also catch legitimate documentation and demo
+# paths.
+data/scoring/providers/*/reference/
+data/scoring/providers/*/references/
+data/scoring/providers/*/mask/
+data/scoring/providers/*/masks/
+data/scoring/providers/*/Masks/
+data/scoring/providers/*/ground_truth/
+data/scoring/providers/*/hidden/
+data/scoring/providers/*/DROKtransNifti/
+data/scoring/packages/*/reference/
+data/scoring/packages/*/references/
+data/scoring/packages/*/mask/
+data/scoring/packages/*/masks/
+data/scoring/packages/*/Masks/
+data/scoring/packages/*/ground_truth/
+data/scoring/packages/*/hidden/
+
+# Additional medical-image formats not already listed above.
+*.dicom
+*.ima
+*.mha
+*.mhd
+*.nrrd
+
+# Credentials and tokens.
+*.token
+*.pem
+*.key
+.env.*
+!.env.example
+
+# Runtime sentinels that must survive the rules above, so the empty
+# directories the application expects still exist on a fresh clone.
+!data/reference_data/.gitkeep
+!data/outputs/.gitkeep
+!data/outputs/execution/.gitkeep
+!data/outputs/manifests/.gitkeep
+!data/outputs/validation/.gitkeep
+!submissions/incoming/.gitkeep
+!submissions/extracted/.gitkeep
+!submissions/validated/.gitkeep
+
+# Demo scoring package: the manifest and script are documentation, not data.
+!data/sample_submissions/demo_scoring_package/manifest.json
+!data/sample_submissions/demo_scoring_package/scoring.py
+!data/sample_submissions/demo_scoring_package/README.md

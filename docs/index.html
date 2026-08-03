@@ -1,340 +1,130 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Documentation for the OSIPI perfusion challenge submission pipeline.">
-  <title>OSIPI Perfusion Pipeline Documentation</title>
-  <link rel="icon" href="assets/images/pipeline-logo.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="assets/stylesheets/site.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perfusion Challenge Pipeline · Documentation</title>
+<meta name="description" content="Documentation for the OSIPI Perfusion Challenge Pipeline: a configurable local web application for importing, validating, running, reviewing and exporting ASL, DCE and DSC challenge submissions.">
+<link rel="icon" href="assets/images/osipi-logo.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<link rel="stylesheet" href="assets/stylesheets/site.css">
 </head>
-<body>
-  <header class="topbar">
-    <button class="menu-button" data-menu aria-label="Open documentation menu">☰</button>
-    <a class="brand" href="#overview">
-      <img src="assets/images/pipeline-logo.svg" alt="Pipeline logo">
-      <span>OSIPI Perfusion Pipeline<small>Project documentation</small></span>
-    </a>
-    <nav class="top-links" aria-label="External links">
-      <a href="https://osipi.github.io/">OSIPI</a>
-      <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline">GitHub repository</a>
-    </nav>
-  </header>
+<body data-page="index">
 
-  <div class="layout">
-    <aside class="sidebar">
-      <p class="sidebar-label">Documentation</p>
-      <nav>
-        <a href="#overview" class="active">Overview</a>
-        <a href="#status">Current status</a>
-        <a href="#workflow">Pipeline workflow</a>
-        <a href="#screenshots">Interface gallery</a>
-        <a href="#setup">Local setup</a>
-        <a href="#submission-support">Submission support</a>
-        <a href="#configuration">Configuration guide</a>
-        <a href="#scoring-provider">Scoring providers</a>
-        <a href="#scientific-status">Scientific decisions</a>
-        <a href="#video">Video walkthrough</a>
-        <a href="#publishing">Publish with GitHub Pages</a>
-        <a href="#limitations">Limitations</a>
-      </nav>
-      <div class="sidebar-note">
-        This site documents the current repository snapshot. Scientific formulas that have not been approved by the challenge team are marked as open decisions.
-      </div>
+<a class="docs-skip" href="#main">Skip to content</a>
+
+<nav class="navbar navbar-expand-lg docs-navbar sticky-top" aria-label="Main">
+  <div class="container-fluid px-3 px-lg-4">
+    <button class="navbar-toggler border-0 me-2 d-lg-none" type="button"
+            data-bs-toggle="offcanvas" data-bs-target="#docsMenu" aria-controls="docsMenu"
+            aria-label="Open documentation menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+      <img src="assets/images/osipi-logo.png"
+           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           class="docs-brand-logo">
+    </a>
+
+    <!-- Tabs are rendered by assets/scripts/nav.js so all pages share one list. -->
+    <ul class="navbar-nav ms-auto flex-row gap-3 align-items-center" data-navbar-tabs></ul>
+  </div>
+</nav>
+
+<div class="container-fluid px-0">
+  <div class="docs-layout">
+
+    <aside class="docs-sidebar ps-3 ps-xl-4">
+      <nav id="sidebar-nav" aria-label="Documentation sections"></nav>
     </aside>
 
-    <main>
-      <div class="content">
-        <section id="overview" class="hero">
-          <p class="eyebrow">Google Summer of Code 2026 · OSIPI</p>
-          <h1>Perfusion challenge submission pipeline</h1>
-          <p>A local web application for importing, validating, running, reviewing, and exporting ASL, DCE, and DSC perfusion-imaging challenge submissions.</p>
-          <div class="hero-actions">
-            <a class="button primary" href="#setup">Run the pipeline</a>
-            <a class="button secondary" href="#configuration">Change configuration</a>
-            <a class="button secondary" href="#video">Watch walkthrough</a>
-          </div>
-        </section>
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="docsMenu" aria-labelledby="docsMenuLabel">
+      <div class="offcanvas-header border-bottom">
+        <h2 class="offcanvas-title h6 mb-0" id="docsMenuLabel">Documentation</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body">
+        <nav id="sidebar-nav-mobile" aria-label="Documentation sections"></nav>
+      </div>
+    </div>
 
-        <section id="status">
-          <h2>Current project status</h2>
-          <p class="section-lede">The technical submission workflow is operational. The remaining work is mainly the final scientific definition and integration of challenge-specific metrics.</p>
-          <div class="status-grid">
-            <article class="status-card done"><strong>Core workflow</strong><span>Import, index, validate, run, review, and export.</span></article>
-            <article class="status-card active"><strong>Challenge configuration</strong><span>Challenge rules live in <code>config/validation_rules.yaml</code>; scoring packages are uploaded, not coded.</span></article>
-            <article class="status-card pending"><strong>Scientific scoring</strong><span>Final formulas and grouping rules still require mentor approval.</span></article>
-          </div>
-          <div class="callout warning">
-            <strong>No invented scores</strong>
-            The application should only report official challenge metrics after the formula, reference data, masks, and grouping rules have been supplied or approved by OSIPI.
-          </div>
-        </section>
+    <main class="docs-main" id="main">
+      <div class="docs-content">
 
-        <section id="workflow">
-          <h2>Pipeline workflow</h2>
-          <p class="section-lede">The interface keeps the submission lifecycle visible and separates file checks, execution, scientific comparisons, and exports.</p>
-          <div class="workflow-grid">
-            <article class="workflow-card"><div class="number">1</div><h3>Upload</h3><p>Import a ZIP, local folder, GitHub repository, or Zenodo record.</p></article>
-            <article class="workflow-card"><div class="number">2</div><h3>Index</h3><p>Review detected files, map types, metadata, and submission structure.</p></article>
-            <article class="workflow-card"><div class="number">3</div><h3>Validate</h3><p>Check required files, filenames, NIfTI integrity, and challenge rules.</p></article>
-            <article class="workflow-card"><div class="number">4</div><h3>Run</h3><p>Run reproducible submissions in Docker, or skip execution for result-only packages.</p></article>
-            <article class="workflow-card"><div class="number">5</div><h3>QC &amp; Preview</h3><p>Review generic QC and reference comparisons when a provider is available.</p></article>
-            <article class="workflow-card"><div class="number">6</div><h3>Export</h3><p>Generate structured JSON, CSV, HTML, and PDF outputs for review.</p></article>
+        <section id="introduction">
+          <p class="docs-breadcrumb">OSIPI / GSoC 2026</p>
+          <h1>Perfusion Challenge Pipeline</h1>
+          <p class="docs-lead">A configurable local web application for importing, validating, running,
+            reviewing and exporting ASL, DCE and DSC challenge submissions.</p>
+
+          <div class="d-flex flex-wrap gap-2 mt-4 mb-2">
+            <a class="btn btn-primary" href="install.html#installation">Run locally</a>
+            <a class="btn btn-outline-secondary" href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">View repository</a>
           </div>
-        </section>
 
-        <section id="screenshots">
-          <h2>Interface gallery</h2>
-          <p class="section-lede">These screenshots are rendered from the current frontend with demonstration data. Click an image to enlarge it.</p>
-          <div class="screenshot-grid">
-            <figure class="screenshot"><img src="assets/images/pipeline-upload.png" alt="Upload step of the pipeline"><figcaption>Upload a result-only or reproducible submission.</figcaption></figure>
-            <figure class="screenshot"><img src="assets/images/pipeline-index.png" alt="Indexed submission file review"><figcaption>Review detected files and submission metadata.</figcaption></figure>
-            <figure class="screenshot"><img src="assets/images/pipeline-validation.png" alt="Validation results in the pipeline"><figcaption>Separate blocking errors from items that need review.</figcaption></figure>
-            <figure class="screenshot"><img src="assets/images/pipeline-scoring.png" alt="Quality checks and scoring preview"><figcaption>Show QC and provider-backed reference comparisons without inventing an overall score.</figcaption></figure>
-            <figure class="screenshot wide"><img src="assets/images/pipeline-export.png" alt="Export page with report formats"><figcaption>Export machine-readable results and reviewer-friendly reports.</figcaption></figure>
-          </div>
-        </section>
+          <h2 id="what-it-does">What the pipeline does</h2>
+          <p>Submissions arrive as ZIP archives of NIfTI parameter maps. The pipeline extracts and
+            indexes each archive, checks it against the rules configured for its challenge, runs the
+            participant's code in Docker when the submission includes it, computes quality-control
+            and reference-comparison statistics, and exports reports as JSON, CSV, HTML and PDF.</p>
+          <p>It runs locally. Imaging data, reference maps and ROI masks stay on the machine.</p>
 
-        <section id="setup">
-          <h2>Run locally</h2>
-          <p class="section-lede">Docker Desktop is the simplest supported way to run the current web application.</p>
-          <div class="steps">
-            <article class="step"><h3>Clone the repository</h3><p>Download the project and move into its root folder.</p></article>
-            <article class="step"><h3>Build and start</h3><p>Use Docker Compose so the backend and frontend run with consistent dependencies.</p></article>
-            <article class="step"><h3>Open the application</h3><p>Visit <code>http://localhost:8000</code>, then upload a demonstration submission.</p></article>
-          </div>
-          <div class="code-title"><span>Terminal</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>git clone https://github.com/ralkhleef/osipi-perfusion-pipeline.git
-cd osipi-perfusion-pipeline
-docker compose build --no-cache
-docker compose up -d
-
-# Open http://localhost:8000
-# Stop later with:
-docker compose down</code></pre>
-        </section>
-
-        <section id="submission-support">
-          <h2>Submission support</h2>
-          <div class="card-grid">
-            <article class="card">
-              <span class="badge info">Result-only</span>
-              <h3>Precomputed maps</h3>
-              <p>Use this when a participant submits completed NIfTI outputs and a methods document without runnable code.</p>
-            </article>
-            <article class="card">
-              <span class="badge info">Reproducible</span>
-              <h3>Code plus Docker</h3>
-              <p>Use this when a participant supplies code, a Dockerfile or Compose file, and instructions that generate outputs locally.</p>
-            </article>
-            <article class="card">
-              <span class="badge done">DCE</span>
-              <h3>Current direction</h3>
-              <p>Ktrans is mandatory; vp, ve, and Kep may be optional. Modelled S–t and a methods document are expected for the 2026 challenge design.</p>
-            </article>
-            <article class="card">
-              <span class="badge done">ASL</span>
-              <h3>Current direction</h3>
-              <p>Perfmap/CBF and ATTmap naming is recognized. Reference-map comparison is supported at a general level; final challenge metrics remain configurable.</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="configuration">
-          <h2>Configuration guide</h2>
-          <p class="section-lede">Configuration is currently code-based. There is not yet one central YAML file controlling every challenge. The table below shows the real edit points in this repository.</p>
-          <div class="table-wrap">
+          <h2 id="submission-types">Supported submission types</h2>
+          <div class="docs-table-wrap">
             <table>
-              <thead><tr><th>What changes</th><th>Current file</th><th>What to edit</th></tr></thead>
+              <thead><tr><th>Type</th><th>Contains</th><th>Execution</th></tr></thead>
               <tbody>
-                <tr><td>Required and optional parameter maps</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.required_maps</code> and <code>optional_maps</code></td></tr>
-                <tr><td>Required non-map artifacts</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.required_artifacts</code> and the <code>artifact_types</code> block</td></tr>
-                <tr><td>Expected dataset structure</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.datasets</code> — participants, repeats and sites</td></tr>
-                <tr><td>Map names, labels and units</td><td><code>config/validation_rules.yaml</code></td><td>The <code>map_types</code> block: <code>patterns</code>, <code>display</code>, <code>units</code>, <code>dimensions</code></td></tr>
-                <tr><td>Filename identity parsing</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.filename_identity_patterns</code></td></tr>
-                <tr><td>Official scoring script and metrics</td><td>A scoring package</td><td><code>manifest.json</code>, uploaded through Scoring Setup — no code edit</td></tr>
-                <tr><td>Reference data and mask locations</td><td><code>backend/services/path_config.py</code></td><td>Provider and output directory constants</td></tr>
-                <tr><td>Participant execution command</td><td><code>run_config.json</code> inside a submission</td><td><code>command</code> and optional <code>timeout_seconds</code></td></tr>
+                <tr><td>Result-only</td><td>Completed parameter maps</td><td>Skipped — the maps already exist</td></tr>
+                <tr><td>Reproducible</td><td>Code plus a Dockerfile</td><td>Runs in a container, then the outputs are validated</td></tr>
+                <tr><td>Batch</td><td>Several team folders in one archive</td><td>Split into separate submissions automatically</td></tr>
               </tbody>
             </table>
           </div>
+          <p>DCE, ASL and DSC are configured. Adding another challenge is a change to
+            <code>config/validation_rules.yaml</code> — see <a href="configuration.html#validation-rules">Validation
+            rules</a>.</p>
 
-          <h3 style="margin-top:28px">Example: recognise a new map filename</h3>
-          <p>Add aliases under <code>map_types</code>. This changes detection and labelling only; it does not create a scientific metric.</p>
-          <div class="code-title"><span>config/validation_rules.yaml</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>map_types:
-  ktrans:
-    display: Ktrans
-    label: Volume transfer constant
-    units: min^-1
-    dimensions: 3
-    patterns:
-      - ktrans
-      - k_trans
-      - transfer_constant   # add further aliases here</code></pre>
-
-          <h3 style="margin-top:28px">Example: change what a challenge requires</h3>
-          <p>Requirements are enforced from this file. Making <code>ve</code> mandatory is a one-line change, and no Python is edited.</p>
-          <div class="code-title"><span>config/validation_rules.yaml</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>challenges:
-  dce:
-    required_maps:
-      - ktrans
-      - ve            # moved up from optional_maps
-    optional_maps:
-      - vp
-      - kep
-    required_artifacts:
-      - modelled_st   # 4-D, checked against the NIfTI header
-      - methods
-    datasets:
-      synthetic:
-        participants:   # null = not yet decided by OSIPI, so not checked
-        repeats: 2
-        sites: 3
-      clinical:
-        participants: 5
-        repeats: 2
-        sites: 1</code></pre>
-
-          <p>A missing required map or artifact becomes a blocking error, an optional map is not reported, and the dataset grid is checked against each scan’s resolved participant, repeat and site. Unknown keys are rejected at load time, so a typo fails loudly instead of being silently ignored.</p>
-
-          <h3 style="margin-top:28px">Example: change a reproducible run command</h3>
-          <p>A participant can include this file at the top level of their submitted package.</p>
-          <div class="code-title"><span>run_config.json</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>{
-  "command": ["python", "run.py", "--input", "/input", "--output", "/output"],
-  "timeout_seconds": 1800
-}</code></pre>
-
-          <div class="callout">
-            <strong>How far the configuration reaches</strong>
-            Challenge requirements, map names, units, dataset structure and identity parsing are loaded from <code>config/validation_rules.yaml</code> at runtime and are validated on load. Scoring scripts and their metric lists arrive as uploaded packages with their own <code>manifest.json</code>. What still requires a code change is a genuinely new <em>kind</em> of check or a new statistical formula — the schema describes structure, not mathematics.
+          <h2 id="pipeline-workflow">Pipeline workflow</h2>
+          <p>Six steps, in order:</p>
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Step</th><th>What happens</th></tr></thead>
+              <tbody>
+                <tr><td>1. Upload</td><td>Accepts a ZIP, a folder, a GitHub URL or a Zenodo record.</td></tr>
+                <tr><td>2. Review</td><td>Detects the challenge and whether the submission is result-only or reproducible, and indexes every file.</td></tr>
+                <tr><td>3. Validate</td><td>Checks readability, dimensions, required maps and artifacts, and the expected dataset structure.</td></tr>
+                <tr><td>4. Run</td><td>Executes reproducible submissions in Docker. Result-only submissions skip this step.</td></tr>
+                <tr><td>5. QC &amp; Preview</td><td>Quality-control statistics, image previews and reference comparison where reference data exists.</td></tr>
+                <tr><td>6. Export</td><td>HTML and PDF reports, plus JSON and CSV in blinded and unblinded forms.</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
-        <section id="scoring-provider">
-          <h2>Add or change a scoring provider</h2>
-          <p class="section-lede">A provider connects one challenge and map type to an approved script, reference data, masks, and an explicit list of metrics.</p>
-          <div class="steps">
-            <article class="step"><h3>Create a provider folder</h3><p>Place the approved scoring script, hidden reference data, and masks under <code>data/scoring/providers/&lt;provider_id&gt;/</code>. Do not commit private challenge data to a public repository.</p></article>
-            <article class="step"><h3>Describe it in a manifest</h3><p>Add <code>manifest.json</code> beside the script with the package id, challenge type, entry point, call mode, and the explicit list of metrics it returns. Mark <code>"official": false</code> for anything that is not approved OSIPI scoring.</p></article>
-            <article class="step"><h3>Adapt the script safely</h3><p>Map pipeline output folders to the script’s expected input structure and capture its real artifacts. Never fabricate missing metric values.</p></article>
-            <article class="step"><h3>Add focused tests</h3><p>Test provider discovery, missing-data behavior, output parsing, and each approved metric formula with small controlled fixtures.</p></article>
-            <article class="step"><h3>Update reports and documentation</h3><p>Expose only the metrics returned by the provider and describe the exact grouping level, units, masks, and limitations.</p></article>
-          </div>
-          <div class="code-title"><span>manifest.json</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>{
-  "package_id": "osipi_dce_ktrans",
-  "name": "Approved DCE Ktrans scoring",
-  "version": "1.0.0",
-  "challenge_type": "dce",
-  "map_type": "ktrans",
-  "entry_point": "scoring.py",
-  "call_mode": "standard",
-  "official": true,
-  "metrics": ["approved_metric_1", "approved_metric_2"]
-}</code></pre>
-          <p>Upload the package through <strong>Scoring Setup</strong> in the application and select it as active for the challenge. No Python file is edited to register it, and the pipeline reports only the metrics the manifest declares.</p>
-          <div class="callout warn">
-            <strong>Scoring packages run as code</strong>
-            A package is Python that executes on the server. Only trusted reviewers should upload one, and the script should be read before it is installed.
-          </div>
-        </section>
-
-        <section id="scientific-status">
-          <h2>Scientific requirements from the latest review</h2>
-          <p class="section-lede">The meeting notes are organized here so confirmed requirements are not mixed with ideas that still need a formal definition.</p>
-          <div class="decision-grid">
-            <article class="decision-card confirmed">
-              <span class="badge done">Confirmed direction</span>
-              <h3>DCE and ASL inputs</h3>
-              <ul>
-                <li>DCE: Ktrans required; vp, ve, and Kep optional.</li>
-                <li>DCE: modelled S–t as a 4D NIfTI and a methods document.</li>
-                <li>Synthetic and clinical data remain part of one submission.</li>
-                <li>Organizer-provided ROI masks may remain hidden during evaluation.</li>
-                <li>ASL recognizes Perfmap/CBF and ATTmap outputs.</li>
-              </ul>
-            </article>
-            <article class="decision-card next">
-              <span class="badge info">Next implementation</span>
-              <h3>Metric integration</h3>
-              <ul>
-                <li>ROI summaries for Ktrans and ASL maps.</li>
-                <li>Residual or RSS comparison between measured and modelled dynamic signals.</li>
-                <li>Variation across participants, repeats, and sites.</li>
-                <li>Clear individual metrics and plots rather than an invented universal pass/fail score.</li>
-              </ul>
-            </article>
-            <article class="decision-card open">
-              <span class="badge pending">Needs mentor approval</span>
-              <h3>Exact definitions</h3>
-              <ul>
-                <li>Accuracy formula: bias, RMSE, absolute error, percentage error, or another definition.</li>
-                <li>Exact RSS/deviance formula and aggregation.</li>
-                <li>Whether grouped statistics use voxel values, scan-level ROI medians, or both.</li>
-                <li>Paired repeat/site analysis and the ICC model, if ICC is required.</li>
-                <li>Final number of participants, repeats, sites, methods sections, and formal thresholds.</li>
-              </ul>
-            </article>
-          </div>
-          <div class="callout warning">
-            <strong>Implementation rule</strong>
-            Before adding a metric, record its formula, input units, mask, aggregation level, pairing rule, missing-data behavior, and expected output field. A metric name by itself is not enough to reproduce scientific scoring.
-          </div>
-        </section>
-
-        <section id="video">
-          <h2>Configuration walkthrough</h2>
-          <p class="section-lede">This short captioned video shows where submission rules, provider definitions, reference paths, and GitHub Pages deployment are changed. A narration script is included for recording a voiced version.</p>
-          <div class="video-shell">
-            <video controls preload="metadata" poster="assets/images/pipeline-scoring.png">
-              <source src="assets/video/configuration-walkthrough.mp4" type="video/mp4">
-              Your browser does not support embedded MP4 video.
-            </video>
-          </div>
-          <div class="video-links">
-            <a href="video-script.md">Read the narration script</a>
-            <a href="assets/video/configuration-walkthrough.mp4">Open the MP4 file</a>
-          </div>
-        </section>
-
-        <section id="publishing">
-          <h2>Publish the documentation with GitHub Pages</h2>
-          <p class="section-lede">The repository includes a Pages workflow that uploads the static <code>docs/</code> folder. No documentation build dependency is required.</p>
-          <ol class="checklist">
-            <li>Review the repository for private submissions, patient data, hidden references, credentials, and generated runtime outputs before pushing.</li>
-            <li>Commit the documentation, screenshots, video, and <code>.github/workflows/pages.yml</code>.</li>
-            <li>Push the <code>main</code> branch to GitHub.</li>
-            <li>In repository Settings → Pages, choose <strong>GitHub Actions</strong> as the source.</li>
-            <li>Open the Actions tab and confirm the “Deploy documentation” workflow succeeds.</li>
-            <li>Use the Pages URL in the repository description and final GSoC submission.</li>
-          </ol>
-          <div class="code-title"><span>Terminal</span><button class="copy-button" type="button">Copy</button></div>
-          <pre><code>git add README.md docs .github/workflows/pages.yml GITHUB_PUBLISHING_CHECKLIST.md
-git commit -m "Add project documentation site"
-git push origin main</code></pre>
-        </section>
-
-        <section id="limitations">
-          <h2>Current limitations</h2>
-          <div class="card-grid">
-            <article class="card"><h3>Scientific formulas are not all final</h3><p>The documentation distinguishes confirmed requirements from open decisions. Do not label provisional comparisons as official challenge scores.</p></article>
-            <article class="card"><h3>Configuration is distributed</h3><p>Submission rules and provider settings currently live in Python modules. A central reviewed YAML schema would simplify future maintenance.</p></article>
-            <article class="card"><h3>Reference data may be private</h3><p>Hidden masks, clinical data, and organizer-owned references should be mounted or installed securely and excluded from the public Git repository.</p></article>
-            <article class="card"><h3>Reports reflect available providers</h3><p>JSON, CSV, HTML, and PDF exports can only include metrics that were actually computed by an enabled provider.</p></article>
-          </div>
-        </section>
       </div>
 
-      <footer>
-        OSIPI Perfusion Pipeline documentation · GSoC 2026 project · This project page is OSIPI-inspired and is not the main OSIPI website.
+      <footer class="docs-footer mt-5">
+        <div class="docs-content d-flex flex-wrap gap-3 justify-content-between">
+          <span>OSIPI Perfusion Challenge Pipeline · Google Summer of Code 2026</span>
+          <span class="d-flex gap-3">
+            <a href="https://osipi.github.io/" target="_blank" rel="noopener">OSIPI</a>
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub repository</a>
+          </span>
+        </div>
       </footer>
     </main>
-  </div>
 
-  <div class="lightbox" role="dialog" aria-label="Expanded screenshot"><button type="button" aria-label="Close">×</button><img src="" alt=""></div>
-  <script src="assets/scripts/site.js"></script>
+    <aside class="docs-toc-col">
+      <p class="docs-toc-title">On this page</p>
+      <nav class="docs-toc" data-toc aria-label="On this page"></nav>
+    </aside>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="assets/scripts/nav.js"></script>
+<script src="assets/scripts/site.js"></script>
 </body>
 </html>

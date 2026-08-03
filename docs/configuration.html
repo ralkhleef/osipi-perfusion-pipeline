@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configuration · Perfusion Challenge Pipeline</title>
+<meta name="description" content="Documentation for the OSIPI Perfusion Challenge Pipeline: a configurable local web application for importing, validating, running, reviewing and exporting ASL, DCE and DSC challenge submissions.">
+<link rel="icon" href="assets/images/osipi-logo.png">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<link rel="stylesheet" href="assets/stylesheets/site.css">
+</head>
+<body data-page="configuration">
+
+<a class="docs-skip" href="#main">Skip to content</a>
+
+<nav class="navbar navbar-expand-lg docs-navbar sticky-top" aria-label="Main">
+  <div class="container-fluid px-3 px-lg-4">
+    <button class="navbar-toggler border-0 me-2 d-lg-none" type="button"
+            data-bs-toggle="offcanvas" data-bs-target="#docsMenu" aria-controls="docsMenu"
+            aria-label="Open documentation menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+      <img src="assets/images/osipi-logo.png"
+           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           class="docs-brand-logo">
+    </a>
+
+    <!-- Tabs are rendered by assets/scripts/nav.js so all pages share one list. -->
+    <ul class="navbar-nav ms-auto flex-row gap-3 align-items-center" data-navbar-tabs></ul>
+  </div>
+</nav>
+
+<div class="container-fluid px-0">
+  <div class="docs-layout">
+
+    <aside class="docs-sidebar ps-3 ps-xl-4">
+      <nav id="sidebar-nav" aria-label="Documentation sections"></nav>
+    </aside>
+
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="docsMenu" aria-labelledby="docsMenuLabel">
+      <div class="offcanvas-header border-bottom">
+        <h2 class="offcanvas-title h6 mb-0" id="docsMenuLabel">Documentation</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+      </div>
+      <div class="offcanvas-body">
+        <nav id="sidebar-nav-mobile" aria-label="Documentation sections"></nav>
+      </div>
+    </div>
+
+    <main class="docs-main" id="main">
+      <div class="docs-content">
+
+        <section>
+          <h2 id="validation-rules" data-toc-title="Validation rules">Validation rules</h2>
+          <p>Challenge requirements are in <code>config/validation_rules.yaml</code>, read at runtime.
+            The file is validated on load: an unknown key, a malformed dataset block or a bad regular
+            expression fails immediately rather than being ignored.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>What changes</th><th>Where</th><th>Key</th></tr></thead>
+              <tbody>
+                <tr><td>Required and optional maps</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.required_maps</code>, <code>optional_maps</code></td></tr>
+                <tr><td>Required non-map artifacts</td><td><code>config/validation_rules.yaml</code></td><td><code>required_artifacts</code> and the <code>artifact_types</code> block</td></tr>
+                <tr><td>Expected dataset structure</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.datasets</code></td></tr>
+                <tr><td>Map names, labels, units, dimensions</td><td><code>config/validation_rules.yaml</code></td><td>The <code>map_types</code> block</td></tr>
+                <tr><td>Filename identity parsing</td><td><code>config/validation_rules.yaml</code></td><td><code>filename_identity_patterns</code></td></tr>
+                <tr><td>Scoring script and its metrics</td><td>A scoring package</td><td><code>manifest.json</code>, uploaded through Scoring Setup</td></tr>
+                <tr><td>Reference and mask locations</td><td><code>backend/services/path_config.py</code></td><td>Provider and output directory constants</td></tr>
+                <tr><td>Participant execution command</td><td><code>run_config.json</code> in the submission</td><td><code>command</code>, <code>timeout_seconds</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="docs-callout">
+            <p>The schema covers structure: which files are required, their dimensions, how scans are
+              organised. A new statistical formula is implemented and tested in code.</p>
+          </div>
+
+          <p>Annotated template: <a href="examples/challenge.example.yaml"><code>docs/examples/challenge.example.yaml</code></a>.</p>
+        </section>
+
+        <section>
+          <h2 id="dataset-structure" data-toc-title="Dataset structure">Dataset structure</h2>
+          <p>Each dataset declares its expected participants, repeats and sites. Validation counts
+            resolved scan identities against that grid. A <code>null</code> count is not checked,
+            which is how an undecided number is expressed.</p>
+
+          <h3 id="example-c">Example: change expected participant, repeat or site counts</h3>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>challenges:
+  dce:
+    datasets:
+      synthetic:
+        participants: 4      # was null — now checked
+        repeats: 2
+        sites: 3
+      clinical:
+        participants: 5
+        repeats: 2
+        sites: 1</code></pre>
+          </div>
+          <p>That grid expects 24 synthetic scans (4 × 2 × 3) and 10 clinical (5 × 2 × 1). A shortfall
+            is reported as <code>DATASET_COUNT_MISMATCH</code>.</p>
+        </section>
+
+        <section>
+          <h2 id="map-requirements" data-toc-title="Map requirements">Map requirements</h2>
+          <p>A missing required map is a blocking error. An optional map is never reported as missing.
+            Non-map artifacts — a 4-D modelled signal-time curve, a methods document — are declared
+            under <code>artifact_types</code> and required per challenge. Where an artifact declares
+            <code>dimensions</code>, the value is checked against the NIfTI header.</p>
+
+          <h3 id="example-b">Example: change <code>ve</code> from optional to required</h3>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>challenges:
+  dce:
+    required_maps:
+      - ktrans
+      - ve             # moved up from optional_maps
+    optional_maps:
+      - vp
+      - kep
+    required_artifacts:
+      - modelled_st    # 4-D, checked against the NIfTI header
+      - methods</code></pre>
+          </div>
+        </section>
+
+        <section>
+          <h2 id="filename-aliases" data-toc-title="Filename aliases">Filename aliases</h2>
+          <p>Filename detection uses the <code>patterns</code> list on each map type. An alias affects
+            detection and labelling only.</p>
+
+          <h3 id="example-a">Example: add another filename alias for Ktrans</h3>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>map_types:
+  ktrans:
+    display: Ktrans
+    label: Volume transfer constant
+    units: min^-1
+    dimensions: 3
+    patterns:
+      - ktrans
+      - k_trans
+      - transfer_constant
+      - ktrans_map        # new alias</code></pre>
+          </div>
+          <p>Add a validation test covering the new alias.</p>
+
+          <p>Challenge type names come from the same file. <code>KNOWN_CHALLENGE_TYPES</code> exists at
+            runtime but is derived from the configuration at startup, not maintained by hand.</p>
+        </section>
+
+        <section>
+          <h2 id="scoring-providers" data-toc-title="Scoring providers">Scoring providers</h2>
+          <p>A scoring provider is an uploaded package, not a registry entry in the source. Each package
+            holds a scoring script and a <code>manifest.json</code> listing the metrics it returns.
+            Packages are installed through Scoring Setup and selected as active per challenge.</p>
+
+          <h3 id="example-d">Example: scoring package manifest</h3>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>manifest.json</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>{
+  "package_id": "osipi_dce_ktrans",
+  "name": "Approved DCE Ktrans scoring",
+  "version": "1.0.0",
+  "challenge_type": "dce",
+  "map_type": "ktrans",
+  "entry_point": "scoring.py",
+  "call_mode": "standard",
+  "official": true,
+  "metrics": ["approved_metric_1", "approved_metric_2"]
+}</code></pre>
+          </div>
+
+          <p><code>call_mode</code> is <code>standard</code> for scripts taking
+            <code>--submission-dir</code>, <code>--output-dir</code> and optionally
+            <code>--reference-dir</code>. Only the metrics listed in the manifest are reported.
+            Anything that is not approved OSIPI scoring takes <code>"official": false</code>.</p>
+
+          <div class="docs-callout">
+            <p>A scoring package is Python that executes on the server. Read the script before
+              installing one.</p>
+          </div>
+        </section>
+
+        <section>
+          <h2 id="reference-data" data-toc-title="Reference data and masks">Reference data and masks</h2>
+          <p>Reference maps and ROI masks come from the organiser. Search order: the submission's own
+            <code>reference/</code> directory, the configured reference data directory, then the
+            active scoring package's reference directory.</p>
+          <p>Within a reference root, maps are read from <code>maps/</code> and masks from
+            <code>masks/</code>. Files are de-duplicated by physical file identity rather than path
+            text, so on macOS and Windows the same mask cannot be admitted twice under two spellings.</p>
+          <p>Locations are defined in <code>backend/services/path_config.py</code>.
+            <code>.gitignore</code> excludes reference data, masks and imaging files from version
+            control.</p>
+        </section>
+
+      </div>
+
+      <footer class="docs-footer mt-5">
+        <div class="docs-content d-flex flex-wrap gap-3 justify-content-between">
+          <span>OSIPI Perfusion Challenge Pipeline · Google Summer of Code 2026</span>
+          <span class="d-flex gap-3">
+            <a href="https://osipi.github.io/" target="_blank" rel="noopener">OSIPI</a>
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub repository</a>
+          </span>
+        </div>
+      </footer>
+    </main>
+
+    <aside class="docs-toc-col">
+      <p class="docs-toc-title">On this page</p>
+      <nav class="docs-toc" data-toc aria-label="On this page"></nav>
+    </aside>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<script src="assets/scripts/nav.js"></script>
+<script src="assets/scripts/site.js"></script>
+</body>
+</html>

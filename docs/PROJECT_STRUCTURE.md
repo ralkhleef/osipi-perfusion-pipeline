@@ -31,7 +31,6 @@
 | `docker-compose.yml` | Docker Compose config for the local app |
 | `.dockerignore` | Files excluded from the Docker build |
 | `requirements.txt` | Python dependencies |
-| `scripts/start/start.command` / `scripts/start/start.bat` / `scripts/start/start.sh` | Launch the app |
-| `scripts/stop/stop.sh` / `scripts/stop/stop.bat` | Stop the app |
+| `Dockerfile` / `docker-compose.yml` | Build and run the app |
 
 The contents of `data/outputs/`, `submissions/incoming/`, and `submissions/extracted/` are generated at runtime and should not be committed to git.

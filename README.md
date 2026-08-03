@@ -10,7 +10,7 @@ GitHub: https://github.com/ralkhleef/osipi-perfusion-pipeline
 
 You upload a submission (a ZIP of NIfTI maps). The app checks the files, shows previews, compares them to reference data if you've added any, and produces reports you can download.
 
-1. **Run it.** Install Docker Desktop and start it. Then, in this folder, double-click `scripts/start/start.command` on macOS, or run `./scripts/start/start.sh` (macOS/Linux) or `scripts\start\start.bat` (Windows). Once it's up, open http://localhost:8000 in your browser. To stop it: `./scripts/stop/stop.sh`.
+1. **Run it.** Install Docker Desktop and start it. Then, in this folder, run `docker compose up --build`. Once it's up, open http://localhost:8000 in your browser. Stop it with `docker compose down`.
 
 2. **Try it.** Upload `submissions/incoming/lena_01_exact_single_submission.zip` and click through the six steps (Upload, Review, Validate, Run, QC & Preview, Export). It should come up as ASL with CBF and ATT detected, show QC statistics, and let you download the reports. The RMSE and ROI comparison numbers only appear once you add reference maps (step 3).
 
@@ -23,25 +23,32 @@ You upload a submission (a ZIP of NIfTI maps). The app checks the files, shows p
 You need Docker Desktop installed and running.
 
 ```bash
-# macOS / Linux
-./scripts/start/start.sh
+docker build -t osipi-pipeline .
 
-# Windows
-scripts\start\start.bat
-
-# macOS double-click
-scripts/start/start.command
+docker run --rm -p 8000:8000 \
+  -v "$PWD/data:/app/data" \
+  -v "$PWD/submissions:/app/submissions" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -e PYTHONPATH=/app/backend:/app/src \
+  -e HOST_SUBMISSIONS_DIR="$PWD/submissions" \
+  -e HOST_OUTPUTS_DIR="$PWD/data/outputs" \
+  -e HOST_REFERENCE_DATA_DIR="$PWD/data/reference_data" \
+  osipi-pipeline
 ```
 
-Then open http://localhost:8000.
+Then open http://localhost:8000. Stop it with Ctrl-C.
 
-To stop: `./scripts/stop/stop.sh` (or `docker compose down`).
+The Docker socket mount and the three `HOST_*` variables are what let the
+container start a second container to run a participant's code. The backend
+runs inside Docker but calls the host daemon, so the paths it passes to
+`docker run` have to be host paths. Without them, upload, validation, QC and
+export still work; the Run step does not.
 
-You can also start it manually:
+`docker-compose.yml` holds the same configuration and expands `$PWD` for you:
 
 ```bash
-docker compose build --no-cache
-docker compose up -d
+docker compose up --build      # add -d for the background
+docker compose down
 ```
 
 ---
