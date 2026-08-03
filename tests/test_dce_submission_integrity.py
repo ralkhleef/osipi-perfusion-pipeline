@@ -20,68 +20,31 @@ The expected end state for the fixture below, stated once:
 
 from __future__ import annotations
 
-import gzip
-import struct
 import zipfile
 from pathlib import Path
 
 import pytest
 
-CLINICAL = [(p, 1, r) for p in range(1, 6) for r in range(1, 3)]     # 10 scans
-SYNTHETIC = [(1, s, r) for s in range(1, 4) for r in range(1, 3)]    # 6 scans
-MAPS = ("Ktrans", "vp", "ve")
-SHAPE = (2, 2, 2)
-VALUES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+from osipi_pipeline.testing import (
+    VOLUME_SHAPE as SHAPE,
+    VOLUME_VALUES,
+    build_dce_submission,
+    write_nifti,
+    zip_directory,
+)
+
+VALUES = list(VOLUME_VALUES)
 
 
-# ── NIfTI fixtures ────────────────────────────────────────────────────────
-
-def _nifti(values: list[float], shape: tuple[int, ...]) -> bytes:
-    header = bytearray(352)
-    struct.pack_into("<i", header, 0, 348)
-    struct.pack_into("<h", header, 40, len(shape))
-    for index, size in enumerate(shape):
-        struct.pack_into("<h", header, 42 + index * 2, size)
-    struct.pack_into("<h", header, 70, 16)
-    struct.pack_into("<h", header, 72, 32)
-    struct.pack_into("<f", header, 108, 352.0)
-    for index in range(1, len(shape) + 1):
-        struct.pack_into("<f", header, 76 + index * 4, 1.0)
-    struct.pack_into("<f", header, 112, 1.0)
-    header[344:348] = b"n+1\x00"
-    return bytes(header) + b"".join(struct.pack("<f", float(v)) for v in values)
-
-
-def _write(path: Path, values: list[float], shape: tuple[int, ...]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(gzip.compress(_nifti(values, shape)))
-
-
-def _build_submission(root: Path) -> Path:
-    """The layout config/validation_rules.yaml describes for DCE-2026."""
-    team = root / "DCE Test Clean"
-    for dataset, scans in (("Clinical", CLINICAL), ("Synthetic", SYNTHETIC)):
-        for participant, site, repeat in scans:
-            scan = (team / dataset / f"Participant{participant}"
-                    / f"Site{site}" / f"Repeat{repeat}")
-            for name in MAPS:
-                _write(scan / f"{name}.nii.gz", VALUES, SHAPE)
-            _write(scan / "modelled_st.nii.gz", VALUES * 2, (2, 2, 2, 2))
-    (team / "methods.txt").write_text("Extended Tofts, population AIF.\n",
-                                      encoding="utf-8")
-    return team
+def _write(path: Path, values=VALUES, shape=SHAPE) -> None:
+    """Thin alias so the tests below read as tests, not as plumbing."""
+    write_nifti(path, values, shape)
 
 
 @pytest.fixture()
 def dce_zip(tmp_path: Path) -> Path:
-    stage = tmp_path / "stage"
-    team = _build_submission(stage)
-    archive = tmp_path / "DCE Test Clean.zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(team.rglob("*")):
-            if path.is_file():
-                zf.write(path, path.relative_to(stage))
-    return archive
+    submission = build_dce_submission(tmp_path / "stage", "DCE Test Clean")
+    return zip_directory(submission, tmp_path / "DCE Test Clean.zip")
 
 
 @pytest.fixture()

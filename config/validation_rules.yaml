@@ -124,9 +124,12 @@ map_types:
       - mean_transit_time
 
 # Submitted files that are not parameter maps. Each carries a semantic `role`
-# so a 4-D fitted signal is never mistaken for a 3-D parameter map. Declaring
-# an artifact here does not yet cause it to be ingested or required — that
-# arrives in a later phase.
+# so a 4-D fitted signal is never mistaken for a 3-D parameter map.
+#
+# Declaring an artifact here makes it classifiable; listing it under a
+# challenge's `required_artifacts` makes it mandatory. `dimensions`, where
+# given, is checked against the file's NIfTI header, so a 3-D file submitted
+# as a modelled signal-time curve is reported rather than accepted.
 artifact_types:
   modelled_st:
     role: fitted_signal
@@ -153,12 +156,15 @@ challenges:
   dce:
     label: DCE
     description: Dynamic contrast enhanced MRI
-    # Retained unchanged. Missing entries stay warnings, as documented.
+
     expected_maps:
       - ktrans
       - kep
       - vp
-    # DCE-2026 split. Described here only; nothing enforces these yet.
+    # DCE-2026 requirements:
+    # a missing required map or artifact is a blocking error, an optional map
+    # is not, and the dataset grid below is checked against resolved scan
+    # identity. Change these to change the rules; no code edit is needed.
     required_maps:
       - ktrans
     optional_maps:

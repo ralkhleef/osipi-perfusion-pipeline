@@ -2442,6 +2442,8 @@ def _gather_summary(sid: str) -> dict:
     }
     return {
         "submission_id":   sid,
+        # Canonical role-based counts, computed once during validation.
+        "counts":          (val or {}).get("counts") or {},
         "team_name":       (val or {}).get("team_name", ""),
         "contact_email":   (val or {}).get("contact_email", ""),
         "source_folder":   (val or {}).get("source_folder", "") or (val or {}).get("submission_id", sid),
@@ -2953,12 +2955,19 @@ def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
         )
     return (
         '<div class="table-wrap"><table>'
-        "<caption>Table 4. Errors and warnings raised during validation, with the "
+        "<caption>Table 5. Errors and warnings raised during validation, with the "
         "action required before the submission can be shared.</caption>"
         '<thead><tr><th>Severity</th><th>Submission</th><th>Message</th>'
         "<th>Affected file</th><th>Recommended action</th></tr></thead>"
         "<tbody>" + "".join(rows) + "</tbody></table></div>"
     )
+
+
+CONTENTS_CAPTION = (
+    "Table 1. What the submission contains, grouped by dataset and type. "
+    "Parameter maps, fitted signals and documents are counted separately; "
+    "organiser reference data is not counted as submitted content."
+)
 
 
 @app.get("/api/report")
@@ -3128,7 +3137,7 @@ def export_report(
                     "</tr>"
                 )
         map_table = (
-            "<h3>Submitted outputs <span class=\"report-muted\">(per map — CBF and ATT separate)</span></h3>"
+            "<h3>Submitted outputs <span class=\"report-muted\">(one entry per parameter type)</span></h3>"
             "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
             "<th>Map</th><th>Type</th><th>Units</th><th>Dims</th><th>Shape</th><th>Voxel size</th>"
             "<th>Finite voxels</th><th>NaN / Inf</th>"
@@ -3140,7 +3149,7 @@ def export_report(
         reference_table = ""
         if reference_rows:
             reference_table = (
-                "<h3>Reference comparison <span class=\"report-muted\">(per map and ROI — CBF and ATT are never combined)</span></h3>"
+                "<h3>Reference comparison <span class=\"report-muted\">(per parameter type and ROI; types are never combined)</span></h3>"
                 "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
                 "<th>Map type</th><th>ROI</th><th>Reference status</th>"
                 "<th>RMSE</th><th>MAE</th><th>Bias</th><th>Error CoV</th><th>Correlation</th>"
@@ -3158,7 +3167,7 @@ def export_report(
 
     table_html = (
         '<div class="table-wrap"><table>'
-        "<caption>Table 2. Per-submission quality control and reference agreement. "
+        "<caption>Table 3. Per-submission quality control and reference agreement. "
         "Dashes and &ldquo;Not available&rdquo; denote measures that could not be "
         "computed; they are never reported as zero.</caption>"
         "<thead><tr>"
@@ -3245,11 +3254,11 @@ def export_report(
     _roi_headers = report_model.get("roi_descriptive_headers") or []
     _roi_summary = report_model.get("roi_descriptive_summary") or {}
     _roi_caption = (
-        f"Table 3. Within-ROI Ktrans statistics: "
+        f"Table 4. Within-ROI Ktrans statistics: "
         f"{_roi_summary.get('available_rows', 0)} of "
         f"{_roi_summary.get('total_rows', 0)} scan-ROI combinations available. "
         if _roi_rows else
-        "Table 3. Within-ROI Ktrans statistics. None were available for this "
+        "Table 4. Within-ROI Ktrans statistics. None were available for this "
         "submission. "
     ) + ROI_METHOD_TEXT
     _roi_numeric = {5, 6, 7, 8}
@@ -3333,6 +3342,30 @@ def export_report(
             )
             + "</div>"
         )
+
+    # Submission contents, from the same model rows the PDF renders, so the
+    # two formats cannot disagree about what the submission contains.
+    contents_rows_model = report_model.get("submission_contents") or []
+    contents_headers = "".join(
+        f"<th>{_esc(h)}</th>" for h in report_model["submission_contents_headers"])
+    if contents_rows_model:
+        contents_body = "".join(
+            "<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>"
+            for row in contents_rows_model
+        )
+    else:
+        # Rendered even when empty so table numbering stays identical in both
+        # formats; an absent Table 1 would read as a broken report.
+        span = len(report_model["submission_contents_headers"])
+        contents_body = (
+            f'<tr><td colspan="{span}">Not available for this submission.</td></tr>')
+    contents_html = (
+        '<h2>Submission contents</h2>'
+        '<div class="table-wrap"><table>'
+        f'<caption>{CONTENTS_CAPTION}</caption>'
+        f'<thead><tr>{contents_headers}</tr></thead>'
+        f'<tbody>{contents_body}</tbody></table></div>'
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -3573,11 +3606,13 @@ def export_report(
   <h2>Methods</h2>
   {methods_html}
 
+  {contents_html}
+
   <!-- The submissions table was removed: submission, challenge, map types
        and map count are all columns of the results table below. -->
   <h2>Results</h2>
   <div class="table-wrap"><table class="kv">
-    <caption>Table 1. Aggregate quality-control statistics and reference agreement. Values are weighted across included maps; parameter types with different units are never averaged together.</caption>
+    <caption>Table 2. Aggregate quality-control statistics and reference agreement. Values are weighted across included maps; parameter types with different units are reported separately and never averaged together.</caption>
     <thead><tr><th>Measure</th><th>Value</th></tr></thead>
     <tbody>{summary_rows_html}</tbody>
   </table></div>

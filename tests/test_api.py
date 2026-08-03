@@ -1792,7 +1792,7 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
         "SUMMARY", "METHODS", "RESULTS", "LIMITATIONS",
         "Pipeline version", "Configuration version",
         "Finite voxels", "Reference status",
-        "Table 1. Aggregate quality-control",
+        "Table 2. Aggregate quality-control",
     ):
         assert expected in pdf_text
     # The decorative "Small QC Charts" section was removed to reduce noise.

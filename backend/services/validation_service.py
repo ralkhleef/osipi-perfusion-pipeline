@@ -22,6 +22,7 @@ from osipi_pipeline.ingestion.manifest import (
     manifest_files,
     refresh_manifest,
 )
+from osipi_pipeline.ingestion.counts import contents_rows, count_submission
 from osipi_pipeline.ingestion.models import IdentityConflict, SubmissionArtifact
 from osipi_pipeline.validation.validate import duplicate_filename_groups
 from osipi_pipeline.validation.completeness import (
@@ -170,6 +171,54 @@ def _err(code: str, message: str, path: str = "") -> Dict:
 
 def _warn(code: str, message: str, path: str = "") -> Dict:
     return {"severity": "warning", "code": code, "message": message, "path": path or None}
+
+
+def submission_artifacts(folder: Path, challenge: str):
+    """Normalized artifacts from the manifest that was just refreshed.
+
+    One reader, so counting, completeness checking and warning suppression all
+    see the same view of the submission. Reference and mask directories are
+    already excluded upstream.
+    """
+    try:
+        manifest = load_manifest(
+            folder, refresh_if_stale=False, challenge_type=challenge
+        ) or {}
+        return [
+            SubmissionArtifact(**item)
+            for item in manifest.get("artifacts", [])
+            if isinstance(item, dict)
+        ]
+    except Exception:
+        logger.exception("Could not read normalized artifacts for %s", folder)
+        return []
+
+
+def submission_counts(folder: Path, challenge: str) -> Dict:
+    """Role-based counts for the validation card and every report format.
+
+    Counting raw NIfTI files overstated a 16-scan DCE submission as 67 maps:
+    the 16 modelled signal-time curves are fitted signals, and the reference
+    map and ROI masks are organiser inputs, not submitted content. The correct
+    figure is 48 parameter maps, and it is computed once here.
+    """
+    artifacts = submission_artifacts(folder, challenge)
+    counts = count_submission(artifacts).to_dict()
+    # Grouped contents for the report's submission-contents table, so the
+    # renderers never regroup files themselves.
+    counts["contents"] = contents_rows(artifacts)
+    return counts
+
+
+def _unclassified_parameter_maps(folder: Path, challenge: str) -> int:
+    """Files that should be parameter maps but could not be classified.
+
+    Everything the pipeline already understands — a fitted signal, a methods
+    document, a reference map, an ROI mask — is excluded, so the
+    "map type could not be determined" warning fires only when a genuine
+    participant parameter map is unidentifiable.
+    """
+    return int(submission_counts(folder, challenge).get("unclassified", 0))
 
 
 def _completeness_issues(folder: Path, challenge: str) -> List[Dict]:
@@ -323,17 +372,19 @@ def validate_submission(
         detected = detection.get("detected_parameter_map_type", "Unknown")
         if detected in _known_auto_detected():
             effective_map_type = detected
-        else:
+        elif _unclassified_parameter_maps(folder, normalized_challenge):
+            # Only a file that is genuinely expected to be a parameter map and
+            # could not be classified is worth reporting. A modelled signal, a
+            # methods document, a reference map or an ROI mask is none of those.
             effective_map_type = ""
             warnings.append(_warn(
                 "MAP_TYPE_UNDETECTED",
                 "Parameter map type could not be auto-detected. Select it manually if needed.",
             ))
-        if detected == "Mixed/Other":
-            warnings.append(_warn(
-                "MAP_TYPE_MIXED",
-                "Multiple parameter map types detected. Treating as Mixed/Other.",
-            ))
+        else:
+            effective_map_type = ""
+        # A challenge that defines several parameter maps is expected to
+        # contain several; that is completeness, not ambiguity. No warning.
 
     # ---- NIfTI files --------------------------------------------------------
 
@@ -423,21 +474,30 @@ def validate_submission(
         errors.extend(nib_errors)
         warnings.extend(nib_warnings)
 
+    # ---- Canonical role-based counts ----------------------------------------
+
+    counts = submission_counts(folder, normalized_challenge)
+    artifacts = submission_artifacts(folder, normalized_challenge)
+
     # ---- README / SOP -------------------------------------------------------
-
+    #
+    # A challenge may require a methods document instead of a README. When that
+    # configured artifact is present the submission has documented itself, and
+    # warning about a missing README is simply wrong.
     readme_found = _has_readme(all_files)
+    documentation_found = readme_found or counts.get("methods_documents", 0) > 0
 
-    if include_readme == "yes" and not readme_found:
+    if include_readme == "yes" and not documentation_found:
         errors.append(_err(
             "NO_README_OR_METADATA",
             "A README or SOP was marked as included, but none was found. "
             f"Add one of the configured README/metadata files: {', '.join(sorted(README_NAMES))}.",
             str(folder),
         ))
-    elif not readme_found:
+    elif not documentation_found:
         warnings.append(_warn(
             "README_MISSING",
-            "No README or SOP file was found. Consider adding one.",
+            "No README, SOP or methods document was found. Consider adding one.",
             str(folder),
         ))
 
@@ -462,14 +522,11 @@ def validate_submission(
                 str(folder),
             ))
     else:
-        # result_only mode: no run instructions is expected and non-blocking
-        if not has_run_instructions:
-            warnings.append(_warn(
-                "NO_RUN_INSTRUCTIONS",
-                "This submission contains result maps only and cannot be run automatically. "
-                "Add a Dockerfile to enable reproducible execution.",
-                str(folder),
-            ))
+        # result_only mode: execution is not required, so absent run
+        # instructions and absent code are the expected state, not findings.
+        # Reporting them trained reviewers to ignore the warning channel on
+        # every correct result-only submission.
+        pass
         if include_code == "yes" and not _has_code(all_files):
             warnings.append(_warn(
                 "NO_CODE_FILES",
@@ -537,6 +594,7 @@ def validate_submission(
         mode=mode,
         nifti_summary=nifti_summary,
         has_result_maps=has_result_maps,
+        counts=counts,
     )
     result["job_id"] = job_id
     result["qc_mode"] = "quick" if quick_qc else "deep"
@@ -566,6 +624,7 @@ def _finish(
     mode: str = "result_only",
     nifti_summary: Optional[List[Dict]] = None,
     has_result_maps: bool = False,
+    counts: Optional[Dict] = None,
 ) -> Dict:
     now = datetime.now(timezone.utc).isoformat()
     result: Dict = {
@@ -588,6 +647,9 @@ def _finish(
         "warnings": warnings,
         "warning_count": len(warnings),   # pre-computed so JS doesn't have to call .length
         "nifti_count": nifti_count,
+        # Role-based counts. `nifti_count` remains the raw file count for
+        # backward compatibility; `counts` is what the UI and reports display.
+        "counts": counts or count_submission([]).to_dict(),
         "total_files": total_files,
         "has_dockerfile": has_dockerfile,
         "nifti_summary": nifti_summary or [],

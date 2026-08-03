@@ -16,36 +16,18 @@ separate directories on a case-sensitive filesystem, which must NOT collapse.
 
 from __future__ import annotations
 
-import gzip
-import struct
 from pathlib import Path
 
 import pytest
 
-SHAPE = (2, 2, 2)
+from osipi_pipeline.testing import VOLUME_SHAPE as SHAPE, write_nifti
+
 KTRANS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 TUMOUR_MASK = [1, 1, 1, 1, 0, 0, 0, 0]
 
 
-def _nifti(values: list[float], shape: tuple[int, ...]) -> bytes:
-    header = bytearray(352)
-    struct.pack_into("<i", header, 0, 348)
-    struct.pack_into("<h", header, 40, len(shape))
-    for index, size in enumerate(shape):
-        struct.pack_into("<h", header, 42 + index * 2, size)
-    struct.pack_into("<h", header, 70, 16)
-    struct.pack_into("<h", header, 72, 32)
-    struct.pack_into("<f", header, 108, 352.0)
-    for index in range(1, len(shape) + 1):
-        struct.pack_into("<f", header, 76 + index * 4, 1.0)
-    struct.pack_into("<f", header, 112, 1.0)
-    header[344:348] = b"n+1\x00"
-    return bytes(header) + b"".join(struct.pack("<f", float(v)) for v in values)
-
-
 def _write(path: Path, values: list[float], shape: tuple[int, ...] = SHAPE) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(gzip.compress(_nifti(values, shape)))
+    write_nifti(path, values, shape)
 
 
 def _reference_tree(root: Path) -> Path:
