@@ -486,6 +486,50 @@ function submissionTypeInfo(item) {
   return { label: "Needs attention", state: "warning" };
 }
 
+// Canonical role-based counts from the backend validation result. Absent on
+// results stored before counts existed, so every reader defaults safely.
+function submissionCounts(item) {
+  const counts = item && typeof item.counts === "object" && item.counts ? item.counts : {};
+  return {
+    parameterMaps: Number(counts.parameter_maps || 0),
+    fittedSignals: Number(counts.fitted_signals || 0),
+    methodsDocuments: Number(counts.methods_documents || 0),
+    scans: Number(counts.scans || 0),
+    scansByDataset: counts.scans_by_dataset && typeof counts.scans_by_dataset === "object"
+      ? counts.scans_by_dataset : {},
+  };
+}
+
+// What the submission covers, e.g. "Clinical + Synthetic". Derived from
+// resolved scan identity, not from how many map types were detected:
+// a DCE submission holding Ktrans, vp and ve is complete, not "Mixed/Other".
+function datasetDisplay(item) {
+  const names = Object.keys(submissionCounts(item).scansByDataset);
+  if (!names.length) return "";
+  return names
+    .slice()
+    .sort()
+    .map((name) => name.charAt(0).toUpperCase() + name.slice(1))
+    .join(" + ");
+}
+
+// One short line of counts, each labelled, omitting anything absent.
+function submissionCountSummary(item) {
+  const c = submissionCounts(item);
+  const parts = [];
+  if (c.scans) parts.push(`${c.scans} scan${c.scans === 1 ? "" : "s"}`);
+  if (c.parameterMaps) {
+    parts.push(`${c.parameterMaps} parameter map${c.parameterMaps === 1 ? "" : "s"}`);
+  }
+  if (c.fittedSignals) {
+    parts.push(`${c.fittedSignals} modelled S-t volume${c.fittedSignals === 1 ? "" : "s"}`);
+  }
+  if (c.methodsDocuments) {
+    parts.push(`${c.methodsDocuments} methods document${c.methodsDocuments === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
 function statusChipTone(state) {
   const clean = String(state || "pending").toLowerCase();
   if (["complete", "completed", "passed", "pass", "ready", "success", "scored"].includes(clean)) return "success";
@@ -3570,8 +3614,14 @@ function renderValidateStep(data, isSingleMode) {
         : "Indicates whether result maps are included or processing must be run.";
 
       // Detail content
-      const niftiLine = rNiftiCount > 0
-        ? `<div class="vr-detail-nifti">Map count: <strong>${rNiftiCount}</strong></div>` : "";
+      // Role-based counts, computed once by the backend. The old line showed
+      // the raw NIfTI file count, which counted fitted signals and organiser
+      // reference data as parameter maps.
+      const countSummary = submissionCountSummary(r);
+      const niftiLine = countSummary
+        ? `<div class="vr-detail-nifti">${escapeHtml(countSummary)}</div>`
+        : (rNiftiCount > 0
+            ? `<div class="vr-detail-nifti">Map count: <strong>${rNiftiCount}</strong></div>` : "");
       // Blocking errors keep red styling; everything else is a calm "Items to review" list.
       const errHtml  = errors.length > 0
         ? `<div class="vp-section error-section" style="margin-top:8px">
@@ -3588,8 +3638,11 @@ function renderValidateStep(data, isSingleMode) {
              <summary>Technical details</summary>
              <ul class="issue-list" style="margin-top:6px">${checks.map((m) => `<li class="is-pass">${escapeHtml(m)}</li>`).join("")}</ul>
            </details>` : "";
+      // The run-readiness chip already says "Result maps provided"; repeating
+      // it here made three mentions of one fact. The note carries only the
+      // consequence.
       const resultOnlyNote = isResultOnly
-        ? `<p class="vr-result-only-note">This submission already includes result maps. No processing run is needed.</p>`
+        ? `<p class="vr-result-only-note">No processing run is needed.</p>`
         : "";
       const noIssueHtml = (!errHtml && !warnHtml)
         ? `<p style="font-size:0.73rem;color:var(--subtle);margin:0">No items to review.</p>` : "";
@@ -3598,17 +3651,29 @@ function renderValidateStep(data, isSingleMode) {
       const execHtml = "";
 
       // Collapsed row: one short meta line. Everything else moves into Details.
+      // Dataset coverage beats a detected map-type label here: "Clinical +
+      // Synthetic" says what the submission contains, where "Mixed/Other"
+      // only said that more than one map type was found — which is the
+      // expected state for a challenge that defines several.
+      const datasets = datasetDisplay(r);
+      const counts = submissionCounts(r);
+      const mapCount = counts.parameterMaps || Number(rNiftiCount) || 0;
       const metaHtml = [
         safeChallenge,
-        safeMap,
-        `${escapeHtml(rNiftiCount)} map${Number(rNiftiCount) === 1 ? "" : "s"}`,
+        datasets ? escapeHtml(datasets) : safeMap,
+        `${escapeHtml(mapCount)} parameter map${mapCount === 1 ? "" : "s"}`,
         warnings.length ? `${warnings.length} item${warnings.length === 1 ? "" : "s"} to review` : null,
       ].filter(Boolean).join(" · ");
+      // The submission-type chip and the run-readiness chip both read
+      // "Result maps provided" for a result-only submission, so the card
+      // said it twice. Show the type chip only when it adds something.
+      const typeChipHtml = subType.label === runTxt ? "" :
+        `<span class="validation-meta-with-help">${escapeHtml(subType.label)} ${helpTooltip(subTypeHelp, "Submission type help")}</span>`;
       const detailChips = `
             <div class="validation-detail-chips worklist-meta">
               <span class="validation-meta-with-help">${statusPill(pillText, pillState)}</span>
-              <span class="validation-meta-with-help">${escapeHtml(subType.label)} ${helpTooltip(subTypeHelp, isResultOnly ? "Result maps provided help" : "Submission type help")}</span>
-              <span class="validation-meta-with-help">${statusPill(runTxt, runState)} ${helpTooltip("Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.", "Run readiness help")}</span>
+              ${typeChipHtml}
+              <span class="validation-meta-with-help">${statusPill(runTxt, runState)} ${helpTooltip(isResultOnly ? subTypeHelp : "Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.", "Run readiness help")}</span>
               <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem"></span>
             </div>`;
       const detailsHtml = `
