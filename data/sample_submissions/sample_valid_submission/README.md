@@ -1,1 +1,0 @@
-Valid test submission.

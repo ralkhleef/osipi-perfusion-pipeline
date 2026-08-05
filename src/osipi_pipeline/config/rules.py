@@ -53,7 +53,11 @@ _CHALLENGE_KEYS = {
     "required_artifacts",
     "datasets",
     "filename_identity_patterns",
+    "grouped_statistics",
 }
+# Aggregation of per-scan ROI statistics across an axis. Absent or disabled
+# means nothing is computed; the scientific conventions are not confirmed.
+_GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size"}
 # Named groups a filename identity pattern may capture. Anything else is a
 # typo or an attempt to smuggle logic into configuration, so it is rejected
 # rather than silently ignored.
@@ -787,6 +791,28 @@ def artifact_type_specs() -> dict[str, dict[str, Any]]:
         str(key).lower(): copy.deepcopy(value)
         for key, value in (validation_rules().get("artifact_types") or {}).items()
     }
+
+
+def grouped_statistics_by_challenge() -> dict[str, dict[str, Any]]:
+    """Grouped-statistics settings per challenge.
+
+    Returns ``{"enabled": False}`` when a challenge says nothing, so the
+    feature is off unless a challenge opts in explicitly. ``source`` names the
+    per-scan field to aggregate and ``axes`` which comparisons to make; both
+    are configuration because OSIPI has not yet confirmed either.
+    """
+    from osipi_pipeline.scoring.grouped_statistics import AXES, MIN_GROUP_SIZE
+
+    result: dict[str, dict[str, Any]] = {}
+    for challenge, config in validation_rules().get("challenges", {}).items():
+        spec = config.get("grouped_statistics") or {}
+        result[str(challenge).lower()] = {
+            "enabled": bool(spec.get("enabled", False)),
+            "axes": tuple(spec.get("axes") or AXES),
+            "source": str(spec.get("source") or "roi_median"),
+            "minimum_group_size": int(spec.get("minimum_group_size") or MIN_GROUP_SIZE),
+        }
+    return result
 
 
 def datasets_by_challenge() -> dict[str, dict[str, dict[str, int | None]]]:
