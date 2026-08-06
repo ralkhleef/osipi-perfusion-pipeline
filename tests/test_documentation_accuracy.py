@@ -27,6 +27,11 @@ DOCS = ROOT / "docs"
 PAGES = sorted(DOCS.glob("*.html"))
 TEXT = "\n".join(p.read_text() for p in PAGES)
 
+#: Everything in docs/ that GitHub Pages serves as readable text. Anything
+#: deployed can be read by someone, so anything deployed has to be true.
+PUBLISHED = sorted(p for p in DOCS.rglob("*")
+                   if p.suffix in {".html", ".md"} and p.is_file())
+
 
 def code_spans(pattern: str) -> set[str]:
     """Everything the docs wrapped in <code> matching ``pattern``."""
@@ -267,8 +272,53 @@ def test_retired_claims_do_not_return(phrase: str) -> None:
     The published site once told mentors that runtime YAML configuration was a
     future recommendation, months after it shipped. Pinning the exact phrases
     keeps that particular regression from recurring.
+
+    Checked across everything in ``docs/``, not only the HTML. Restricting it
+    to the pages is how a narration script describing a ``PROVIDERS`` registry
+    that no longer exists stayed published: it was in the deployed directory,
+    it was linked from a page, and no check ever read it.
     """
-    assert phrase not in TEXT, f"the documentation reintroduced {phrase!r}"
+    for path in PUBLISHED:
+        assert phrase not in path.read_text(), \
+            f"{path.name} reintroduced {phrase!r}"
+
+
+# ── Nothing published may be a stand-in for work not yet done ─────────────
+
+def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
+    """A <video> whose file is absent renders as a dead player, not as a gap.
+
+    The site shipped a walkthrough recording that taught a scoring registry
+    the code does not have. Deleting the file is not enough on its own — the
+    element referring to it has to go with it.
+    """
+    for page in PAGES:
+        html = page.read_text()
+        for source in re.findall(r'<(?:video|iframe|source|audio)[^>]*src="([^"]+)"',
+                                 html):
+            if source.startswith(("http://", "https://")):
+                continue
+            assert (DOCS / source).exists(), \
+                f"{page.name} embeds {source}, which is not in the repository"
+
+
+@pytest.mark.parametrize("phrase", [
+    "Suggested file:",
+    "Planned recordings",
+    "coming soon",
+    "Coming soon",
+    "TODO",
+    "to be recorded",
+])
+def test_no_placeholder_scaffolding_is_published(phrase: str) -> None:
+    """Notes-to-self are for a branch, not for a published site.
+
+    A reader cannot tell a plan from a description. A grid of recordings that
+    do not exist reads, to a mentor, as a site that is broken.
+    """
+    for path in PUBLISHED:
+        assert phrase not in path.read_text(), \
+            f"{path.name} publishes the placeholder {phrase!r}"
 
 
 def test_the_docs_still_explain_the_real_configuration_file() -> None:
@@ -409,6 +459,63 @@ def test_the_clone_url_is_the_repository_the_site_links_to() -> None:
     linked = set(re.findall(r'href="(https://github\.com/[\w-]+/[\w-]+)"', TEXT))
     assert clone.removesuffix(".git") in linked, \
         f"the clone URL {clone} is not the repository the site links to"
+
+
+# ── Branding assets ───────────────────────────────────────────────────────
+
+IMAGES = DOCS / "assets" / "images"
+
+
+def _png_header(path: Path) -> tuple[int, int, int]:
+    """(width, height, colour type) from the IHDR chunk.
+
+    Read by hand rather than with Pillow: this is the only thing the tests
+    need from an image, and it must not add a dependency to the suite.
+    """
+    import struct
+
+    data = path.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", f"{path.name} is not a PNG"
+    width, height = struct.unpack(">II", data[16:24])
+    return width, height, data[25]
+
+
+def test_the_mark_is_square_and_transparent() -> None:
+    """A wordmark-shaped or white-backed icon looks wrong in a browser tab."""
+    width, height, colour_type = _png_header(IMAGES / "osipi-mark.png")
+    assert width == height, f"the mark is {width}x{height}, not square"
+    assert colour_type == 6, "the mark has no alpha channel"
+
+
+def test_the_wordmark_keeps_its_alpha_too() -> None:
+    _, _, colour_type = _png_header(IMAGES / "osipi-logo.png")
+    assert colour_type == 6, "the wordmark lost its transparency"
+
+
+def test_every_page_uses_the_mark_as_its_icon_and_the_wordmark_as_its_brand() -> None:
+    """The two are not interchangeable, and the site once used one for both.
+
+    The wordmark reduced to a 16 px favicon is an illegible smear; the mark
+    alone in the navbar drops the organisation's name from every page.
+    """
+    for page in PAGES:
+        html = page.read_text()
+        assert 'rel="icon" href="assets/images/favicon.ico"' in html, \
+            f"{page.name} does not use the mark as its icon"
+        assert 'src="assets/images/osipi-logo.png"' in html, \
+            f"{page.name} lost the wordmark from its navbar"
+        assert 'rel="icon" href="assets/images/osipi-logo.png"' not in html, \
+            f"{page.name} reverted to the wordmark as a favicon"
+
+
+def test_the_favicon_carries_the_small_sizes_that_matter() -> None:
+    """Saving an ICO from an already-small image silently yields one entry."""
+    data = (IMAGES / "favicon.ico").read_bytes()
+    assert data[:4] == b"\x00\x00\x01\x00", "favicon.ico is not an ICO"
+    count = int.from_bytes(data[4:6], "little")
+    # Each directory entry is 16 bytes; width 0 in an entry means 256.
+    widths = {data[6 + 16 * i] or 256 for i in range(count)}
+    assert {16, 32}<= widths, f"favicon.ico only carries {sorted(widths)}"
 
 
 def test_the_documented_config_check_actually_runs() -> None:

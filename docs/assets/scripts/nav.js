@@ -69,8 +69,7 @@
   // on any page. Restoring it means putting this entry back into PAGES above:
   //
   //   { id: "status", file: "status.html", tab: "Status",
-  //     links: [["#scientific-status", "Scientific status"],
-  //             ["#video-walkthrough", "Video walkthrough"]] }
+  //     links: [["#scientific-status", "Scientific status"]] }
   //
   // The page sets `data-page="status"`, which no longer matches an entry, so
   // buildSidebar falls back to the Overview group. That is the intended

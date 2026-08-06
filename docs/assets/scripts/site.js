@@ -1,5 +1,5 @@
 /* Documentation site behaviour: on-this-page navigation, scroll tracking,
- * copy buttons and the screenshot lightbox.
+ * copy buttons.
  *
  * No build step and no framework — Bootstrap's own JS bundle handles the
  * offcanvas menu; everything below is plain DOM work.
@@ -129,52 +129,4 @@
     }, 2000);
   });
 
-  // ── Screenshot lightbox ────────────────────────────────────────────────
-  const lightbox = document.querySelector("[data-lightbox]");
-  const lightboxImage = lightbox && lightbox.querySelector("img");
-  let lastFocused = null;
-
-  function openLightbox(source, alt) {
-    if (!lightbox || !lightboxImage) return;
-    lastFocused = document.activeElement;
-    lightboxImage.src = source;
-    lightboxImage.alt = alt || "";
-    lightbox.classList.add("open");
-    lightbox.setAttribute("aria-hidden", "false");
-    const close = lightbox.querySelector(".docs-lightbox-close");
-    if (close) close.focus();
-  }
-
-  function closeLightbox() {
-    if (!lightbox) return;
-    lightbox.classList.remove("open");
-    lightbox.setAttribute("aria-hidden", "true");
-    lightboxImage.src = "";
-    if (lastFocused) lastFocused.focus();
-  }
-
-  document.addEventListener("click", (event) => {
-    const image = event.target.closest(".docs-figure img, .docs-thumbs img");
-    if (image) {
-      openLightbox(image.dataset.full || image.src, image.alt);
-      return;
-    }
-    if (event.target.closest("[data-lightbox]")) closeLightbox();
-  });
-
-  // Screenshots are focusable, so they must open from the keyboard too.
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeLightbox();
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const image = event.target.closest(".docs-figure img, .docs-thumbs img");
-    if (!image) return;
-    event.preventDefault();
-    openLightbox(image.dataset.full || image.src, image.alt);
-  });
-
-  for (const image of document.querySelectorAll(".docs-figure img, .docs-thumbs img")) {
-    image.tabIndex = 0;
-    image.setAttribute("role", "button");
-    image.setAttribute("aria-label", `Enlarge: ${image.alt || "screenshot"}`);
-  }
 })();
