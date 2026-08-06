@@ -54,9 +54,12 @@
 
         <section>
           <h2 id="validation-rules" data-toc-title="Validation rules">Validation rules</h2>
-          <p>Challenge requirements are in <code>config/validation_rules.yaml</code>, read at runtime.
-            The file is validated on load: an unknown key, a malformed dataset block or a bad regular
-            expression fails immediately rather than being ignored.</p>
+          <p>Challenge requirements are in <code>config/validation_rules.yaml</code>. Changing what a
+            challenge demands is an edit to that file, not a code change. It is read from disk rather
+            than compiled in, and validated on load: an unknown key, a malformed dataset block or a
+            bad regular expression fails immediately rather than being ignored. Editing the file is
+            not the whole job — see <a href="#apply-a-change">Apply a change</a> for how the edit
+            reaches the running application.</p>
 
           <div class="docs-table-wrap">
             <table>
@@ -163,6 +166,24 @@
             holds a scoring script and a <code>manifest.json</code> listing the metrics it returns.
             Packages are installed through Scoring Setup and selected as active per challenge.</p>
 
+          <h3 id="package-layout">What a package contains</h3>
+          <p>A package is a ZIP holding the manifest and the script, plus any reference data the
+            script needs. <code>manifest.json</code> may sit at the root or one level down, so an
+            archive made by zipping a folder works without repacking.</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Package layout</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>my_scoring_package.zip
+  manifest.json      required
+  scoring.py         the entry point; the name comes from manifest.entry_point
+  reference/         optional — ground-truth NIfTI maps
+  masks/             optional — ROI mask NIfTI files
+  README.md          optional</code></pre>
+          </div>
+          <p>Installed packages live in <code>data/scoring/packages/</code>, one directory per
+            <code>package_id</code>. Which package is active per challenge is recorded in
+            <code>data/scoring/active.json</code>. Both are under <code>data/</code>, which is a
+            mounted volume, so installing a package does not involve rebuilding the image.</p>
+
           <h3 id="example-d">Example: scoring package manifest</h3>
           <div class="docs-code">
             <div class="docs-code-header"><span>manifest.json</span><button class="docs-copy" type="button">Copy</button></div>
@@ -184,6 +205,22 @@
             <code>--reference-dir</code>. Only the metrics listed in the manifest are reported.
             Anything that is not approved OSIPI scoring takes <code>"official": false</code>.</p>
 
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th><code>call_mode</code></th><th>How the script is invoked</th><th>Use when</th></tr></thead>
+              <tbody>
+                <tr><td><code>standard</code></td><td><code>python scoring.py --submission-dir &lt;dir&gt; --output-dir &lt;dir&gt; [--reference-dir &lt;dir&gt;]</code></td><td>Writing a new script. The directories are passed in, so nothing is hardcoded.</td></tr>
+                <tr><td><code>osipi_cwd</code></td><td>Run with the working directory set to the package directory; the script resolves its own relative paths</td><td>Adopting an existing OSIPI script that expects the legacy TF6.2 layout, without editing it.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p><code>challenge_type</code> is checked at install against the challenges configured in
+            <code>config/validation_rules.yaml</code>, and a manifest naming one that does not exist
+            is rejected. So a new challenge is added to the YAML before its scoring package is
+            uploaded. <code>package_id</code> is restricted to letters, digits, underscores and
+            hyphens, because it becomes a directory name.</p>
+
           <div class="docs-callout">
             <p>A scoring package is Python that executes on the server. Read the script before
               installing one.</p>
@@ -201,6 +238,48 @@
           <p>Locations are defined in <code>backend/services/path_config.py</code>.
             <code>.gitignore</code> excludes reference data, masks and imaging files from version
             control.</p>
+        </section>
+
+        <section>
+          <h2 id="apply-a-change" data-toc-title="Apply a change">Apply a change</h2>
+          <p>Editing a file on your machine is not enough on its own. The application runs inside a
+            container, and the rules are read once and kept for the life of the process. What is
+            needed depends on what you changed.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>What you changed</th><th>To apply it</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td><code>docker compose restart</code></td><td>The compose file mounts <code>./config</code> into the container, so the file is already current; the restart is what re-reads it.</td></tr>
+                <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use.</td></tr>
+                <tr><td>A scoring package</td><td>Nothing — upload it in Scoring Setup</td><td>Packages are stored under <code>data/</code>, which is a mounted volume, and read per run.</td></tr>
+                <tr><td>Reference maps or ROI masks</td><td>Nothing — copy the files in</td><td>Also under <code>data/</code>, and located per submission.</td></tr>
+                <tr><td>Anything under <code>backend/</code>, <code>frontend/</code> or <code>src/</code></td><td><code>docker compose up --build</code></td><td>Source is copied into the image, not mounted.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="docs-callout">
+            <p>A rules edit that appears to do nothing is almost always this: the file changed on
+              disk but the process is still holding what it read at startup, or the container is
+              running the copy baked into the image.</p>
+          </div>
+
+          <h3 id="check-the-edit">Check the edit before restarting</h3>
+          <p>The file is validated when it loads, so a typo surfaces as a startup failure rather than
+            as silently ignored configuration. Reading it directly says whether it parses and what
+            the application will see, without waiting for a restart:</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Check</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>PYTHONPATH=src python3 -c "
+from osipi_pipeline.config.rules import datasets_by_challenge, map_type_specs
+print(sorted(map_type_specs()))
+print(datasets_by_challenge()['dce'])
+"</code></pre>
+          </div>
+          <p>An invalid file raises <code>ConfigValidationError</code> naming the key at fault. A
+            change to required maps or dataset counts also belongs in the test suite, so that a later
+            edit reverting it fails visibly rather than quietly.</p>
         </section>
 
       </div>

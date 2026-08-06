@@ -53,9 +53,52 @@
       <div class="docs-content">
 
         <section>
+          <h2 id="prerequisites" data-toc-title="What you need">What you need</h2>
+          <p>Docker and Git are the only things required to run the application. Python and Node
+            are needed only to run the test suites, which run outside the container.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Tool</th><th>Needed for</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Docker Desktop</td><td>Running the application</td><td>Must be running before <code>docker build</code>. It supplies the Docker daemon the Run step also uses.</td></tr>
+                <tr><td>Git</td><td>Cloning the repository</td><td>Or download the ZIP from GitHub, which works equally well.</td></tr>
+                <tr><td>Python 3.9 or newer</td><td>The Python tests</td><td>Not needed to run the application — the image ships its own Python 3.11.</td></tr>
+                <tr><td>Node 18 or newer</td><td>The frontend tests</td><td>They use only Node built-ins, so there is no <code>npm install</code>.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="get-the-code" data-toc-title="Get the code">Get the code</h2>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Clone</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>git clone https://github.com/ralkhleef/osipi-perfusion-pipeline.git
+cd osipi-perfusion-pipeline</code></pre>
+          </div>
+
+          <p>Every command below is run from that directory. The clone contains no imaging data:
+            reference maps, ROI masks and submissions are excluded from version control, so a fresh
+            clone starts empty and you supply the data yourself.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Directory</th><th>Holds</th></tr></thead>
+              <tbody>
+                <tr><td><code>backend/</code></td><td>The FastAPI application and its services</td></tr>
+                <tr><td><code>frontend/</code></td><td>The browser interface — plain HTML, CSS and JavaScript, no build step</td></tr>
+                <tr><td><code>src/osipi_pipeline/</code></td><td>The library: ingestion, validation and scoring</td></tr>
+                <tr><td><code>config/</code></td><td>Challenge rules — the file you edit to change requirements</td></tr>
+                <tr><td><code>data/</code></td><td>Reference data, masks, scoring packages and outputs</td></tr>
+                <tr><td><code>submissions/</code></td><td>Uploaded archives and their extracted contents</td></tr>
+                <tr><td><code>tests/</code></td><td>Python and frontend test suites</td></tr>
+              </tbody>
+            </table>
+          </div>
+
           <h2 id="installation" data-toc-title="Run the application">Run the application</h2>
-          <p>Docker Desktop must be installed and running. Build the image once from the
-            repository root, then run it. The application serves on
+          <p>There is no dependency install step: the image builds them from
+            <code>requirements.txt</code> and <code>backend/requirements.txt</code>. Docker Desktop
+            must be running. Build once from the repository root, then run. The application serves on
             <code>http://localhost:8000</code>.</p>
 
           <div class="docs-code">
@@ -68,6 +111,7 @@
             <pre><code>docker run --rm -p 8000:8000 \
   -v "$PWD/data:/app/data" \
   -v "$PWD/submissions:/app/submissions" \
+  -v "$PWD/config:/app/config:ro" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e PYTHONPATH=/app/backend:/app/src \
   -e HOST_SUBMISSIONS_DIR="$PWD/submissions" \
@@ -78,6 +122,11 @@
 
           <p>Stop it with Ctrl-C. On Windows PowerShell, replace <code>$PWD</code> with
             <code>${PWD}</code> and the line continuations with backticks.</p>
+
+          <p>The <code>config</code> mount is read-only and optional — the image already contains a
+            copy — but with it an edit to the challenge rules reaches the application on the next
+            start instead of needing the image rebuilt. See
+            <a href="configuration.html#apply-a-change">Apply a change</a>.</p>
 
           <div class="docs-callout">
             <p>The three <code>HOST_*</code> variables and the Docker socket mount are what let the
@@ -96,12 +145,55 @@
 docker compose down</code></pre>
           </div>
 
-          <h2 id="tests" data-toc-title="Run the tests">Run the tests</h2>
-          <p>The test suite runs outside the container and needs the development dependencies:</p>
+          <h2 id="verify" data-toc-title="Check it is running">Check it is running</h2>
+          <p>The container reports its own health, so a first check needs no browser and no data:</p>
           <div class="docs-code">
-            <div class="docs-code-header"><span>Tests</span><button class="docs-copy" type="button">Copy</button></div>
+            <div class="docs-code-header"><span>Health</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>curl http://localhost:8000/api/health</code></pre>
+          </div>
+          <p>Then open <code>http://localhost:8000</code>. The interface loads on the Upload step.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Symptom</th><th>Usual cause</th></tr></thead>
+              <tbody>
+                <tr><td><code>Cannot connect to the Docker daemon</code> during build</td><td>Docker Desktop is not running.</td></tr>
+                <tr><td>Port 8000 already allocated</td><td>Something else holds the port. Publish another one: <code>-p 8080:8000</code>.</td></tr>
+                <tr><td>The page loads but the Run step reports Docker unavailable</td><td>The socket mount or the <code>HOST_*</code> variables are missing. Everything except Run still works.</td></tr>
+                <tr><td>A rules change has no effect</td><td>The image holds the old copy. See <a href="configuration.html#apply-a-change">Apply a change</a>.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="tests" data-toc-title="Run the tests">Run the tests</h2>
+          <p>The suites run outside the container, against the source in the working tree, so they
+            need their own dependencies installed on your machine. This is the only step that
+            installs anything with <code>pip</code>.</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Python tests</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>pip install -r requirements.txt -r backend/requirements.txt -r requirements-test.txt
 python3 -m pytest -q</code></pre>
+          </div>
+
+          <p>The frontend suites are plain Node scripts using only built-in modules, so there is no
+            package to install. Each prints its own pass and fail counts and exits non-zero on a
+            failure.</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Frontend tests</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>node tests/frontend_smoke_test.js
+node tests/frontend_roi_dom_test.js
+node tests/frontend_validation_card_test.js
+node tests/footer_logic_test.js</code></pre>
+          </div>
+
+          <p>To exercise the whole pipeline rather than its parts, run the demo. It builds a DCE
+            submission, puts it through upload, validation, scoring and export, and writes the
+            reports and CSVs to <code>data/outputs/demo_evidence/</code> along with a summary of
+            what it checked. It extracts into a temporary directory, so it leaves no submissions
+            behind.</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>End-to-end demo</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>python3 scripts/demo_evidence.py</code></pre>
           </div>
         </section>
 

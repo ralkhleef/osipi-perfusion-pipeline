@@ -29,7 +29,10 @@
       file: "install.html",
       tab: "Install",
       links: [
+        ["#prerequisites", "What you need"],
+        ["#get-the-code", "Get the code"],
         ["#installation", "Run the application"],
+        ["#verify", "Check it is running"],
         ["#tests", "Run the tests"],
       ],
     },
@@ -56,18 +59,22 @@
         ["#filename-aliases", "Filename aliases"],
         ["#scoring-providers", "Scoring providers"],
         ["#reference-data", "Reference data and masks"],
-      ],
-    },
-    {
-      id: "status",
-      file: "status.html",
-      tab: "Status",
-      links: [
-        ["#scientific-status", "Scientific status"],
-        ["#video-walkthrough", "Video walkthrough"],
+        ["#apply-a-change", "Apply a change"],
       ],
     },
   ];
+
+  // Hidden for now. `docs/status.html` still exists and still builds, but it
+  // is absent from PAGES, so it appears in no navbar tab and no sidebar list
+  // on any page. Restoring it means putting this entry back into PAGES above:
+  //
+  //   { id: "status", file: "status.html", tab: "Status",
+  //     links: [["#scientific-status", "Scientific status"],
+  //             ["#video-walkthrough", "Video walkthrough"]] }
+  //
+  // The page sets `data-page="status"`, which no longer matches an entry, so
+  // buildSidebar falls back to the Overview group. That is the intended
+  // behaviour for an unlisted page and is why the fallback exists.
 
   const EXTERNAL = [
     ["https://osipi.github.io/", "OSIPI"],
@@ -106,22 +113,28 @@
 
   // ── Sidebar: this page's sections, then the other pages ────────────────
   function buildSidebar(host) {
-    const page = PAGES.find((p) => p.id === current) || PAGES[0];
+    // An unlisted page — one deliberately kept out of PAGES — has no entry to
+    // find. Falling back to the first page would print Overview's section
+    // links under an Overview heading on a page that contains neither, so the
+    // "on this page" group is skipped entirely and only the site map is shown.
+    const page = PAGES.find((p) => p.id === current);
 
-    const onThis = document.createElement("div");
-    onThis.className = "docs-nav-group";
-    const heading = document.createElement("p");
-    heading.className = "docs-nav-heading";
-    heading.textContent = page.tab;
-    onThis.appendChild(heading);
-    for (const [href, label] of page.links) {
-      const link = document.createElement("a");
-      link.className = "docs-nav-link";
-      link.href = href;
-      link.textContent = label;
-      onThis.appendChild(link);
+    if (page) {
+      const onThis = document.createElement("div");
+      onThis.className = "docs-nav-group";
+      const heading = document.createElement("p");
+      heading.className = "docs-nav-heading";
+      heading.textContent = page.tab;
+      onThis.appendChild(heading);
+      for (const [href, label] of page.links) {
+        const link = document.createElement("a");
+        link.className = "docs-nav-link";
+        link.href = href;
+        link.textContent = label;
+        onThis.appendChild(link);
+      }
+      host.appendChild(onThis);
     }
-    host.appendChild(onThis);
 
     // Sibling pages, so the sidebar is a map of the whole site rather than a
     // dead end at the bottom of one page.

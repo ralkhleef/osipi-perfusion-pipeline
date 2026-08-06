@@ -76,6 +76,10 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
            "package_id", "challenge_type", "map_type", "entry_point",
            "call_mode", "timeout_seconds", "scoring_package",
            "private_path_parts", "structural_subdirs", "grouped_statistics"}
+        # `osipi_cwd` is a *value* of call_mode, not a key, and only looks like
+        # one because it is snake_case. It is pinned against the code that
+        # implements it in test_the_documented_call_modes_are_implemented.
+        | {"osipi_cwd"}
         # Issue codes are upper case; environment variables are handled
         # separately. Anything left must be a real configuration key.
     )
@@ -324,3 +328,99 @@ def test_every_local_asset_exists() -> None:
                                 page.read_text()):
             path = DOCS / asset.split("#")[0]
             assert path.exists(), f"{page.name} references missing asset {asset}"
+
+
+# ── The getting-started instructions are runnable ─────────────────────────
+#
+# Someone arriving at this repository for the first time follows the Install
+# page literally. A command naming a file that was renamed or deleted wastes
+# their time and, worse, makes them doubt the rest of the page. These checks
+# resolve every path the instructions tell a newcomer to type.
+
+def _documented_paths(label: str) -> set[str]:
+    """Repository-relative paths appearing in the code block ``label``."""
+    found: set[str] = set()
+    for block in _code_blocks(label):
+        found |= set(re.findall(r"(?<![\w/.-])((?:[\w-]+/)*[\w-]+\.(?:py|js|txt))",
+                                block))
+    return found
+
+
+def test_the_documented_call_modes_are_implemented() -> None:
+    """Both scoring call modes must be branches the service actually takes."""
+    service = (ROOT / "backend" / "services" /
+               "scoring_package_service.py").read_text()
+    for mode in ("standard", "osipi_cwd"):
+        assert f"<code>{mode}</code>" in TEXT, f"the docs no longer name {mode}"
+        assert f'"{mode}"' in service, f"docs describe call_mode {mode!r}, absent from the code"
+
+
+def test_the_documented_pip_targets_exist() -> None:
+    """The one install step a newcomer runs must not name a missing file."""
+    documented = _documented_paths("Python tests")
+    assert documented, "no Python test instructions found"
+    for path in documented:
+        assert (ROOT / path).exists(), f"the docs pip-install missing {path}"
+
+
+def test_the_documented_test_and_script_files_exist() -> None:
+    for label in ("Frontend tests", "End-to-end demo"):
+        documented = _documented_paths(label)
+        assert documented, f"no commands found under {label!r}"
+        for path in documented:
+            assert (ROOT / path).exists(), f"{label} runs missing {path}"
+
+
+def test_the_documented_frontend_suites_are_all_of_them() -> None:
+    """A new suite nobody is told to run is a suite nobody runs."""
+    on_disk = {f"tests/{p.name}" for p in (ROOT / "tests").glob("*_test.js")}
+    documented = _documented_paths("Frontend tests")
+    assert not on_disk - documented, \
+        f"frontend suites the docs never mention: {sorted(on_disk - documented)}"
+
+
+def test_the_documented_project_layout_is_real() -> None:
+    """Every directory the layout table names must exist in a fresh clone."""
+    for directory in re.findall(r"<td><code>([\w/]+)/</code></td>", TEXT):
+        assert (ROOT / directory).is_dir(), \
+            f"the layout table names {directory}/, which does not exist"
+
+
+def test_the_documented_health_check_hits_a_real_endpoint() -> None:
+    main = (ROOT / "backend" / "main.py").read_text()
+    for path in re.findall(r"curl [^<\n]*localhost:8000(/[\w/-]+)", TEXT):
+        assert f'"{path}"' in main, f"the docs curl {path}, which is not served"
+
+
+def test_the_config_mount_the_instructions_depend_on_is_present() -> None:
+    """The docs promise a rules edit needs only a restart. That is only true
+    while the compose file mounts config/; dropping the mount silently makes
+    the instruction wrong, and the symptom — an edit that does nothing — is
+    exactly the confusion the section exists to prevent."""
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    mounts = compose["services"]["osipi-backend"]["volumes"]
+    assert "./config:/app/config:ro" in mounts, \
+        "compose no longer mounts config/, so 'docker compose restart' is not enough"
+    assert "docker compose restart" in TEXT
+
+
+def test_the_clone_url_is_the_repository_the_site_links_to() -> None:
+    (clone,) = re.findall(r"git clone (\S+)", TEXT)
+    linked = set(re.findall(r'href="(https://github\.com/[\w-]+/[\w-]+)"', TEXT))
+    assert clone.removesuffix(".git") in linked, \
+        f"the clone URL {clone} is not the repository the site links to"
+
+
+def test_the_documented_config_check_actually_runs() -> None:
+    """Run the snippet the docs give for checking a config edit."""
+    import subprocess
+    import sys
+
+    (block,) = _code_blocks("Check")
+    snippet = re.sub(r'^\s*PYTHONPATH=src python3 -c "', "", block).rstrip('"\n ')
+    result = subprocess.run(
+        [sys.executable, "-c", snippet], cwd=ROOT, capture_output=True, text=True,
+        env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"},
+    )
+    assert result.returncode == 0, f"the documented check fails:\n{result.stderr}"
+    assert "ktrans" in result.stdout
