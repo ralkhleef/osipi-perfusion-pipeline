@@ -8,13 +8,12 @@ Submissions
 **Organisation** — OSIPI (Open Science Initiative for Perfusion Imaging), ISMRM
 Perfusion Study Group
 
-**Mentors** — Olivia _(surname)_, Lena _(surname)_
+**Mentors** — Lena Václavů, Olivia Jones, Puneet Kumar
 
 **Repository** — https://github.com/ralkhleef/osipi-perfusion-pipeline
 **Documentation** — https://ralkhleef.github.io/osipi-perfusion-pipeline/
 
-> Fill in the mentor surnames and confirm the Pages URL after the first
-> deployment, then delete this note.
+> Confirm the Pages URL after the first deployment, then delete this note.
 
 ---
 

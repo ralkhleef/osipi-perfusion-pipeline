@@ -23,9 +23,9 @@
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline home page">
       <img src="assets/images/osipi-logo.png"
-           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           alt="Open Science Initiative for Perfusion Imaging"
            class="docs-brand-logo">
     </a>
 
@@ -65,7 +65,7 @@
               <tbody>
                 <tr><td>Docker Desktop</td><td>Running the application</td><td>Must be running before <code>docker build</code>. It supplies the Docker daemon the Run step also uses.</td></tr>
                 <tr><td>Git</td><td>Cloning the repository</td><td>Or download the ZIP from GitHub, which works equally well.</td></tr>
-                <tr><td>Python 3.9 or newer</td><td>The Python tests</td><td>Not needed to run the application — the image ships its own Python 3.11.</td></tr>
+                <tr><td>Python 3.9 or newer</td><td>The Python tests</td><td>Not needed to run the application. The image ships its own Python 3.11.</td></tr>
                 <tr><td>Node 18 or newer</td><td>The frontend tests</td><td>They use only Node built-ins, so there is no <code>npm install</code>.</td></tr>
               </tbody>
             </table>
@@ -87,9 +87,9 @@ cd osipi-perfusion-pipeline</code></pre>
               <thead><tr><th>Directory</th><th>Holds</th></tr></thead>
               <tbody>
                 <tr><td><code>backend/</code></td><td>The FastAPI application and its services</td></tr>
-                <tr><td><code>frontend/</code></td><td>The browser interface — plain HTML, CSS and JavaScript, no build step</td></tr>
+                <tr><td><code>frontend/</code></td><td>The browser interface, in plain HTML, CSS and JavaScript with no build step</td></tr>
                 <tr><td><code>src/osipi_pipeline/</code></td><td>The library: ingestion, validation and scoring</td></tr>
-                <tr><td><code>config/</code></td><td>Challenge rules — the file you edit to change requirements</td></tr>
+                <tr><td><code>config/</code></td><td>Challenge rules, the file you edit to change requirements</td></tr>
                 <tr><td><code>data/</code></td><td>Reference data, masks, scoring packages and outputs</td></tr>
                 <tr><td><code>submissions/</code></td><td>Uploaded archives and their extracted contents</td></tr>
                 <tr><td><code>tests/</code></td><td>Python and frontend test suites</td></tr>
@@ -125,9 +125,9 @@ cd osipi-perfusion-pipeline</code></pre>
           <p>Stop it with Ctrl-C. On Windows PowerShell, replace <code>$PWD</code> with
             <code>${PWD}</code> and the line continuations with backticks.</p>
 
-          <p>The <code>config</code> mount is read-only and optional — the image already contains a
-            copy — but with it an edit to the challenge rules reaches the application on the next
-            start instead of needing the image rebuilt. See
+          <p>The <code>config</code> mount is read-only and optional, since the image already
+            contains a copy. With it, an edit to the challenge rules reaches the application on the
+            next start instead of needing the image rebuilt. See
             <a href="configuration.html#apply-a-change">Apply a change</a>.</p>
 
           <div class="docs-callout">

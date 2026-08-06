@@ -302,6 +302,27 @@ def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
                 f"{page.name} embeds {source}, which is not in the repository"
 
 
+def test_no_unreferenced_media_is_deployed() -> None:
+    """Every image and recording under docs/assets must be used by a page.
+
+    Removing the element that embedded a file is not the same as removing the
+    file. Left behind, it is still published, still reachable at its URL, and
+    invisible to every other check here because nothing links to it. That is
+    how a walkthrough recording describing a scoring registry the code does
+    not have stayed deployed after its section was deleted.
+    """
+    media = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+             ".mp4", ".webm", ".mov", ".mp3", ".ico"}
+    assets = DOCS / "assets"
+    orphans = [
+        path.relative_to(DOCS).as_posix()
+        for path in sorted(assets.rglob("*"))
+        if path.is_file() and path.suffix.lower() in media
+        and path.relative_to(DOCS).as_posix() not in TEXT
+    ]
+    assert not orphans, f"deployed but referenced by no page: {orphans}"
+
+
 @pytest.mark.parametrize("phrase", [
     "Suggested file:",
     "Planned recordings",

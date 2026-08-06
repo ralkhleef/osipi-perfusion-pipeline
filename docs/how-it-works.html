@@ -23,9 +23,9 @@
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline home page">
       <img src="assets/images/osipi-logo.png"
-           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           alt="Open Science Initiative for Perfusion Imaging"
            class="docs-brand-logo">
     </a>
 
@@ -59,8 +59,8 @@
 
           <h3 id="indexing">Indexing</h3>
           <p>An archive is extracted once and indexed into a manifest. Each file becomes an artifact
-            record with a role — parameter map, fitted signal or methods document — and a scan
-            identity: dataset, participant, site, repeat.</p>
+            record with a role and a scan identity. The roles are parameter map, fitted signal and
+            methods document. The identity is dataset, participant, site and repeat.</p>
           <p>Identity is read from the directory structure first; a path such as
             <code>Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz</code> gives all four values.
             Configured filename patterns fill gaps. Where the two disagree the directory wins and the
@@ -90,7 +90,7 @@
             separately and never averaged.</p>
           <p>Where reference maps exist, within-ROI Ktrans statistics are computed: median,
             population SD (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|). These
-            measure the spatial spread of one map in one ROI of one scan — not repeatability,
+            measure the spatial spread of one map in one ROI of one scan. They are not repeatability,
             reproducibility or inter-participant variability. Unavailable values are reported as
             unavailable, not as zero.</p>
 

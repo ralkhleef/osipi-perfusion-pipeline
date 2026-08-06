@@ -23,9 +23,9 @@
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline home page">
       <img src="assets/images/osipi-logo.png"
-           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           alt="Open Science Initiative for Perfusion Imaging"
            class="docs-brand-logo">
     </a>
 
@@ -60,7 +60,7 @@
             challenge demands is an edit to that file, not a code change. It is read from disk rather
             than compiled in, and validated on load: an unknown key, a malformed dataset block or a
             bad regular expression fails immediately rather than being ignored. Editing the file is
-            not the whole job — see <a href="#apply-a-change">Apply a change</a> for how the edit
+            not the whole job. <a href="#apply-a-change">Apply a change</a> covers how the edit
             reaches the running application.</p>
 
           <div class="docs-table-wrap">
@@ -100,7 +100,7 @@
   dce:
     datasets:
       synthetic:
-        participants: 4      # was null — now checked
+        participants: 4      # was null, now checked
         repeats: 2
         sites: 3
       clinical:
@@ -115,8 +115,8 @@
         <section>
           <h2 id="map-requirements" data-toc-title="Map requirements">Map requirements</h2>
           <p>A missing required map is a blocking error. An optional map is never reported as missing.
-            Non-map artifacts — a 4-D modelled signal-time curve, a methods document — are declared
-            under <code>artifact_types</code> and required per challenge. Where an artifact declares
+            Non-map artifacts such as a 4-D modelled signal-time curve or a methods document are
+            declared under <code>artifact_types</code> and required per challenge. Where an artifact declares
             <code>dimensions</code>, the value is checked against the NIfTI header.</p>
 
           <h3 id="example-b">Example: change <code>ve</code> from optional to required</h3>
@@ -177,8 +177,8 @@
             <pre><code>my_scoring_package.zip
   manifest.json      required
   scoring.py         the entry point; the name comes from manifest.entry_point
-  reference/         optional — ground-truth NIfTI maps
-  masks/             optional — ROI mask NIfTI files
+  reference/         optional, ground-truth NIfTI maps
+  masks/             optional, ROI mask NIfTI files
   README.md          optional</code></pre>
           </div>
           <p>Installed packages live in <code>data/scoring/packages/</code>, one directory per
@@ -254,8 +254,8 @@
               <tbody>
                 <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td><code>docker compose restart</code></td><td>The compose file mounts <code>./config</code> into the container, so the file is already current; the restart is what re-reads it.</td></tr>
                 <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use.</td></tr>
-                <tr><td>A scoring package</td><td>Nothing — upload it in Scoring Setup</td><td>Packages are stored under <code>data/</code>, which is a mounted volume, and read per run.</td></tr>
-                <tr><td>Reference maps or ROI masks</td><td>Nothing — copy the files in</td><td>Also under <code>data/</code>, and located per submission.</td></tr>
+                <tr><td>A scoring package</td><td>Upload it in Scoring Setup</td><td>Packages are stored under <code>data/</code>, which is a mounted volume, and read per run.</td></tr>
+                <tr><td>Reference maps or ROI masks</td><td>Copy the files in</td><td>Also under <code>data/</code>, and located per submission.</td></tr>
                 <tr><td>Anything under <code>backend/</code>, <code>frontend/</code> or <code>src/</code></td><td><code>docker compose up --build</code></td><td>Source is copied into the image, not mounted.</td></tr>
               </tbody>
             </table>

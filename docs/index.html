@@ -23,9 +23,9 @@
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline — home">
+    <a class="navbar-brand" href="index.html" aria-label="Perfusion Challenge Pipeline home page">
       <img src="assets/images/osipi-logo.png"
-           alt="OSIPI — Open Science Initiative for Perfusion Imaging"
+           alt="Open Science Initiative for Perfusion Imaging"
            class="docs-brand-logo">
     </a>
 
@@ -77,14 +77,14 @@
             <table>
               <thead><tr><th>Type</th><th>Contains</th><th>Execution</th></tr></thead>
               <tbody>
-                <tr><td>Result-only</td><td>Completed parameter maps</td><td>Skipped — the maps already exist</td></tr>
+                <tr><td>Result-only</td><td>Completed parameter maps</td><td>Skipped, because the maps already exist</td></tr>
                 <tr><td>Reproducible</td><td>Code plus a Dockerfile</td><td>Runs in a container, then the outputs are validated</td></tr>
                 <tr><td>Batch</td><td>Several team folders in one archive</td><td>Split into separate submissions automatically</td></tr>
               </tbody>
             </table>
           </div>
           <p>DCE, ASL and DSC are configured. Adding another challenge is a change to
-            <code>config/validation_rules.yaml</code> — see <a href="configuration.html#validation-rules">Validation
+            <code>config/validation_rules.yaml</code>. See <a href="configuration.html#validation-rules">Validation
             rules</a>.</p>
 
           <h2 id="pipeline-workflow">Pipeline workflow</h2>
