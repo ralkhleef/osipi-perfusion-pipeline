@@ -60,17 +60,10 @@
           <p class="docs-lead">Python Pipeline for Evaluating OSIPI Perfusion Imaging Challenge
             Submissions.</p>
 
-          <div class="docs-table-wrap">
-            <table>
-              <tbody>
-                <tr><td>Contributor</td><td>Ranya Al-khleef</td></tr>
-                <tr><td>Mentors</td><td>Lena Václavů, Olivia Jones, Puneet Kumar</td></tr>
-                <tr><td>Organisation</td><td><a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a>, ISMRM Perfusion Study Group</td></tr>
-                <tr><td>Length</td><td>175 hours</td></tr>
-                <tr><td>Code</td><td><a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">github.com/ralkhleef/osipi-perfusion-pipeline</a></td></tr>
-              </tbody>
-            </table>
-          </div>
+          <p>By Ranya Al-khleef, mentored by Lena Václavů, Olivia Jones and Puneet Kumar, for
+            <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the ISMRM
+            Perfusion Study Group. A 175 hour project. The code is on
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub</a>.</p>
 
           <p>Two labs given the same DCE scan will produce two different Ktrans maps. OSIPI runs
             challenges to measure how far apart those answers are, which only works if every
@@ -98,19 +91,19 @@
           <p>None of these ran out of time. Each is waiting on something only the challenge leads can
             give. Nothing here is guessed at: a value that cannot be worked out is written as
             unavailable.</p>
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Item</th><th>What is missing</th></tr></thead>
-              <tbody>
-                <tr><td>Accuracy, deviance</td><td>The formula. Accuracy could mean bias, RMSE, or absolute or percentage error.</td></tr>
-                <tr><td>SD and CoV across repeats, sites and participants</td><td>Two conventions. The code is written and switched off.</td></tr>
-                <tr><td>Residual sum of squares</td><td>The measured signal. Submissions carry the modelled one only.</td></tr>
-                <tr><td>ICC</td><td>Which model, and whether repeated datasets are supplied.</td></tr>
-                <tr><td>ASL and DSC rules</td><td>Which maps each needs. The map types are set up, the challenge entries are empty.</td></tr>
-                <tr><td>BIDS validation</td><td>Not built. NIfTI checks cover readability, shape and values.</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <ul>
+            <li><strong>Accuracy and deviance.</strong> The formula. Accuracy could mean bias, RMSE,
+              or absolute or percentage error.</li>
+            <li><strong>SD and CoV across repeats, sites and participants.</strong> Two conventions.
+              The code is written and switched off until they are agreed.</li>
+            <li><strong>Residual sum of squares.</strong> The measured signal. Submissions carry the
+              modelled one only.</li>
+            <li><strong>ICC.</strong> Which model, and whether repeated datasets are supplied.</li>
+            <li><strong>ASL and DSC rules.</strong> Which maps each one needs. The map types are set
+              up, the challenge entries are empty.</li>
+            <li><strong>BIDS validation.</strong> Not built. NIfTI checks cover readability, shape
+              and values.</li>
+          </ul>
         </section>
 
         <section>
@@ -119,18 +112,15 @@
             drawn at arithmetic: what a challenge asks for and which script scores it are settings,
             while a new formula is code.</p>
 
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Change</th><th>How</th><th>Needs a developer</th></tr></thead>
-              <tbody>
-                <tr><td>Install or replace a scoring script</td><td>Upload the ZIP in Scoring Setup, then pick it for the challenge</td><td>No</td></tr>
-                <tr><td>Change which metrics it reports</td><td>Edit <code>manifest.json</code> in the ZIP, any text editor</td><td>No</td></tr>
-                <tr><td>Change required maps, dataset counts or filename aliases</td><td>Edit <code>config/validation_rules.yaml</code>, then press Reload rules</td><td>No</td></tr>
-                <tr><td>Turn on the grouped SD and CoV</td><td>Agree the two conventions, then a setting</td><td>No, once agreed</td></tr>
-                <tr><td>Define a new metric such as accuracy or ICC</td><td>Python, with tests</td><td>Yes</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <p><strong>No developer needed.</strong> Installing or replacing a scoring script is a ZIP
+            uploaded in Scoring Setup and then picked for the challenge. Changing which metrics that
+            script reports is an edit to <code>manifest.json</code> inside the ZIP, in any text
+            editor. Changing the required maps, the dataset counts or the filename aliases is an edit
+            to <code>config/validation_rules.yaml</code> followed by the Reload rules button. Turning
+            on the grouped SD and CoV is a single setting, once the two conventions are agreed.</p>
+
+          <p><strong>A developer is needed</strong> to define a metric that does not exist yet, such
+            as accuracy or ICC. That is Python, with tests.</p>
 
           <p>The rules are still edited as YAML in a text editor rather than through a form. That is
             the obvious next thing to build.</p>

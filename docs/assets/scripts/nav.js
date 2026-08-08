@@ -29,11 +29,11 @@
       file: "install.html",
       tab: "Install",
       links: [
-        ["#prerequisites", "What you need"],
-        ["#get-the-code", "Get the code"],
-        ["#installation", "Run the application"],
-        ["#verify", "Check it is running"],
-        ["#tests", "Run the tests"],
+        ["#prerequisites", "Requirements"],
+        ["#get-the-code", "Getting the code"],
+        ["#installation", "Running the application"],
+        ["#verify", "Verifying the install"],
+        ["#tests", "Running the tests"],
       ],
     },
     {
@@ -41,8 +41,8 @@
       file: "how-it-works.html",
       tab: "How it works",
       links: [
-        ["#why", "Why it exists"],
-        ["#the-steps", "The steps"],
+        ["#why", "Background"],
+        ["#the-steps", "Pipeline overview"],
         ["#indexing", "Upload and Review"],
         ["#validation", "Validate"],
         ["#execution", "Run"],

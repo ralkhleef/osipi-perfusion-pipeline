@@ -55,7 +55,7 @@
       <div class="docs-content">
 
         <section>
-          <h2 id="prerequisites" data-toc-title="What you need">What you need</h2>
+          <h2 id="prerequisites" data-toc-title="Requirements">Requirements</h2>
           <p>Docker and Git are the only things required to run the application. Python and Node
             are needed only to run the test suites, which run outside the container.</p>
 
@@ -71,7 +71,7 @@
             </table>
           </div>
 
-          <h2 id="get-the-code" data-toc-title="Get the code">Get the code</h2>
+          <h2 id="get-the-code" data-toc-title="Getting the code">Getting the code</h2>
           <div class="docs-code">
             <div class="docs-code-header"><span>Clone</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>git clone https://github.com/ralkhleef/osipi-perfusion-pipeline.git
@@ -97,7 +97,7 @@ cd osipi-perfusion-pipeline</code></pre>
             </table>
           </div>
 
-          <h2 id="installation" data-toc-title="Run the application">Run the application</h2>
+          <h2 id="installation" data-toc-title="Running the application">Running the application</h2>
           <p>There is no dependency install step: the image builds them from
             <code>requirements.txt</code> and <code>backend/requirements.txt</code>. Docker Desktop
             must be running. Build once from the repository root, then run. The application serves on
@@ -147,7 +147,7 @@ cd osipi-perfusion-pipeline</code></pre>
 docker compose down</code></pre>
           </div>
 
-          <h2 id="verify" data-toc-title="Check it is running">Check it is running</h2>
+          <h2 id="verify" data-toc-title="Verifying the install">Verifying the install</h2>
           <p>The container reports its own health, so a first check needs no browser and no data:</p>
           <div class="docs-code">
             <div class="docs-code-header"><span>Health</span><button class="docs-copy" type="button">Copy</button></div>
@@ -167,7 +167,7 @@ docker compose down</code></pre>
             </table>
           </div>
 
-          <h2 id="tests" data-toc-title="Run the tests">Run the tests</h2>
+          <h2 id="tests" data-toc-title="Running the tests">Running the tests</h2>
           <p>The suites run outside the container, against the source in the working tree, so they
             need their own dependencies installed on your machine. This is the only step that
             installs anything with <code>pip</code>.</p>
