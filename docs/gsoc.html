@@ -65,77 +65,80 @@
             Perfusion Study Group. A 175 hour project. The code is on
             <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub</a>.</p>
 
-          <p>Two labs given the same DCE scan will produce two different Ktrans maps. OSIPI runs
-            challenges to measure how far apart those answers are, which only works if every
-            submission is checked and scored the same way. This project is the software that does
-            that, and that keeps the team's name out of the reviewer's copy. See
-            <a href="how-it-works.html#why">How it works</a>.</p>
+          <p>Two implementations given the same DCE scan return different Ktrans values. OSIPI runs
+            challenges to quantify those differences, which requires every submission to be checked
+            and scored identically and reviewed without knowledge of its origin. This project
+            provides that pipeline. See <a href="how-it-works.html#why">How it works</a> for the
+            design.</p>
         </section>
 
         <section>
           <h2 id="what-shipped" data-toc-title="What shipped">What shipped</h2>
           <ul>
-            <li>Import from a ZIP, a folder, GitHub or Zenodo. Batch archives split on their own.</li>
-            <li>Every file gets a job and a scan address, read from the folders first.</li>
-            <li>Checks on the files and on the submission as a whole, with eleven issue codes.</li>
-            <li>Submitted code runs in Docker with no network, a memory cap and a time limit.</li>
-            <li>RMSE, mean absolute error, bias and correlation against the reference, per voxel and per ROI.</li>
-            <li>Per-ROI median, SD and CoV for each scan.</li>
-            <li>HTML and PDF built from one set of results, so the two cannot disagree.</li>
-            <li>Blinded exports with no team name in the page, the metadata or the filename.</li>
+            <li>Import from a ZIP archive, a folder, a GitHub repository or a Zenodo record, with batch archives separated automatically.</li>
+            <li>Single-pass indexing that assigns every file a role and a scan identity, resolved from the directory structure.</li>
+            <li>File-level and structural validation covering eleven distinct issue codes.</li>
+            <li>Execution of submitted code in Docker with no network access, a memory limit and a timeout.</li>
+            <li>Reference comparison producing RMSE, mean absolute error, bias and correlation, voxelwise and per ROI.</li>
+            <li>Within-scan ROI median, population standard deviation and coefficient of variation.</li>
+            <li>HTML and PDF reports generated from one result model, so the two cannot diverge.</li>
+            <li>Blinded exports with no identifying information in the document, its metadata or its filename.</li>
           </ul>
         </section>
 
         <section>
           <h2 id="still-open" data-toc-title="Still open">Still open</h2>
-          <p>None of these ran out of time. Each is waiting on something only the challenge leads can
-            give. Nothing here is guessed at: a value that cannot be worked out is written as
-            unavailable.</p>
+          <p>Each item below is blocked on a definition or an input that only the challenge leads can
+            supply, rather than on remaining development time. Values that cannot be computed are
+            reported as unavailable.</p>
           <ul>
-            <li><strong>Accuracy and deviance.</strong> The formula. Accuracy could mean bias, RMSE,
-              or absolute or percentage error.</li>
-            <li><strong>SD and CoV across repeats, sites and participants.</strong> Two conventions.
-              The code is written and switched off until they are agreed.</li>
-            <li><strong>Residual sum of squares.</strong> The measured signal. Submissions carry the
-              modelled one only.</li>
-            <li><strong>ICC.</strong> Which model, and whether repeated datasets are supplied.</li>
-            <li><strong>ASL and DSC rules.</strong> Which maps each one needs. The map types are set
-              up, the challenge entries are empty.</li>
-            <li><strong>BIDS validation.</strong> Not built. NIfTI checks cover readability, shape
-              and values.</li>
+            <li><strong>Accuracy and deviance.</strong> The definition. Accuracy may refer to signed
+              bias, RMSE, or absolute or percentage error.</li>
+            <li><strong>Standard deviation and CoV across repeats, sites and participants.</strong>
+              Whether to aggregate scan-level ROI medians or pooled voxel values, and whether repeats
+              and sites are paired within a participant first. The implementation exists and is
+              disabled pending those decisions.</li>
+            <li><strong>Residual sum of squares.</strong> The measured dynamic signal. Submissions
+              supply the modelled signal only.</li>
+            <li><strong>ICC.</strong> The ICC model, and whether repeated datasets are provided.</li>
+            <li><strong>ASL and DSC completeness rules.</strong> The required maps and dataset grid
+              for each. The map types are configured; the challenge entries are empty.</li>
+            <li><strong>BIDS validation.</strong> Not implemented. NIfTI checks cover readability,
+              dimensionality and value sanity.</li>
           </ul>
         </section>
 
         <section>
           <h2 id="who-changes-what" data-toc-title="Who changes what">Who changes what</h2>
-          <p>Most of what a challenge team will want to change later needs no developer. The line is
-            drawn at arithmetic: what a challenge asks for and which script scores it are settings,
-            while a new formula is code.</p>
+          <p>Ongoing maintenance was designed to sit with the challenge team rather than with a
+            developer. The boundary is arithmetic: what a challenge requires and which script scores
+            it are configuration, while a new formula is code.</p>
 
-          <p><strong>No developer needed.</strong> Installing or replacing a scoring script is a ZIP
-            uploaded in Scoring Setup and then picked for the challenge. Changing which metrics that
-            script reports is an edit to <code>manifest.json</code> inside the ZIP, in any text
-            editor. Changing the required maps, the dataset counts or the filename aliases is an edit
-            to <code>config/validation_rules.yaml</code> followed by the Reload rules button. Turning
-            on the grouped SD and CoV is a single setting, once the two conventions are agreed.</p>
+          <p><strong>Configuration.</strong> A scoring script is installed or replaced by uploading a
+            ZIP in Scoring Setup and selecting it for the challenge. The metrics it reports are
+            listed in <code>manifest.json</code> inside that ZIP and can be edited in any text
+            editor. Required maps, dataset counts and filename aliases are set in
+            <code>config/validation_rules.yaml</code> and take effect when Reload rules is pressed.
+            The grouped SD and CoV statistics are enabled by a single setting once their conventions
+            are confirmed.</p>
 
-          <p><strong>A developer is needed</strong> to define a metric that does not exist yet, such
-            as accuracy or ICC. That is Python, with tests.</p>
+          <p><strong>Development.</strong> Defining a metric that does not yet exist, such as
+            accuracy or ICC, requires Python and accompanying tests.</p>
 
-          <p>The rules are still edited as YAML in a text editor rather than through a form. That is
-            the obvious next thing to build.</p>
+          <p>Configuration is still edited as YAML in a text editor rather than through a form, which
+            is the natural next addition.</p>
         </section>
 
         <section>
           <h2 id="testing" data-toc-title="Testing">Testing</h2>
-          <p>704 Python tests and 1,125 frontend checks. The more useful number is seven: production
-            bugs found by pushing a real archive through the real interface, which the suite had not
-            caught. A DCE archive split into two submissions. Shared files were deleted during the
-            batch split. ROI masks counted twice on macOS. The blinded report printed the team name.
-            Every fix has a test, and every test was checked by breaking the fix on purpose to see
-            whether the test noticed.</p>
-          <p>One command runs the whole thing and writes the reports, the CSVs and a list of what it
-            checked:</p>
+          <p>The suite comprises 704 Python tests and 1,125 frontend checks. Seven production defects
+            were found by running a real archive through the interface rather than by the suite,
+            including a DCE archive that split into two submissions, shared files deleted during the
+            batch separation, ROI masks counted twice on case-insensitive filesystems, and a team
+            name printed in a blinded report. Each fix carries a regression test, and each test was
+            verified by reintroducing the defect to confirm the test detects it.</p>
+          <p>A single command exercises the pipeline end to end and writes the reports, the result
+            files and a record of the checks it performed:</p>
           <div class="docs-code">
             <div class="docs-code-header"><span>Demo</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>python3 scripts/demo_evidence.py</code></pre>

@@ -56,53 +56,52 @@
 
         <section>
           <h2 id="why" data-toc-title="Background">Background</h2>
-          <p>Ask two labs to compute Ktrans from the same DCE scan and you will get two different
-            maps. The differences come from the model, the fitting, the arterial input function, and
-            choices nobody wrote down. The same is true of CBF and ATT from ASL. OSIPI runs challenges
-            to find out how large those differences actually are, because that is what standing
-            behind a number in clinical research requires.</p>
-          <p>That only means something if every submission is treated identically. If one team's maps
-            are checked more carefully than another's, or scored against a different mask, or read by
-            someone who knows which lab sent them, the comparison stops measuring the methods and
-            starts measuring the review.</p>
-          <p>So this pipeline runs the same steps in the same order for every submission, records
-            what it found, and keeps the team's name away from whoever reads the results.</p>
+          <p>A perfusion parameter map depends on the model, the fitting method and the arterial
+            input function used to produce it. Two implementations given the same DCE scan return
+            different Ktrans values, and the same applies to CBF and ATT derived from ASL. OSIPI runs
+            challenges to quantify those differences and to support standardisation in clinical
+            research.</p>
+          <p>A comparison of that kind is only valid if every submission is handled the same way.
+            Differences in how carefully a submission is checked, which mask it is scored against, or
+            whether the reviewer knows its origin all become part of the result. The pipeline exists
+            to remove those differences from the measurement.</p>
 
           <h2 id="the-steps" data-toc-title="Pipeline overview">Pipeline overview</h2>
+          <p>A submission moves through six steps in order. Each step records what it found, and its
+            output is available to the steps after it.</p>
           <div class="docs-table-wrap">
             <table>
-              <thead><tr><th>Step</th><th>The question it answers</th></tr></thead>
+              <thead><tr><th>Step</th><th>Purpose</th></tr></thead>
               <tbody>
-                <tr><td>1. Upload</td><td>What did they send us?</td></tr>
-                <tr><td>2. Review</td><td>Which challenge is this, and what is in the box?</td></tr>
-                <tr><td>3. Validate</td><td>Is anything missing, unreadable or the wrong shape?</td></tr>
-                <tr><td>4. Run</td><td>If they sent code, does it produce the maps they claim?</td></tr>
-                <tr><td>5. QC and Preview</td><td>Do the numbers look sane, and how do they compare to the reference?</td></tr>
-                <tr><td>6. Export</td><td>Can a reviewer read this without learning who sent it?</td></tr>
+                <tr><td>1. Upload</td><td>Accept the submission from a ZIP, a folder, a GitHub repository or a Zenodo record.</td></tr>
+                <tr><td>2. Review</td><td>Detect the challenge, index every file, and resolve each file to a scan.</td></tr>
+                <tr><td>3. Validate</td><td>Check the files individually and the submission against its challenge rules.</td></tr>
+                <tr><td>4. Run</td><td>Execute the submitted code in a container, where code was supplied.</td></tr>
+                <tr><td>5. QC and Preview</td><td>Compute quality-control statistics and compare against reference data.</td></tr>
+                <tr><td>6. Export</td><td>Produce reports and result files, blinded or unblinded.</td></tr>
               </tbody>
             </table>
           </div>
-          <p>Each step is described below.</p>
         </section>
 
         <section>
           <h2 id="detail" data-toc-title="The steps in detail">The steps in detail</h2>
 
           <h3 id="indexing">Upload and Review</h3>
-          <p>The archive is unpacked once and every file is written down in a list. Each file gets a
-            job and an address. The jobs are parameter map, fitted signal and methods document. The
-            address is dataset, participant, site and repeat.</p>
-          <p>The address comes from the folder names first. A path like
-            <code>Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz</code> gives all four. Filename
-            patterns fill in what the folders leave out. If the two disagree the folder wins and the
-            clash is reported, because guessing would be worse than saying so. Nothing is worked out
-            from the order files happen to be in. Reference and mask folders belong to OSIPI, not to
-            the team, so they are left out of the team's file count.</p>
+          <p>The archive is extracted once and indexed. Each file is recorded with a role and a scan
+            identity. Roles are parameter map, fitted signal and methods document. A scan identity is
+            a dataset, participant, site and repeat.</p>
+          <p>Identity is resolved from the directory structure first. A path such as
+            <code>Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz</code> supplies all four values.
+            Configured filename patterns fill any gaps. Where the two sources disagree, the directory
+            takes precedence and the conflict is reported rather than resolved silently. Identity is
+            never inferred from file order. Reference and mask directories are supplied by the
+            organiser, so they are excluded from the submission's own artifacts.</p>
 
           <h3 id="validation">Validate</h3>
-          <p>First the files themselves: does each NIfTI open, is it the right number of dimensions,
-            does it hold real numbers, is it empty. Then the submission as a whole, against the rules
-            set for its challenge. An error stops the submission. A warning does not.</p>
+          <p>File-level checks cover NIfTI readability, dimensionality, finite values and zero-byte
+            files. Structural checks compare the submission against the rules configured for its
+            challenge. Errors block the submission; warnings do not.</p>
           <p>Structural codes: <code>REQUIRED_MAP_MISSING</code>,
             <code>REQUIRED_ARTIFACT_MISSING</code>, <code>MAP_DIMENSION_MISMATCH</code>,
             <code>ARTIFACT_DIMENSION_MISMATCH</code>, <code>DUPLICATE_PARAMETER_MAP</code>,
@@ -111,32 +110,31 @@
             <code>IDENTITY_CONFLICT</code>, <code>UNKNOWN_DATASET</code>.</p>
 
           <h3 id="execution">Run</h3>
-          <p>If the team sent a Dockerfile, their code runs in a box of its own with no network, a
-            memory cap and a time limit. The command comes from <code>run_config.json</code> in the
-            submission. Teams who only sent finished maps skip this step. If Docker is not available
-            the step switches off and everything else still works.</p>
+          <p>A submission containing a Dockerfile is built and run in an isolated container with no
+            network access, a memory limit and a timeout. The command is read from
+            <code>run_config.json</code> in the submission. Result-only submissions skip this step.
+            Where Docker is unavailable the step is disabled and the remaining steps are unaffected.</p>
 
           <h3 id="statistics">QC and Preview</h3>
-          <p>The basic health of each map: how many voxels hold a real number, how many are NaN or
-            infinity, how many are negative. Different parameters are measured in different units, so
-            they are reported one at a time and never averaged together.</p>
-          <p>Where OSIPI has supplied reference maps, each submitted map is compared to it voxel by
-            voxel and inside each ROI mask: RMSE, mean absolute error, bias and correlation.</p>
-          <p>Each ROI also gets its own numbers for one map in one scan: median, population SD
-            (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|). These say how spread out
-            the values are inside that one region. They are not repeatability, reproducibility or
-            variation between participants, and the report says so, because a number in the wrong
-            column is worse than no number. Anything that could not be worked out is written as
-            unavailable, never as zero.</p>
+          <p>Quality control reports the proportion of finite voxels, counts of NaN and infinity, and
+            the proportion of negative voxels for each map. Parameter types carry different units and
+            are therefore reported separately and never averaged together.</p>
+          <p>Where reference maps are available, each submitted map is compared against its reference
+            voxelwise and within each ROI mask, producing RMSE, mean absolute error, bias and
+            correlation.</p>
+          <p>Each ROI additionally reports the median, population standard deviation
+            (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|) of one map within one
+            scan. These describe spatial spread within a single region. They are not repeatability,
+            reproducibility or between-participant variability, and the report states this. Values
+            that cannot be computed are reported as unavailable rather than as zero.</p>
 
           <h3 id="outputs">Export</h3>
-          <p>Every format is built from one set of results, so the numbers are worked out once. The
-            HTML and the PDF hold the same sections, the same rows and the same table numbers. You
-            also get an ROI statistics CSV with one row per scan and region, and a combined CSV or
-            JSON.</p>
-          <p>A blinded export leaves out the team name, the contact address, the submission id and
-            the archive name. Not just from the page, but from the file's own metadata and from the
-            name it downloads under, since all three are places a name can leak.</p>
+          <p>All output formats are generated from a single result model, so every figure is computed
+            once. The HTML and PDF reports contain the same sections, rows and table numbers.
+            Additional exports are an ROI statistics CSV with one row per scan and region, and a
+            combined CSV or JSON in wide or long form.</p>
+          <p>A blinded export omits the team name, contact address, submission id and archive name
+            from the document body, the file metadata and the download filename.</p>
         </section>
 
       </div>
