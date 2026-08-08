@@ -113,27 +113,32 @@
             a generated DCE submission of 16 scans. Nothing here is mocked up: it is the same code
             path the Export step uses.</p>
 
-          <p>This is the <strong>blinded</strong> copy, which is what reviewers see. The team name
-            and contact address are absent and the submission is identified only by number. The
-            scoring columns are empty because the demo runs without reference maps, so the report
-            shows quality control only and says so.</p>
+          <p>The report below is the <strong>blinded</strong> copy, which is what reviewers see. The
+            team name and contact address are absent and the submission is identified only by
+            number. Its scoring columns are empty because the demo runs without reference maps, so
+            the report shows quality control only and states that.</p>
 
           <div class="docs-downloads">
-            <a class="docs-download" href="downloads/example-report-blinded.html">
-              <span class="docs-download-kind">HTML</span>
-              <span class="docs-download-name">Example report, blinded</span>
-              <span class="docs-download-note">Opens in the browser</span>
-            </a>
             <a class="docs-download" href="downloads/example-report-blinded.pdf">
               <span class="docs-download-kind">PDF</span>
-              <span class="docs-download-name">Example report, blinded</span>
-              <span class="docs-download-note">The same report, for printing or circulating</span>
+              <span class="docs-download-name">Evaluation report</span>
+              <span class="docs-download-note">Four pages, blinded</span>
+            </a>
+            <a class="docs-download" href="downloads/example-roi-statistics.csv">
+              <span class="docs-download-kind">CSV</span>
+              <span class="docs-download-name">ROI statistics</span>
+              <span class="docs-download-note">32 rows, one per scan and region</span>
             </a>
           </div>
 
-          <p>To produce these yourself, and the unblinded copies alongside them, run the demo from a
-            clone. It writes to <code>data/outputs/demo_evidence/</code> and leaves no submissions
-            behind. See <a href="install.html#tests">Run the tests</a>.</p>
+          <p>The CSV is the machine-readable form of the same run: one row per scan and ROI, with
+            the median, standard deviation and coefficient of variation, the voxel count, the units,
+            and a status column recording why any value is unavailable.</p>
+
+          <p>To produce these yourself, along with the HTML report, the JSON exports and the
+            unblinded copies, run the demo from a clone. It writes to
+            <code>data/outputs/demo_evidence/</code> and leaves no submissions behind. See
+            <a href="install.html#tests">Running the tests</a>.</p>
         </section>
 
       </div>

@@ -59,16 +59,27 @@
           <p>Docker and Git are the only things required to run the application. Python and Node
             are needed only to run the test suites, which run outside the container.</p>
 
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Tool</th><th>Needed for</th><th>Notes</th></tr></thead>
-              <tbody>
-                <tr><td>Docker Desktop</td><td>Running the application</td><td>Must be running before <code>docker build</code>. It supplies the Docker daemon the Run step also uses.</td></tr>
-                <tr><td>Git</td><td>Cloning the repository</td><td>Or download the ZIP from GitHub, which works equally well.</td></tr>
-                <tr><td>Python 3.9 or newer</td><td>The Python tests</td><td>Not needed to run the application. The image ships its own Python 3.11.</td></tr>
-                <tr><td>Node 18 or newer</td><td>The frontend tests</td><td>They use only Node built-ins, so there is no <code>npm install</code>.</td></tr>
-              </tbody>
-            </table>
+          <div class="docs-cards">
+            <div class="docs-card">
+              <h3>To run the application</h3>
+              <p>Nothing else is required.</p>
+              <dl>
+                <dt>Docker Desktop</dt>
+                <dd>Must be running before <code>docker build</code>. Also supplies the daemon the Run step uses.</dd>
+                <dt>Git</dt>
+                <dd>Or download the ZIP from GitHub, which works equally well.</dd>
+              </dl>
+            </div>
+            <div class="docs-card">
+              <h3>To run the tests</h3>
+              <p>The suites run outside the container.</p>
+              <dl>
+                <dt>Python 3.9 or newer</dt>
+                <dd>Not needed to run the application. The image ships its own Python 3.11.</dd>
+                <dt>Node 18 or newer</dt>
+                <dd>Built-in modules only, so there is no <code>npm install</code>.</dd>
+              </dl>
+            </div>
           </div>
 
           <h2 id="get-the-code" data-toc-title="Getting the code">Getting the code</h2>

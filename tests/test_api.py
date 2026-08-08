@@ -1761,6 +1761,42 @@ def test_report_html_generated(client: TestClient) -> None:
         assert forbidden not in r.text
 
 
+def test_every_pdf_page_is_the_same_size_and_orientation(client: TestClient) -> None:
+    """A reader should not have to rotate the document part-way through.
+
+    Two wide tables used to be given landscape pages of their own, so a four
+    page report went portrait, landscape, landscape, portrait. Reading it on
+    screen meant rotating twice, and printing it produced a stack nobody
+    could staple. The tables are set at the portrait measure instead.
+
+    Page geometry is read out of the PDF itself rather than trusted from the
+    code, because the template and the page it emits are two different things.
+    """
+    import re
+
+    data, fname = _make_result_only_zip("pdf_orientation.zip")
+    sid = _upload_and_get_id(client, data, fname)
+    client.post("/api/validate", json={"submission_id": sid,
+                                       "challenge_type": "dce",
+                                       "mode": "result_only"})
+
+    response = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
+    assert response.status_code == 200, response.text
+
+    raw = response.content.decode("latin-1", errors="ignore")
+    boxes = re.findall(r"/MediaBox\s*\[\s*([\d.\s-]+?)\]", raw)
+    assert len(boxes) >= 2, f"expected several pages, found {len(boxes)} MediaBox entries"
+
+    sizes = set()
+    for box in boxes:
+        x0, y0, x1, y1 = (float(v) for v in box.split())
+        sizes.add((round(x1 - x0), round(y1 - y0)))
+
+    assert len(sizes) == 1, f"pages have mixed sizes: {sorted(sizes)}"
+    width, height = sizes.pop()
+    assert height > width, f"pages are landscape ({width} x {height})"
+
+
 def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> None:
     """/api/export/report/pdf returns a researcher-facing PDF without workflow labels."""
     data, fname = _make_result_only_zip("report_pdf_test.zip")

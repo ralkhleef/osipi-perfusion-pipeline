@@ -88,19 +88,50 @@
             rules</a>.</p>
 
           <h2 id="pipeline-workflow">Pipeline workflow</h2>
-          <p>Six steps, in order:</p>
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Step</th><th>What happens</th></tr></thead>
-              <tbody>
-                <tr><td>1. Upload</td><td>Accepts a ZIP, a folder, a GitHub URL or a Zenodo record.</td></tr>
-                <tr><td>2. Review</td><td>Detects the challenge and whether the submission is result-only or reproducible, and indexes every file.</td></tr>
-                <tr><td>3. Validate</td><td>Checks readability, dimensions, required maps and artifacts, and the expected dataset structure.</td></tr>
-                <tr><td>4. Run</td><td>Executes reproducible submissions in Docker. Result-only submissions skip this step.</td></tr>
-                <tr><td>5. QC &amp; Preview</td><td>Quality-control statistics, image previews and reference comparison where reference data exists.</td></tr>
-                <tr><td>6. Export</td><td>HTML and PDF reports, plus JSON and CSV in blinded and unblinded forms.</td></tr>
-              </tbody>
-            </table>
+          <p>A submission moves through six steps in order.</p>
+          <div class="docs-steps">
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">1</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Upload</p>
+                <p>Accepts a ZIP, a folder, a GitHub URL or a Zenodo record.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">2</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Review</p>
+                <p>Detects the challenge and whether the submission is result-only or reproducible, and indexes every file.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">3</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Validate</p>
+                <p>Checks readability, dimensions, required maps and artifacts, and the expected dataset structure.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">4</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Run</p>
+                <p>Executes reproducible submissions in Docker. Result-only submissions skip this step.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">5</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">QC and Preview</p>
+                <p>Quality-control statistics, image previews and reference comparison where reference data exists.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">6</span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Export</p>
+                <p>HTML and PDF reports, plus JSON and CSV in blinded and unblinded forms.</p>
+              </div>
+            </div>
           </div>
         </section>
 

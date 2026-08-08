@@ -114,19 +114,34 @@
             developer. The boundary is arithmetic: what a challenge requires and which script scores
             it are configuration, while a new formula is code.</p>
 
-          <p><strong>Configuration.</strong> A scoring script is installed or replaced by uploading a
-            ZIP in Scoring Setup and selecting it for the challenge. The metrics it reports are
-            listed in <code>manifest.json</code> inside that ZIP and can be edited in any text
-            editor. Required maps, dataset counts and filename aliases are set in
-            <code>config/validation_rules.yaml</code> and take effect when Reload rules is pressed.
-            The grouped SD and CoV statistics are enabled by a single setting once their conventions
-            are confirmed.</p>
-
-          <p><strong>Development.</strong> Defining a metric that does not yet exist, such as
-            accuracy or ICC, requires Python and accompanying tests.</p>
-
-          <p>Configuration is still edited as YAML in a text editor rather than through a form, which
-            is the natural next addition.</p>
+          <div class="docs-cards">
+            <div class="docs-card">
+              <h3>The challenge team can change these</h3>
+              <p>No developer, no terminal.</p>
+              <dl>
+                <dt>Install or replace a scoring script</dt>
+                <dd>Upload the ZIP in Scoring Setup, then select it for the challenge.</dd>
+                <dt>Change which metrics it reports</dt>
+                <dd>Edit <code>manifest.json</code> inside that ZIP, in any text editor.</dd>
+                <dt>Required maps, dataset counts, filename aliases</dt>
+                <dd>Edit <code>config/validation_rules.yaml</code>, then press Reload rules.</dd>
+                <dt>Enable the grouped SD and CoV</dt>
+                <dd>One setting, once the two conventions are confirmed.</dd>
+              </dl>
+            </div>
+            <div class="docs-card">
+              <h3>These need a developer</h3>
+              <p>Python, with accompanying tests.</p>
+              <dl>
+                <dt>A metric that does not exist yet</dt>
+                <dd>Accuracy, deviance, residual sum of squares and ICC each need to be written and
+                  tested once their definitions are agreed.</dd>
+                <dt>A form for editing the rules</dt>
+                <dd>Configuration is still YAML in a text editor. A form would need the config
+                  directory mounted writable and a save path that cannot corrupt the file.</dd>
+              </dl>
+            </div>
+          </div>
         </section>
 
         <section>
@@ -152,12 +167,12 @@
             <a class="docs-download" href="downloads/gsoc-proposal.pdf">
               <span class="docs-download-kind">PDF</span>
               <span class="docs-download-name">Original proposal</span>
-              <span class="docs-download-note">What was proposed, before any code was written</span>
+              <span class="docs-download-note">Six pages, submitted before any code was written</span>
             </a>
-            <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/GSoC_WORK_PRODUCT.md">
-              <span class="docs-download-kind">MD</span>
+            <a class="docs-download" href="downloads/gsoc-work-product.pdf">
+              <span class="docs-download-kind">PDF</span>
               <span class="docs-download-name">Work product</span>
-              <span class="docs-download-note">The full write-up, with commits and evidence</span>
+              <span class="docs-download-note">Six pages, with the commits and the evidence</span>
             </a>
           </div>
         </section>

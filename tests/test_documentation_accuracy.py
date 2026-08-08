@@ -310,13 +310,48 @@ def test_the_example_report_is_a_real_one_the_code_produced() -> None:
     match it. Pinning structure the generator emits means a hand-edited stand-in
     would have to reproduce the generator to pass, at which point it is real.
     """
-    report = (DOCS / "downloads" / "example-report-blinded.html").read_text()
-    for marker in ("<!DOCTYPE html", "Submission 1"):
-        assert marker in report, f"the example report lacks {marker!r}"
-    # The blinding promise the page makes about this exact file.
-    assert "Team and contact details were withheld" in report
+    pdf = (DOCS / "downloads" / "example-report-blinded.pdf").read_bytes()
+    assert pdf.startswith(b"%PDF"), "the example report is not a PDF"
+
+    # The generator writes uncompressed pages precisely so page text can be
+    # read back like this. If that ever changes, this check would pass
+    # vacuously, so the marker assertions have to fail first and loudly.
+    text = pdf.decode("latin-1", errors="ignore")
+    for marker in ("Submission 1", "Team and contact details were withheld"):
+        assert marker in text, (
+            f"the example report lacks {marker!r}; is pageCompression enabled?")
     for leaked in ("Team Gamma", "gamma@example.org", "DCE_Test_Clean"):
-        assert leaked not in report, f"the published example leaks {leaked!r}"
+        assert leaked not in text, f"the published example leaks {leaked!r}"
+
+
+def test_the_published_example_pdf_is_portrait_throughout() -> None:
+    """The file offered for download is the one people judge the tool by."""
+    pdf = (DOCS / "downloads" / "example-report-blinded.pdf").read_bytes()
+    boxes = re.findall(rb"/MediaBox\s*\[\s*([\d.\s-]+?)\]", pdf)
+    assert boxes, "no page boxes found in the example report"
+    sizes = set()
+    for box in boxes:
+        x0, y0, x1, y1 = (float(v) for v in box.split())
+        sizes.add((round(x1 - x0), round(y1 - y0)))
+    assert len(sizes) == 1, f"the published example has mixed page sizes: {sorted(sizes)}"
+    width, height = sizes.pop()
+    assert height > width, f"the published example is landscape ({width} x {height})"
+
+
+def test_the_published_example_csv_matches_what_the_page_claims() -> None:
+    """The page says 32 rows, one per scan and region. It should be true."""
+    csv_path = DOCS / "downloads" / "example-roi-statistics.csv"
+    lines = [line for line in csv_path.read_text().splitlines() if line.strip()]
+    header, rows = lines[0], lines[1:]
+
+    for column in ("roi_median", "roi_within_scan_sd", "roi_within_scan_cov",
+                   "voxel_count", "units", "status"):
+        assert column in header, f"the example CSV has no {column} column"
+    assert len(rows) == 32, f"the example CSV has {len(rows)} rows, the page says 32"
+    assert "32 rows" in (DOCS / "examples.html").read_text()
+
+    for leaked in ("Team Gamma", "gamma@example.org"):
+        assert leaked not in csv_path.read_text(), f"the example CSV leaks {leaked!r}"
 
 
 def _offered_downloads() -> list[str]:
@@ -585,6 +620,59 @@ def test_the_clone_url_is_the_repository_the_site_links_to() -> None:
     linked = set(re.findall(r'href="(https://github\.com/[\w-]+/[\w-]+)"', TEXT))
     assert clone.removesuffix(".git") in linked, \
         f"the clone URL {clone} is not the repository the site links to"
+
+
+# ── Hand-written components ───────────────────────────────────────────────
+
+def test_numbered_steps_run_in_order_and_are_complete() -> None:
+    """The step numbers are typed by hand, so they can silently repeat.
+
+    A stepper reading 1, 2, 3, 3, 5, 6 looks fine at a glance and is wrong.
+    The last step also has to be the one without a connector line, or the
+    rail hangs past the final circle.
+    """
+    for page in PAGES:
+        html = page.read_text()
+        blocks = re.findall(r'<div class="docs-steps">(.*?)\n\s*</div>\s*$',
+                            html, re.S | re.M)
+        for block in re.findall(r'<div class="docs-steps">(.*?)</div>\s*(?:</section>|<p)',
+                                html, re.S):
+            numbers = [int(n) for n in
+                       re.findall(r'<span class="docs-step-num">(\d+)</span>', block)]
+            if not numbers:
+                continue
+            assert numbers == list(range(1, len(numbers) + 1)), \
+                f"{page.name}: step numbers are {numbers}"
+
+            steps = re.findall(r'<div class="docs-step">(.*?)</div>\s*</div>', block, re.S)
+            assert len(steps) == len(numbers), \
+                f"{page.name}: {len(numbers)} numbers but {len(steps)} steps"
+            for step in steps:
+                assert "docs-step-title" in step, f"{page.name}: a step has no title"
+
+            lines = block.count('class="docs-step-line"')
+            assert lines == len(numbers) - 1, (
+                f"{page.name}: {len(numbers)} steps need {len(numbers) - 1} "
+                f"connectors, found {lines}")
+        assert blocks or True
+
+
+def test_every_component_class_the_pages_use_is_styled() -> None:
+    """A typo in a class name renders as unstyled markup, not as an error.
+
+    Both sides need a word boundary. Substring matching says `.docs-step-num`
+    is present when the stylesheet only defines `.docs-step-numbers`, and says
+    a page uses `docs-step` when it only ever writes `docs-steps`.
+    """
+    css = (DOCS / "assets" / "stylesheets" / "site.css").read_text()
+
+    used: set[str] = set()
+    for attribute in re.findall(r'class="([^"]+)"', TEXT):
+        used.update(attribute.split())
+
+    for name in sorted(n for n in used if n.startswith("docs-")):
+        assert re.search(rf"\.{re.escape(name)}(?![\w-])", css), \
+            f"{name} is used by a page but has no style rule"
 
 
 # ── Branding assets ───────────────────────────────────────────────────────

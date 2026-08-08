@@ -1,19 +1,17 @@
 # GSoC 2026 Work Product
 
-**Project** — Python Pipeline for Evaluating OSIPI Perfusion Imaging Challenge
+**Project**: Python Pipeline for Evaluating OSIPI Perfusion Imaging Challenge
 Submissions
 
-**Contributor** — Ranya Al-khleef
+**Contributor**: Ranya Al-khleef
 
-**Organisation** — OSIPI (Open Science Initiative for Perfusion Imaging), ISMRM
+**Organisation**: OSIPI (Open Science Initiative for Perfusion Imaging), ISMRM
 Perfusion Study Group
 
-**Mentors** — Lena Václavů, Olivia Jones, Puneet Kumar
+**Mentors**: Lena Václavů, Olivia Jones, Puneet Kumar
 
-**Repository** — https://github.com/ralkhleef/osipi-perfusion-pipeline
-**Documentation** — https://ralkhleef.github.io/osipi-perfusion-pipeline/
-
-> Confirm the Pages URL after the first deployment, then delete this note.
+**Repository**: https://github.com/ralkhleef/osipi-perfusion-pipeline
+**Documentation**: https://ralkhleef.github.io/osipi-perfusion-pipeline/
 
 ---
 
@@ -32,8 +30,8 @@ next year, needs a tool.
 
 ## What was built
 
-A local web application that takes a submission archive through six steps —
-upload, review, validate, run, QC and preview, export — and produces reports in
+A local web application that takes a submission archive through six steps,
+upload, review, validate, run, QC and preview, export, and produces reports in
 JSON, CSV, HTML and PDF. It runs entirely on the organiser's machine, so
 imaging data, reference maps and hidden ROI masks never leave it.
 
@@ -91,11 +89,11 @@ does not compute a metric whose formula has not been confirmed.
 
 ## Testing
 
-**618 Python tests, 1 skipped. 1,125 frontend checks.**
+**705 Python tests, 1 skipped. 1,125 frontend checks.**
 
 | Suite | Count |
 |---|---|
-| Python | 618 passed, 1 skipped |
+| Python | 705 passed, 1 skipped |
 | Frontend smoke | 1,014 |
 | Frontend ROI DOM | 53 |
 | Footer logic | 27 |
@@ -116,7 +114,7 @@ the automated suite could not reach**, documented with reproduction in
    then became unresolvable, producing 41 spurious errors and silently
    disabling dataset-count validation.
 2. Files sitting beside the batch directories were **destroyed** during the
-   carve — including the required methods document, which the submitter was
+   carve, including the required methods document, which the submitter was
    then blamed for omitting.
 3. An unknown submission id **returned another submission's results**, because
    the lookup matched by substring.
@@ -144,8 +142,8 @@ ship:
 | `test_blinded_identity.py` | 45 | No test asserted against the **whole** blinded output |
 | `test_submission_lookup.py` | 26 | No test requested an id that **does not exist** |
 
-`test_reference_dedup.py` simulates macOS case-folding with a symlink — two
-paths, one inode — so a macOS-only bug reproduces on the Linux filesystem CI
+`test_reference_dedup.py` simulates macOS case-folding with a symlink, two
+paths, one inode, so a macOS-only bug reproduces on the Linux filesystem CI
 runs on.
 
 ### Reproducible evidence
@@ -178,8 +176,8 @@ blinded HTML/PDF/CSV/JSON: no identity   unblinded: names the team
 | `d529724` | Documentation design and private-data protections |
 | `5e8b088` | Merge with `origin/main` |
 
-Earlier work — the DCE-2026 configuration schema, the normalised artifact
-model, ROI descriptive statistics, and the journal-style report redesign —
+Earlier work, the DCE-2026 configuration schema, the normalised artifact
+model, ROI descriptive statistics, and the journal-style report redesign,
 landed in the commits preceding these.
 
 ---
@@ -192,7 +190,7 @@ landed in the commits preceding these.
 | `src/osipi_pipeline/` | Library: config, ingestion, validation, scoring |
 | `backend/` | FastAPI application and services |
 | `frontend/` | Interface |
-| `tests/` | 618 Python tests, 1,125 frontend checks |
+| `tests/` | 705 Python tests, 1,125 frontend checks |
 | `docs/` | Documentation site, published by GitHub Pages |
 | `scripts/demo_evidence.py` | Regenerates the evidence bundle |
 | `CODE_WALKTHROUGH.md` | The seven defects, with reproduction |
@@ -227,7 +225,7 @@ to whoever picks this up.
 
 In the order I would tackle it:
 
-1. **Grouped statistics** — inter-repeat and inter-site SD and CoV. Every field
+1. **Grouped statistics**, inter-repeat and inter-site SD and CoV. Every field
    needed is already on each ROI row, so this is aggregation over existing data
    rather than new measurement. It only needs the aggregation rule confirmed.
 2. **Accuracy and deviance**, once defined.
@@ -242,5 +240,5 @@ In the order I would tackle it:
 
 Thanks to my mentors for the challenge specifications, the review sessions that
 shaped the configuration design, and for pushing back on metrics that were not
-yet defined — that pressure is why the pipeline reports "unavailable" instead of
+yet defined, that pressure is why the pipeline reports "unavailable" instead of
 a plausible-looking number.

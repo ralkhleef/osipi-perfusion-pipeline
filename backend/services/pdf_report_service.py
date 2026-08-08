@@ -1187,9 +1187,13 @@ def _simple_pdf_bytes(lines: Sequence[str]) -> bytes:
 
 
 def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
-    """Render the branded landscape PDF.
+    """Render the branded PDF.
 
     Layout notes:
+      * Every page is portrait letter. Two wide tables used to get landscape
+        pages of their own, which is a normal thing to do but made the
+        document rotate twice while being read, on screen and on paper. They
+        are set at the portrait measure instead.
       * Page 1 uses a tall masthead (logo + gradient band); later pages use a
         slim running header. That needs two PageTemplates, hence
         BaseDocTemplate rather than SimpleDocTemplate.
@@ -1198,7 +1202,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         pass once the count is known.
     """
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import landscape, letter
+    from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
     from reportlab.pdfbase import pdfmetrics
@@ -1209,15 +1213,12 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     )
 
     C = {k: colors.HexColor(v) for k, v in BRAND.items()}
-    # Portrait, like a paper. The body was landscape only because one table
-    # is wide, which meant every other page ran a 10in measure and left
-    # ~45% of itself empty. That table now gets its own landscape page
-    # instead (a mixed-orientation PDF is standard for wide tables).
     PAGE_W, PAGE_H = letter
-    WIDE_W, WIDE_H = landscape(letter)
     MARGIN = 0.75 * inch
     CONTENT_W = PAGE_W - 2 * MARGIN
-    WIDE_CONTENT_W = WIDE_W - 2 * MARGIN
+    # Kept as a name because the two formerly landscape tables still refer to
+    # their own measure. It is now the same measure as everything else.
+    WIDE_CONTENT_W = CONTENT_W
     # Must clear the whole canvas-drawn masthead: 0.50in top gap + the
     # lockup height + 0.13in to the rule + 0.58in down to the deck
     # baseline, plus descenders and a gap before the leader paragraph.
@@ -1292,9 +1293,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     def section(title: str, width: float | None = None) -> Table:
         """Letterspaced small-caps heading sitting on a hairline rule.
 
-        ``width`` defaults to the portrait measure; the landscape results
-        page passes its own so the rule spans the frame rather than stopping
-        short of the table beneath it.
+        ``width`` defaults to the content measure; callers pass their own
+        when the rule must span something narrower.
         """
         table = Table([[Paragraph(esc(str(title).upper()), heading_style)]],
                       colWidths=[width or CONTENT_W], hAlign="LEFT")
@@ -1330,6 +1330,41 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]
 
+    def fitted_widths(headers: Sequence[Any], rows: Sequence[Sequence[Any]],
+                      total: float) -> list[float]:
+        """Share the measure out by how much text each column carries.
+
+        Equal columns are what broke the headings: "Submission" and
+        "Reference status" got the same width as "Maps", so ReportLab split
+        them mid-word into "SUBMISSI / ON". Weighting by the longest word in
+        each column means a column is at least wide enough for its own
+        heading, which is the thing that has to stay readable.
+        """
+        n = max(1, len(headers))
+        # Headings are set uppercase and letterspaced, so they need more room
+        # per character than the cells beneath them.
+        HEADING_WIDTH = 1.9
+        PADDING = 2.0
+        weights: list[float] = []
+        for index in range(n):
+            heading = str(headers[index]) if index < len(headers) else ""
+            # The longest single word, not the whole heading: "Reference
+            # status" may wrap at the space, it just may not break "Reference".
+            longest_word = max((len(w) for w in heading.split()), default=len(heading))
+            longest_cell = 0
+            for row in rows[:60]:
+                if index < len(row):
+                    longest_cell = max(longest_cell, len(str(row[index] or "")))
+            weights.append(PADDING + max(
+                4.0,
+                min(longest_word * HEADING_WIDTH, 20.0),
+                # A little over the longest value: "44.72%" fits exactly at
+                # six and then wraps its own percent sign onto a second line.
+                min(longest_cell + 1.5, 24.0),
+            ))
+        scale = total / sum(weights)
+        return [w * scale for w in weights]
+
     def data_table(headers: Sequence[Any], rows: Sequence[Sequence[Any]],
                    col_widths: Sequence[float] | None = None,
                    tone_col: int | None = None,
@@ -1341,7 +1376,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         the column rather than ragging against the left edge.
         """
         n_cols = max(1, len(headers))
-        widths = col_widths or [CONTENT_W / n_cols] * n_cols
+        widths = col_widths or fitted_widths(headers, rows, CONTENT_W)
         numeric = set(num_cols)
         cells = [[
             Paragraph(esc(str(h).upper()),
@@ -1399,8 +1434,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     def two_up(left, right, ratio: float = 0.5, gap: float = 0.22 * inch) -> Table:
         """Place two flowables side by side.
 
-        The page is landscape, so a lone key/value table leaves ~3.5in of dead
-        space to its right. Pairing related blocks keeps the report compact.
+        A lone key/value table leaves dead space to its right. Pairing
+        related blocks keeps the report compact.
         """
         usable = CONTENT_W - gap
         table = Table(
@@ -1492,7 +1527,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return x
 
     def _page_dims(canvas):
-        """Current page size. Varies: the results table page is landscape."""
+        """Current page size. Every template is portrait letter."""
         try:
             return canvas._pagesize
         except Exception:
@@ -1617,7 +1652,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
 
     buffer = io.BytesIO()
     doc = BaseDocTemplate(
-        buffer, pagesize=landscape(letter),
+        buffer, pagesize=(PAGE_W, PAGE_H),
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=FOOTER_H + 0.12 * inch,
         title=str(model["title"]), author="OSIPI Perfusion Pipeline",
@@ -1648,12 +1683,12 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                           PAGE_H - LATER_HEADER_H - 0.16 * inch - body_bottom,
                           id="f2", **_pad)],
         ),
-        # The per-submission results table has a dozen columns and will not
-        # read at a 7in measure, so it gets a landscape page of its own.
+        # Same geometry as "later". Kept as a separate id so the story can
+        # still mark where the wide tables begin without rotating the page.
         PageTemplate(
-            id="wide", pagesize=(WIDE_W, WIDE_H), onPage=draw_later_header,
-            frames=[Frame(MARGIN, body_bottom, WIDE_CONTENT_W,
-                          WIDE_H - LATER_HEADER_H - 0.16 * inch - body_bottom,
+            id="wide", pagesize=(PAGE_W, PAGE_H), onPage=draw_later_header,
+            frames=[Frame(MARGIN, body_bottom, CONTENT_W,
+                          PAGE_H - LATER_HEADER_H - 0.16 * inch - body_bottom,
                           id="f3", **_pad)],
         ),
     ])
@@ -1662,12 +1697,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     story: list = [NextPageTemplate("later")]
 
     def constrained(flowable, width: float) -> Table:
-        """Hold a flowable to a set measure.
-
-        The page is landscape, so text left to fill the frame runs to ~110
-        characters a line, roughly half again the length at which the eye
-        reliably finds the next line. This caps the leader at about 80.
-        """
+        """Hold a flowable to a set measure, capping the line at about 80
+        characters."""
         table = Table([[flowable]], colWidths=[width], hAlign="LEFT")
         table.setStyle(TableStyle([
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -1822,7 +1853,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ]))
         story.append(preview_table)
 
-    # Switch to the landscape template for the wide table, then switch back.
+    # The two widest tables start here on a page of their own.
     story.append(NextPageTemplate("wide"))
     story.append(PageBreak())
     story.append(section("Results by submission", WIDE_CONTENT_W))
@@ -1835,9 +1866,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     num_cols = [i for i, h in enumerate(headers)
                 if h in numeric_names or str(h).startswith("Mean ")]
     story.append(data_table(headers, model["rows"], tone_col=ref_col,
-                            num_cols=num_cols,
-                            col_widths=[WIDE_CONTENT_W / max(1, len(headers))]
-                                       * len(headers)))
+                            num_cols=num_cols))
     story.append(caption(
         "Table 3. Per-submission quality control and reference agreement. "
         "Measures that could not be computed are reported as Not available "

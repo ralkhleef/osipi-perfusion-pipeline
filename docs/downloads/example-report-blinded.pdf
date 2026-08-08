@@ -68,7 +68,7 @@ endobj
 endobj
 11 0 obj
 <<
-/Contents 18 0 R /MediaBox [ 0 0 792 612 ] /Parent 16 0 R /Resources <<
+/Contents 18 0 R /MediaBox [ 0 0 612 792 ] /Parent 16 0 R /Resources <<
 /Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ] /XObject <<
 /FormXob.e50575d6d59e16d2245e692fb1dc638a 8 0 R
 >>
@@ -80,7 +80,7 @@ endobj
 endobj
 12 0 obj
 <<
-/Contents 19 0 R /MediaBox [ 0 0 792 612 ] /Parent 16 0 R /Resources <<
+/Contents 19 0 R /MediaBox [ 0 0 612 792 ] /Parent 16 0 R /Resources <<
 /Font 1 0 R /ProcSet [ /PDF /Text /ImageB /ImageC /ImageI ] /XObject <<
 /FormXob.e50575d6d59e16d2245e692fb1dc638a 8 0 R
 >>
@@ -109,8 +109,8 @@ endobj
 endobj
 15 0 obj
 <<
-/Author (OSIPI Perfusion Pipeline) /CreationDate (D:20260805202704-07'00') /Creator (\(unspecified\)) /Keywords () /ModDate (D:20260805202704-07'00') /Producer (ReportLab PDF Library - \(opensource\)) 
-  /Subject (Evaluation report \204 Submission 1) /Title (OSIPI Perfusion Pipeline Report) /Trapped /False
+/Author (OSIPI Perfusion Pipeline) /CreationDate (D:20260808154127-07'00') /Creator (\(unspecified\)) /Keywords () /ModDate (D:20260808154127-07'00') /Producer (ReportLab PDF Library - \(opensource\)) 
+  /Subject (Evaluation report, Submission 1) /Title (OSIPI Perfusion Pipeline Report) /Trapped /False
 >>
 endobj
 16 0 obj
@@ -120,7 +120,7 @@ endobj
 endobj
 17 0 obj
 <<
-/Length 9129
+/Length 9171
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
@@ -131,7 +131,7 @@ q
 Q
 .419608 .431373 .478431 rg
 BT /F1 7.5 Tf 9 TL ET
-BT 1 0 0 1 519.645 738.2597 Tm (2026-08-06) Tj T* ET
+BT 1 0 0 1 519.645 738.2597 Tm (2026-08-08) Tj T* ET
 BT 1 0 0 1 511.3125 726.0197 Tm (Blinded report) Tj T* ET
 .290196 .301961 .341176 RG
 .8 w
@@ -308,47 +308,47 @@ q
 1 0 0 1 54 408.34 cm
 Q
 q
-1 0 0 1 54 365.54 cm
+1 0 0 1 54 373.94 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
 q
-1 0 0 1 0 29.8 cm
+1 0 0 1 0 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (DATASET) Tj T* ET
 Q
 Q
 q
-1 0 0 1 84 29.8 cm
+1 0 0 1 140.9032 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (TYPE) Tj T* ET
 Q
 Q
 q
-1 0 0 1 168 29.8 cm
+1 0 0 1 192.929 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (COUNT) Tj T* ET
 Q
 Q
 q
-1 0 0 1 252 29.8 cm
+1 0 0 1 255.2516 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (DIMENSIONS) Tj T* ET
 Q
 Q
 q
-1 0 0 1 336 29.8 cm
+1 0 0 1 369.0581 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (UNITS) Tj T* ET
 Q
 Q
 q
-1 0 0 1 420 29.8 cm
+1 0 0 1 431.3806 21.4 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (STATUS) Tj T* ET
@@ -358,46 +358,46 @@ q
 1 0 0 1 0 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 10.2 Tm /F1 6.6 Tf 8.4 TL (Not available for this) Tj T* (submission.) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (Not available for this submission.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 84 20.8 cm
+1 0 0 1 140.9032 12.4 cm
 Q
 q
-1 0 0 1 168 20.8 cm
+1 0 0 1 192.929 12.4 cm
 Q
 q
-1 0 0 1 252 20.8 cm
+1 0 0 1 255.2516 12.4 cm
 Q
 q
-1 0 0 1 336 20.8 cm
+1 0 0 1 369.0581 12.4 cm
 Q
 q
-1 0 0 1 420 20.8 cm
+1 0 0 1 431.3806 12.4 cm
 Q
 q
 1 J
 1 j
 .290196 .301961 .341176 RG
 .7 w
-n 0 42.8 m 504 42.8 l S
+n 0 34.4 m 504 34.4 l S
 .45 w
-n 0 24.8 m 504 24.8 l S
+n 0 16.4 m 504 16.4 l S
 .7 w
 n 0 0 m 504 0 l S
 Q
 Q
 Q
 q
-1 0 0 1 54 339.54 cm
+1 0 0 1 54 347.94 cm
 q
 .419608 .431373 .478431 rg
 BT 1 0 0 1 0 13 Tm /F3 8 Tf 10.5 TL (Table 1. What the submission contains, grouped by dataset and type. Parameter maps, fitted signals and documents are counted separately; organiser) Tj T* (reference data is not counted as submitted content.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 54 299.04 cm
+1 0 0 1 54 307.44 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
@@ -418,10 +418,10 @@ Q
 Q
 Q
 q
-1 0 0 1 54 294.04 cm
+1 0 0 1 54 302.44 cm
 Q
 q
-1 0 0 1 54 97.24 cm
+1 0 0 1 54 105.64 cm
 q
 .419608 .431373 .478431 rg
 BT /F1 10 Tf 12 TL ET
@@ -641,7 +641,7 @@ Q
 Q
 Q
 q
-1 0 0 1 54 71.24 cm
+1 0 0 1 54 79.64 cm
 q
 .419608 .431373 .478431 rg
 BT 1 0 0 1 0 13 Tm /F3 8 Tf 10.5 TL (Table 2. Aggregate quality-control statistics and reference agreement. Values are weighted across included maps; parameter types with different units are) Tj T* (reported separately and never averaged together.) Tj T* ET
@@ -653,7 +653,7 @@ q
 n 54 30.24 m 558 30.24 l S
 BT /F1 7 Tf 8.4 TL ET
 .419608 .431373 .478431 rg
-BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-06 03:27 UTC) Tj T* ET
+BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-08 22:41 UTC) Tj T* ET
 BT 1 0 0 1 544.378 19.24 Tm (1 / 4) Tj T* ET
 Q
  
@@ -661,33 +661,33 @@ endstream
 endobj
 18 0 obj
 <<
-/Length 36037
+/Length 49817
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
 q
 q
-24.48 0 0 24.4035 54 576.7583 cm
+24.48 0 0 24.4035 54 756.7583 cm
 /FormXob.e50575d6d59e16d2245e692fb1dc638a Do
 Q
 .086275 .086275 .101961 rg
 BT /F4 8.5 Tf 10.2 TL ET
-BT 1 0 0 1 85.68 584.64 Tm (O) Tj T* ET
-BT 1 0 0 1 92.58 584.64 Tm (S) Tj T* ET
-BT 1 0 0 1 99.48 584.64 Tm (I) Tj T* ET
-BT 1 0 0 1 106.38 584.64 Tm (P) Tj T* ET
-BT 1 0 0 1 113.28 584.64 Tm (I) Tj T* ET
+BT 1 0 0 1 85.68 764.64 Tm (O) Tj T* ET
+BT 1 0 0 1 92.58 764.64 Tm (S) Tj T* ET
+BT 1 0 0 1 99.48 764.64 Tm (I) Tj T* ET
+BT 1 0 0 1 106.38 764.64 Tm (P) Tj T* ET
+BT 1 0 0 1 113.28 764.64 Tm (I) Tj T* ET
 .419608 .431373 .478431 rg
 BT /F3 8 Tf 9.6 TL ET
-BT 1 0 0 1 127.38 584.64 Tm (Evaluation report) Tj T* ET
+BT 1 0 0 1 127.38 764.64 Tm (Evaluation report) Tj T* ET
 BT /F1 7.5 Tf 9 TL ET
-BT 1 0 0 1 692.985 583.2 Tm (Submission 1) Tj T* ET
+BT 1 0 0 1 512.985 763.2 Tm (Submission 1) Tj T* ET
 .290196 .301961 .341176 RG
 .5 w
-n 54 573.12 m 738 573.12 l S
+n 54 753.12 m 558 753.12 l S
 Q
 q
-1 0 0 1 54 534.98 cm
+1 0 0 1 54 714.98 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
@@ -703,183 +703,183 @@ q
 1 j
 .788235 .8 .827451 RG
 .5 w
-n 0 0 m 684 0 l S
+n 0 0 m 504 0 l S
 Q
 Q
 Q
 q
-1 0 0 1 54 529.98 cm
+1 0 0 1 54 709.98 cm
 Q
 q
-1 0 0 1 54 487.58 cm
+1 0 0 1 54 659.18 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
 q
-1 0 0 1 0 29.4 cm
+1 0 0 1 0 37.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (SUBMISSION) Tj T* ET
 Q
 Q
 q
-1 0 0 1 57 29.4 cm
+1 0 0 1 57.08738 37.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (CHALLENGE) Tj T* ET
 Q
 Q
 q
-1 0 0 1 114 29.4 cm
+1 0 0 1 109.0097 29.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (MAP TYPES) Tj T* ET
+BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL (MAP) Tj T* (TYPES) Tj T* ET
 Q
 Q
 q
-1 0 0 1 171 29.4 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 32.1458 0 Td (MAPS) Tj T* -32.1458 0 Td ET
-Q
-Q
-q
-1 0 0 1 228 29.4 cm
+1 0 0 1 140.2718 37.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 3.0839 0 Td (FINITE VOXELS) Tj T* -3.0839 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 1.242887 0 Td (MAPS) Tj T* -1.242887 0 Td ET
 Q
 Q
 q
-1 0 0 1 285 29.4 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 21.2972 0 Td (NAN / INF) Tj T* -21.2972 0 Td ET
-Q
-Q
-q
-1 0 0 1 342 21.4 cm
+1 0 0 1 166.3689 29.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL 18.1409 0 Td (NEGATIVE) Tj T* 6.6465 0 Td (VOXELS) Tj T* -24.7874 0 Td ET
+BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL 9.475084 0 Td (FINITE) Tj T* -5.2605 0 Td (VOXELS) Tj T* -4.214584 0 Td ET
 Q
 Q
 q
-1 0 0 1 399 29.4 cm
+1 0 0 1 202.7961 29.8 cm
+q
+.513725 .52549 .560784 rg
+BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL 2.807496 0 Td (NAN) Tj T* -0.3528 0 Td (/ INF) Tj T* -2.454696 0 Td ET
+Q
+Q
+q
+1 0 0 1 225.9029 29.8 cm
+q
+.513725 .52549 .560784 rg
+BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL 7.898182 0 Td (NEGATIVE) Tj T* 6.6465 0 Td (VOXELS) Tj T* -14.54468 0 Td ET
+Q
+Q
+q
+1 0 0 1 272.6602 37.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (MAP MEANS) Tj T* ET
 Q
 Q
 q
-1 0 0 1 456 21.4 cm
+1 0 0 1 317.5146 29.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL (REFERENCE) Tj T* (STATUS) Tj T* ET
 Q
 Q
 q
-1 0 0 1 513 29.4 cm
+1 0 0 1 369.4369 37.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 31.7993 0 Td (RMSE) Tj T* -31.7993 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 19.65367 0 Td (RMSE) Tj T* -19.65367 0 Td ET
 Q
 Q
 q
-1 0 0 1 570 29.4 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 36.3479 0 Td (MAE) Tj T* -36.3479 0 Td ET
-Q
-Q
-q
-1 0 0 1 627 29.4 cm
+1 0 0 1 414.2913 37.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 35.6423 0 Td (BIAS) Tj T* -35.6423 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 24.20227 0 Td (MAE) Tj T* -24.20227 0 Td ET
 Q
 Q
 q
-1 0 0 1 0 4 cm
+1 0 0 1 459.1456 37.8 cm
+q
+.513725 .52549 .560784 rg
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 23.49667 0 Td (BIAS) Tj T* -23.49667 0 Td ET
+Q
+Q
+q
+1 0 0 1 0 12.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (Submission 1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 57 4 cm
+1 0 0 1 57.08738 12.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (DCE) Tj T* ET
 Q
 Q
 q
-1 0 0 1 114 4 cm
+1 0 0 1 109.0097 12.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (Ktrans) Tj T* ET
 Q
 Q
 q
-1 0 0 1 171 4 cm
+1 0 0 1 140.2718 12.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 42.6608 0 Td (16) Tj T* -42.6608 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 11.75789 0 Td (16) Tj T* -11.75789 0 Td ET
 Q
 Q
 q
-1 0 0 1 228 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 33.1238 0 Td (100%) Tj T* -33.1238 0 Td ET
-Q
-Q
-q
-1 0 0 1 285 4 cm
+1 0 0 1 166.3689 12.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 37.1564 0 Td (0 / 0) Tj T* -37.1564 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 12.55098 0 Td (100%) Tj T* -12.55098 0 Td ET
 Q
 Q
 q
-1 0 0 1 342 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 11.852 0 Td (Not available) Tj T* -11.852 0 Td ET
-Q
-Q
-q
-1 0 0 1 399 4 cm
+1 0 0 1 202.7961 12.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (Not available) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.263196 0 Td (0 / 0) Tj T* -3.263196 0 Td ET
 Q
 Q
 q
-1 0 0 1 456 4 cm
-q
-BT 1 0 0 1 0 1.8 Tm 8.4 TL /F1 6.6 Tf .419608 .431373 .478431 rg /F5 6.6 Tf 8.4 TL (l) Tj /F1 6.6 Tf 8.4 TL .2 .207843 .239216 rg ( ) Tj .419608 .431373 .478431 rg (Not available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 513 4 cm
+1 0 0 1 225.9029 12.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 11.852 0 Td (Not available) Tj T* -11.852 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 1.609282 0 Td (Not available) Tj T* -1.609282 0 Td ET
 Q
 Q
 q
-1 0 0 1 570 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 11.852 0 Td (Not available) Tj T* -11.852 0 Td ET
-Q
-Q
-q
-1 0 0 1 627 4 cm
+1 0 0 1 272.6602 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 11.852 0 Td (Not available) Tj T* -11.852 0 Td ET
+BT 1 0 0 1 0 10.2 Tm /F1 6.6 Tf 8.4 TL (Not) Tj T* (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 317.5146 4 cm
+q
+BT 1 0 0 1 0 10.2 Tm 8.4 TL /F1 6.6 Tf .419608 .431373 .478431 rg /F5 6.6 Tf 8.4 TL (l) Tj /F1 6.6 Tf 8.4 TL .2 .207843 .239216 rg ( ) Tj .419608 .431373 .478431 rg (Not) Tj T* (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 369.4369 4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 10.2 Tm /F1 6.6 Tf 8.4 TL 27.58477 0 Td (Not) Tj T* -15.774 0 Td (available) Tj T* -11.81077 0 Td ET
+Q
+Q
+q
+1 0 0 1 414.2913 4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 10.2 Tm /F1 6.6 Tf 8.4 TL 27.58477 0 Td (Not) Tj T* -15.774 0 Td (available) Tj T* -11.81077 0 Td ET
+Q
+Q
+q
+1 0 0 1 459.1456 4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 10.2 Tm /F1 6.6 Tf 8.4 TL 27.58477 0 Td (Not) Tj T* -15.774 0 Td (available) Tj T* -11.81077 0 Td ET
 Q
 Q
 q
@@ -887,23 +887,23 @@ q
 1 j
 .290196 .301961 .341176 RG
 .7 w
-n 0 42.4 m 684 42.4 l S
+n 0 50.8 m 504 50.8 l S
 .45 w
-n 0 16.4 m 684 16.4 l S
+n 0 24.8 m 504 24.8 l S
 .7 w
-n 0 0 m 684 0 l S
+n 0 0 m 504 0 l S
 Q
 Q
 Q
 q
-1 0 0 1 54 472.08 cm
+1 0 0 1 54 633.18 cm
 q
 .419608 .431373 .478431 rg
-BT 1 0 0 1 0 2.5 Tm /F3 8 Tf 10.5 TL (Table 3. Per-submission quality control and reference agreement. Measures that could not be computed are reported as Not available and are never converted to zero.) Tj T* ET
+BT 1 0 0 1 0 13 Tm /F3 8 Tf 10.5 TL (Table 3. Per-submission quality control and reference agreement. Measures that could not be computed are reported as Not available and are never) Tj T* (converted to zero.) Tj T* ET
 Q
 Q
 q
-1 0 0 1 54 431.58 cm
+1 0 0 1 54 592.68 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
@@ -924,88 +924,858 @@ Q
 Q
 Q
 q
-1 0 0 1 54 426.58 cm
+1 0 0 1 54 587.68 cm
 Q
 q
-1 0 0 1 54 39.78 cm
+1 0 0 1 54 44.88 cm
 q
 0 0 0 rg
 BT /F1 10 Tf 12 TL ET
 q
-1 0 0 1 0 373.8 cm
+1 0 0 1 0 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (DATASET) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 365.8 cm
+1 0 0 1 53.36471 529.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL (PARTICIPAN) Tj T* (T) Tj T* ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (PARTICIPANT) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 373.8 cm
+1 0 0 1 130.0983 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (REPEAT) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 373.8 cm
+1 0 0 1 176.836 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (SITE) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 373.8 cm
+1 0 0 1 210.3197 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (ROI) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 373.8 cm
+1 0 0 1 257.4062 529.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 14.31748 0 Td (MEDIAN) Tj T* -14.31748 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 15.23702 0 Td (MEDIAN) Tj T* -15.23702 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 373.8 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 30.06748 0 Td (SD) Tj T* -30.06748 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 373.8 cm
+1 0 0 1 304.1439 529.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 25.16608 0 Td (COV) Tj T* -25.16608 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 17.38425 0 Td (SD) Tj T* -17.38425 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 373.8 cm
+1 0 0 1 337.2789 529.8 cm
 q
 .513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 13.60558 0 Td (VOXELS) Tj T* -13.60558 0 Td ET
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 12.48285 0 Td (COV) Tj T* -12.48285 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 373.8 cm
+1 0 0 1 370.4138 529.8 cm
+q
+.513725 .52549 .560784 rg
+BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 14.52512 0 Td (VOXELS) Tj T* -14.52512 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (UNITS) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 373.8 cm
+1 0 0 1 457.2623 529.8 cm
 q
 .513725 .52549 .560784 rg
 BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (STATUS) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 512.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 496 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 479.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 463.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 446.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 430.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 414 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 397.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 381.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
+Q
+Q
+q
+1 0 0 1 0 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+Q
+Q
+q
+1 0 0 1 53.36471 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
+Q
+Q
+q
+1 0 0 1 257.4062 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
+Q
+Q
+q
+1 0 0 1 304.1439 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
+Q
+Q
+q
+1 0 0 1 337.2789 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
+Q
+Q
+q
+1 0 0 1 370.4138 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 457.2623 364.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
 Q
 Q
 q
@@ -1016,70 +1786,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 348.4 cm
+1 0 0 1 53.36471 348.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 348.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 348.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 348.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 348.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 348.4 cm
+1 0 0 1 210.3197 348.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 348.4 cm
+1 0 0 1 257.4062 348.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 348.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 348.4 cm
+1 0 0 1 304.1439 348.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 348.4 cm
+1 0 0 1 337.2789 348.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 348.4 cm
+1 0 0 1 370.4138 348.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 348.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 348.4 cm
+1 0 0 1 457.2623 348.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1093,70 +1863,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 332 cm
+1 0 0 1 53.36471 332 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 332 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 332 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 332 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 332 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 332 cm
+1 0 0 1 210.3197 332 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 332 cm
+1 0 0 1 257.4062 332 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 332 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 332 cm
+1 0 0 1 304.1439 332 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 332 cm
+1 0 0 1 337.2789 332 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 332 cm
+1 0 0 1 370.4138 332 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 332 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 332 cm
+1 0 0 1 457.2623 332 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1170,70 +1940,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 315.6 cm
+1 0 0 1 53.36471 315.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 315.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 315.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 315.6 cm
+1 0 0 1 176.836 315.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 315.6 cm
+1 0 0 1 210.3197 315.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 315.6 cm
+1 0 0 1 257.4062 315.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 315.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 315.6 cm
+1 0 0 1 304.1439 315.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 315.6 cm
+1 0 0 1 337.2789 315.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 315.6 cm
+1 0 0 1 370.4138 315.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 315.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 315.6 cm
+1 0 0 1 457.2623 315.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1247,70 +2017,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 299.2 cm
+1 0 0 1 53.36471 299.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 299.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 299.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 299.2 cm
+1 0 0 1 176.836 299.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 299.2 cm
+1 0 0 1 210.3197 299.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 299.2 cm
+1 0 0 1 257.4062 299.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 299.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 299.2 cm
+1 0 0 1 304.1439 299.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 299.2 cm
+1 0 0 1 337.2789 299.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 299.2 cm
+1 0 0 1 370.4138 299.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 299.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 299.2 cm
+1 0 0 1 457.2623 299.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1324,70 +2094,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 282.8 cm
+1 0 0 1 53.36471 282.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 282.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 282.8 cm
+1 0 0 1 176.836 282.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 282.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 282.8 cm
+1 0 0 1 210.3197 282.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 282.8 cm
+1 0 0 1 257.4062 282.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 282.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 282.8 cm
+1 0 0 1 304.1439 282.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 282.8 cm
+1 0 0 1 337.2789 282.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 282.8 cm
+1 0 0 1 370.4138 282.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 282.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 282.8 cm
+1 0 0 1 457.2623 282.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1401,70 +2171,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 266.4 cm
+1 0 0 1 53.36471 266.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
+Q
+Q
+q
+1 0 0 1 130.0983 266.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 266.4 cm
+1 0 0 1 176.836 266.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 266.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 266.4 cm
+1 0 0 1 210.3197 266.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 266.4 cm
+1 0 0 1 257.4062 266.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 266.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 266.4 cm
+1 0 0 1 304.1439 266.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 266.4 cm
+1 0 0 1 337.2789 266.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 266.4 cm
+1 0 0 1 370.4138 266.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 266.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 266.4 cm
+1 0 0 1 457.2623 266.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1478,70 +2248,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 250 cm
+1 0 0 1 53.36471 250 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 250 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 250 cm
+1 0 0 1 130.0983 250 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 250 cm
+1 0 0 1 176.836 250 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 250 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 250 cm
+1 0 0 1 257.4062 250 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 250 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 250 cm
+1 0 0 1 304.1439 250 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 250 cm
+1 0 0 1 337.2789 250 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 250 cm
+1 0 0 1 370.4138 250 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 250 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 250 cm
+1 0 0 1 457.2623 250 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1555,70 +2325,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 233.6 cm
+1 0 0 1 53.36471 233.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 233.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 233.6 cm
+1 0 0 1 130.0983 233.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 233.6 cm
+1 0 0 1 176.836 233.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 233.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 233.6 cm
+1 0 0 1 257.4062 233.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 233.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 233.6 cm
+1 0 0 1 304.1439 233.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 233.6 cm
+1 0 0 1 337.2789 233.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 233.6 cm
+1 0 0 1 370.4138 233.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 233.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 233.6 cm
+1 0 0 1 457.2623 233.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1632,70 +2402,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 217.2 cm
+1 0 0 1 53.36471 217.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 217.2 cm
+1 0 0 1 130.0983 217.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 217.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 217.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 217.2 cm
+1 0 0 1 210.3197 217.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 217.2 cm
+1 0 0 1 257.4062 217.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 217.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 217.2 cm
+1 0 0 1 304.1439 217.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 217.2 cm
+1 0 0 1 337.2789 217.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 217.2 cm
+1 0 0 1 370.4138 217.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 217.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 217.2 cm
+1 0 0 1 457.2623 217.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1709,70 +2479,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 200.8 cm
+1 0 0 1 53.36471 200.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 200.8 cm
+1 0 0 1 130.0983 200.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 200.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 200.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 200.8 cm
+1 0 0 1 210.3197 200.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 200.8 cm
+1 0 0 1 257.4062 200.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 200.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 200.8 cm
+1 0 0 1 304.1439 200.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 200.8 cm
+1 0 0 1 337.2789 200.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 200.8 cm
+1 0 0 1 370.4138 200.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 200.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 200.8 cm
+1 0 0 1 457.2623 200.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1782,74 +2552,74 @@ q
 1 0 0 1 0 184.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 184.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 184.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 184.4 cm
+1 0 0 1 53.36471 184.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 184.4 cm
+1 0 0 1 130.0983 184.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 184.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 184.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 184.4 cm
+1 0 0 1 257.4062 184.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 184.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 184.4 cm
+1 0 0 1 304.1439 184.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 184.4 cm
+1 0 0 1 337.2789 184.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 184.4 cm
+1 0 0 1 370.4138 184.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 184.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 184.4 cm
+1 0 0 1 457.2623 184.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1859,74 +2629,74 @@ q
 1 0 0 1 0 168 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 168 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 168 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 168 cm
+1 0 0 1 53.36471 168 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 168 cm
+1 0 0 1 130.0983 168 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 168 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 168 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 168 cm
+1 0 0 1 257.4062 168 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 168 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 168 cm
+1 0 0 1 304.1439 168 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 168 cm
+1 0 0 1 337.2789 168 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 168 cm
+1 0 0 1 370.4138 168 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 168 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 168 cm
+1 0 0 1 457.2623 168 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -1936,74 +2706,74 @@ q
 1 0 0 1 0 151.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 151.6 cm
+1 0 0 1 53.36471 151.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 151.6 cm
+1 0 0 1 130.0983 151.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 151.6 cm
+1 0 0 1 176.836 151.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 151.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 151.6 cm
+1 0 0 1 257.4062 151.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 151.6 cm
+1 0 0 1 304.1439 151.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 151.6 cm
+1 0 0 1 337.2789 151.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 151.6 cm
+1 0 0 1 370.4138 151.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 151.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 151.6 cm
+1 0 0 1 457.2623 151.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2013,74 +2783,74 @@ q
 1 0 0 1 0 135.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 135.2 cm
+1 0 0 1 53.36471 135.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 135.2 cm
+1 0 0 1 130.0983 135.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 135.2 cm
+1 0 0 1 176.836 135.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 135.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 135.2 cm
+1 0 0 1 257.4062 135.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 135.2 cm
+1 0 0 1 304.1439 135.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 135.2 cm
+1 0 0 1 337.2789 135.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 135.2 cm
+1 0 0 1 370.4138 135.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 135.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 135.2 cm
+1 0 0 1 457.2623 135.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2090,74 +2860,74 @@ q
 1 0 0 1 0 118.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 118.8 cm
+1 0 0 1 53.36471 118.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 118.8 cm
+1 0 0 1 130.0983 118.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 118.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 118.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 118.8 cm
+1 0 0 1 257.4062 118.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 118.8 cm
+1 0 0 1 304.1439 118.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 118.8 cm
+1 0 0 1 337.2789 118.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 118.8 cm
+1 0 0 1 370.4138 118.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 118.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 118.8 cm
+1 0 0 1 457.2623 118.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2167,74 +2937,74 @@ q
 1 0 0 1 0 102.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (4) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 102.4 cm
+1 0 0 1 53.36471 102.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 102.4 cm
+1 0 0 1 130.0983 102.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 102.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 102.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 102.4 cm
+1 0 0 1 257.4062 102.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 102.4 cm
+1 0 0 1 304.1439 102.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 102.4 cm
+1 0 0 1 337.2789 102.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 102.4 cm
+1 0 0 1 370.4138 102.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 102.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 102.4 cm
+1 0 0 1 457.2623 102.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2244,74 +3014,74 @@ q
 1 0 0 1 0 86 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 86 cm
+1 0 0 1 53.36471 86 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 86 cm
+1 0 0 1 130.0983 86 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 86 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 86 cm
+1 0 0 1 210.3197 86 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 86 cm
+1 0 0 1 257.4062 86 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 86 cm
+1 0 0 1 304.1439 86 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 86 cm
+1 0 0 1 337.2789 86 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 86 cm
+1 0 0 1 370.4138 86 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 86 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 86 cm
+1 0 0 1 457.2623 86 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2321,74 +3091,74 @@ q
 1 0 0 1 0 69.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 69.6 cm
+1 0 0 1 53.36471 69.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 69.6 cm
+1 0 0 1 130.0983 69.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 69.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 69.6 cm
+1 0 0 1 210.3197 69.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 69.6 cm
+1 0 0 1 257.4062 69.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 69.6 cm
+1 0 0 1 304.1439 69.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 69.6 cm
+1 0 0 1 337.2789 69.6 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 69.6 cm
+1 0 0 1 370.4138 69.6 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 69.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 69.6 cm
+1 0 0 1 457.2623 69.6 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2398,74 +3168,74 @@ q
 1 0 0 1 0 53.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 53.2 cm
+1 0 0 1 53.36471 53.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 53.2 cm
+1 0 0 1 130.0983 53.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 53.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 53.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 53.2 cm
+1 0 0 1 257.4062 53.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 53.2 cm
+1 0 0 1 304.1439 53.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 53.2 cm
+1 0 0 1 337.2789 53.2 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 53.2 cm
+1 0 0 1 370.4138 53.2 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 53.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 53.2 cm
+1 0 0 1 457.2623 53.2 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2475,74 +3245,74 @@ q
 1 0 0 1 0 36.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (clinical) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (5) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 36.8 cm
+1 0 0 1 53.36471 36.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 36.8 cm
+1 0 0 1 130.0983 36.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 176.836 36.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
+Q
+Q
+q
+1 0 0 1 210.3197 36.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 36.8 cm
+1 0 0 1 257.4062 36.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 36.8 cm
+1 0 0 1 304.1439 36.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 36.8 cm
+1 0 0 1 337.2789 36.8 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 36.8 cm
+1 0 0 1 370.4138 36.8 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 36.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 36.8 cm
+1 0 0 1 457.2623 36.8 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2556,70 +3326,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 20.4 cm
+1 0 0 1 53.36471 20.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 20.4 cm
+1 0 0 1 130.0983 20.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 20.4 cm
+1 0 0 1 176.836 20.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 20.4 cm
+1 0 0 1 210.3197 20.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 20.4 cm
+1 0 0 1 257.4062 20.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.25) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 20.4 cm
+1 0 0 1 304.1439 20.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.1118) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 20.4 cm
+1 0 0 1 337.2789 20.4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (44.72%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 20.4 cm
+1 0 0 1 370.4138 20.4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (4) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 20.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 20.4 cm
+1 0 0 1 457.2623 20.4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2633,70 +3403,70 @@ BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
 Q
 Q
 q
-1 0 0 1 45.81818 4 cm
+1 0 0 1 53.36471 4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 91.63636 4 cm
+1 0 0 1 130.0983 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
 Q
 Q
 q
-1 0 0 1 137.4545 4 cm
+1 0 0 1 176.836 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
 Q
 Q
 q
-1 0 0 1 183.2727 4 cm
+1 0 0 1 210.3197 4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
 Q
 Q
 q
-1 0 0 1 229.0909 4 cm
+1 0 0 1 257.4062 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 26.89412 0 Td (0.45) Tj T* -26.89412 0 Td ET
 Q
 Q
 q
-1 0 0 1 274.9091 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 4 cm
+1 0 0 1 304.1439 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 5.952148 0 Td (0.2291) Tj T* -5.952148 0 Td ET
 Q
 Q
 q
-1 0 0 1 366.5455 4 cm
+1 0 0 1 337.2789 4 cm
 q
 .2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 3.754348 0 Td (50.92%) Tj T* -3.754348 0 Td ET
 Q
 Q
 q
-1 0 0 1 412.3636 4 cm
+1 0 0 1 370.4138 4 cm
+q
+.2 .207843 .239216 rg
+BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 36.06812 0 Td (8) Tj T* -36.06812 0 Td ET
+Q
+Q
+q
+1 0 0 1 417.1516 4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
 Q
 Q
 q
-1 0 0 1 458.1818 4 cm
+1 0 0 1 457.2623 4 cm
 q
 .2 .207843 .239216 rg
 BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
@@ -2707,11 +3477,21 @@ q
 1 j
 .290196 .301961 .341176 RG
 .7 w
-n 0 386.8 m 504 386.8 l S
+n 0 542.8 m 504 542.8 l S
 .45 w
-n 0 360.8 m 504 360.8 l S
+n 0 524.8 m 504 524.8 l S
 .92549 .933333 .945098 RG
 .3 w
+n 0 508.4 m 504 508.4 l S
+n 0 492 m 504 492 l S
+n 0 475.6 m 504 475.6 l S
+n 0 459.2 m 504 459.2 l S
+n 0 442.8 m 504 442.8 l S
+n 0 426.4 m 504 426.4 l S
+n 0 410 m 504 410 l S
+n 0 393.6 m 504 393.6 l S
+n 0 377.2 m 504 377.2 l S
+n 0 360.8 m 504 360.8 l S
 n 0 344.4 m 504 344.4 l S
 n 0 328 m 504 328 l S
 n 0 311.6 m 504 311.6 l S
@@ -2733,6 +3513,8 @@ n 0 65.6 m 504 65.6 l S
 n 0 49.2 m 504 49.2 l S
 n 0 32.8 m 504 32.8 l S
 n 0 16.4 m 504 16.4 l S
+.290196 .301961 .341176 RG
+.7 w
 n 0 0 m 504 0 l S
 Q
 Q
@@ -2740,935 +3522,57 @@ Q
 q
 .788235 .8 .827451 RG
 .5 w
-n 54 30.24 m 738 30.24 l S
+n 54 30.24 m 558 30.24 l S
 BT /F1 7 Tf 8.4 TL ET
 .419608 .431373 .478431 rg
-BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-06 03:27 UTC) Tj T* ET
-BT 1 0 0 1 724.378 19.24 Tm (2 / 4) Tj T* ET
+BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-08 22:41 UTC) Tj T* ET
+BT 1 0 0 1 544.378 19.24 Tm (2 / 4) Tj T* ET
 Q
  
 endstream
 endobj
 19 0 obj
 <<
-/Length 16375
+/Length 1418
 >>
 stream
 1 0 0 1 0 0 cm  BT /F1 12 Tf 14.4 TL ET
 q
 q
-24.48 0 0 24.4035 54 576.7583 cm
+24.48 0 0 24.4035 54 756.7583 cm
 /FormXob.e50575d6d59e16d2245e692fb1dc638a Do
 Q
 .086275 .086275 .101961 rg
 BT /F4 8.5 Tf 10.2 TL ET
-BT 1 0 0 1 85.68 584.64 Tm (O) Tj T* ET
-BT 1 0 0 1 92.58 584.64 Tm (S) Tj T* ET
-BT 1 0 0 1 99.48 584.64 Tm (I) Tj T* ET
-BT 1 0 0 1 106.38 584.64 Tm (P) Tj T* ET
-BT 1 0 0 1 113.28 584.64 Tm (I) Tj T* ET
+BT 1 0 0 1 85.68 764.64 Tm (O) Tj T* ET
+BT 1 0 0 1 92.58 764.64 Tm (S) Tj T* ET
+BT 1 0 0 1 99.48 764.64 Tm (I) Tj T* ET
+BT 1 0 0 1 106.38 764.64 Tm (P) Tj T* ET
+BT 1 0 0 1 113.28 764.64 Tm (I) Tj T* ET
 .419608 .431373 .478431 rg
 BT /F3 8 Tf 9.6 TL ET
-BT 1 0 0 1 127.38 584.64 Tm (Evaluation report) Tj T* ET
+BT 1 0 0 1 127.38 764.64 Tm (Evaluation report) Tj T* ET
 BT /F1 7.5 Tf 9 TL ET
-BT 1 0 0 1 692.985 583.2 Tm (Submission 1) Tj T* ET
+BT 1 0 0 1 512.985 763.2 Tm (Submission 1) Tj T* ET
 .290196 .301961 .341176 RG
 .5 w
-n 54 573.12 m 738 573.12 l S
+n 54 753.12 m 558 753.12 l S
 Q
 q
-1 0 0 1 54 374.48 cm
-q
-0 0 0 rg
-BT /F1 10 Tf 12 TL ET
-q
-1 0 0 1 0 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (DATASET) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 169 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 9.7 Tm /F1 6.3 Tf 8 TL (PARTICIPAN) Tj T* (T) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (REPEAT) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (SITE) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (ROI) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 14.31748 0 Td (MEDIAN) Tj T* -14.31748 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 30.06748 0 Td (SD) Tj T* -30.06748 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 25.16608 0 Td (COV) Tj T* -25.16608 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL 13.60558 0 Td (VOXELS) Tj T* -13.60558 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (UNITS) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 177 cm
-q
-.513725 .52549 .560784 rg
-BT 1 0 0 1 0 1.7 Tm /F1 6.3 Tf 8 TL (STATUS) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 151.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 135.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 118.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 102.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 86 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 69.6 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 53.2 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 36.8 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (tumour) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.25) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.1118) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (44.72%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (4) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 20.4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 0 0 1 0 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (synthetic) Tj T* ET
-Q
-Q
-q
-1 0 0 1 45.81818 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 91.63636 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (2) Tj T* ET
-Q
-Q
-q
-1 0 0 1 137.4545 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (3) Tj T* ET
-Q
-Q
-q
-1 0 0 1 183.2727 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (brain mask) Tj T* ET
-Q
-Q
-q
-1 0 0 1 229.0909 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 25.97458 0 Td (0.45) Tj T* -25.97458 0 Td ET
-Q
-Q
-q
-1 0 0 1 274.9091 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 18.63538 0 Td (0.2291) Tj T* -18.63538 0 Td ET
-Q
-Q
-q
-1 0 0 1 320.7273 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 16.43758 0 Td (50.92%) Tj T* -16.43758 0 Td ET
-Q
-Q
-q
-1 0 0 1 366.5455 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL 35.14858 0 Td (8) Tj T* -35.14858 0 Td ET
-Q
-Q
-q
-1 0 0 1 412.3636 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (min^-1) Tj T* ET
-Q
-Q
-q
-1 0 0 1 458.1818 4 cm
-q
-.2 .207843 .239216 rg
-BT 1 0 0 1 0 1.8 Tm /F1 6.6 Tf 8.4 TL (available) Tj T* ET
-Q
-Q
-q
-1 J
-1 j
-.290196 .301961 .341176 RG
-.7 w
-n 0 190 m 504 190 l S
-.45 w
-n 0 164 m 504 164 l S
-.92549 .933333 .945098 RG
-.3 w
-n 0 164 m 504 164 l S
-n 0 147.6 m 504 147.6 l S
-n 0 131.2 m 504 131.2 l S
-n 0 114.8 m 504 114.8 l S
-n 0 98.4 m 504 98.4 l S
-n 0 82 m 504 82 l S
-n 0 65.6 m 504 65.6 l S
-n 0 49.2 m 504 49.2 l S
-n 0 32.8 m 504 32.8 l S
-n 0 16.4 m 504 16.4 l S
-.290196 .301961 .341176 RG
-.7 w
-n 0 0 m 504 0 l S
-Q
-Q
-Q
-q
-1 0 0 1 54 348.48 cm
+1 0 0 1 54 712.98 cm
 q
 .419608 .431373 .478431 rg
-BT 1 0 0 1 0 13 Tm /F3 8 Tf 10.5 TL (Table 4. Within-ROI Ktrans statistics: 32 of 32 scan-ROI combinations available. ROI statistics were calculated from finite Ktrans voxels within each configured ROI. Standard deviation uses the population) Tj T* (definition \(ddof=0\). CoV is standard deviation divided by the absolute arithmetic mean and is unavailable when the mean is near zero. These conventions remain subject to final confirmation by OSIPI.) Tj T* ET
+BT 1 0 0 1 0 23.5 Tm /F3 8 Tf 10.5 TL (Table 4. Within-ROI Ktrans statistics: 32 of 32 scan-ROI combinations available. ROI statistics were calculated from finite Ktrans voxels within each) Tj T* (configured ROI. Standard deviation uses the population definition \(ddof=0\). CoV is standard deviation divided by the absolute arithmetic mean and is) Tj T* (unavailable when the mean is near zero. These conventions remain subject to final confirmation by OSIPI.) Tj T* ET
 Q
 Q
 q
 .788235 .8 .827451 RG
 .5 w
-n 54 30.24 m 738 30.24 l S
+n 54 30.24 m 558 30.24 l S
 BT /F1 7 Tf 8.4 TL ET
 .419608 .431373 .478431 rg
-BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-06 03:27 UTC) Tj T* ET
-BT 1 0 0 1 724.378 19.24 Tm (3 / 4) Tj T* ET
+BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-08 22:41 UTC) Tj T* ET
+BT 1 0 0 1 544.378 19.24 Tm (3 / 4) Tj T* ET
 Q
  
 endstream
@@ -3880,7 +3784,7 @@ q
 n 54 30.24 m 558 30.24 l S
 BT /F1 7 Tf 8.4 TL ET
 .419608 .431373 .478431 rg
-BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-06 03:27 UTC) Tj T* ET
+BT 1 0 0 1 54 19.24 Tm (Pipeline version 0.1.0  \267  Configuration version 1  \267  2026-08-08 22:41 UTC) Tj T* ET
 BT 1 0 0 1 544.378 19.24 Tm (4 / 4) Tj T* ET
 Q
  
@@ -3904,15 +3808,15 @@ xref
 0000170860 00000 n 
 0000171119 00000 n 
 0000171189 00000 n 
-0000171519 00000 n 
-0000171601 00000 n 
-0000180782 00000 n 
-0000216872 00000 n 
-0000233300 00000 n 
+0000171515 00000 n 
+0000171597 00000 n 
+0000180820 00000 n 
+0000230690 00000 n 
+0000232160 00000 n 
 trailer
 <<
 /ID 
-[<a7dbd4da49a199ab89c2c889846d482f><a7dbd4da49a199ab89c2c889846d482f>]
+[<5cdbede54fa04b9b156117d997d9c087><5cdbede54fa04b9b156117d997d9c087>]
 % ReportLab generated PDF document -- digest (opensource)
 
 /Info 15 0 R
@@ -3920,5 +3824,5 @@ trailer
 /Size 21
 >>
 startxref
-237392
+236252
 %%EOF
