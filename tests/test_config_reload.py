@@ -3,7 +3,7 @@
 Editing config/validation_rules.yaml used to require a container restart, so a
 mentor could not change what a challenge requires without a terminal. These
 cover the endpoint behind the Reload button, and in particular what happens
-when the edit is wrong — the case the button exists to make survivable.
+when the edit is wrong, the case the button exists to make survivable.
 """
 
 from __future__ import annotations

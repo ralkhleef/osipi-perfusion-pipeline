@@ -1,7 +1,7 @@
 /* Documentation site behaviour: on-this-page navigation, scroll tracking,
  * copy buttons.
  *
- * No build step and no framework — Bootstrap's own JS bundle handles the
+ * No build step and no framework, Bootstrap's own JS bundle handles the
  * offcanvas menu; everything below is plain DOM work.
  */
 

@@ -2,18 +2,18 @@
 
 Scope is deliberately narrow: this describes the **spatial spread of one map
 inside one ROI of one scan**. It is not repeatability, not reproducibility,
-and not inter-participant variability — those compare *across* scans and
+and not inter-participant variability, those compare *across* scans and
 belong to a later phase. The field names carry `within_scan` so the two can
 never be confused in code or in an export.
 
 Conventions, all centralised here so nothing drifts:
 
-* **median** — median of the finite voxels in the ROI.
-* **standard deviation** — *population* SD, ``sqrt(Σ(x-mean)²/N)``
+* **median**, median of the finite voxels in the ROI.
+* **standard deviation**, *population* SD, ``sqrt(Σ(x-mean)²/N)``
   (``np.std(..., ddof=0)``), matching what the rest of the pipeline already
   uses for whole-image statistics. Mixing population and sample SD across
   outputs would make numbers silently incomparable.
-* **coefficient of variation** — ``SD / abs(mean)``, using the *arithmetic
+* **coefficient of variation**, ``SD / abs(mean)``, using the *arithmetic
   mean* as denominator, matching the pipeline's existing CoV. Not the median,
   even though the median is the headline statistic.
 
@@ -30,7 +30,7 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Sequence
 
-# A mean this close to zero makes CoV meaningless — the ratio explodes and
+# A mean this close to zero makes CoV meaningless, the ratio explodes and
 # reports a precision the data does not have. One documented tolerance,
 # used everywhere, rather than a clamp or an infinity.
 COV_MEAN_TOLERANCE = 1e-12
@@ -144,7 +144,7 @@ def describe_values(
 ) -> DescriptiveStatistics:
     """Compute median, population SD, and CoV over ``values``.
 
-    Testable directly from arrays — no file fixtures required.
+    Testable directly from arrays: no file fixtures required.
     """
     raw = list(values)
     total = len(raw) if mask_voxel_count is None else int(mask_voxel_count)
@@ -238,7 +238,7 @@ def unavailable_result(
 ) -> RoiDescriptiveResult:
     """A result that records why statistics could not be produced.
 
-    An unavailable ROI is reported as unavailable, never as zero — zero is a
+    An unavailable ROI is reported as unavailable, never as zero, zero is a
     measurement, absence is not.
     """
     return RoiDescriptiveResult(

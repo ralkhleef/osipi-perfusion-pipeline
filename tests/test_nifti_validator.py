@@ -72,7 +72,7 @@ def test_nan_inf_image_warns_not_crashes(tmp_path: Path) -> None:
     results = validate_nifti_files([nifti_path])
     r = results[0]
 
-    # File is still structurally valid — no errors, just warnings.
+    # File is still structurally valid, no errors, just warnings.
     assert r["valid"] is True
     assert r["errors"] == []
     assert r["nan_count"] == 1

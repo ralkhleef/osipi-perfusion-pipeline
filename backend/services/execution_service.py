@@ -7,8 +7,8 @@ settings, and delegates to :func:`execute_submission`.
 Returns a JSON-serialisable result dict that includes:
 
 - All :class:`ExecutionResult` fields (via ``to_dict()``).
-- ``stdout_preview`` / ``stderr_preview`` — first 8 KB of each log file.
-- ``output_file_count`` — number of files written to ``/output``.
+- ``stdout_preview`` / ``stderr_preview``, first 8 KB of each log file.
+- ``output_file_count``, number of files written to ``/output``.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def run_submission(
 
     1. ``submission_id`` path safety.
     2. Submission folder exists.
-    3. Submission contains a ``Dockerfile`` — callers receive a clear error
+    3. Submission contains a ``Dockerfile``, callers receive a clear error
        message if it is missing; we do not fall back to a default image.
 
     Timeout resolution (highest priority wins):
@@ -154,7 +154,7 @@ def run_submission(
     # ── Build response ────────────────────────────────────────────────────────
     data: Dict[str, Any] = {"success": True, **result.to_dict()}
     data["stdout_preview"]    = _read_log_section(result.stdout_path, "run stdout")
-    # For exit 125 (container couldn't start), read full stderr — it contains
+    # For exit 125 (container couldn't start), read full stderr, it contains
     # the docker daemon's error message, which is the most useful debug signal.
     if result.exit_code == 125 and not result.build_failed:
         data["stderr_preview"] = _read_file_head(result.stderr_path)
@@ -210,7 +210,7 @@ def _read_log_section(log_path: str, section_keyword: str) -> str:
     if section_start is not None:
         chunk = "".join(lines[section_start:section_end])
     else:
-        # Section header not found — return tail of the file
+        # Section header not found: return tail of the file
         chunk = content
 
     # Return the first _LOG_PREVIEW_BYTES characters of the extracted chunk
@@ -221,7 +221,7 @@ def _read_file_head(log_path: str) -> str:
     """Return up to _LOG_PREVIEW_BYTES from the start of a log file.
 
     Used for exit-125 diagnostics where the whole stderr (not just a named
-    section) is needed — the Docker daemon error message appears at the top.
+    section) is needed, the Docker daemon error message appears at the top.
     """
     try:
         content = Path(log_path).read_text(encoding="utf-8", errors="replace")
@@ -233,7 +233,7 @@ def _read_file_head(log_path: str) -> str:
 def _find_execution_root(submission_path: Path) -> tuple:
     """Return the directory containing the Dockerfile to use for execution.
 
-    Handles submissions packaged with a single wrapper folder — e.g. a ZIP
+    Handles submissions packaged with a single wrapper folder, e.g. a ZIP
     extracted as ``team_name/Dockerfile`` rather than ``Dockerfile`` at the
     top level.  Logic:
 
@@ -272,7 +272,7 @@ def _find_execution_root(submission_path: Path) -> tuple:
             "one top-level folder) to enable execution."
         )
 
-    # Exactly one Dockerfile found in a subdirectory — use its parent as root
+    # Exactly one Dockerfile found in a subdirectory, use its parent as root
     effective_root = found[0].parent
     return effective_root, None
 

@@ -1,7 +1,7 @@
 """Phase 4: within-ROI descriptive statistics.
 
-Scope is one map, one ROI, one scan. Nothing here compares across scans —
-no repeatability, reproducibility, or inter-participant variability — and no
+Scope is one map, one ROI, one scan. Nothing here compares across scans,
+no repeatability, reproducibility, or inter-participant variability, and no
 accuracy, deviance, or RSS is computed anywhere in this phase.
 
 Formula tests run directly on arrays; only the masking and geometry tests

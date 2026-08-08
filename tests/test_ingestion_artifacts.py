@@ -1,7 +1,7 @@
 """Phase 2: normalized submission artifacts, identity, and classification.
 
 Phase 2 classifies and organizes files. It does **not** enforce required
-maps, required artifacts, or expected counts — the tests below assert what
+maps, required artifacts, or expected counts, the tests below assert what
 was found, never that a submission is complete.
 """
 

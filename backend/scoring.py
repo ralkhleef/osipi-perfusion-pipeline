@@ -1,4 +1,4 @@
-"""backend/scoring.py — Scoring framework for OSIPI pipeline.
+"""backend/scoring.py, Scoring framework for OSIPI pipeline.
 
 Provider system
 --------------
@@ -18,12 +18,12 @@ Two providers are registered:
             Synthetic_P<n>_Visit<n>.nii[.gz]
             Clinical_P<n>_Visit<n>.nii[.gz]
 
-        The script uses no CLI arguments — it reads hardcoded relative paths
+        The script uses no CLI arguments, it reads hardcoded relative paths
         (entryDirectories/, DROKtransNifti/, Masks/, scoringOutputs/) from its
         cwd.  score_submission() patches entry_list in the script source and
         runs it with cwd=provider_dir.
 
-    osipi_codecollection_dce_testdata   [DEVELOPMENT ONLY — never runs scoring]
+    osipi_codecollection_dce_testdata   [DEVELOPMENT ONLY, never runs scoring]
         CSV test data from OSIPI/DCE-DSC-MRI_CodeCollection.
         Used only to test provider-discovery UI. NOT for scoring NIfTI maps.
 
@@ -91,7 +91,7 @@ PROVIDERS: dict[str, dict] = {
         "not_for_scoring": False,
         "metrics":       ["accuracy", "repeatability", "reproducibility",
                           "osipi_silver_score", "osipi_gold_score"],
-        # Paths — derived from OSIPI_TF62_DIR
+        # Paths: derived from OSIPI_TF62_DIR
         "provider_dir":  OSIPI_TF62_DIR,
         "script_file":   OSIPI_TF62_DIR / "challengeScoring.py",
         # challengeScoring.py uses hardcoded relative paths from its cwd.
@@ -101,10 +101,10 @@ PROVIDERS: dict[str, dict] = {
         "setup_note": (
             "Place the following inside "
             "data/scoring/providers/osipi_tf62_dce_ktrans/ to enable scoring:\n"
-            "  challengeScoring.py  — from OSIPI/TF6.2_DCE-DSC-MRI_Challenges Scoring/\n"
-            "  DROKtransNifti/      — DRO Ktrans NIfTI maps "
+            "  challengeScoring.py , from OSIPI/TF6.2_DCE-DSC-MRI_Challenges Scoring/\n"
+            "  DROKtransNifti/     , DRO Ktrans NIfTI maps "
             "(additionalDROData/NIfTI/ from the same repo)\n"
-            "  Masks/               — NIfTI mask files (Scoring/Masks/ from the same repo)"
+            "  Masks/              , NIfTI mask files (Scoring/Masks/ from the same repo)"
         ),
     },
 
@@ -112,7 +112,7 @@ PROVIDERS: dict[str, dict] = {
     "osipi_codecollection_dce_testdata": {
         "provider_id":   "osipi_codecollection_dce_testdata",
         "display_name":  "OSIPI CodeCollection Test Data",
-        "provider_name": "OSIPI DCE/DSC CodeCollection — Test Data",
+        "provider_name": "OSIPI DCE/DSC CodeCollection, Test Data",
         "category":      "development",
         "official":      False,
         "challenge_type": "dce",
@@ -185,7 +185,7 @@ def _resolve_provider(
 
 
 # ---------------------------------------------------------------------------
-# Path helpers — mirror docker_runner._safe_name
+# Path helpers: mirror docker_runner._safe_name
 # ---------------------------------------------------------------------------
 
 def _safe_name(value: str) -> str:
@@ -724,7 +724,7 @@ def _load_nifti_values(path: Path) -> dict:
             for item in struct.iter_unpack(endian + fmt_code, payload)
         ]
         # Best-effort affine/voxel size from the fallback header (sform srows if
-        # present, else pixdim). None when unavailable — callers must treat a
+        # present, else pixdim). None when unavailable, callers must treat a
         # missing affine as "cannot verify grid" rather than "grids match".
         affine = None
         try:
@@ -850,7 +850,7 @@ def canonical_path_key(path: Path):
     ``Path`` equality is textual, and ``Path.resolve()`` does not normalise
     case on macOS, so ``reference/masks/t.nii.gz`` and
     ``reference/Masks/t.nii.gz`` compare as different paths while being the
-    same file on any case-insensitive filesystem — macOS APFS by default, and
+    same file on any case-insensitive filesystem, macOS APFS by default, and
     Windows. Deduplicating on ``Path`` therefore admits every reference map
     and every ROI mask twice, and because ROI identity is derived from the
     mask *filename*, the duplicate statistics are indistinguishable in the
@@ -959,7 +959,7 @@ _LOGGER = _logging.getLogger(__name__)
 def submission_artifacts(submission_id: str) -> list:
     """Normalized artifacts for a submission, from the existing manifest.
 
-    Reuses the manifest the scoring path has already refreshed — no second
+    Reuses the manifest the scoring path has already refreshed, no second
     traversal of the submission tree.
     """
     from osipi_pipeline.ingestion.manifest import load_manifest
@@ -979,8 +979,8 @@ def _attach_roi_descriptives(
 ) -> None:
     """Populate ROI descriptive statistics on the reference-scoring result.
 
-    Distinguishes *expected scientific unavailability* — no masks, no
-    eligible Ktrans — from an unexpected internal error. The former is a
+    Distinguishes *expected scientific unavailability*, no masks, no
+    eligible Ktrans, from an unexpected internal error. The former is a
     normal outcome recorded as a status, not an application fault, so it is
     not logged as a crash.
     """
@@ -1079,7 +1079,7 @@ def _reference_masks(root: Path) -> list[dict]:
     Both spellings of the masks directory are searched, so deduplication must
     be by physical file identity: on a case-insensitive filesystem the two
     spellings are one directory, and keying on ``Path`` admitted every mask
-    twice — doubling every ROI statistic in every output. See
+    twice, doubling every ROI statistic in every output. See
     CODE_WALKTHROUGH.md §B4.
     """
     mask_dirs = _dedupe_paths([root / "masks", root / "Masks"])
@@ -1139,7 +1139,7 @@ def _comparison_metrics(
     Uses a vectorised NumPy path (100x+ faster on full-resolution maps) and falls
     back to the pure-Python implementation when NumPy is unavailable. The two
     paths compute the identical statistics (verified by the reference-scoring
-    tests), so scoring values are unchanged — only faster.
+    tests), so scoring values are unchanged, only faster.
     """
     try:
         import numpy as np  # type: ignore
@@ -1364,7 +1364,7 @@ def _score_reference_maps(
         "warnings": [],
         "maps": [],
         # Additive (Phase 4). Within-ROI descriptive statistics for the
-        # submitted maps — distinct from the reference-error metrics below,
+        # submitted maps, distinct from the reference-error metrics below,
         # and never a substitute for them. Populated by
         # attach_roi_descriptive_statistics once scan identity is available.
         "roi_descriptive_statistics": [],
@@ -1605,7 +1605,7 @@ def _score_reference_maps(
             result["summary"]["aggregate_map_type"] = "mixed"
             result["warnings"].append(
                 "Multiple map types were scored (e.g. CBF and ATT). They have different units, "
-                "so no combined average is reported — see per-map-type results in summary.by_map_type."
+                "so no combined average is reported, see per-map-type results in summary.by_map_type."
             )
 
     # Repeatability/ICC require repeated (e.g. noise-varied) datasets, which a
@@ -2000,7 +2000,7 @@ def _check_codecollection_infrastructure() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# all_providers_status() — infrastructure snapshot (no submission needed)
+# all_providers_status(), infrastructure snapshot (no submission needed)
 # ---------------------------------------------------------------------------
 
 def all_providers_status() -> list[dict]:
@@ -2110,8 +2110,8 @@ def _check_submission_prerequisites(
     Returns:
         all_present  : bool
         missing      : list[str]
-        outputs_ready: bool    — execution produced ≥1 NIfTI file
-        ktrans_compat: bool    — at least one file matches OSIPI naming pattern
+        outputs_ready: bool   , execution produced ≥1 NIfTI file
+        ktrans_compat: bool   , at least one file matches OSIPI naming pattern
         nifti_files  : list[Path]
     """
     # First: infrastructure
@@ -2133,7 +2133,7 @@ def _check_submission_prerequisites(
     nifti_files   = [f for f in exec_out.rglob("*") if _is_nifti_path(f)]
     outputs_ready = len(nifti_files) > 0
     if not outputs_ready:
-        missing.append("Execution outputs (no NIfTI files found — run the submission first)")
+        missing.append("Execution outputs (no NIfTI files found, run the submission first)")
 
     ktrans_compat = any(_OSIPI_FNAME_RE.match(f.name) for f in nifti_files)
     if outputs_ready and not ktrans_compat:
@@ -2152,7 +2152,7 @@ def _check_submission_prerequisites(
 
 
 # ---------------------------------------------------------------------------
-# scoring_status() — per-submission
+# scoring_status(), per-submission
 # ---------------------------------------------------------------------------
 
 def scoring_status(
@@ -2258,7 +2258,7 @@ def scoring_status(
                     "providers":     providers_snap,
                     "active_mode":   "custom",
                 }, submission_id, challenge_type, bool(readiness.get("has_reference")))
-            # Package is ready — return ready even if exec outputs don't exist yet
+            # Package is ready: return ready even if exec outputs don't exist yet
             return _with_nifti_status({
                 "provider_id":   pkg_id,
                 "provider_name": f"{manifest['name']} v{manifest['version']}",
@@ -2353,7 +2353,7 @@ def scoring_status(
 def _write_patched_runner(script: Path, entry_name: str) -> Path:
     """Write a temp copy of challengeScoring.py with entry_list set to [entry_name].
 
-    challengeScoring.py uses no CLI arguments — it reads ``entry_list`` from
+    challengeScoring.py uses no CLI arguments, it reads ``entry_list`` from
     its own source.  We patch it so only the specified submission is scored.
     The caller must delete the returned path when done.
     """
@@ -2435,7 +2435,7 @@ def _parse_osipi_tabular(tabular_path: Path, entry_name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# score_submission() — run the real scoring script
+# score_submission(), run the real scoring script
 # ---------------------------------------------------------------------------
 
 def score_submission(
@@ -2542,7 +2542,7 @@ def score_submission(
             "submission_id": submission_id,
             "provider_id":   pid,
             "status":        "not_configured",
-            "message":       "Prerequisites not met — see missing list.",
+            "message":       "Prerequisites not met, see missing list.",
             "missing":       pre["missing"],
             "metrics":       {},
             "artifacts":     [],
@@ -2626,9 +2626,9 @@ def score_submission(
             "status":         "scored",
             "scored_at":      scored_at,
             "message": (
-                "Scoring complete — metrics parsed."
+                "Scoring complete, metrics parsed."
                 if metrics else
-                "Scoring complete — artifacts saved. Metrics could not be parsed from output."
+                "Scoring complete, artifacts saved. Metrics could not be parsed from output."
             ),
             "stdout":         proc.stdout[:4096],
             "metrics":        metrics,
@@ -2682,7 +2682,7 @@ def score_submission(
         return result
 
     finally:
-        # Remove the patched runner — it's ephemeral
+        # Remove the patched runner: it's ephemeral
         runner_path.unlink(missing_ok=True)
 
 

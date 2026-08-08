@@ -1,8 +1,8 @@
 """Fake submission run.py for integration testing.
 
 Writes two fake output files to /output:
-  - fake_output.nii     — fake NIfTI (minimal header bytes)
-  - metadata.json       — execution metadata
+  - fake_output.nii    , fake NIfTI (minimal header bytes)
+  - metadata.json      , execution metadata
 
 Usage:
     python3 run.py --output /output

@@ -2,7 +2,7 @@
 
 Volumes are written with a hand-packed NIfTI-1 header rather than through
 nibabel, so fixtures can be produced with no optional dependency installed and
-so the on-disk bytes are exactly what the test intends — a fixture builder that
+so the on-disk bytes are exactly what the test intends, a fixture builder that
 shares a library with the code under test can hide a bug in both.
 
 The DCE grid matches ``config/validation_rules.yaml``:

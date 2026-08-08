@@ -3,7 +3,7 @@
 The report had no direct coverage: the API tests exercised the endpoints and
 grepped the rendered output for section headings, so a wrong *number* would
 sail through while a renamed heading failed the build. These tests assert the
-content rules instead — de-duplication, conditional caveats, per-challenge
+content rules instead, de-duplication, conditional caveats, per-challenge
 scoping, and the invariant that missing data is never rendered as zero.
 """
 

@@ -36,7 +36,7 @@ _SKIP_PREFIXES = set(settings_tuple("ingestion", "skip_prefixes"))
 _SKIP_NAMES    = set(settings_tuple("ingestion", "skip_names"))
 
 
-# ── Public API — single submission (legacy) ───────────────────────────────────
+# ── Public API, single submission (legacy) ───────────────────────────────────
 
 
 def save_and_extract(file_bytes: bytes, filename: str) -> Dict:
@@ -103,7 +103,7 @@ def save_and_extract_batch(file_bytes: bytes, filename: str) -> Dict:
 def save_and_extract_batch_from_path(zip_path: Path, filename: str) -> Dict:
     """Batch extraction from a ZIP already on disk.
 
-    No in-memory size check — the caller is responsible for enforcing the limit
+    No in-memory size check: the caller is responsible for enforcing the limit
     while streaming (e.g. the ``/api/upload-batch`` endpoint).
     Handles wrapper-folder ZIPs and returns the same response shape as
     ``save_and_extract_batch``.
@@ -131,7 +131,7 @@ def save_uploaded_folder(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dic
 
     ``files`` is an iterable of ``(relative_path_string, data)`` where
     ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
-    on disk (streaming path — avoids holding all files in RAM at once).
+    on disk (streaming path, avoids holding all files in RAM at once).
 
     Enforces cumulative file count and size limits before staging.
     """
@@ -203,7 +203,7 @@ def save_folder_as_batch(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dic
 
     ``files`` is an iterable of ``(relative_path_string, data)`` where
     ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
-    on disk (streaming path — avoids holding all files in RAM at once).
+    on disk (streaming path, avoids holding all files in RAM at once).
 
     Enforces cumulative size / file-count limits before staging.
     Uses the same ``_finalize_staged_dir`` path as ZIP uploads, so
@@ -385,7 +385,7 @@ def _is_submission_candidate(d: Path) -> bool:
     """Return True if *d* looks like a submission folder.
 
     A directory qualifies as a submission candidate if it contains at least one
-    file anywhere in its subtree.  NIfTI files are *not* required — a folder
+    file anywhere in its subtree.  NIfTI files are *not* required, a folder
     that only contains a README, Dockerfile, metadata.json, or any other file
     is still a valid (if incomplete) submission.  Validation decides pass/fail.
 
@@ -404,7 +404,7 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
     """Return the top-level subdirectories that are submission candidates.
 
     A directory is a candidate if it contains any files (NIfTI or otherwise).
-    NIfTI files are *not* required — invalid/incomplete submissions are included
+    NIfTI files are *not* required: invalid/incomplete submissions are included
     so that validation can mark them as failed rather than silently skipping them.
 
     Handles the wrapper-folder pattern: if exactly one top-level directory
@@ -437,7 +437,7 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
 
     # If every top-level dir is a well-known structural subdir (input/, results/,
     # maps/, …) this is a single submission whose data is laid out across those
-    # folders — NOT a multi-team batch.  Without this check a ZIP that contains
+    # folders, NOT a multi-team batch.  Without this check a ZIP that contains
     # ``input/`` and ``results/maps/`` at its top level would be wrongly split
     # into two submissions (e.g. ``<name>_input`` and ``<name>_results``).
     if _is_structural_layout(submission_dirs):
@@ -574,14 +574,14 @@ def _is_structural_layout(dirs: List[Path]) -> bool:
 
     Two kinds of name qualify:
 
-    *Layout* subdirectories — treat as ONE submission (not a batch)::
+    *Layout* subdirectories, treat as ONE submission (not a batch)::
 
         lena_realistic_asl_osipi_named/
             input/        ← structural
             results/      ← structural
                 maps/
 
-    *Dataset* subdirectories declared by a challenge — also ONE submission::
+    *Dataset* subdirectories declared by a challenge, also ONE submission::
 
         dce_team_alpha/
             Synthetic/    ← dataset partition
@@ -639,10 +639,10 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
     Returns None (single submission) if:
     - fewer than 2 inner directories are found, OR
     - ALL inner directories look like structural subdirectories of one submission
-      (e.g. ``input/``, ``results/``, ``maps/`` — see ``_is_structural_layout``).
+      (e.g. ``input/``, ``results/``, ``maps/``, see ``_is_structural_layout``).
 
-    Includes all inner directories that contain any files — not just those with
-    NIfTI files — so that incomplete submissions are detected and can fail
+    Includes all inner directories that contain any files, not just those with
+    NIfTI files: so that incomplete submissions are detected and can fail
     validation rather than being silently skipped.
     """
     try:
@@ -659,7 +659,7 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
         return None
 
     # If all subdirs are structural names (input/, results/, maps/, …)
-    # this is a single submission with an internal data layout — not a batch.
+    # this is a single submission with an internal data layout, not a batch.
     if _is_structural_layout(submission_dirs):
         return None
 
@@ -686,7 +686,7 @@ def _auto_extract_single_zip(directory: Path) -> None:
     if not zip_files:
         return  # Nothing to extract
 
-    # If NIfTI files are already present the record is already unpacked — leave it.
+    # If NIfTI files are already present the record is already unpacked, leave it.
     if any(f.name.lower().endswith(NIFTI_SUFFIXES) for f in all_items):
         return
 

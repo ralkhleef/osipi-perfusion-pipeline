@@ -139,7 +139,7 @@ def classify(
 
     Configured artifacts are checked before the legacy categories so a
     ``methods.txt`` is a methods document rather than generic metadata, but
-    README detection keeps priority — existing README behaviour is unchanged.
+    README detection keeps priority: existing README behaviour is unchanged.
     """
     if is_readme:
         return ROLE_README, None, None

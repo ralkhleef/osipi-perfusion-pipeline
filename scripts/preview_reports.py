@@ -1,7 +1,7 @@
 """Preview the HTML and PDF evaluation reports without a live submission.
 
-A design/QA tool, not part of the running app. It feeds synthetic summaries —
-shaped exactly like ``_gather_summary`` output — through the real renderers so
+A design/QA tool, not part of the running app. It feeds synthetic summaries,
+shaped exactly like ``_gather_summary`` output, through the real renderers so
 you can iterate on report styling quickly.
 
 Usage (from the repo root):

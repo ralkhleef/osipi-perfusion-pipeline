@@ -1,4 +1,4 @@
-"""Fake reproducible submission — writes synthetic perfusion maps to /output.
+"""Fake reproducible submission, writes synthetic perfusion maps to /output.
 
 This script is used for integration testing of the reproducible execution
 workflow.  It does NOT require real input data; it generates small dummy

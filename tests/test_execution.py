@@ -270,7 +270,7 @@ def test_output_files_collected_after_run(tmp_path: Path, monkeypatch) -> None:
 
 
 # ===========================================================================
-# run_config.json — command and timeout_seconds
+# run_config.json, command and timeout_seconds
 # ===========================================================================
 
 def test_run_config_command_is_used(tmp_path: Path, monkeypatch) -> None:
@@ -343,12 +343,12 @@ def test_explicit_timeout_wins_over_run_config(tmp_path: Path, monkeypatch) -> N
         timeout_seconds=42,   # explicit non-default value
     )
 
-    # run_config says 999, but caller explicitly passed 42 — 42 should win
+    # run_config says 999, but caller explicitly passed 42, 42 should win
     assert used_timeouts == [42]
 
 
 # ===========================================================================
-# Fake submission fixture — smoke test (no Docker required)
+# Fake submission fixture: smoke test (no Docker required)
 # ===========================================================================
 
 def test_fake_submission_fixture_has_required_files() -> None:

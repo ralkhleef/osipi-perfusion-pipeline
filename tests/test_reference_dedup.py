@@ -2,15 +2,15 @@
 
 Regression tests for CODE_WALKTHROUGH.md §B4. ``_reference_masks`` and
 ``_reference_maps_by_type`` each search two spellings of a directory
-(``masks``/``Masks``, ``maps``/``Maps``). On a case-insensitive filesystem —
-macOS APFS by default, and Windows — those are the *same* directory, so
+(``masks``/``Masks``, ``maps``/``Maps``). On a case-insensitive filesystem,
+macOS APFS by default, and Windows, those are the *same* directory, so
 deduplicating by ``Path`` admitted every file twice and doubled every ROI
 statistic in the CSV, the HTML table, the PDF, and the Results Summary.
 
 Case-insensitivity cannot be created on the Linux filesystem that CI runs on,
 so the case-folded directory is simulated with a **symlink**: two different
 paths that stat to the same inode, which is exactly the condition the bug
-turned on. Both behaviours are covered — the aliased case, and genuinely
+turned on. Both behaviours are covered, the aliased case, and genuinely
 separate directories on a case-sensitive filesystem, which must NOT collapse.
 """
 
@@ -199,7 +199,7 @@ def test_reference_roots_collapse_aliased_directories(tmp_path: Path, monkeypatc
 # ── The count that reaches the user ───────────────────────────────────────
 
 def test_sixteen_scans_and_two_masks_give_exactly_thirty_two_rows(tmp_path: Path) -> None:
-    """16 scans x 2 ROIs = 32 rows — the number a reviewer reads.
+    """16 scans x 2 ROIs = 32 rows, the number a reviewer reads.
 
     Runs the real calculator against masks discovered by the real production
     search, with the aliased directory present, so a regression in either the

@@ -1,7 +1,7 @@
 """Aggregating per-scan ROI statistics across one axis.
 
-Disabled by default: the arithmetic is settled but the scientific choices —
-medians versus pooled voxels, pairing, minimum group size — are not, so nothing
+Disabled by default: the arithmetic is settled but the scientific choices,
+medians versus pooled voxels, pairing, minimum group size, are not, so nothing
 is computed until a challenge opts in. These tests pin both the arithmetic and
 the fact that it stays off.
 

@@ -81,8 +81,8 @@ def is_reference_path(relative_path: str) -> bool:
     """True when a path sits inside reference / mask data, not team output.
 
     Reference maps and ROI masks are commonly staged *inside* the extracted
-    submission — ``submissions/extracted/<sid>/reference`` is the first
-    location production searches — but they are scoring inputs, not something
+    submission, ``submissions/extracted/<sid>/reference`` is the first
+    location production searches, but they are scoring inputs, not something
     the team submitted. Counting them as artifacts inflates the map count and
     makes reference files fail participant identity resolution, since they
     carry no participant or repeat. Directory names come from
@@ -99,7 +99,7 @@ def _build_artifacts(
 ) -> tuple[tuple[SubmissionArtifact, ...], tuple[IdentityConflict, ...]]:
     """Normalize every submitted file entry into a :class:`SubmissionArtifact`.
 
-    Every submitted file gets a record — duplicates included. Two copies of the
+    Every submitted file gets a record, duplicates included. Two copies of the
     same map under one identity produce two artifacts; deciding whether that is
     valid belongs to a later phase, and dropping one here would hide it.
 
@@ -124,7 +124,7 @@ def _build_artifacts(
         )
         identity, file_conflicts = resolve_identity(rel, challenge=challenge)
         conflicts.extend(file_conflicts)
-        # Header only — never the voxel array. None when unreadable, which
+        # Header only: never the voxel array. None when unreadable, which
         # the validation layer reports separately.
         dimensions = read_ndim(root / rel) if is_nifti else None
         artifacts.append(SubmissionArtifact(

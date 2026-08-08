@@ -1,7 +1,7 @@
 """Produce the DCE_Test_Clean demo evidence bundle.
 
-Runs the exact scenario that used to fail — a DCE-2026 team submission with
-both Synthetic and Clinical datasets — through the real upload, validation,
+Runs the exact scenario that used to fail, a DCE-2026 team submission with
+both Synthetic and Clinical datasets, through the real upload, validation,
 scoring and export path, and writes every artefact a reviewer needs:
 
     data/outputs/demo_evidence/
@@ -217,7 +217,7 @@ def main() -> None:
 
 def _write_evidence(checks, written, sid: str) -> None:
     lines = [
-        "# DCE_Test_Clean — demo evidence",
+        "# DCE_Test_Clean, demo evidence",
         "",
         "The scenario that used to fail, run end to end through the real upload,",
         "validation, scoring and export path. Regenerate with:",

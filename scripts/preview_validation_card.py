@@ -22,7 +22,7 @@ STYLES = ROOT / "frontend" / "styles.css"
 OUT_DIR = ROOT / "data" / "outputs" / "ui_preview"
 
 # The marker that opens the appended block. Everything from here is "after".
-MARKER = "   Journal register — issue lists, status chips, section headings"
+MARKER = "   Journal register, issue lists, status chips, section headings"
 
 # Real messages, taken verbatim from the validation run in CODE_WALKTHROUGH.md.
 SCANS = [
@@ -129,7 +129,7 @@ def main() -> None:
     index = css.find(MARKER)
     if index == -1:
         raise SystemExit(
-            "Journal register marker not found in styles.css — the preview "
+            "Journal register marker not found in styles.css, the preview "
             "cannot separate before from after."
         )
     # Rewind to the opening comment delimiter so "before" ends cleanly.

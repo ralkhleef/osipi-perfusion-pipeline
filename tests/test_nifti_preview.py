@@ -143,7 +143,7 @@ def test_download_endpoint_does_not_serve_private_reference_maps(preview_workspa
 
 
 # ---------------------------------------------------------------------------
-# Parameter Map Previews — gallery must show only 3-D recognized parameter maps
+# Parameter Map Previews: gallery must show only 3-D recognized parameter maps
 # ---------------------------------------------------------------------------
 
 def _lena_style_manifest(workspace: Path) -> dict:

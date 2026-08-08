@@ -1,7 +1,7 @@
 """Phase 1 schema tests: DCE-2026 requirements expressed in configuration.
 
 This phase only *describes* the DCE-2026 submission requirements. Nothing
-here asserts enforcement — no ingestion, validation severity, or scoring
+here asserts enforcement, no ingestion, validation severity, or scoring
 behaviour changes in Phase 1, and the backward-compatibility tests below
 exist to prove exactly that for ASL and DSC.
 

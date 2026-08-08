@@ -7,7 +7,7 @@ the helpers already in ``backend.scoring`` rather than opening a second
 ROI-loading path.
 
 Computed once per scoring run. The resulting records are passed forward to
-the API, JSON, CSV, and the report model — no output format recomputes them.
+the API, JSON, CSV, and the report model, no output format recomputes them.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ _MISSING = object()
 
 # Only Ktrans is required for DCE-2026. The machinery below is map-generic,
 # so enabling another parameter is a one-line change here rather than a
-# rewrite — but this phase deliberately emits Ktrans only.
+# rewrite, but this phase deliberately emits Ktrans only.
 DESCRIPTIVE_MAP_TYPES_BY_CHALLENGE: dict[str, tuple[str, ...]] = {
     "dce": ("ktrans",),
 }
@@ -174,7 +174,7 @@ def compute_roi_descriptive_statistics(
                     status=STATUS_MASK_UNREADABLE, units=units))
                 continue
 
-            # Geometry: same policy as reference scoring — matching shape is
+            # Geometry: same policy as reference scoring, matching shape is
             # required and nothing is resampled. One bad ROI must not stop
             # the others.
             mask_shape = mask_data.get("shape")
@@ -210,7 +210,7 @@ def _apply_mask(values: Sequence[Any], mask: Sequence[Any]) -> tuple[list[Any], 
     try:
         import numpy as np
 
-        # Boolean indexing, not a Python voxel loop — a synthetic submission
+        # Boolean indexing, not a Python voxel loop, a synthetic submission
         # can hold millions of voxels per scan.
         map_array = np.asarray(values, dtype=float)
         mask_array = np.asarray(mask, dtype=float)

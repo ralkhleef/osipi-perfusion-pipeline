@@ -1,6 +1,6 @@
 """Configuration-driven submission completeness checks.
 
-Consumes normalized :class:`SubmissionArtifact` records — never filenames —
+Consumes normalized :class:`SubmissionArtifact` records, never filenames,
 so map-type detection happens exactly once, in the ingestion classifier.
 
 Scope is decided entirely by configuration. A challenge that declares no
@@ -9,9 +9,9 @@ all, which is what leaves ASL and DSC behaving exactly as before.
 
 Two levels of scope:
 
-* **Scan level** — one ``(dataset, participant, repeat, site)`` combination.
+* **Scan level**, one ``(dataset, participant, repeat, site)`` combination.
   Required maps and fitted signals must exist for every observed scan.
-* **Submission level** — the methods document, required once for the whole
+* **Submission level**, the methods document, required once for the whole
   submission regardless of how many scans it contains.
 
 Issues are ordered hierarchically so a single missing file does not bury the
@@ -36,7 +36,7 @@ from osipi_pipeline.config.rules import (
     required_maps_by_challenge,
 )
 
-# Issue codes. Stable strings — the UI and exports key off these.
+# Issue codes. Stable strings: the UI and exports key off these.
 REQUIRED_MAP_MISSING = "REQUIRED_MAP_MISSING"
 REQUIRED_ARTIFACT_MISSING = "REQUIRED_ARTIFACT_MISSING"
 MAP_DIMENSION_MISMATCH = "MAP_DIMENSION_MISMATCH"
@@ -234,7 +234,7 @@ def _identity_issues(scan_artifacts, datasets, issues) -> tuple[set[str], list]:
 def _dataset_structure_issues(complete, datasets) -> list[dict]:
     """Validate participant, repeat, and site counts.
 
-    Counts unique identifiers rather than requiring consecutive numbering —
+    Counts unique identifiers rather than requiring consecutive numbering,
     repeats labelled 1 and 3 satisfy a count of 2 unless OSIPI specifies
     otherwise.
     """
@@ -368,7 +368,7 @@ def _scan_requirement_issues(complete, required_maps, required_artifacts) -> lis
 
 
 def _submission_artifact_issues(artifacts, required_artifacts) -> list[dict]:
-    """Artifacts required once per submission — currently the methods document."""
+    """Artifacts required once per submission, currently the methods document."""
     issues: list[dict] = []
     specs = artifact_type_specs()
     for artifact_id in required_artifacts:

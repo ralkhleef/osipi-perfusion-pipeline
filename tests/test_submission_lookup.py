@@ -3,8 +3,8 @@
 Regression tests for CODE_WALKTHROUGH.md §B3. Validation results are stored as
 ``<submission_id>_validation.json`` and were matched by **substring**, so any
 id that is a prefix of a real one silently resolved to that other submission's
-results. Batch carving manufactures exactly those prefixes — ``team_gamma``
-against ``team_gamma_Clinical`` and ``team_gamma_Synthetic`` — and the report
+results. Batch carving manufactures exactly those prefixes, ``team_gamma``
+against ``team_gamma_Clinical`` and ``team_gamma_Synthetic``, and the report
 then rendered another team's findings under the requested label, blinded or
 not.
 """

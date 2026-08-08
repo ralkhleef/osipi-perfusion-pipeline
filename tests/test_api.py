@@ -37,7 +37,7 @@ from fastapi.testclient import TestClient  # noqa: E402  (after importorskip)
 
 
 # ---------------------------------------------------------------------------
-# Helpers — build tiny in-memory ZIPs and NIfTI files
+# Helpers: build tiny in-memory ZIPs and NIfTI files
 # ---------------------------------------------------------------------------
 
 def _tiny_nifti_bytes(ndim: int = 3) -> bytes:
@@ -170,7 +170,7 @@ def _make_batch_zip() -> tuple[bytes, str]:
 
 
 # ---------------------------------------------------------------------------
-# Pytest fixture — isolated directories + TestClient
+# Pytest fixture: isolated directories + TestClient
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
@@ -311,7 +311,7 @@ def test_configured_missing_maps_are_reported_for_each_challenge(client: TestCli
     # declared optional, so the legacy "expected map missing" warning is
     # suppressed for them rather than contradicting the configuration.
     # Required-map absence is reported as a blocking REQUIRED_MAP_MISSING
-    # error instead — see tests/test_completeness.py.
+    # error instead, see tests/test_completeness.py.
     dce_missing = [w["message"].lower() for w in dce.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
     assert not any("kep" in msg for msg in dce_missing)
     assert not any("vp" in msg for msg in dce_missing)
@@ -504,7 +504,7 @@ def test_leaderboard_empty(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Upload — local ZIP
+# Upload: local ZIP
 # ---------------------------------------------------------------------------
 
 def test_upload_rejects_non_zip(client: TestClient) -> None:
@@ -545,7 +545,7 @@ def test_upload_batch_zip(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Validate — single submission
+# Validate: single submission
 # ---------------------------------------------------------------------------
 
 def _upload_and_get_id(client: TestClient, zip_data: bytes, fname: str) -> str:
@@ -681,7 +681,7 @@ def test_preflight_result_only(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Export — validation
+# Export: validation
 # ---------------------------------------------------------------------------
 
 def _upload_validate(client: TestClient) -> str:
@@ -728,7 +728,7 @@ def test_export_validation_missing_returns_404(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Export — batch
+# Export: batch
 # ---------------------------------------------------------------------------
 
 def test_export_batch_csv(client: TestClient) -> None:
@@ -768,7 +768,7 @@ def test_export_batch_missing_returns_404(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Export — execution (before any runs — should 404)
+# Export: execution (before any runs, should 404)
 # ---------------------------------------------------------------------------
 
 def test_export_execution_before_run_returns_404(client: TestClient) -> None:
@@ -777,7 +777,7 @@ def test_export_execution_before_run_returns_404(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Scoring — not configured
+# Scoring: not configured
 # ---------------------------------------------------------------------------
 
 def test_score_single_not_configured(client: TestClient) -> None:
@@ -819,7 +819,7 @@ def test_nifti_files_unknown_submission(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Helpers — build scoring package ZIPs
+# Helpers: build scoring package ZIPs
 # ---------------------------------------------------------------------------
 
 def _make_scoring_package_zip(
@@ -950,7 +950,7 @@ def test_scoring_package_upload_no_script(client: TestClient) -> None:
     )
     # Should either reject at install time (400) or succeed (200) but mark not-ready.
     # Either way a later check_ready would return not ready.
-    # We accept 200 or 4xx — the key invariant is it must NOT 500 silently with a bad state.
+    # We accept 200 or 4xx: the key invariant is it must NOT 500 silently with a bad state.
     assert r.status_code != 500 or "error" in r.text.lower()
 
 
@@ -1085,7 +1085,7 @@ def test_score_single_disabled_mode(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def _make_asl_structural_zip(filename: str = "asl_submission.zip") -> tuple[bytes, str]:
-    """ZIP with input/ + results/maps/ inside one root — must be ONE submission."""
+    """ZIP with input/ + results/maps/ inside one root, must be ONE submission."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("lena_asl/input/asl_data.nii", _tiny_nifti_bytes())
@@ -1165,7 +1165,7 @@ def test_custom_asl_scoring_status_ready_when_configured(client: TestClient) -> 
     })
     assert r2.status_code == 200, r2.text
 
-    # 3. Query scoring status for a (non-existent) submission — should return "ready",
+    # 3. Query scoring status for a (non-existent) submission, should return "ready",
     #    not "not_configured", because the package itself is properly configured.
     r3 = client.post("/api/scoring-status", json={
         "submission_id":  "asl_test_submission",
@@ -1201,7 +1201,7 @@ def test_custom_asl_score_runs_without_exec_outputs(client: TestClient) -> None:
     })
     assert r2.status_code == 200, r2.text
 
-    # 3. Run scoring — should not return not_configured
+    # 3. Run scoring, should not return not_configured
     r3 = client.post("/api/score", json={
         "submission_id":  sid,
         "challenge_type": "asl",
@@ -1302,7 +1302,7 @@ def test_result_only_submission_run_readiness(client: TestClient) -> None:
     assert rr != "runnable", (
         f"Result-only submission should not be 'runnable', got {rr!r}"
     )
-    # Should be result_only or similar — not blocking
+    # Should be result_only or similar, not blocking
     assert body.get("passed") is True or body.get("nifti_count", 0) >= 1
 
 
@@ -1319,7 +1319,7 @@ def test_reproducible_submission_is_runnable(client: TestClient) -> None:
 
 
 def test_scoring_not_configured_returns_honest_status(client: TestClient) -> None:
-    """When no scoring is configured, /api/score returns not_configured — never a fake score."""
+    """When no scoring is configured, /api/score returns not_configured, never a fake score."""
     data, fname = _make_result_only_zip()
     sid = _upload_and_get_id(client, data, fname)
     r = client.post("/api/score", json={
@@ -1331,7 +1331,7 @@ def test_scoring_not_configured_returns_honest_status(client: TestClient) -> Non
     body = r.json()
     status = body.get("status", "")
     assert status in ("not_configured", "not_ready", "failed"), (
-        f"Expected an honest non-scoring status, got {status!r} — "
+        f"Expected an honest non-scoring status, got {status!r}, "
         "do not fake scoring results when no package is configured."
     )
     # Must NOT return metrics when not configured
@@ -1534,7 +1534,7 @@ def test_batch_export_unblinded_includes_pii(client: TestClient) -> None:
 
 
 # ===========================================================================
-# Additional coverage — submission unwrap, .gz handling, combined export,
+# Additional coverage: submission unwrap, .gz handling, combined export,
 # HTML report, zero-byte NIfTI, ASL case-insensitivity.
 # ===========================================================================
 
@@ -1749,7 +1749,7 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Reference status" in r.text
     assert "Pipeline version" in r.text and "Configuration version" in r.text
     assert r.text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
-    # Plain printable report — no purple-heavy app/dashboard styling.
+    # Plain printable report: no purple-heavy app/dashboard styling.
     assert "#4c2a86" not in r.text
     assert 'class="cards"' not in r.text
     assert 'class="metrics"' not in r.text
@@ -1778,7 +1778,7 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     # These assertions only work while the PDF is written uncompressed (see
     # pageCompression in pdf_report_service); compression would move page text
     # into Flate streams. "Notes and limitations" appears only in page
-    # content — never in the document metadata — so it fails loudly if that
+    # content, never in the document metadata, so it fails loudly if that
     # ever changes, rather than every check below passing vacuously.
     # Section headings are set as uppercase small caps, so match them that
     # way. "NOTES AND LIMITATIONS" appears only in page content, never in the
@@ -2089,7 +2089,7 @@ def test_pdf_report_has_versions_and_permap_sections(client, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 — completeness enforcement reaches the existing validation gate
+# Phase 3: completeness enforcement reaches the existing validation gate
 # ---------------------------------------------------------------------------
 
 def _make_dce_zip(filename: str, entries: dict[str, bytes]) -> tuple[bytes, str]:

@@ -2,12 +2,12 @@
 
 Documentation goes stale silently. A renamed config key, a removed issue code
 or a changed Docker flag leaves the page looking authoritative while telling a
-reader something untrue — and the reader has no way to tell. This project has
+reader something untrue, and the reader has no way to tell. This project has
 already shipped a documentation site that instructed people to edit four Python
 constants that had been deleted, so the failure mode is not hypothetical.
 
-Every check here reads the *real* source of truth — the loaded YAML schema, the
-validation module, `docker-compose.yml` — and fails if the page disagrees.
+Every check here reads the *real* source of truth, the loaded YAML schema, the
+validation module, `docker-compose.yml`, and fails if the page disagrees.
 These are cheap tests that catch an expensive class of mistake.
 """
 
@@ -58,10 +58,10 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
     from osipi_pipeline.config import rules
 
     # snake_case identifiers, which is how every key in this project is
-    # written, plus camelCase — the schema has none, so a camelCase key in the
+    # written, plus camelCase, the schema has none, so a camelCase key in the
     # documentation is always a mistake, and catching it closes the case where
     # only some occurrences of a key were renamed.
-    # Keys are often written as a path — challenges.<id>.required_maps — so
+    # Keys are often written as a path, challenges.<id>.required_maps, so
     # each dotted segment is checked, not the span as a whole. Discarding the
     # whole span let a rename inside a path slip through unseen.
     candidates: set[str] = set()
@@ -289,7 +289,7 @@ def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
     """A <video> whose file is absent renders as a dead player, not as a gap.
 
     The site shipped a walkthrough recording that taught a scoring registry
-    the code does not have. Deleting the file is not enough on its own — the
+    the code does not have. Deleting the file is not enough on its own, the
     element referring to it has to go with it.
     """
     for page in PAGES:
@@ -343,8 +343,8 @@ def test_every_download_the_page_offers_exists_and_is_not_empty() -> None:
 def test_no_offered_download_is_excluded_from_version_control() -> None:
     """Existing locally is not the same as being published.
 
-    A .gitignore rule of `downloads/` — unanchored, from the standard Python
-    template, meant for the pip cache — matched docs/downloads/ as well. The
+    A .gitignore rule of `downloads/`, unanchored, from the standard Python
+    template, meant for the pip cache, matched docs/downloads/ as well. The
     files sat on disk, the page linked to them, every other check passed, and
     they would have 404ed on the deployed site because they were never
     committed. Nothing but git can answer this question.
@@ -546,7 +546,7 @@ def test_the_config_mount_the_instructions_depend_on_is_present() -> None:
 
     That is only true while the compose file mounts config/. Without the
     mount the container reads the copy baked into the image, so Reload
-    re-reads the same stale file and the edit appears to do nothing — which
+    re-reads the same stale file and the edit appears to do nothing, which
     is exactly the confusion the section exists to prevent.
     """
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())

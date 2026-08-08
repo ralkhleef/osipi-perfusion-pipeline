@@ -2,8 +2,8 @@
 
 The within-scan statistics in :mod:`descriptive_statistics` describe one map in
 one ROI of one scan. This module aggregates those per-scan values across a
-grouping axis — repeats of one participant at one site, sites for one
-participant, or participants within a dataset — to describe how much the
+grouping axis, repeats of one participant at one site, sites for one
+participant, or participants within a dataset, to describe how much the
 measurement moves when only that one factor changes.
 
 **This is disabled by default and produces nothing until a challenge enables
@@ -41,8 +41,8 @@ AXIS_PARTICIPANT = "inter_participant"
 
 AXES = (AXIS_REPEAT, AXIS_SITE, AXIS_PARTICIPANT)
 
-#: Which identity fields are held fixed for each axis. Everything not listed —
-#: and not the axis itself — would confound the comparison.
+#: Which identity fields are held fixed for each axis. Everything not listed,
+#: and not the axis itself, would confound the comparison.
 _HELD_FIXED = {
     AXIS_REPEAT: ("dataset", "participant", "site"),
     AXIS_SITE: ("dataset", "participant", "repeat"),
@@ -178,7 +178,7 @@ def compute_grouped_statistics(
     here and no geometry is recomputed.
 
     Groups smaller than ``minimum_group_size`` are reported with an explicit
-    status rather than omitted — a reviewer needs to see that a participant had
+    status rather than omitted, a reviewer needs to see that a participant had
     only one repeat, not silently find them missing from the table.
     """
     rows = [row for row in roi_rows if _field(row, "roi_id")]

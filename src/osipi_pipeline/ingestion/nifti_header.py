@@ -6,7 +6,7 @@ the 348-byte header and stops.
 
 For ``.nii.gz`` it streams through :mod:`gzip` and reads only the first 348
 bytes, rather than decompressing the whole file into memory as the scoring
-fallback does — the difference is a few hundred bytes against hundreds of
+fallback does, the difference is a few hundred bytes against hundreds of
 megabytes per volume.
 
 Returns ``None`` on any problem. A malformed header is a validation concern

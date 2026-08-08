@@ -2,7 +2,7 @@
 
 Everything here uses genuine NIfTI files written to disk and the actual
 scoring entry point. Masks are discovered by the production
-``_reference_masks()`` search — never handed to the calculator directly —
+``_reference_masks()`` search, never handed to the calculator directly,
 so this proves the discovery and association path, not just the arithmetic.
 
 Expected values are hand-calculated from a four-voxel ROI:
@@ -69,7 +69,7 @@ def dce_submission(tmp_path, monkeypatch):
     """A structured DCE submission plus a discoverable reference ROI mask.
 
     The dataset configuration is overridden to 1 participant x 1 repeat x
-    1 site so a small fixture satisfies completeness — production validation
+    1 site so a small fixture satisfies completeness, production validation
     is not weakened, the *test challenge* is simply smaller.
     """
     import scoring

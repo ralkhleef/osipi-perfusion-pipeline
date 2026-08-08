@@ -18,7 +18,7 @@ ROLE_UNKNOWN = "unknown"
 class SubmissionArtifact:
     """One submitted file, with whatever identity could be resolved.
 
-    Identity fields are ``None`` when they could not be determined — a flat
+    Identity fields are ``None`` when they could not be determined, a flat
     legacy submission has no participant or site, and inventing one would be
     worse than admitting the gap. Nothing in Phase 2 enforces completeness;
     this record only states what was found.

@@ -1,7 +1,7 @@
 """Phase 3: configuration-driven submission completeness.
 
 Exercises the pure checker against normalized artifacts. Structural validity
-only — no scientific quantity is computed anywhere in this phase.
+only, no scientific quantity is computed anywhere in this phase.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 Regression tests for the four defects a manual upload exposed
 (CODE_WALKTHROUGH.md §B1, §B2, §3.7, §B6). Every one of them was invisible to
 the existing suite because no test routed a multi-dataset submission through
-the real uploader — these do.
+the real uploader, these do.
 
 The expected end state for the fixture below, stated once:
 
@@ -278,7 +278,7 @@ def test_a_genuine_duplicate_within_one_scan_is_still_reported(uploaded) -> None
 
 
 def test_flat_submissions_keep_the_original_behaviour(tmp_path: Path) -> None:
-    """No resolvable identity means one bucket — the pre-fix semantics."""
+    """No resolvable identity means one bucket, the pre-fix semantics."""
     from osipi_pipeline.validation.validate import duplicate_filename_groups
 
     root = tmp_path / "flat"

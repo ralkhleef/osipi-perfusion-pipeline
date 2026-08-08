@@ -219,7 +219,7 @@ def _roi_descriptive_model(
 ) -> dict[str, Any]:
     """Collect the canonical ROI records and render them once.
 
-    Reads ``reference_scoring.roi_descriptive_statistics`` — the records
+    Reads ``reference_scoring.roi_descriptive_statistics``, the records
     computed during scoring. Nothing here recalculates a statistic.
     """
     records: list[dict] = []
@@ -273,7 +273,7 @@ def agreement_points(summaries: Sequence[Mapping[str, Any]], *,
     """Collect per-region agreement points, keyed by map type.
 
     Reads the full ``reference_scoring`` block, which keeps richer stats than
-    ``reference_metric_rows`` surfaces — ``mean_submitted``,
+    ``reference_metric_rows`` surfaces, ``mean_submitted``,
     ``mean_reference``, and ``standard_deviation_error`` are all recorded by
     the scorer per region and were simply never carried into the report. That
     is enough for Bland-Altman and identity plots without re-reading a single
@@ -379,7 +379,7 @@ def _status_fields(validation: str, execution: str, qc: str,
     """Keep only the status fields that carry information for this run.
 
     All four derive from the same two counters, so on most runs three of them
-    restate each other — "Unable to continue" appearing twice teaches the
+    restate each other, "Unable to continue" appearing twice teaches the
     reader that the band is decorative. Execution is dropped when nothing
     required execution (the normal case for result-only submissions), and QC
     is dropped when it agrees with validation.
@@ -406,7 +406,7 @@ def build_limitations(
 
     Shared by the HTML and PDF renderers. Previously both printed the same
     eight bullets on every report, which trained readers to skip the section
-    — a caveat about repeatability CoV is noise on a run that computed no
+   , a caveat about repeatability CoV is noise on a run that computed no
     reference metrics at all. Wording is derived from the run rather than
     hardcoded, so a DCE-only report no longer claims something about ASL.
     """
@@ -577,9 +577,9 @@ def _detected_map_types(fields: Iterable[Mapping[str, Any]]) -> str:
 def _normalize_identity(value: str) -> str:
     """Reduce a string to comparable letters and digits.
 
-    Collapses the derived forms one name takes across the pipeline —
+    Collapses the derived forms one name takes across the pipeline,
     ``Secret Team Omega``, ``secret_team_omega``, ``SECRET-TEAM-OMEGA``,
-    ``secret team omega.zip`` — to a single comparable token, so a check
+    ``secret team omega.zip``, to a single comparable token, so a check
     cannot be defeated by a formatting difference.
     """
     return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
@@ -589,7 +589,7 @@ def identity_tokens(summary: Mapping[str, Any]) -> frozenset[str]:
     """Normalised forms of everything that could name the submitter.
 
     Used only as a final safety net *after* structural selection has already
-    chosen a safe value — never as a search-and-replace over rendered output,
+    chosen a safe value, never as a search-and-replace over rendered output,
     which would miss metadata and could corrupt unrelated text.
     """
     raw = [
@@ -623,8 +623,8 @@ def affected_display(
 ) -> str:
     """The value the "Affected" column may show for one issue.
 
-    Issue records carry an absolute filesystem path. Its basename — which both
-    renderers used — is the submission directory for submission-level issues,
+    Issue records carry an absolute filesystem path. Its basename, which both
+    renderers used, is the submission directory for submission-level issues,
     and that directory name *is* the submission id, derived in turn from the
     uploaded archive name. A blinded report therefore printed the team's name
     in the issues table while blinding it everywhere else, and leaked the
@@ -944,7 +944,7 @@ def _build_report_model(
     if is_mixed_challenge:
         summary_lines.append(
             "This batch spans multiple challenges (" + ", ".join(challenges) + "). "
-            "Results are aggregated per challenge — no cross-challenge totals are computed."
+            "Results are aggregated per challenge, no cross-challenge totals are computed."
         )
     if warnings:
         summary_lines.append(f"{warnings} warning{'s' if warnings != 1 else ''} reported.")
@@ -1005,7 +1005,7 @@ def _build_report_model(
         ],
         # Per-map-type agreement points plus the units to label their axes.
         # ROI descriptive rows, formatted once here. HTML and PDF both render
-        # these exact rows in this exact order — neither reformats, refilters,
+        # these exact rows in this exact order, neither reformats, refilters,
         # or recomputes, which is what kept the two formats in step before.
         **_roi_descriptive_model(summaries),
         "agreement_points": agreement_points(summaries, blinded=blinded),
@@ -1308,7 +1308,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return KeepTogether([table, Spacer(1, 5)])
 
     def status_para(value: Any, style=table_cell_style) -> Paragraph:
-        """Coloured dot plus plain text — never a filled pill.
+        """Coloured dot plus plain text, never a filled pill.
 
         U+25CF is present in the base-14 Helvetica encoding, so this needs no
         embedded font. Both dot and text carry the tone, which keeps the
@@ -1436,7 +1436,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             text = str(value)
             # Size to fit. A long value (a six-item map-type list, a
             # seven-digit voxel count) has to wrap, and the label paragraph's
-            # leading is far too tight for a 14pt line — the wrapped lines
+            # leading is far too tight for a 14pt line, the wrapped lines
             # used to sit on top of each other. Each figure therefore gets a
             # value style whose leading matches its own size.
             size = 14.0
@@ -1508,7 +1508,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         page_w, page_h = _page_dims(canvas)
         top = page_h
         # The official lockup already contains the mark, the OSIPI wordmark,
-        # and the tagline, so nothing is set alongside it — typesetting our
+        # and the tagline, so nothing is set alongside it, typesetting our
         # own wordmark next to it would duplicate the artwork.
         lockup_w = 2.70 * inch
         lockup_h = lockup_w / max(0.1, lockup_aspect())
@@ -1621,7 +1621,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=FOOTER_H + 0.12 * inch,
         title=str(model["title"]), author="OSIPI Perfusion Pipeline",
-        subject=f"Evaluation report — {model['session_name']}",
+        subject=f"Evaluation report, {model['session_name']}",
         # Deliberately uncompressed. Compression saves ~25% but hides page
         # text inside Flate streams, and the blinded-report guarantee is
         # verified by grepping the PDF bytes for team names and folder paths.
@@ -1665,7 +1665,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         """Hold a flowable to a set measure.
 
         The page is landscape, so text left to fill the frame runs to ~110
-        characters a line — roughly half again the length at which the eye
+        characters a line, roughly half again the length at which the eye
         reliably finds the next line. This caps the leader at about 80.
         """
         table = Table([[flowable]], colWidths=[width], hAlign="LEFT")
@@ -1736,7 +1736,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     if blocks:
         # Two across; a trailing odd figure pairs with an empty cell. Each
         # row is a nested table and so cannot split, so the heading is bound
-        # to the first row — otherwise it strands at the foot of a page with
+        # to the first row, otherwise it strands at the foot of a page with
         # its figures overleaf.
         rows_out = [
             two_up(pair[0], pair[1] if len(pair) > 1 else [Spacer(1, 1)])
@@ -1753,7 +1753,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     ref_cols = ["ROI", "RMSE", "MAE", "Bias", "Error CoV", "Corr", "Valid vox", "Excl vox"]
     for sec in model.get("per_map_sections") or []:
         story.append(section(
-            f"Appendix · submitted outputs — {sec['label']}"
+            f"Appendix · submitted outputs, {sec['label']}"
             + (f"  ({sec['challenge']})" if sec.get("challenge") else "")
         ))
         for m in sec["maps"]:

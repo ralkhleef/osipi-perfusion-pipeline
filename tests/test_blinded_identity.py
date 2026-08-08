@@ -7,7 +7,7 @@ uploaded archive name. Both renderers had their own copy of that line, so the
 HTML leaked while the PDF happened not to.
 
 The team name here is deliberately hostile: a single unusual token that cannot
-occur by accident, checked in every derived form the pipeline produces —
+occur by accident, checked in every derived form the pipeline produces,
 spaced, slugged, underscored, upper, lower, and as a path component. Assertions
 are made against the *whole* output, not the visible table cell, so metadata,
 comments, embedded JSON, and download filenames are all covered.
@@ -105,7 +105,7 @@ def _base_summary() -> dict:
     """The production gatherer's shape for an id with nothing on disk.
 
     Captured once and cached, because the client fixture monkeypatches
-    ``_gather_summary`` to return this very fixture — calling it again from
+    ``_gather_summary`` to return this very fixture, calling it again from
     inside would recurse forever.
     """
     global _BASE_CACHE
@@ -140,7 +140,7 @@ def client(monkeypatch):
     import main
 
     # Capture the real shape BEFORE patching. _summary() calls _base_summary(),
-    # which calls _gather_summary() on its first use only — so if the patch
+    # which calls _gather_summary() on its first use only, so if the patch
     # lands first, that call reaches the patch and recurses. It survived only
     # because some earlier test in the file happened to warm the cache. Running
     # a fixture test on its own hit the recursion.

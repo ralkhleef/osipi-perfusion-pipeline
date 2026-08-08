@@ -288,9 +288,9 @@ def duplicate_filename_groups(
     """Group files that genuinely repeat a filename *within one scan*.
 
     A basename alone is not evidence of duplication. The DCE-2026 layout
-    requires the same standard names in every scan directory —
+    requires the same standard names in every scan directory,
     ``Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz`` and
-    ``…/Repeat2/Ktrans.nii.gz`` are two different scans, not a mistake — so
+    ``…/Repeat2/Ktrans.nii.gz`` are two different scans, not a mistake, so
     keying on the basename alone warns about every correct submission. See
     CODE_WALKTHROUGH.md §B6.
 

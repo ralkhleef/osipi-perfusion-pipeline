@@ -25,7 +25,7 @@ from pathlib import Path
 from osipi_pipeline.execution.models import ExecutionResult
 
 # ---------------------------------------------------------------------------
-# Defaults — can be overridden per call or via run_config.json
+# Defaults: can be overridden per call or via run_config.json
 # ---------------------------------------------------------------------------
 
 DEFAULT_FALLBACK_DOCKERFILE = Path("docker/Dockerfile.example")
@@ -39,7 +39,7 @@ DEFAULT_CPU_LIMIT           = "2.0"
 # Docker-outside-of-Docker (DooD) path translation
 # ---------------------------------------------------------------------------
 # The backend runs inside a container, but volume mounts in `docker run -v`
-# are evaluated by the **host** Docker daemon — so paths must be host-visible.
+# are evaluated by the **host** Docker daemon, so paths must be host-visible.
 #
 # docker-compose.yml sets these env vars to the absolute host paths:
 #   HOST_SUBMISSIONS_DIR      → /host/path/to/project/submissions
@@ -77,7 +77,7 @@ def _to_host_path(container_path: Path) -> Path:
 class DockerExecutionError(RuntimeError):
     """Raised for *pre-flight* failures: Docker not installed, bad path, etc.
 
-    Build and run failures do NOT raise this error — they are captured in the
+    Build and run failures do NOT raise this error, they are captured in the
     returned ``ExecutionResult`` (``build_failed=True`` or ``passed=False``).
     """
 
@@ -104,15 +104,15 @@ def execute_submission(
     Directory layout created under ``output_dir``:
 
         {output_dir}/{challenge_type}_{submission_name}/
-            execution_stdout.log   — combined build + run stdout
-            execution_stderr.log   — combined build + run stderr
-            outputs/               — mounted at /output inside the container
-                <any files>        — all files written by the submission
+            execution_stdout.log  , combined build + run stdout
+            execution_stderr.log  , combined build + run stderr
+            outputs/              , mounted at /output inside the container
+                <any files>       , all files written by the submission
 
     Pre-flight failures (Docker not installed, bad path) raise
     :class:`DockerExecutionError`.
 
-    Build failures do **not** raise — they return an ``ExecutionResult`` with
+    Build failures do **not** raise: they return an ``ExecutionResult`` with
     ``build_failed=True`` and ``passed=False``.  Log files are written so the
     caller can show build output to the user.
 
@@ -350,13 +350,13 @@ def _run_docker_container(
     """Run the Docker container with security and resource constraints.
 
     Mounts:
-        ``/submission`` — read-only view of the submission folder.
-        ``/output``     — read-write directory for submission outputs.
-        ``/input``      — read-only challenge input data (when provided).
+        ``/submission``, read-only view of the submission folder.
+        ``/output``    , read-write directory for submission outputs.
+        ``/input``     , read-only challenge input data (when provided).
 
     Security:
-        ``--network none``               — no outbound network access.
-        ``--security-opt no-new-privileges`` — prevent privilege escalation.
+        ``--network none``              , no outbound network access.
+        ``--security-opt no-new-privileges``, prevent privilege escalation.
 
     DooD path translation:
         Paths are translated from container-internal paths to host-visible

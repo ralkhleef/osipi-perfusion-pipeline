@@ -2,7 +2,7 @@
 
 A report about data quality that contains no graphics makes the reader do
 the comparison arithmetic themselves. The module draws Bland-Altman and
-identity plots — the standard method-comparison figures — from statistics
+identity plots, the standard method-comparison figures, from statistics
 the scorer already stores, so no voxel data has to be re-read.
 
 Axes are scaled to the observed range rather than forced to zero. That is
@@ -13,8 +13,8 @@ Styling follows the rest of the report: hairline axes, no gridlines, no
 fills, no chartjunk. Colour encodes series and nothing else.
 
 The geometry is computed once into a list of primitive dicts, then handed
-to one of two thin renderers — :func:`to_svg` for the HTML report and
-:func:`to_drawing` for the ReportLab PDF — so the two outputs cannot drift.
+to one of two thin renderers, :func:`to_svg` for the HTML report and
+:func:`to_drawing` for the ReportLab PDF, so the two outputs cannot drift.
 Every builder returns ``None`` when there is nothing worth plotting, and
 callers are expected to skip the figure in that case.
 """
@@ -84,7 +84,7 @@ def _xy_plot(points: Sequence[Mapping[str, Any]],
 
     ``reference`` draws either the ``identity`` line (y = x, for
     submitted-vs-reference) or a ``zero`` line (for Bland-Altman). ``band``
-    is an optional pair of horizontal limits drawn dashed — the 95% limits
+    is an optional pair of horizontal limits drawn dashed, the 95% limits
     of agreement. ``legend`` is ``[(name, marker style), ...]``.
     """
     xs = _nums(p.get("x") for p in points)
@@ -119,7 +119,7 @@ def _xy_plot(points: Sequence[Mapping[str, Any]],
     # Reserve a row above the plot for the y-axis label. Drawing it beside
     # the axis (anchored "end" at x0) pushed long labels such as
     # "submitted mean (ml/100g/min)" off the left edge of the figure, so it
-    # sits above the axis instead — which also avoids rotated text, which
+    # sits above the axis instead, which also avoids rotated text, which
     # ReportLab's String cannot do.
     gutter, bottom = 42.0, 28.0
     top = (LEGEND_H if legend else 0.0) + 12.0

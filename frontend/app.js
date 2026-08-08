@@ -1,6 +1,6 @@
 "use strict";
 // ─────────────────────────────────────────────────────────────────────────────
-// OSIPI Perfusion Challenge — Review System
+// OSIPI Perfusion Challenge: Review System
 // app.js  v28
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ const state = {
   },
 };
 
-// Request guard — prevents concurrent submits from double-clicks
+// Request guard: prevents concurrent submits from double-clicks
 let requestInProgress = false;
 
 // ── Batch state ───────────────────────────────────────────────────────────────
@@ -57,10 +57,10 @@ const SESSION_KEY        = "osipi_pipeline_session_v1";
 const SESSION_VERSION    = 1;
 const SESSION_EXPIRY_MS  = 24 * 60 * 60 * 1000;   // 24 hours
 
-// Execution result summaries populated by _updateRunRow() — keyed by submission_id
+// Execution result summaries populated by _updateRunRow(), keyed by submission_id
 const _execSummaries = {};
 
-// Scoring result cache populated by _applyScoreStatus() — keyed by submission_id
+// Scoring result cache populated by _applyScoreStatus(), keyed by submission_id
 const _scoreCache = {};
 const _displayAliases = {};
 let _suppressSessionSave = false;
@@ -875,7 +875,7 @@ function simplifyMessage(item) {
     return "No code files detected";
 
   // Messages read better whole. The issue list wraps them cleanly, so only
-  // genuinely runaway text — a validator that pastes an entire path list —
+  // genuinely runaway text, a validator that pastes an entire path list,
   // needs a cap, and that cap breaks at a word boundary instead of mid-word
   // ("… because datase…" told the reader nothing).
   if (text.length > 240) {
@@ -918,7 +918,7 @@ function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
   if (!hasIssue("were expected", "count mismatch", "nifti_count_mismatch", "expected parameter map"))
     checks.push("Map count matches expectations");
   if (errCount === 0 && warnCount === 0)
-    checks.push("All checks passed — submission is ready for scoring");
+    checks.push("All checks passed, submission is ready for scoring");
 
   return checks;
 }
@@ -968,7 +968,7 @@ function goToStep(step) {
   document.querySelector(".content")?.scrollTo({ top: 0, behavior: "instant" });
   document.querySelector(`#step-${step} .step-body`)?.scrollTo({ top: 0, behavior: "instant" });
   window.scrollTo({ top: 0, behavior: "instant" });
-  // Update header title (page-title / page-subtitle may not exist in topbar layout — no-op if missing)
+  // Update header title (page-title / page-subtitle may not exist in topbar layout, no-op if missing)
   const titles = STEP_TITLES[step] || {};
   const hTitle = el("page-title");
   const hSub   = el("page-subtitle");
@@ -1244,11 +1244,11 @@ function _isStepReady(step) {
       // Warnings never block. Continue → Run is enabled when at least one
       // submission has ZERO blocking errors (r.passed === error_count === 0).
       // Run-readiness (runnable vs result-only) is decided on the Run step, so
-      // it must NOT gate the action row here — a result-only submission that passed
+      // it must NOT gate the action row here, a result-only submission that passed
       // with warnings still has 0 errors and must be allowed to continue.
       return results.some((r) => r.passed || issueCount(r, "errors") === 0);
     }
-    case "run":    return true;  // always allow continue — non-blocking
+    case "run":    return true;  // always allow continue, non-blocking
     case "score":  return true;  // always allow continue to export
     case "export": return false; // no "next" after export
     default: return false;
@@ -1335,7 +1335,7 @@ function _stepUnlocked(step) {
 // The visible numbered stepper was removed. This is kept as a safe no-op so the
 // many progress-refresh call sites stay valid; step gating/navigation is handled
 // by the hidden wf-btn-* state holders, _syncWfNav(), and goToStep().
-function _syncCompactProgress() { /* stepper removed — no visible progress nav to sync */ }
+function _syncCompactProgress() { /* stepper removed, no visible progress nav to sync */ }
 
 // Wire wf-nav button clicks
 document.querySelectorAll(".wf-step[data-step]").forEach((btn) => {
@@ -1459,9 +1459,9 @@ function resetAll() {
 // ══════════════════════════════════════════════════════════════════════════════
 // Session persistence  (localStorage key: osipi_pipeline_session_v1)
 // Rules:
-//   • No auto-restore — banner shown, user must click "Restore"
-//   • 24 h expiry — expired sessions are silently discarded
-//   • No files, logs, CSVs, or large arrays stored — IDs and summaries only
+//   • No auto-restore, banner shown, user must click "Restore"
+//   • 24 h expiry, expired sessions are silently discarded
+//   • No files, logs, CSVs, or large arrays stored, IDs and summaries only
 // ══════════════════════════════════════════════════════════════════════════════
 
 function _generateSessionId() {
@@ -1504,7 +1504,7 @@ function saveSessionState() {
         teamName:           r.team_name,
         contactEmail:       r.contact_email,
         validatedAt:        r.validated_at,
-        // Store first 3 errors/warnings as short text only — no raw logs
+        // Store first 3 errors/warnings as short text only, no raw logs
         topErrors:   (r.errors   || []).slice(0, 3).map((e) => msgText(e).slice(0, 80)),
         topWarnings: (r.warnings || []).slice(0, 3).map((w) => msgText(w).slice(0, 80)),
       })),
@@ -1529,12 +1529,12 @@ function saveSessionState() {
       displayAliases:     { ..._displayAliases },
       validationSummary,
       executionSummaries: { ..._execSummaries },
-      // Scoring: store provider/status snapshot only — no metric values
+      // Scoring: store provider/status snapshot only, no metric values
       scoringSnapshot:    _collectScoringSnapshot(),
     };
 
     localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
-  } catch (_) { /* localStorage unavailable or full — fail silently */ }
+  } catch (_) { /* localStorage unavailable or full, fail silently */ }
   // Lightweight reload-restore state (sessionStorage) tracks every save point:
   // upload/detection, validation, run, scoring, and step changes.
   saveWizardState();
@@ -1567,7 +1567,7 @@ function clearSessionState() {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Wizard reload persistence  (sessionStorage key: osipi_wizard_state_v1)
-// Auto-restores the active step on browser reload. Lightweight state only —
+// Auto-restores the active step on browser reload. Lightweight state only,
 // step id, submission/batch ids, and form basics. No files, no results.
 // The full session snapshot stays in localStorage (saveSessionState above);
 // this layer only decides WHERE to resume and whether that is still valid.
@@ -1592,7 +1592,7 @@ function saveWizardState() {
       displayAliases: { ..._displayAliases },
       updatedAt:     new Date().toISOString(),
     }));
-  } catch (_) { /* sessionStorage unavailable — fail silently */ }
+  } catch (_) { /* sessionStorage unavailable, fail silently */ }
 }
 
 function loadWizardState() {
@@ -1650,7 +1650,7 @@ async function restoreWizardState() {
 
   const saved = loadSessionState();
   if (!saved) {
-    // Nothing to rebuild from — restore form basics only and stay on Upload.
+    // Nothing to rebuild from: restore form basics only and stay on Upload.
     if (wizard) {
       const teamField  = el("team-name");
       const emailField = el("contact-email");
@@ -1780,7 +1780,7 @@ async function restoreSessionFromStorage() {
     if (radio) { radio.checked = true; switchSource(saved.sourceType); }
   }
 
-  // 2. Restore batch/submission state (no files — backend already has them)
+  // 2. Restore batch/submission state (no files, backend already has them)
   state.submissionId  = saved.submissionId || null;
   batchState.isBatch  = !!saved.isBatch;
   batchState.batchId  = saved.batchId || null;
@@ -1815,7 +1815,7 @@ async function restoreSessionFromStorage() {
   if (savedStepIdx >= 2 && saved.validationSummary) {
     const synthData = _synthValidationData(saved.validationSummary);
     batchState.validationData = synthData;
-    // renderValidateStep may auto-advance to "run" — we'll override with goToStep after
+    // renderValidateStep may auto-advance to "run", we'll override with goToStep after
     renderValidateStep(synthData);
   }
 
@@ -1892,7 +1892,7 @@ function _applyExecSummariesToRows() {
     }
     const drawer = wrap.querySelector(".er-row-detail, .run-card-detail");
     if (drawer) {
-      drawer.innerHTML = `<p style="font-size:0.73rem;color:var(--muted);margin:0">Session restored — re-run to see full logs.</p>`;
+      drawer.innerHTML = `<p style="font-size:0.73rem;color:var(--muted);margin:0">Session restored, re-run to see full logs.</p>`;
     }
   });
   if (typeof _applyRunFilters === "function") _applyRunFilters();
@@ -1910,7 +1910,7 @@ async function _verifyBackendFiles(submissionId) {
       );
       clearSessionState();
     }
-  } catch (_) { /* network error during check — silent */ }
+  } catch (_) { /* network error during check, silent */ }
 }
 
 function _showRestoreWarning(msg) {
@@ -2213,7 +2213,7 @@ function _xhrUpload(url, formData, onProgress) {
     if (xhr.upload && typeof onProgress === "function") {
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && e.total > 0) onProgress((e.loaded / e.total) * 100);
-        else onProgress(null);   // size unknown — indeterminate, never faked
+        else onProgress(null);   // size unknown, indeterminate, never faked
       };
     }
     xhr.onload = () => {
@@ -2494,7 +2494,7 @@ async function handleSubmit() {
       unlockStep("index");
       goToStep("index");
     } else {
-      // ── Single submission — normalize to index step ────────────────────
+      // ── Single submission, normalize to index step ────────────────────
       batchState.isBatch = false;
       state.submissionId = importData.submission_id;
       state.detection = {
@@ -2754,7 +2754,7 @@ function _resolveRowMapTypes(sub, rowEl) {
       if (detailVal) detailVal.textContent = types.join(", ")
       + (t === "Mixed/Other" ? " (detected as Mixed/Other)" : "");
     })
-    .catch(() => { /* display-only enhancement — ignore failures */ });
+    .catch(() => { /* display-only enhancement, ignore failures */ });
 }
 
 // ── Submission Structure popover ─────────────────────────────────────────────
@@ -2875,7 +2875,7 @@ document.addEventListener("keydown", (e) => {
 // Shared worklist component system
 // ------------------------------------------------------------------------------
 // ONE renderer used by every step (Review, Validate, Run, Score, Map Preview,
-// Export). Each row produces the SAME structure — only the content differs:
+// Export). Each row produces the SAME structure, only the content differs:
 //   <row>
 //     [checkbox]
 //     <worklist-icon>
@@ -3166,7 +3166,7 @@ function renderBatchTable(submissions) {
       _refreshWizardFooter();
     };
     if (cb) cb.addEventListener("change", () => setSelected(cb.checked));
-    // Clicking the row toggles selection — except tooltips, actions, details.
+    // Clicking the row toggles selection, except tooltips, actions, details.
     card.addEventListener("click", (e) => {
       if (isSingle) return;
       if (e.target.closest(".help-tooltip, .worklist-actions, .details-toggle, .worklist-details, .structure-control")) return;
@@ -3395,11 +3395,11 @@ function _renderSingleAsValidate(data) {
   saveSessionState();
 }
 
-// ── Step 3: Validate — render validation cards ────────────────────────────────
+// ── Step 3: Validate, render validation cards ────────────────────────────────
 
 const _reviewFilter = { filter: "all", search: "", map: "all", sort: "status", showAll: false };
 
-// ── Issue summary helper — one brief text (not a list) ───────────────────────
+// ── Issue summary helper, one brief text (not a list) ───────────────────────
 function _issueSummary(errors, warnings) {
   function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
   if (errors.length === 0 && warnings.length === 0)
@@ -3647,13 +3647,13 @@ function renderValidateStep(data, isSingleMode) {
       const noIssueHtml = (!errHtml && !warnHtml)
         ? `<p style="font-size:0.73rem;color:var(--subtle);margin:0">No items to review.</p>` : "";
 
-      // No inline exec section on Validate — execution happens in Run step only
+      // No inline exec section on Validate, execution happens in Run step only
       const execHtml = "";
 
       // Collapsed row: one short meta line. Everything else moves into Details.
       // Dataset coverage beats a detected map-type label here: "Clinical +
       // Synthetic" says what the submission contains, where "Mixed/Other"
-      // only said that more than one map type was found — which is the
+      // only said that more than one map type was found, which is the
       // expected state for a challenge that defines several.
       const datasets = datasetDisplay(r);
       const counts = submissionCounts(r);
@@ -3727,13 +3727,13 @@ function renderValidateStep(data, isSingleMode) {
   const backBtn = el("batch-back-to-batch-btn");
   if (backBtn) backBtn.style.display = "none";
 
-  // Show/hide "no runnable" message — only show when there are truly no valid submissions
+  // Show/hide "no runnable" message, only show when there are truly no valid submissions
   const noRunnableMsg = el("validate-no-runnable-msg");
   const hasAnyPassed  = runnableCount > 0 || resultOnlyCount > 0;
   if (noRunnableMsg)
     noRunnableMsg.style.display = !hasAnyPassed && results.length > 0 ? "" : "none";
 
-  // Continue button — enabled for both runnable and result-only; label reflects destination
+  // Continue button: enabled for both runnable and result-only; label reflects destination
   const continueBtn = el("validate-continue-btn");
   if (continueBtn) {
     continueBtn.disabled  = !hasAnyPassed;
@@ -3765,7 +3765,7 @@ function _applyReviewFilters() {
   });
   rows.forEach((r) => list.appendChild(r));
 
-  // Apply filter + search — collect matching rows
+  // Apply filter + search, collect matching rows
   const q = search.toLowerCase();
   const matchingRows = [];
   rows.forEach((row) => {
@@ -3847,7 +3847,7 @@ function _toggleRowDetail(wrap, forceOpen) {
   }
 }
 
-// Row expand — legacy toggle button (.br-toggle-btn) click
+// Row expand: legacy toggle button (.br-toggle-btn) click
 document.addEventListener("click", (e) => {
   const btn = e.target.closest(".br-toggle-btn");
   if (!btn) return;
@@ -3857,7 +3857,7 @@ document.addEventListener("click", (e) => {
   _toggleRowDetail(wrap);
 });
 
-// Row expand — Details button (.vr-details-btn) click
+// Row expand: Details button (.vr-details-btn) click
 document.addEventListener("click", (e) => {
   const btn = e.target.closest(".vr-details-btn");
   if (!btn) return;
@@ -3874,7 +3874,7 @@ document.addEventListener("click", (e) => {
   if (!wrap) return;
   e.stopPropagation();
   _toggleRowDetail(wrap, true);
-  // Show exec section (hidden by default — only revealed when Run is clicked)
+  // Show exec section (hidden by default, only revealed when Run is clicked)
   const execSection = wrap.querySelector(".batch-exec-section");
   if (execSection) execSection.classList.add("exec-visible");
   const execBtn = wrap.querySelector(".batch-exec-btn");
@@ -4060,7 +4060,7 @@ function _refreshRunProgress() {
 
     // Show a calm, neutral completion banner (no loud success/warn styling).
     const bannerType = failed > 0 ? "warn" : "success";
-    const bannerHtml = `<span class="scb-text">Processing complete — ${parts.join(", ")}</span>`;
+    const bannerHtml = `<span class="scb-text">Processing complete, ${parts.join(", ")}</span>`;
     _showCompletionBanner("run-completion-banner", bannerHtml, bannerType);
 
     // Unlock Score step and refresh local actions
@@ -4371,7 +4371,7 @@ function _updateRunRow(subId, execData, isError) {
   }
   wrap.dataset.execStatus = newExecStatus;
 
-  // Persist execution summary (no logs — IDs and counts only)
+  // Persist execution summary (no logs, IDs and counts only)
   if (isError) {
     _execSummaries[subId] = { status: "failed", passed: false, outputFileCount: 0 };
   } else if (execData) {
@@ -4389,7 +4389,7 @@ function _updateRunRow(subId, execData, isError) {
 
   const runnable = wrap.dataset.runnable === "true";
 
-  // Update compact run meta text — works for both card and legacy table cells.
+  // Update compact run meta text: works for both card and legacy table cells.
   const statusCell = wrap.querySelector(".er-run-status-cell, .run-card-status-row");
   if (statusCell) {
     statusCell.textContent = _erRunMetaText(newExecStatus, runnable);
@@ -4404,7 +4404,7 @@ function _updateRunRow(subId, execData, isError) {
       : `<span class="vr-issue-warn">0 files</span>`;
   }
 
-  // Update output-check cell (table only — card skips this column)
+  // Update output-check cell (table only, card skips this column)
   const outCheckCell = wrap.querySelector(".er-outcheck-cell");
   if (outCheckCell) {
     if (isError || !execData.output_validation) {
@@ -4443,7 +4443,7 @@ function _updateRunRow(subId, execData, isError) {
 }
 
 async function _renderRunPanel() {
-  // Called when user clicks Run nav item — just refresh the step
+  // Called when user clicks Run nav item, just refresh the step
   await renderRunStep();
 }
 
@@ -4487,7 +4487,7 @@ function renderExecResult(data) {
     s1Body = `<p class="exec-step-note">Run instructions could not be built. Check technical logs below.</p>`;
   } else if (containerFailed) {
     s1Icon = "si-fail"; s1Char = "FAIL"; s1StatusCls = "sl-fail"; s1StatusTxt = "Could not start";
-    s1Body = `<p class="exec-step-note">Container failed to start (exit 125) — this is typically a host configuration issue, not a problem with the submission itself.</p>`;
+    s1Body = `<p class="exec-step-note">Container failed to start (exit 125), this is typically a host configuration issue, not a problem with the submission itself.</p>`;
   } else {
     s1Icon = "si-pass"; s1Char = "OK"; s1StatusCls = "sl-pass"; s1StatusTxt = "Ready";
   }
@@ -4650,7 +4650,7 @@ function _updateValCardExecBadge(subId, newStatus) {
   });
 })();
 
-// Delegation: Details button in run step (.er-detail-btn) — works for table rows + new cards
+// Delegation: Details button in run step (.er-detail-btn), works for table rows + new cards
 (function initRunDetailBtnDelegation() {
   document.addEventListener("click", (e) => {
     const btn = e.target.closest(".er-detail-btn");
@@ -4688,7 +4688,7 @@ function _updateValCardExecBadge(subId, newStatus) {
         await runBatchExec(null, row.dataset.subId, row.dataset.challenge || defaultChallengeType());
         done++;
       }
-      if (statusEl) statusEl.textContent = `Done — ran ${done} submission(s).`;
+      if (statusEl) statusEl.textContent = `Done, ran ${done} submission(s).`;
     } finally {
       setLoading(btn, false, idleLabel);
       _syncCompactProgress();
@@ -4711,7 +4711,7 @@ function _updateValCardExecBadge(subId, newStatus) {
     const runControls = el("run-controls");
     const rps         = el("run-panel-status");
     if (hasRunInstructions === false) {
-      if (cannotNote) { cannotNote.style.display = ""; cannotNote.textContent = "No run instructions found — this submission can be validated as result-only but cannot be run automatically."; }
+      if (cannotNote) { cannotNote.style.display = ""; cannotNote.textContent = "No run instructions found, this submission can be validated as result-only but cannot be run automatically."; }
       if (runControls) runControls.style.display = "none";
       if (rps) { rps.className = "run-panel-status rps-na"; rps.textContent = "Cannot run"; }
     } else {
@@ -6447,7 +6447,7 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
         <div class="scoring-pkg-meta">
           v${escapeHtml(pkg.version)} · ${escapeHtml(pkg.challenge_type.toUpperCase())}
           ${pkg.map_type ? " · " + escapeHtml(pkg.map_type) : ""}
-          ${pkg.description ? " — " + escapeHtml(pkg.description.slice(0, 80)) : ""}
+          ${pkg.description ? ", " + escapeHtml(pkg.description.slice(0, 80)) : ""}
         </div>
       </div>
       <div class="scoring-pkg-actions">
@@ -6517,7 +6517,7 @@ async function _saveScoringSetup() {
 
 // Wire up radio change, file upload, package remove, and save button.
 (function _wireScoringSetup() {
-  // Radio buttons — show/hide custom section
+  // Radio buttons: show/hide custom section
   document.querySelectorAll('input[name="scoring-mode"]').forEach((radio) => {
     radio.addEventListener("change", () => {
       _onScoringModeChange(radio.value);
@@ -6678,13 +6678,13 @@ async function renderScoreStep() {
     return;
   }
 
-  // ── 2. Scoring is configured — show ready card ───────────────────────────────
+  // ── 2. Scoring is configured, show ready card ───────────────────────────────
   if (notConfiguredCard) {
     notConfiguredCard.hidden = true;
     notConfiguredCard.style.display = "none";
   }
   if (statusCard)        statusCard.style.display        = "";
-  // Note: score-provider-details is now inside the admin <details> panel —
+  // Note: score-provider-details is now inside the admin <details> panel,
   // it stays hidden unless the user opens the admin section.
 
   // Fetch providers for the advanced details panel (populated lazily)
@@ -6788,7 +6788,7 @@ async function _fetchAndUpdateScoreStatus(sid, challengeType) {
   }
 }
 
-// Apply a status response to a row — sets badge text, enables/disables Score button.
+// Apply a status response to a row, sets badge text, enables/disables Score button.
 function _applyScoreStatus(sid, data) {
   const row = [...document.querySelectorAll(".sc-row-wrap")]
     .find((r) => r.dataset.subId === sid);
@@ -6833,7 +6833,7 @@ function _applyScoreStatus(sid, data) {
     _cacheScoreStatus(sid, data, row);
   }
 
-  // Populate detail drawer — only show it for scored/failed/missing, NOT for bare "not_configured"
+  // Populate detail drawer: only show it for scored/failed/missing, NOT for bare "not_configured"
   const detail    = el(`sc-detail-${sid}`);
   const detailRow = detail?.closest("tr.sc-row-detail-row");
   if (detail) {
@@ -6850,11 +6850,11 @@ function _applyScoreStatus(sid, data) {
       if (detailRow) detailRow.style.display = "";
     } else if (status === "not_ready" && missing.length > 0) {
       // Show missing prereqs collapsed
-      detail.innerHTML = `<details><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Scoring needs additional setup — expand to see details</summary>`
+      detail.innerHTML = `<details><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Scoring needs additional setup, expand to see details</summary>`
         + `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul></details>`;
       if (detailRow) detailRow.style.display = "";
     } else {
-      // not_configured or generic — don't show a noisy detail row
+      // not_configured or generic, don't show a noisy detail row
       detail.innerHTML = "";
       if (detailRow) detailRow.style.display = "none";
     }
@@ -7073,8 +7073,8 @@ function renderScorePreviewPanel() {
 
   // ROI Ktrans statistics come from the canonical scoring result already in
   // the cache. Rendered here because this is the one function every entry
-  // point funnels through — initial render, each async status resolution,
-  // step navigation, and session restore — so the section updates without a
+  // point funnels through, initial render, each async status resolution,
+  // step navigation, and session restore, so the section updates without a
   // page reload and without a second request.
   renderRoiDescriptiveStatistics(..._roiDescriptivePayload());
 
@@ -7136,7 +7136,7 @@ function renderScorePreviewPanel() {
   const comparedMapText = mapSummary.referenceComparedMapCount > 0
     ? `${mapSummary.referenceComparedMapCount}/${mapSummary.referenceMapCount || mapSummary.referenceComparedMapCount}`
     : String(mapSummary.mapCount || 0);
-  // One calm note when reference scoring is unavailable — raw per-map status
+  // One calm note when reference scoring is unavailable, raw per-map status
   // strings live in Technical Details, never in the hero card.
   const referenceUnavailableNote = mapSummary.referenceComparedMapCount > 0
     ? ""
@@ -7149,7 +7149,7 @@ function renderScorePreviewPanel() {
       ${_summaryMetric("CoV", _metricOrUnavailable(mapSummary.referenceMetrics.coefficientOfVariation))}
     `
     : "";
-  // Submission case bar: slim clinical case strip — name, one status chip,
+  // Submission case bar: slim clinical case strip, name, one status chip,
   // one meta line, one calm note. Nothing raw, nothing duplicated.
   const heroMetaParts = [`${escapeHtml(challengeLabel(challengeType))} challenge`];
   if (valTotal > 1) heroMetaParts.push(`${valTotal} submissions`);
@@ -7239,7 +7239,7 @@ function renderScorePreviewPanel() {
     const name = escapeHtml(submissionDisplayName(r, r.submission_id || "submission"));
     const errs = dedupeMessages((r.errors || []).map(simplifyMessage));
     const warns = dedupeMessages((r.warnings || []).map(simplifyMessage));
-    if (!errs.length && !warns.length) return `<div class="summary-detail-sub"><b>${name}</b> — no issues.</div>`;
+    if (!errs.length && !warns.length) return `<div class="summary-detail-sub"><b>${name}</b>, no issues.</div>`;
     const ehtml = errs.map((e) => `<li class="sdi-err">${escapeHtml(e)}</li>`).join("");
     const whtml = warns.map((w) => `<li class="sdi-warn">${escapeHtml(w)}</li>`).join("");
     return `<div class="summary-detail-sub"><b>${name}</b><ul class="summary-detail-list">${ehtml}${whtml}</ul></div>`;
@@ -7469,7 +7469,7 @@ function _renderExportRows() {
 }
 _renderExportRows();
 
-// ROI descriptive CSV. Reads records already computed during scoring — the
+// ROI descriptive CSV. Reads records already computed during scoring, the
 // download never triggers a recalculation.
 const roiCsvBtn = el("export-roi-descriptive-btn");
 if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
@@ -7564,7 +7564,7 @@ _syncWfNav();
 _updateWizardFooter(wf.step);
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Session restore — startup check
+// Session restore: startup check
 //   1. Reload in the same tab (sessionStorage wizard state or URL hash present)
 //      → auto-restore straight to the last valid step.
 //   2. Fresh tab with an older localStorage session → subtle notice, manual
@@ -7582,7 +7582,7 @@ window.addEventListener("hashchange", () => {
     if (step === "score")   renderScoreStep().catch(() => {});
     if (step === "export")  _syncExportStep();
   } else {
-    // Locked step — revert the hash to the current step.
+    // Locked step: revert the hash to the current step.
     const h = STEP_TO_HASH[wf.step];
     if (h) { try { history.replaceState(null, "", `#${h}`); } catch (_) {} }
   }
@@ -7596,9 +7596,9 @@ window.addEventListener("hashchange", () => {
   } catch (_) { /* fall through to manual restore notice */ }
 
   const saved = loadSessionState();
-  if (!saved) return;   // nothing saved or expired — normal fresh start
+  if (!saved) return;   // nothing saved or expired, normal fresh start
 
-  // 2. Show the subtle notice — manual restore only
+  // 2. Show the subtle notice, manual restore only
   showRestoreBanner(saved);
 
   // Wire up the topbar restore chip
@@ -7646,7 +7646,7 @@ window.addEventListener("hashchange", () => {
    Renders the canonical records computed once during scoring. Nothing here
    recalculates a statistic: CoV arrives as a ratio and is only formatted
    for display, and unavailable values are never shown as zero.
-   These are within-scan spatial summaries — not repeatability,
+   These are within-scan spatial summaries, not repeatability,
    reproducibility, or accuracy.                                          */
 
 const ROI_UNAVAILABLE_MESSAGES = {
@@ -7701,7 +7701,7 @@ function renderRoiDescriptiveStatistics(records, status) {
   const rows = Array.isArray(records) ? records : [];
 
   // Only shown when the canonical result actually carries ROI data or an
-  // explicit status — ASL and DSC never reach this branch.
+  // explicit status, ASL and DSC never reach this branch.
   if (!rows.length && !status) {
     card.style.display = "none";
     return;
@@ -7727,7 +7727,7 @@ function renderRoiDescriptiveStatistics(records, status) {
   if (empty) empty.style.display = "none";
   if (table) table.style.display = "";
 
-  // One table, built as a single string — no card per scan, no per-cell
+  // One table, built as a single string, no card per scan, no per-cell
   // listeners. Every dynamic field is escaped.
   if (body) {
     body.innerHTML = rows.map((r) => {

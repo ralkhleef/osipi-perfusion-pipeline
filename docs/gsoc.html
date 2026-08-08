@@ -72,48 +72,41 @@
             </table>
           </div>
 
-          <p>OSIPI runs perfusion-MRI challenges where teams submit parameter maps computed from a
-            shared dataset. Reviewing those by hand does not scale: someone has to open each archive,
-            work out which challenge it belongs to, check the files are present and readable, run the
-            team's code, compute statistics, and assemble results that can be shared without
-            revealing who submitted what. This project automates that.</p>
+          <p>Teams send OSIPI a ZIP of parameter maps. Checking those by hand is slow and no two
+            people do it the same way. This project does the checking, the scoring and the write-up,
+            and keeps the team's name out of the reviewer's copy. See
+            <a href="how-it-works.html#the-problem">How it works</a>.</p>
         </section>
 
         <section>
           <h2 id="what-shipped" data-toc-title="What shipped">What shipped</h2>
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Area</th><th>What it does</th></tr></thead>
-              <tbody>
-                <tr><td>Ingestion</td><td>Archive, folder, GitHub and Zenodo import. One indexing pass per archive. Batch archives split automatically.</td></tr>
-                <tr><td>Identity</td><td>Dataset, participant, site and repeat read from the directory structure, with filename patterns as a fallback. Conflicts are reported, not guessed at.</td></tr>
-                <tr><td>Validation</td><td>NIfTI readability, dimensions and finite values, plus structural completeness with eleven issue codes.</td></tr>
-                <tr><td>Execution</td><td>Reproducible submissions run in Docker with no network, a memory cap and a timeout. Result-only submissions skip the step.</td></tr>
-                <tr><td>Reference scoring</td><td>RMSE, MAE, bias, error CoV and correlation against reference maps, whole-map and within each ROI mask.</td></tr>
-                <tr><td>ROI statistics</td><td>Within-scan Ktrans median, population SD and CoV, computed once and read by every output.</td></tr>
-                <tr><td>Reports</td><td>HTML and PDF built from one model, so the two cannot disagree.</td></tr>
-                <tr><td>Blinding</td><td>Team name, contact, submission id and archive name absent from the body, the metadata and the download filename.</td></tr>
-              </tbody>
-            </table>
-          </div>
+          <ul>
+            <li>Import from a ZIP, a folder, GitHub or Zenodo. Batch archives split on their own.</li>
+            <li>Every file gets a job and a scan address, read from the folders first.</li>
+            <li>Checks on the files and on the submission as a whole, with eleven issue codes.</li>
+            <li>Submitted code runs in Docker with no network, a memory cap and a time limit.</li>
+            <li>RMSE, mean absolute error, bias and correlation against the reference, per voxel and per ROI.</li>
+            <li>Per-ROI median, SD and CoV for each scan.</li>
+            <li>HTML and PDF built from one set of results, so the two cannot disagree.</li>
+            <li>Blinded exports with no team name in the page, the metadata or the filename.</li>
+          </ul>
         </section>
 
         <section>
           <h2 id="still-open" data-toc-title="Still open">Still open</h2>
-          <p>These are not unfinished work in the sense of running out of time. Each one is waiting
-            on a decision or an input that only the challenge leads can give. The pipeline reports an
-            unavailable value as unavailable, and does not compute a metric whose formula has not
-            been agreed.</p>
+          <p>None of these ran out of time. Each is waiting on something only the challenge leads can
+            give. Nothing here is guessed at: a value that cannot be worked out is written as
+            unavailable.</p>
           <div class="docs-table-wrap">
             <table>
               <thead><tr><th>Item</th><th>What is missing</th></tr></thead>
               <tbody>
-                <tr><td>Accuracy, deviance</td><td>The definition. Accuracy could mean signed bias, RMSE, or absolute or percentage error.</td></tr>
-                <tr><td>Inter-participant, inter-repeat and inter-site SD and CoV</td><td>Whether to aggregate scan-level ROI medians or pooled voxel values, and whether repeats and sites are paired within a participant first. The code exists and is switched off.</td></tr>
-                <tr><td>Residual sum of squares</td><td>The measured dynamic signal. Submissions carry the modelled signal only, and RSS needs both.</td></tr>
-                <tr><td>ICC</td><td>Which ICC model, and whether repeatability comes from repeated noise-varied datasets.</td></tr>
-                <tr><td>ASL and DSC completeness rules</td><td>Which maps each challenge requires and the dataset grid. The map types are configured; the challenge entries are empty.</td></tr>
-                <tr><td>BIDS validation</td><td>Not implemented. NIfTI checks are readability, dimensions and value sanity only.</td></tr>
+                <tr><td>Accuracy, deviance</td><td>The formula. Accuracy could mean bias, RMSE, or absolute or percentage error.</td></tr>
+                <tr><td>SD and CoV across repeats, sites and participants</td><td>Two conventions. The code is written and switched off.</td></tr>
+                <tr><td>Residual sum of squares</td><td>The measured signal. Submissions carry the modelled one only.</td></tr>
+                <tr><td>ICC</td><td>Which model, and whether repeated datasets are supplied.</td></tr>
+                <tr><td>ASL and DSC rules</td><td>Which maps each needs. The map types are set up, the challenge entries are empty.</td></tr>
+                <tr><td>BIDS validation</td><td>Not built. NIfTI checks cover readability, shape and values.</td></tr>
               </tbody>
             </table>
           </div>
@@ -121,50 +114,42 @@
 
         <section>
           <h2 id="who-changes-what" data-toc-title="Who changes what">Who changes what</h2>
-          <p>Most of what a challenge team will want to change after this project ends needs no
-            developer. The line is drawn at arithmetic: what a challenge requires and which script
-            scores it are configuration, while a new formula is code.</p>
+          <p>Most of what a challenge team will want to change later needs no developer. The line is
+            drawn at arithmetic: what a challenge asks for and which script scores it are settings,
+            while a new formula is code.</p>
 
           <div class="docs-table-wrap">
             <table>
               <thead><tr><th>Change</th><th>How</th><th>Needs a developer</th></tr></thead>
               <tbody>
-                <tr><td>Install or replace a scoring script</td><td>Upload the ZIP in Scoring Setup, then select it for the challenge</td><td>No</td></tr>
-                <tr><td>Change which metrics a script reports</td><td>Edit <code>manifest.json</code> in the ZIP, any text editor</td><td>No</td></tr>
-                <tr><td>Change required or optional maps</td><td>Edit <code>config/validation_rules.yaml</code>, then press Reload rules</td><td>No</td></tr>
-                <tr><td>Change participant, repeat or site counts</td><td>Same file, same button</td><td>No</td></tr>
-                <tr><td>Add a filename alias</td><td>Same file, same button</td><td>No</td></tr>
-                <tr><td>Turn on the grouped SD and CoV statistics</td><td>Confirm the two open conventions, then a config flag</td><td>No, once the conventions are agreed</td></tr>
-                <tr><td>Define a new metric, such as accuracy or ICC</td><td>Python, with tests</td><td>Yes</td></tr>
+                <tr><td>Install or replace a scoring script</td><td>Upload the ZIP in Scoring Setup, then pick it for the challenge</td><td>No</td></tr>
+                <tr><td>Change which metrics it reports</td><td>Edit <code>manifest.json</code> in the ZIP, any text editor</td><td>No</td></tr>
+                <tr><td>Change required maps, dataset counts or filename aliases</td><td>Edit <code>config/validation_rules.yaml</code>, then press Reload rules</td><td>No</td></tr>
+                <tr><td>Turn on the grouped SD and CoV</td><td>Agree the two conventions, then a setting</td><td>No, once agreed</td></tr>
+                <tr><td>Define a new metric such as accuracy or ICC</td><td>Python, with tests</td><td>Yes</td></tr>
               </tbody>
             </table>
           </div>
 
-          <p>Editing the rules used to mean restarting the container, which meant a terminal. There
-            is now a <strong>Reload rules</strong> button in Scoring Setup that re-reads the file and
-            reports a mistake on screen. A rejected edit changes nothing: the configuration already
-            running stays running until a valid one replaces it.</p>
-
-          <p>What is not covered: the rules are still edited as YAML in a text editor, not through a
-            form. That is the obvious next improvement, and it needs the config directory mounted
-            writable and a save path that cannot corrupt the file.</p>
+          <p>The rules are still edited as YAML in a text editor rather than through a form. That is
+            the obvious next thing to build.</p>
         </section>
 
         <section>
           <h2 id="testing" data-toc-title="Testing">Testing</h2>
-          <p>693 Python tests and 1,125 frontend checks. More useful than the count: seven production
-            bugs were found by running a real archive through the real interface, not by the suite.
-            Among them, a DCE archive split into two submissions, shared root files were destroyed
-            during the batch carve, ROI masks were counted twice on macOS, and the blinded report
-            printed the team name in its Affected column. Each fix has a regression test, and each
-            test was checked by deliberately breaking the fix to confirm the test notices.</p>
-          <p>A single command runs the whole pipeline end to end and writes the reports, the CSVs and
-            a summary of what it verified:</p>
+          <p>704 Python tests and 1,125 frontend checks. The more useful number is seven: production
+            bugs found by pushing a real archive through the real interface, which the suite had not
+            caught. A DCE archive split into two submissions. Shared files were deleted during the
+            batch split. ROI masks counted twice on macOS. The blinded report printed the team name.
+            Every fix has a test, and every test was checked by breaking the fix on purpose to see
+            whether the test noticed.</p>
+          <p>One command runs the whole thing and writes the reports, the CSVs and a list of what it
+            checked:</p>
           <div class="docs-code">
             <div class="docs-code-header"><span>Demo</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>python3 scripts/demo_evidence.py</code></pre>
           </div>
-          <p>See <a href="examples.html#example-output">Example output</a> for a report it produced.</p>
+          <p>See <a href="examples.html#example-output">Example output</a> for a report it made.</p>
         </section>
 
         <section>

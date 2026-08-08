@@ -41,11 +41,13 @@
       file: "how-it-works.html",
       tab: "How it works",
       links: [
-        ["#indexing", "Indexing"],
-        ["#validation", "Validation"],
-        ["#execution", "Execution"],
-        ["#statistics", "Statistics"],
-        ["#outputs", "Outputs"],
+        ["#the-problem", "The problem"],
+        ["#the-steps", "The steps"],
+        ["#indexing", "Upload and Review"],
+        ["#validation", "Validate"],
+        ["#execution", "Run"],
+        ["#statistics", "QC and Preview"],
+        ["#outputs", "Export"],
       ],
     },
     {
@@ -134,7 +136,7 @@
 
   // ── Sidebar: this page's sections, then the other pages ────────────────
   function buildSidebar(host) {
-    // An unlisted page — one deliberately kept out of PAGES — has no entry to
+    // An unlisted page: one deliberately kept out of PAGES, has no entry to
     // find. Falling back to the first page would print Overview's section
     // links under an Overview heading on a page that contains neither, so the
     // "on this page" group is skipped entirely and only the site map is shown.

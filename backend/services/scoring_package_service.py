@@ -1,4 +1,4 @@
-"""backend/services/scoring_package_service.py — Scoring package manager.
+"""backend/services/scoring_package_service.py, Scoring package manager.
 
 A scoring package is a ZIP archive or directory containing:
     manifest.json     (required)
@@ -8,17 +8,17 @@ A scoring package is a ZIP archive or directory containing:
     README.md         (optional)
 
 manifest.json required fields:
-    package_id      — filesystem-safe identifier, e.g. "my_challenge_v1"
-    name            — human-readable display name
-    challenge_type  — any challenge id configured in config/validation_rules.yaml
+    package_id     , filesystem-safe identifier, e.g. "my_challenge_v1"
+    name           , human-readable display name
+    challenge_type , any challenge id configured in config/validation_rules.yaml
 
 manifest.json optional fields:
-    version         — semver string, default "1.0.0"
-    map_type        — configured map id/display, e.g. "ktrans" or "cbf"
-    description     — free-text description
-    metrics         — list of metric names the script produces
-    entry_point     — filename of the scoring script, default "scoring.py"
-    call_mode       — "standard" (default) | "osipi_cwd"
+    version        , semver string, default "1.0.0"
+    map_type       , configured map id/display, e.g. "ktrans" or "cbf"
+    description    , free-text description
+    metrics        , list of metric names the script produces
+    entry_point    , filename of the scoring script, default "scoring.py"
+    call_mode      , "standard" (default) | "osipi_cwd"
                       "standard"  → python scoring.py --submission-dir <dir>
                                       --output-dir <dir> [--reference-dir <dir>]
                       "osipi_cwd" → run with cwd=package_dir; script reads
@@ -341,7 +341,7 @@ def remove_package(package_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _check_package_ready_internal(pkg_dir: Path, manifest: dict) -> dict:
-    """Internal check — returns a status dict.
+    """Internal check, returns a status dict.
 
     A package is "ready" when:
     - The scoring script (entry_point) exists.
@@ -355,7 +355,7 @@ def _check_package_ready_internal(pkg_dir: Path, manifest: dict) -> dict:
     # Check for reference data (any NIfTI in reference/, masks/, or root)
     nifti_count = _count_niftis_in(pkg_dir)
     has_reference = (pkg_dir / "reference").exists() or (pkg_dir / "masks").exists() or nifti_count > 0
-    # Reference data is advisory — don't mark as missing unless package has a reference/ dir placeholder
+    # Reference data is advisory: don't mark as missing unless package has a reference/ dir placeholder
     ref_dir = pkg_dir / "reference"
     mask_dir = pkg_dir / "masks"
     if ref_dir.exists() and not _count_niftis_in(ref_dir):
@@ -378,7 +378,7 @@ def _count_niftis_in(path: Path) -> int:
 
 
 def check_package_ready(package_id: str) -> dict:
-    """Public wrapper — check readiness of an installed package."""
+    """Public wrapper, check readiness of an installed package."""
     pkg_dir = SCORING_PACKAGES_DIR / package_id
     if not pkg_dir.exists():
         return {"ready": False, "missing": [f"Package {package_id!r} not installed."]}
@@ -507,9 +507,9 @@ def run_package_scoring(
             "status":         "scored",
             "scored_at":      scored_at,
             "message": (
-                "Scoring complete — metrics parsed."
+                "Scoring complete, metrics parsed."
                 if metrics else
-                "Scoring complete — artifacts saved. No metrics.json found in output."
+                "Scoring complete, artifacts saved. No metrics.json found in output."
             ),
             "stdout":         proc.stdout[:4096],
             "metrics":        metrics,

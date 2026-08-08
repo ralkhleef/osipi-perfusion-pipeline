@@ -34,7 +34,7 @@ _RULE_TOP_LEVEL_KEYS = {
     "code_folder_names",
     "map_types",
     "challenges",
-    # Optional. Describes submitted files that are not parameter maps — a 4-D
+    # Optional. Describes submitted files that are not parameter maps, a 4-D
     # fitted signal, a methods document. Absent in older configs.
     "artifact_types",
 }
@@ -680,8 +680,8 @@ def validate_config_files() -> tuple[dict[str, Any], dict[str, Any]]:
     """Re-read and validate both config files, dropping everything derived.
 
     The parsed YAML is not the only thing cached. Ingestion keeps its own
-    lru_caches built from it — dataset names, compiled filename patterns, the
-    map and artifact indexes — and those were never cleared here, so a reload
+    lru_caches built from it, dataset names, compiled filename patterns, the
+    map and artifact indexes, and those were never cleared here, so a reload
     picked up new rules while still matching filenames against the old
     patterns. Clearing only half the caches is worse than clearing none,
     because the two halves then disagree.
@@ -750,7 +750,7 @@ def required_maps_by_challenge() -> dict[str, tuple[str, ...]]:
     """Map ids a submission must provide, per challenge.
 
     Empty for any challenge that has not declared ``required_maps``. Nothing
-    enforces this yet — Phase 1 only describes the requirement. Existing
+    enforces this yet, Phase 1 only describes the requirement. Existing
     ``expected_maps`` behaviour is untouched, which is what keeps ASL and DSC
     validation identical.
     """
@@ -778,7 +778,7 @@ def filename_identity_patterns_by_challenge() -> dict[str, tuple[str, ...]]:
     a compiled pattern is neither copyable nor serialisable. The parser
     compiles them once behind its own cache.
 
-    Order is significant — the first pattern that matches wins.
+    Order is significant: the first pattern that matches wins.
     """
     return _challenge_id_list_raw("filename_identity_patterns")
 
@@ -838,7 +838,7 @@ def datasets_by_challenge() -> dict[str, dict[str, dict[str, int | None]]]:
     ``participants`` is ``None`` when the organiser has not finalised the
     cohort size; the schema permits this deliberately so an unknown count is
     not misrepresented as a decided one. Dataset names are not restricted to
-    synthetic/clinical — a future challenge may define its own.
+    synthetic/clinical, a future challenge may define its own.
     """
     result: dict[str, dict[str, dict[str, int | None]]] = {}
     for challenge, config in validation_rules().get("challenges", {}).items():

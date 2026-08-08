@@ -11,8 +11,8 @@ day and that is the convention they trust. Concretely:
     the only hues in the document are the logo and three status inks.
   * Numerals are tabular and right-aligned so columns compare vertically.
 
-Both renderers — the HTML report in ``backend/main.py`` and the ReportLab
-PDF in ``services/pdf_report_service.py`` — import their palette, logo, and
+Both renderers: the HTML report in ``backend/main.py`` and the ReportLab
+PDF in ``services/pdf_report_service.py``, import their palette, logo, and
 status logic from here so the two stay identical.
 
 The logo asset is ``frontend/assets/logo.svg``, which is really a thin SVG
@@ -57,7 +57,7 @@ BRAND = {
     "hairline":   "#c9ccd3",   # section underline
     "faint":      "#eceef1",   # row separators in dense tables
     "paper":      "#ffffff",
-    # Logo — used only for the mark itself
+    # Logo: used only for the mark itself
     "logo_plum":  "#830087",
     "logo_coral": "#fe575f",
     # Status inks. Dark enough to read as text on paper, and to survive a

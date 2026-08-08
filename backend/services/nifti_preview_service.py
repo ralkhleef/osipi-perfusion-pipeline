@@ -403,7 +403,7 @@ def _classify_preview_role(item: dict) -> dict:
     A file is a scored parameter map when it is exactly 3-D and has a recognized
     configured map type (CBF/Perfmap, ATT, …). 4-D files are ASL/model/time-series
     data (kept for download, never scored as a parameter map); anything else is
-    an unrecognized submitted file. This is display metadata only — it does not
+    an unrecognized submitted file. This is display metadata only, it does not
     change ingestion, validation, or scoring.
     """
     shape = [d for d in (item.get("shape") or []) if d]

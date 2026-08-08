@@ -18,7 +18,7 @@ disagreement is reported as an :class:`IdentityConflict` rather than being
 silently resolved.
 
 Directory matching is conservative on purpose. A folder is only classified
-when it matches a known prefix followed by an identifier — ``patient-004``
+when it matches a known prefix followed by an identifier, ``patient-004``
 is a participant, ``processed`` is not, even though both begin with "p".
 """
 
@@ -34,7 +34,7 @@ from osipi_pipeline.config.rules import (
 from osipi_pipeline.ingestion.models import IdentityConflict
 
 # Prefix vocabularies. Each entry must be followed by a separator and/or an
-# identifier — bare "processed" or "session" never classifies.
+# identifier, bare "processed" or "session" never classifies.
 _PARTICIPANT_PREFIXES = (
     "participant", "subject", "patient", "sub", "subj", "pat", "p",
 )

@@ -172,7 +172,7 @@ def test_table_numbering_stays_aligned_across_formats(monkeypatch) -> None:
     for number in ("Table 1.", "Table 2.", "Table 3.", "Table 4.", "Table 5."):
         assert number in html, number
         assert number in pdf, number
-    # Contents is Table 1, so ROI is Table 4 and errors Table 5 — in both.
+    # Contents is Table 1, so ROI is Table 4 and errors Table 5, in both.
     assert "Table 5. Errors and warnings" in html
     assert "Table 5. Errors and warnings" in pdf
 
@@ -319,7 +319,7 @@ def test_production_scoring_path_invokes_the_roi_layer(monkeypatch, tmp_path) ->
     """The wiring itself: analyze_submission_niftis must call the ROI layer.
 
     Without this, every other test still passes while nothing is ever
-    populated in production — which is exactly how Phase 4 shipped.
+    populated in production, which is exactly how Phase 4 shipped.
     """
     import scoring
 
