@@ -252,8 +252,8 @@
             <table>
               <thead><tr><th>What you changed</th><th>To apply it</th><th>Why</th></tr></thead>
               <tbody>
-                <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td><code>docker compose restart</code></td><td>The compose file mounts <code>./config</code> into the container, so the file is already current; the restart is what re-reads it.</td></tr>
-                <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use.</td></tr>
+                <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td>Press <strong>Reload rules</strong> in Scoring Setup</td><td>The compose file mounts <code>./config</code>, so the file is already current. The button re-reads it and drops everything cached from the old copy.</td></tr>
+                <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use and the button re-reads the same stale file.</td></tr>
                 <tr><td>A scoring package</td><td>Upload it in Scoring Setup</td><td>Packages are stored under <code>data/</code>, which is a mounted volume, and read per run.</td></tr>
                 <tr><td>Reference maps or ROI masks</td><td>Copy the files in</td><td>Also under <code>data/</code>, and located per submission.</td></tr>
                 <tr><td>Anything under <code>backend/</code>, <code>frontend/</code> or <code>src/</code></td><td><code>docker compose up --build</code></td><td>Source is copied into the image, not mounted.</td></tr>
@@ -263,14 +263,18 @@
 
           <div class="docs-callout">
             <p>A rules edit that appears to do nothing is almost always this: the file changed on
-              disk but the process is still holding what it read at startup, or the container is
-              running the copy baked into the image.</p>
+              disk but nobody pressed Reload, or the container is running the copy baked into the
+              image because <code>./config</code> is not mounted.</p>
           </div>
 
-          <h3 id="check-the-edit">Check the edit before restarting</h3>
-          <p>The file is validated when it loads, so a typo surfaces as a startup failure rather than
-            as silently ignored configuration. Reading it directly says whether it parses and what
-            the application will see, without waiting for a restart:</p>
+          <p>Reload reports a bad edit on screen and changes nothing. Whatever configuration was
+            running keeps running until a valid one replaces it, so a typo cannot take the pipeline
+            down mid-review.</p>
+
+          <h3 id="check-the-edit">Check the edit from a terminal</h3>
+          <p>The button is the normal route. If you would rather see the parsed result directly, or
+            you are working outside the container, reading the file says whether it parses and what
+            the application will see:</p>
           <div class="docs-code">
             <div class="docs-code-header"><span>Check</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>PYTHONPATH=src python3 -c "
@@ -290,7 +294,7 @@ print(datasets_by_challenge()['dce'])
         <div class="docs-content d-flex flex-wrap gap-3 justify-content-between">
           <span>OSIPI Perfusion Challenge Pipeline · Google Summer of Code 2026</span>
           <span class="d-flex gap-3">
-            <a href="https://osipi.github.io/" target="_blank" rel="noopener">OSIPI</a>
+            <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a>
             <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">GitHub repository</a>
           </span>
         </div>

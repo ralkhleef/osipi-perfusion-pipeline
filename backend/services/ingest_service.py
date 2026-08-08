@@ -496,12 +496,11 @@ def _finalize_staged_dir(
 
     # ── Batch: carve per-team submission dirs ─────────────────────────────────
     #
-    # Files sitting *beside* the batch directories belong to every submission in
-    # the batch — a shared methods document, README, or licence. The carve moves
-    # only the contents of each batch directory, and the staging directory is
-    # then deleted, so without this those files are destroyed and each
-    # submission is later reported as missing a required artifact it did supply.
-    # See CODE_WALKTHROUGH.md §B2.
+    # Files sitting beside the batch directories are shared by every submission
+    # in it: a methods document, a README, a licence. The carve moves only what
+    # is inside each directory and then deletes the staging area, so without
+    # this they are destroyed and every submission is reported as missing a
+    # required artifact it did supply. See CODE_WALKTHROUGH.md §B2.
     shared_files = sorted(
         item for item in batch_dirs[0].parent.iterdir() if item.is_file()
     )

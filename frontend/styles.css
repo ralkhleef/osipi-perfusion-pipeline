@@ -3928,6 +3928,24 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .scoring-setup-msg.ok  { color: #276749; }
 .scoring-setup-msg.err { color: #c53030; }
 
+/* Reload challenge rules */
+.config-reload {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+.config-reload-text { display: flex; flex-direction: column; gap: 2px; }
+.config-reload-text strong { font-size: 0.8125rem; }
+.config-reload-text span { font-size: 0.75rem; color: #4a5568; }
+.config-reload-msg { font-size: 0.75rem; margin-top: 8px; }
+.config-reload-msg.ok  { color: #276749; }
+.config-reload-msg.err { color: #c53030; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    RUN STEP — Card layout  (v41)
    ═══════════════════════════════════════════════════════════════════════════ */

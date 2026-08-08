@@ -35,12 +35,10 @@ from services.path_config import FRONTEND_DIR
 
 LOGO_SVG_PATH = FRONTEND_DIR / "assets" / "logo.svg"
 
-# The official full lockup: mark + OSIPI wordmark + "Open Science Initiative
-# for Perfusion Imaging". Used for the page-1 masthead. It is set on white
-# rather than transparent, which is fine because report pages are white; the
-# alternative (keying white out) would eat the coral's antialiased edges.
-# The mark-only SVG is still used for running heads, where the tagline would
-# be far too small to read.
+# The full lockup, for the page-1 masthead. On white rather than transparent,
+# which suits a white page and avoids keying out the coral's soft edges. The
+# mark-only SVG is used for running heads, where the tagline is too small to
+# read anyway.
 LOGO_LOCKUP_PATH = FRONTEND_DIR / "assets" / "logo-lockup.png"
 
 # ── Palette ───────────────────────────────────────────────────────────────
@@ -102,22 +100,9 @@ _TONE_RULES: tuple[tuple[str, str], ...] = (
     ("scored", "ok"),
 )
 
-# Typeface stacks.
-#
-# Every family here is one of ReportLab's base-14 fonts or a metric-compatible
-# system equivalent, for two reasons:
-#
-#  1. Reports are standalone downloads. The web app pulls Inter from Google
-#     Fonts, but a saved or emailed report has no network, so naming Inter
-#     meant the file silently rendered in whatever the browser substituted —
-#     a font "match" that only held on the developer's machine.
-#  2. The HTML and PDF have to agree. Georgia/Inter in one and Times/Helvetica
-#     in the other meant the same report looked like two different documents
-#     depending on which format you opened.
-#
-# So: Times for display, Helvetica/Arial for data, Courier for labels. The
-# mono is a deliberate nod to the typewriter face in the OSIPI lockup, and
-# unlike a webfont it cannot fail to load.
+# Only base-14 PDF fonts and their system equivalents. A report is downloaded
+# and emailed, so a webfont has no network to load from, and the HTML and the
+# PDF have to look like the same document.
 SERIF_STACK = "'Times New Roman', Times, serif"
 SANS_STACK = "Helvetica, Arial, 'Helvetica Neue', sans-serif"
 MONO_STACK = "'Courier New', Courier, monospace"

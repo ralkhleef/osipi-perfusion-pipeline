@@ -677,9 +677,25 @@ def app_settings() -> dict[str, Any]:
 
 
 def validate_config_files() -> tuple[dict[str, Any], dict[str, Any]]:
-    """Load and validate both repository config files."""
+    """Re-read and validate both config files, dropping everything derived.
 
+    The parsed YAML is not the only thing cached. Ingestion keeps its own
+    lru_caches built from it — dataset names, compiled filename patterns, the
+    map and artifact indexes — and those were never cleared here, so a reload
+    picked up new rules while still matching filenames against the old
+    patterns. Clearing only half the caches is worse than clearing none,
+    because the two halves then disagree.
+    """
     clear_config_cache()
+
+    # Imported here, not at module scope: both modules read this one, so a
+    # top-level import would be circular.
+    from osipi_pipeline.ingestion.artifact_classifier import clear_classifier_caches
+    from osipi_pipeline.ingestion.identity_parser import clear_identity_caches
+
+    clear_identity_caches()
+    clear_classifier_caches()
+
     return validation_rules(), app_settings()
 
 

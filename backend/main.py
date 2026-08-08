@@ -77,6 +77,7 @@ from services.pdf_report_service import (
     affected_display,
     build_limitations,
     generate_pdf_report,
+    export_filename,
     report_filename_tag,
 )
 from services.report_branding import (
@@ -96,6 +97,7 @@ from services.report_figures import (
     to_svg as figure_to_svg,
 )
 from osipi_pipeline.config.rules import (
+    ConfigValidationError,
     app_settings,
     challenge_labels,
     challenge_types,
@@ -105,6 +107,7 @@ from osipi_pipeline.config.rules import (
     map_type_patterns,
     map_type_specs,
     tuple_setting,
+    validate_config_files,
 )
 from osipi_pipeline.performance import job_status, recent_timings, timed
 from scoring import (
@@ -166,6 +169,38 @@ def index() -> FileResponse:
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/api/config/reload")
+def reload_config():
+    """Re-read config/ from disk so a rules edit needs no restart.
+
+    Editing ``validation_rules.yaml`` used to mean restarting the container,
+    which means a terminal. The rules are read once and cached for the life of
+    the process, so this drops those caches and reads the files again.
+
+    A bad edit is reported here rather than raised: the point of the button is
+    that someone who is not a developer can fix a typo and press it again. A
+    500 would leave them reading a stack trace, and — worse — the previous
+    configuration is still the one in memory, so the pipeline keeps working
+    while they sort it out. That is worth saying out loud in the response.
+    """
+    try:
+        rules, _settings = validate_config_files()
+    except ConfigValidationError as exc:
+        return {
+            "reloaded": False,
+            "error": str(exc),
+            "detail": "The previous configuration is still in use.",
+        }
+
+    challenges = sorted(rules.get("challenges") or {})
+    return {
+        "reloaded": True,
+        "challenges": challenges,
+        "map_types": sorted(rules.get("map_types") or {}),
+        "reloaded_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @app.get("/api/config")
@@ -707,12 +742,9 @@ def _find_validation_files(submission_id: Optional[str] = None):
     unique.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     if submission_id:
-        # Exact stem match, never a substring. Files are written as
-        # "<submission_id>_validation.json", so substring matching made any id
-        # that is a *prefix* of a real one resolve to that other submission's
-        # results — and batch carving creates exactly such prefixes
-        # ("team_gamma" vs "team_gamma_Clinical"). A blinded report for a
-        # mistyped id would then render another team's findings under the
+        # Exact stem match, never a substring. Batch carving produces ids where
+        # one is a prefix of another ("team_gamma" and "team_gamma_Clinical"),
+        # so substring matching returned the wrong team's results under the
         # requested label. See CODE_WALKTHROUGH.md §B3.
         wanted = {
             f"{submission_id}_validation",
@@ -2790,7 +2822,6 @@ def export_combined(
             raise HTTPException(status_code=404, detail="No submissions found to export.")
         tag = report_filename_tag(
             (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
-        suffix = "blinded" if blinded else "unblinded"
         return Response(
             content=json.dumps({
                 "report_type": "blinded" if blinded else "unblinded",
@@ -2803,7 +2834,8 @@ def export_combined(
                 ],
             }, indent=2),
             media_type="application/json",
-            headers={"Content-Disposition": f'attachment; filename="osipi_combined_{tag}_{suffix}.json"'},
+            headers={"Content-Disposition":
+                     f'attachment; filename="{export_filename("osipi_combined", tag, blinded=blinded, extension="json")}"'},
         )
 
     # ── Long (tidy) CSV: one row per submission × subject × session × map × ROI × metric ──
@@ -2814,13 +2846,13 @@ def export_combined(
         w.writerow(header)
         for r in long_rows:
             w.writerow(r)
-        suffix = "blinded" if blinded else "unblinded"
         tag = report_filename_tag(
             (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
         return Response(
             content=out.getvalue(),
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="osipi_results_long_{tag}_{suffix}.csv"'},
+            headers={"Content-Disposition":
+                     f'attachment; filename="{export_filename("osipi_results_long", tag, blinded=blinded, extension="csv")}"'},
         )
 
     output = io.StringIO()
@@ -2869,13 +2901,13 @@ def export_combined(
     if not wrote_any:
         raise HTTPException(status_code=404, detail="No submissions found to export.")
 
-    suffix = "blinded" if blinded else "unblinded"
-    tag    = report_filename_tag(
+    tag = report_filename_tag(
         (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="osipi_combined_{tag}_{suffix}.csv"'},
+        headers={"Content-Disposition":
+                 f'attachment; filename="{export_filename("osipi_combined", tag, blinded=blinded, extension="csv")}"'},
     )
 
 
@@ -3032,12 +3064,8 @@ def export_report(
     )
 
 
-    # Generic QC bar charts were removed at researcher request: for single
-    # submissions they are trivial, and they are not the submitted-vs-reference
-    # agreement plot the challenge team wants (that is a future, mentor-defined
-    # deliverable). The report stays table-focused.
-    # Map preview thumbnails were removed from the report at researcher request
-    # (kept in the interactive app, not the printable report).
+    # No QC bar charts and no map thumbnails: the researchers asked for a
+    # table-focused printable report. Previews stay in the interactive app.
     issues_html = _issue_rows_html(summaries, blinded=blinded)
 
     metadata_rows_html = []
@@ -3208,12 +3236,9 @@ def export_report(
 
     blind_label = "Blinded report" if blinded else "Unblinded report"
 
-    # The report is downloaded and emailed as a standalone file, so the logo is
-    # embedded as a data URI rather than linked to /static (which would 404 the
-    # moment the file leaves the server). Falls back to a text-only masthead.
-    # Prefer the official full lockup (mark + wordmark + tagline). 760px keeps
-    # it crisp on retina at its ~300px rendered width. Falls back to the
-    # mark-only SVG plus a typeset wordmark if the lockup asset is missing.
+    # Embedded as a data URI, not linked to /static, because the report is
+    # downloaded and emailed and a link would 404 once it leaves the server.
+    # Full lockup first, then the mark, then a text masthead.
     lockup_uri = lockup_data_uri(760)
     logo_uri = None if lockup_uri else logo_data_uri(300)
     if lockup_uri:
@@ -3229,14 +3254,8 @@ def export_report(
     else:
         logo_html = '<div class="wordmark">OSIPI<span>Perfusion pipeline</span></div>'
 
-    # The Summary and Methods prose comes from the shared model so the HTML
-    # and PDF cannot drift. Both used to be written out twice — once here and
-    # once in the model — with no test comparing them, so an edit to either
-    # copy would silently produce two different reports from one dataset.
-    # Table 1 is rendered straight from the model, so the HTML and the PDF
-    # show the same measures in the same order. Building it by hand here is
-    # how the two drifted: the PDF gained the aggregate voxel statistics and
-    # the HTML silently kept showing only the reference rows.
+    # Prose and table rows both come from the shared model. Writing them out
+    # here as well is what let the HTML and the PDF drift apart before.
     summary_rows_html = "".join(
         f"<tr><td>{_esc(measure)}</td><td>"
         + (_status_chip_html(value) if measure == "Reference status"

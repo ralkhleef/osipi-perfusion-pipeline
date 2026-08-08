@@ -6570,7 +6570,51 @@ async function _saveScoringSetup() {
   // Save button
   const saveBtn = el("scoring-setup-save-btn");
   if (saveBtn) saveBtn.addEventListener("click", _saveScoringSetup);
+
+  // Reload challenge rules after someone edits validation_rules.yaml.
+  const reloadBtn = el("config-reload-btn");
+  if (reloadBtn) reloadBtn.addEventListener("click", _reloadChallengeRules);
 })();
+
+async function _reloadChallengeRules() {
+  const btn = el("config-reload-btn");
+  const msg = el("config-reload-msg");
+
+  const show = (text, ok) => {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = `config-reload-msg ${ok ? "ok" : "err"}`;
+    msg.style.display = "";
+  };
+
+  if (btn) setLoading(btn, true, "Reloading");
+  try {
+    const r = await fetch(`${API}/api/config/reload`, { method: "POST" });
+    const d = await r.json();
+
+    // A rejected config is a normal answer here, not a failure to reach the
+    // server: the person is expected to fix the file and press the button
+    // again. Say which configuration is actually running so they are not left
+    // wondering whether they have broken the pipeline.
+    if (!r.ok) throw new Error(d.detail || "Request failed");
+    if (!d.reloaded) {
+      show(`${d.error} ${d.detail || ""}`.trim(), false);
+      return;
+    }
+
+    const challenges = (d.challenges || []).join(", ") || "none";
+    show(`Rules reloaded. Challenges: ${challenges}.`, true);
+
+    // The challenge dropdown and map pills were built from the old config, so
+    // re-pull them. Without this the server has the new rules and the screen
+    // still shows the old ones.
+    await hydrateAppConfig();
+  } catch (err) {
+    show(`Could not reload: ${err.message}`, false);
+  } finally {
+    if (btn) setLoading(btn, false);
+  }
+}
 
 // ── renderScoreStep() ─────────────────────────────────────────────────────────
 

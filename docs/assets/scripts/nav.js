@@ -49,6 +49,15 @@
       ],
     },
     {
+      id: "examples",
+      file: "examples.html",
+      tab: "Examples",
+      links: [
+        ["#interface", "The interface"],
+        ["#example-output", "Example output"],
+      ],
+    },
+    {
       id: "configuration",
       file: "configuration.html",
       tab: "Configuration",
@@ -60,6 +69,19 @@
         ["#scoring-providers", "Scoring providers"],
         ["#reference-data", "Reference data and masks"],
         ["#apply-a-change", "Apply a change"],
+      ],
+    },
+    {
+      id: "gsoc",
+      file: "gsoc.html",
+      tab: "GSoC",
+      links: [
+        ["#project", "The project"],
+        ["#what-shipped", "What shipped"],
+        ["#still-open", "Still open"],
+        ["#who-changes-what", "Who changes what"],
+        ["#testing", "Testing"],
+        ["#documents", "Documents"],
       ],
     },
   ];
@@ -76,7 +98,7 @@
   // behaviour for an unlisted page and is why the fallback exists.
 
   const EXTERNAL = [
-    ["https://osipi.github.io/", "OSIPI"],
+    ["https://osipi.ismrm.org/", "OSIPI"],
     ["https://github.com/ralkhleef/osipi-perfusion-pipeline", "GitHub"],
   ];
 

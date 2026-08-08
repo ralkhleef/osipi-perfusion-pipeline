@@ -12,7 +12,10 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+# Root-anchored: this is the pip download cache. Unanchored it matched any
+# directory called downloads, which silently excluded docs/downloads/ and the
+# example reports the documentation site offers.
+/downloads/
 eggs/
 .eggs/
 lib/

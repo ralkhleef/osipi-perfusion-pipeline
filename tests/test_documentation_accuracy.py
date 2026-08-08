@@ -302,6 +302,84 @@ def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
                 f"{page.name} embeds {source}, which is not in the repository"
 
 
+def test_the_example_report_is_a_real_one_the_code_produced() -> None:
+    """The published example must be output, not a hand-written mock-up.
+
+    A mocked-up report is the most convincing kind of wrong thing to publish:
+    it looks exactly like the real deliverable and is under no obligation to
+    match it. Pinning structure the generator emits means a hand-edited stand-in
+    would have to reproduce the generator to pass, at which point it is real.
+    """
+    report = (DOCS / "downloads" / "example-report-blinded.html").read_text()
+    for marker in ("<!DOCTYPE html", "Submission 1"):
+        assert marker in report, f"the example report lacks {marker!r}"
+    # The blinding promise the page makes about this exact file.
+    assert "Team and contact details were withheld" in report
+    for leaked in ("Team Gamma", "gamma@example.org", "DCE_Test_Clean"):
+        assert leaked not in report, f"the published example leaks {leaked!r}"
+
+
+def _offered_downloads() -> list[str]:
+    """Local files any page offers for download. Remote links are not ours."""
+    found: list[str] = []
+    for page in PAGES:
+        found += [
+            target for target in
+            re.findall(r'class="docs-download" href="([^"]+)"', page.read_text())
+            if not target.startswith(("http://", "https://"))
+        ]
+    return found
+
+
+def test_every_download_the_page_offers_exists_and_is_not_empty() -> None:
+    offered = _offered_downloads()
+    assert offered, "no downloads are offered anywhere on the site"
+    for target in offered:
+        path = DOCS / target
+        assert path.exists(), f"offered for download but missing: {target}"
+        assert path.stat().st_size > 1024, f"offered download is empty: {target}"
+
+
+def test_no_offered_download_is_excluded_from_version_control() -> None:
+    """Existing locally is not the same as being published.
+
+    A .gitignore rule of `downloads/` — unanchored, from the standard Python
+    template, meant for the pip cache — matched docs/downloads/ as well. The
+    files sat on disk, the page linked to them, every other check passed, and
+    they would have 404ed on the deployed site because they were never
+    committed. Nothing but git can answer this question.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("git") or not (ROOT / ".git").exists():
+        pytest.skip("not a git checkout")
+
+    targets = [str((DOCS / t).relative_to(ROOT)) for t in _offered_downloads()]
+    assert targets
+    result = subprocess.run(["git", "check-ignore", *targets],
+                            cwd=ROOT, capture_output=True, text=True)
+    ignored = [line for line in result.stdout.splitlines() if line.strip()]
+    assert not ignored, f"offered for download but gitignored: {ignored}"
+
+
+def test_each_screenshot_slot_names_the_file_that_replaces_it() -> None:
+    """The slots are temporary. Each has to say what fills it.
+
+    Without the filename recorded next to the slot, adding the screenshots
+    later becomes guesswork about where each one goes.
+    """
+    page = (DOCS / "examples.html").read_text()
+    figures = re.findall(r"<figure class=\"docs-screen\">(.*?)</figure>", page, re.S)
+    assert figures, "no interface slots or images found"
+    for figure in figures:
+        if "<img" in figure:
+            continue  # a real screenshot has replaced the slot
+        assert re.search(r"<!--\s*assets/images/screens/[\w-]+\.png\s*-->", figure), \
+            "an empty slot does not name the file that replaces it"
+        assert "<figcaption>" in figure, "an empty slot has no caption"
+
+
 def test_no_unreferenced_media_is_deployed() -> None:
     """Every image and recording under docs/assets must be used by a page.
 
@@ -464,15 +542,42 @@ def test_the_documented_health_check_hits_a_real_endpoint() -> None:
 
 
 def test_the_config_mount_the_instructions_depend_on_is_present() -> None:
-    """The docs promise a rules edit needs only a restart. That is only true
-    while the compose file mounts config/; dropping the mount silently makes
-    the instruction wrong, and the symptom — an edit that does nothing — is
-    exactly the confusion the section exists to prevent."""
+    """The docs promise a rules edit needs only the Reload button.
+
+    That is only true while the compose file mounts config/. Without the
+    mount the container reads the copy baked into the image, so Reload
+    re-reads the same stale file and the edit appears to do nothing — which
+    is exactly the confusion the section exists to prevent.
+    """
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     mounts = compose["services"]["osipi-backend"]["volumes"]
     assert "./config:/app/config:ro" in mounts, \
-        "compose no longer mounts config/, so 'docker compose restart' is not enough"
-    assert "docker compose restart" in TEXT
+        "compose no longer mounts config/, so Reload rules cannot see an edit"
+    assert "Reload rules" in TEXT, "the docs no longer name the button"
+
+
+def test_the_reload_button_the_docs_promise_actually_exists() -> None:
+    """Documentation is not allowed to invent an interface."""
+    app_js = (ROOT / "frontend" / "app.js").read_text()
+    index = (ROOT / "frontend" / "index.html").read_text()
+    main = (ROOT / "backend" / "main.py").read_text()
+
+    assert "Reload rules" in index, "the button the docs describe is not in the interface"
+    assert "/api/config/reload" in app_js and '"/api/config/reload"' in main, \
+        "the button is not wired to an endpoint"
+
+
+def test_the_osipi_link_points_at_the_real_organisation() -> None:
+    """OSIPI is at osipi.ismrm.org, not osipi.github.io.
+
+    Every page footer and the shared navbar carry this link, so getting it
+    wrong is wrong in seven places at once.
+    """
+    sources = PAGES + [DOCS / "assets" / "scripts" / "nav.js"]
+    for path in sources:
+        text = path.read_text()
+        assert "osipi.github.io" not in text, f"{path.name} links to the wrong OSIPI site"
+    assert "https://osipi.ismrm.org/" in TEXT, "the site no longer links to OSIPI"
 
 
 def test_the_clone_url_is_the_repository_the_site_links_to() -> None:

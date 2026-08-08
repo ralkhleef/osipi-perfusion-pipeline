@@ -682,14 +682,25 @@ def _relative_to_submission(path_text: str, summary: Mapping[str, Any]) -> str:
 def report_filename_tag(tag: str, *, blinded: bool) -> str:
     """A download filename fragment that respects blinding.
 
-    Export filenames were built from the raw submission or batch id, so a
-    blinded report downloaded as ``osipi_report_team_gamma_Clinical.html``.
-    Blinded exports get a neutral fragment instead; unblinded exports are
-    unchanged.
+    Export filenames used to be built from the raw submission or batch id, so
+    a blinded report downloaded as ``osipi_report_team_gamma_Clinical.html``.
+    Blinded exports get a neutral fragment instead. Unblinded ones keep the id.
     """
     if not blinded:
         return str(tag or "report")
     return "blinded"
+
+
+def export_filename(stem: str, tag: str, *, blinded: bool, extension: str) -> str:
+    """Build an export filename, without saying "blinded" twice.
+
+    Callers pair the tag from ``report_filename_tag`` with a blinded/unblinded
+    suffix. For a blinded export both are the word "blinded", which is how
+    ``osipi_combined_blinded_blinded.csv`` happened. One is enough.
+    """
+    suffix = "blinded" if blinded else "unblinded"
+    parts = [stem, tag] if tag == suffix else [stem, tag, suffix]
+    return "_".join(p for p in parts if p) + f".{extension}"
 
 
 def _submission_label(summary: Mapping[str, Any], index: int, *, blinded: bool) -> str:
@@ -1682,16 +1693,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         story.append(constrained(Paragraph(esc(line), lead_style), CONTENT_W))
         story.append(Spacer(1, 0.06 * inch))
 
-    # The "Submissions" table used to sit here listing submission, challenge,
-    # map types, and map count. Every one of those columns also appears in the
-    # results table, so it has been removed rather than shown twice.
-    #
-    # QC and reference agreement are closely related and each is narrow, so
-    # they sit side by side in one splittable table.
-    # Now that the duplicated voxel rows live only in the figures band, the
-    # QC side holds a single row, so the two-column split has been folded
-    # back into one table. It stays splittable across pages.
-    # Always emitted, empty or not, so the two formats number tables alike.
+    # Emitted even when empty, so the HTML and the PDF number their tables the
+    # same way.
     contents = model.get("submission_contents") or [
         ["Not available for this submission.", "", "", "", "", ""]]
     story.append(section("Submission contents"))
@@ -1707,12 +1710,8 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         + CAPTION_AGGREGATE_TAIL))
 
     # ── Figures ───────────────────────────────────────────────────────────
-    # One agreement figure per challenge: RMSE, MAE, and bias carry the units
-    # of the map they describe, so ASL and DCE cannot share an axis.
-    # One figure per parameter: Bland-Altman. The RMSE/MAE dot plot, the
-    # identity plot, and the finite-voxel plot were all cut — the first two
-    # restate what Bland-Altman and the results table already show, and a
-    # three-point plot of values between 98% and 99% is not worth a figure.
+    # One Bland-Altman per map type. RMSE, MAE and bias carry the units of the
+    # map they describe, so ASL and DCE cannot share an axis.
     fig_w = (CONTENT_W - 0.30 * inch) / 2
     blocks: list[list] = []
     for map_type, pts in (model.get("agreement_points") or {}).items():

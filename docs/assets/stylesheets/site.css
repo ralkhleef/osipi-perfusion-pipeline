@@ -324,6 +324,95 @@ h3:hover .docs-anchor,
 
 .docs-table-wrap { overflow-x: auto; }
 
+/* ── Interface screens ───────────────────────────────────────────────────── */
+
+.docs-screen { margin: 1.5rem 0 2rem; }
+
+.docs-screen img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 1px solid var(--docs-border);
+  border-radius: .375rem;
+}
+
+/* An empty slot waiting for a screenshot. Deliberately plain and clearly
+   empty: a reader should read it as "not here yet", never mistake it for the
+   interface, and never see a broken-image icon. */
+.docs-shot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  border: 1px dashed var(--docs-border);
+  border-radius: .375rem;
+  background: #f8f9fa;
+}
+
+/* Classed rather than a bare <span>: the documentation tests find worked
+   examples by matching <span>Label</span> code-block headers, and an unclassed
+   label here matched "Run" ahead of the real docker run block. */
+.docs-shot-label {
+  font-size: .875rem;
+  color: var(--docs-muted);
+  letter-spacing: .02em;
+}
+
+.docs-screen figcaption {
+  font-size: .9rem;
+  color: var(--docs-muted);
+  margin-top: .6rem;
+}
+
+.docs-screen figcaption strong { color: var(--bs-body-color); }
+
+/* ── Downloads ───────────────────────────────────────────────────────────── */
+
+.docs-downloads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: .75rem;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.docs-download {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "kind name" "kind note";
+  column-gap: .85rem;
+  align-items: center;
+  padding: .8rem 1rem;
+  border: 1px solid var(--docs-border);
+  border-radius: .375rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.docs-download:hover {
+  border-color: var(--osipi-primary);
+  background: #f8f9fb;
+}
+
+.docs-download-kind {
+  grid-area: kind;
+  align-self: center;
+  font-size: .6875rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--osipi-primary);
+  border: 1px solid currentColor;
+  border-radius: .25rem;
+  padding: .15rem .4rem;
+}
+
+.docs-download-name { grid-area: name; font-weight: 500; }
+
+.docs-download-note {
+  grid-area: note;
+  font-size: .8125rem;
+  color: var(--docs-muted);
+}
+
 /* ── Callout — used sparingly ────────────────────────────────────────────── */
 
 .docs-callout {

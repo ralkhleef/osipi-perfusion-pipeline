@@ -582,6 +582,22 @@
             </div>
           </details>
 
+          <!-- Reloading challenge rules. Editing config/validation_rules.yaml
+               otherwise means restarting the container, which means a
+               terminal. This is the same read-and-validate the app does at
+               startup, so a typo is reported here instead of as a container
+               that will not start. -->
+          <div class="config-reload">
+            <div class="config-reload-text">
+              <strong>Challenge rules</strong>
+              <span>Reload <code>config/validation_rules.yaml</code> after editing it. No restart needed.</span>
+            </div>
+            <button type="button" id="config-reload-btn" class="btn btn-secondary btn-sm">
+              Reload rules
+            </button>
+          </div>
+          <div id="config-reload-msg" class="config-reload-msg" style="display:none"></div>
+
         </div>
       </details>
 

@@ -139,6 +139,13 @@ def _assert_clean(text: str, what: str) -> None:
 def client(monkeypatch):
     import main
 
+    # Capture the real shape BEFORE patching. _summary() calls _base_summary(),
+    # which calls _gather_summary() on its first use only — so if the patch
+    # lands first, that call reaches the patch and recurses. It survived only
+    # because some earlier test in the file happened to warm the cache. Running
+    # a fixture test on its own hit the recursion.
+    _base_summary()
+
     monkeypatch.setattr(main, "_collect_export_ids", lambda b, s: [SID])
     monkeypatch.setattr(main, "_gather_summary", lambda sid: _summary())
     from fastapi.testclient import TestClient
@@ -418,6 +425,40 @@ def test_roi_export_filename_can_be_blinded(client) -> None:
 
     default = api.get("/api/export-roi-descriptive", params={"submission_id": SID})
     assert SID in default.headers["content-disposition"]
+
+
+@pytest.mark.parametrize("endpoint,params,expected", [
+    ("/api/export-combined", {"format": "csv"}, "osipi_combined_blinded.csv"),
+    ("/api/export-combined", {"format": "json"}, "osipi_combined_blinded.json"),
+    ("/api/export-combined", {"format": "csv", "shape": "long"},
+     "osipi_results_long_blinded.csv"),
+])
+def test_blinded_downloads_do_not_say_blinded_twice(client, endpoint, params,
+                                                    expected) -> None:
+    """The neutral tag and the blinded suffix are the same word.
+
+    Blinding the filename replaced the submission id with "blinded", but the
+    suffix already said "blinded", so exports downloaded as
+    ``osipi_combined_blinded_blinded.csv``. Cosmetic, but it is the filename
+    a reviewer sees.
+    """
+    _, api = client
+    response = api.get(endpoint,
+                       params={"submission_id": SID, "blinded": "true", **params})
+    assert response.status_code == 200
+    disposition = response.headers["content-disposition"]
+    assert "blinded_blinded" not in disposition, disposition
+    assert expected in disposition, disposition
+
+
+def test_unblinded_downloads_still_name_the_submission(client) -> None:
+    """Collapsing the duplicate must not collapse the useful half."""
+    _, api = client
+    response = api.get("/api/export-combined",
+                       params={"submission_id": SID, "blinded": "false",
+                               "format": "csv"})
+    disposition = response.headers["content-disposition"]
+    assert SID in disposition and "unblinded" in disposition, disposition
 
 
 # ── Degraded and error paths ──────────────────────────────────────────────

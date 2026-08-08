@@ -275,3 +275,32 @@ def test_invalid_numeric_limit_reports_exact_path(tmp_path: Path, monkeypatch: p
 
 def test_malformed_yaml_reports_clear_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _assert_config_error(tmp_path, monkeypatch, "version: [", "malformed YAML")
+
+
+# ── Reloading configuration clears everything derived from it ─────────────
+
+def test_reloading_config_also_drops_the_ingestion_caches(tmp_path, monkeypatch) -> None:
+    """A reload that clears half the caches leaves the halves disagreeing.
+
+    ``validate_config_files`` re-read the YAML but left ingestion matching
+    filenames against patterns compiled from the previous configuration, so a
+    newly added alias was accepted by the schema and still not recognised.
+    """
+    from osipi_pipeline.config import rules as config_rules
+    from osipi_pipeline.ingestion import artifact_classifier, identity_parser
+
+    # Warm every cache so there is something stale to drop.
+    config_rules.validation_rules()
+    identity_parser._dataset_names("dce")
+    artifact_classifier._map_pattern_index()
+
+    assert identity_parser._dataset_names.cache_info().currsize > 0
+    assert artifact_classifier._map_pattern_index.cache_info().currsize > 0
+
+    config_rules.validate_config_files()
+
+    assert config_rules.validation_rules.cache_info().currsize <= 1
+    assert identity_parser._dataset_names.cache_info().currsize == 0, \
+        "reload left stale dataset names cached"
+    assert artifact_classifier._map_pattern_index.cache_info().currsize == 0, \
+        "reload left stale filename patterns cached"
