@@ -55,16 +55,18 @@
       <div class="docs-content">
 
         <section>
-          <h2 id="the-problem" data-toc-title="The problem">The problem</h2>
-          <p>A challenge team sends OSIPI a ZIP of parameter maps. Someone then has to open it, work
-            out which challenge it is for, check the right files are there and that they open, run the
-            team's code if they sent code, work out the numbers, and write it all up in a form that
-            can be shared without saying who sent what.</p>
-          <p>Doing that by hand is slow, and two people doing it will not do it the same way. The
-            problem is not that any one check is hard. It is that there are a lot of them, they have
-            to be done the same way every time, and the person doing them should not be able to see
-            whose submission it is.</p>
-          <p>This tool does those steps in a fixed order and writes down what it found.</p>
+          <h2 id="why" data-toc-title="Why it exists">Why it exists</h2>
+          <p>Ask two labs to compute Ktrans from the same DCE scan and you will get two different
+            maps. The differences come from the model, the fitting, the arterial input function, and
+            choices nobody wrote down. The same is true of CBF and ATT from ASL. OSIPI runs challenges
+            to find out how large those differences actually are, because that is what standing
+            behind a number in clinical research requires.</p>
+          <p>That only means something if every submission is treated identically. If one team's maps
+            are checked more carefully than another's, or scored against a different mask, or read by
+            someone who knows which lab sent them, the comparison stops measuring the methods and
+            starts measuring the review.</p>
+          <p>So this pipeline runs the same steps in the same order for every submission, records
+            what it found, and keeps the team's name away from whoever reads the results.</p>
 
           <h2 id="the-steps" data-toc-title="The steps">The steps</h2>
           <div class="docs-table-wrap">

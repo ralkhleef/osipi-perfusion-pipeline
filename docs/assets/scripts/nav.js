@@ -41,7 +41,7 @@
       file: "how-it-works.html",
       tab: "How it works",
       links: [
-        ["#the-problem", "The problem"],
+        ["#why", "Why it exists"],
         ["#the-steps", "The steps"],
         ["#indexing", "Upload and Review"],
         ["#validation", "Validate"],
