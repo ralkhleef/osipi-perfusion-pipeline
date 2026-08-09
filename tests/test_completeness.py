@@ -351,22 +351,46 @@ def test_conflict_message_states_directory_won() -> None:
 
 # ── Legacy challenges ─────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("challenge", ["asl", "dsc"])
-def test_challenges_without_new_config_produce_no_issues(challenge: str) -> None:
-    """ASL and DSC declare none of the new fields, so nothing is enforced."""
-    flat = [SubmissionArtifact(path="cbf.nii.gz", role="parameter_map",
-                               challenge=challenge, map_type="cbf", dimensions=3)]
-    assert _run(flat, challenge=challenge) == []
+@pytest.mark.parametrize("challenge,present,missing", [
+    ("asl", "cbf", "att"),
+    ("dsc", "cbv", "mtt"),
+])
+def test_a_missing_required_map_is_an_error_for_asl_and_dsc(
+    challenge: str, present: str, missing: str
+) -> None:
+    """These used to pass silently.
+
+    ASL and DSC declared no required maps, so a submission carrying one map
+    out of three raised nothing at all. Now the absent one is reported.
+    """
+    # A full scan identity, so the run reaches the required-map check rather
+    # than stopping at INCOMPLETE_ARTIFACT_IDENTITY.
+    flat = [SubmissionArtifact(path=f"main/P1/S1/R1/{present}.nii.gz",
+                               role="parameter_map", challenge=challenge,
+                               map_type=present, dimensions=3,
+                               dataset="main", participant="1",
+                               site="1", repeat="1")]
+    issues = _run(flat, challenge=challenge)
+
+    codes = {i["code"] for i in issues}
+    assert "REQUIRED_MAP_MISSING" in codes, f"{challenge} reported {codes or 'nothing'}"
+    assert any(missing in i["message"].lower() for i in issues), \
+        f"{challenge} did not name the missing {missing} map"
 
 
 @pytest.mark.parametrize("challenge,expected", [
     ("dce", {"ktrans", "vp", "ve", "kep"}),
-    ("asl", set()),
-    ("dsc", set()),
+    ("asl", {"cbf", "att"}),
+    ("dsc", {"cbv", "cbf", "mtt"}),
 ])
-def test_legacy_warning_suppression_is_scoped_to_migrated_challenges(
+def test_the_legacy_warning_is_suppressed_wherever_the_new_rules_apply(
     challenge: str, expected: set
 ) -> None:
+    """A map covered by required_maps must not also raise the old warning.
+
+    Reporting a missing map twice, once as an error and once as a warning,
+    would double-count it in every summary the reviewer reads.
+    """
     assert set(suppressed_legacy_map_ids(challenge)) == expected
 
 

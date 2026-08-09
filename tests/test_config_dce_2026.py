@@ -159,21 +159,39 @@ def test_expected_maps_is_unchanged_by_the_new_fields(tmp_path: Path, monkeypatc
     assert cfg.expected_maps_by_challenge()["dce"] == ("ktrans", "kep", "vp")
 
 
-def test_repository_config_keeps_asl_and_dsc_behaviour() -> None:
-    """The shipped config must not change ASL or DSC in any accessor."""
+def test_asl_and_dsc_declare_the_maps_they_exist_to_collect() -> None:
+    """ASL and DSC are configured, not just named.
+
+    They previously declared nothing beyond `expected_maps`, so a submission
+    missing every map raised a warning and passed. CBF and ATT are the whole
+    point of an ASL submission, and CBV, CBF and MTT of a DSC one, so a
+    missing map is now an error.
+
+    Nothing scientific is decided here: no metric, threshold or cohort size.
+    """
     config_rules.clear_config_cache()
-    expected = config_rules.expected_maps_by_challenge()
-    assert expected["asl"] == ("cbf", "att")
-    assert expected["dsc"] == ("cbv", "cbf", "mtt")
-    for accessor in (
-        config_rules.required_maps_by_challenge,
-        config_rules.optional_maps_by_challenge,
-        config_rules.required_artifacts_by_challenge,
-    ):
-        assert accessor()["asl"] == (), accessor.__name__
-        assert accessor()["dsc"] == (), accessor.__name__
-    assert config_rules.datasets_by_challenge()["asl"] == {}
-    assert config_rules.datasets_by_challenge()["dsc"] == {}
+
+    required = config_rules.required_maps_by_challenge()
+    assert set(required["asl"]) == {"cbf", "att"}
+    assert set(required["dsc"]) == {"cbv", "cbf", "mtt"}
+
+    # Nothing beyond the maps is mandatory until the challenge leads say so.
+    artifacts = config_rules.required_artifacts_by_challenge()
+    assert artifacts["asl"] == () and artifacts["dsc"] == ()
+
+
+def test_asl_and_dsc_declare_no_dataset_grid() -> None:
+    """Their layout has not been stated, so none is invented here.
+
+    A dataset name is not inert. Ingestion reads these names to decide
+    whether a top-level directory partitions one submission or separates two
+    teams, so inventing a placeholder dataset would change how real archives
+    are unpacked. The schema accepts null counts now, so a grid can be added
+    as soon as one exists, without another schema change.
+    """
+    config_rules.clear_config_cache()
+    grids = config_rules.datasets_by_challenge()
+    assert grids["asl"] == {} and grids["dsc"] == {}
 
 
 # ── Invalid configuration ─────────────────────────────────────────────────
@@ -266,15 +284,30 @@ def test_string_dataset_counts_are_rejected(
                          f"datasets.clinical.{field}: must be an integer")
 
 
-@pytest.mark.parametrize("field", ["repeats", "sites"])
-def test_null_is_rejected_for_repeats_and_sites(
-    tmp_path: Path, monkeypatch, field: str
-) -> None:
-    """Only participants may be null; the others are known for DCE-2026."""
+@pytest.mark.parametrize("field", ["participants", "repeats", "sites"])
+def test_any_count_may_be_left_undecided(tmp_path: Path, monkeypatch, field: str) -> None:
+    """null means "not yet decided" for every count, not only participants.
+
+    This used to be allowed for participants alone, which meant a challenge
+    could not be declared at all until its repeats and sites were settled.
+    That is why the ASL and DSC entries sat empty with no required maps: the
+    schema gave no way to say "this challenge exists, the grid is pending".
+    An invented placeholder would have been worse, because real submissions
+    would then be failed against a number nobody chose.
+    """
     rules = _dce_rules()
     rules["challenges"]["dce"]["datasets"]["clinical"][field] = None
+    loaded, _settings = _load_temp_config(tmp_path, monkeypatch, rules)
+    assert loaded["challenges"]["dce"]["datasets"]["clinical"][field] is None
+
+
+@pytest.mark.parametrize("field", ["participants", "repeats", "sites"])
+def test_an_omitted_count_is_still_rejected(tmp_path: Path, monkeypatch, field: str) -> None:
+    """Undecided has to be written down. Leaving the key out is a mistake."""
+    rules = _dce_rules()
+    del rules["challenges"]["dce"]["datasets"]["clinical"][field]
     _assert_config_error(tmp_path, monkeypatch, rules,
-                         f"datasets.clinical.{field}: must be an integer")
+                         f"datasets.clinical.{field}: required field is missing")
 
 
 def test_dataset_missing_a_required_count_is_rejected(tmp_path: Path, monkeypatch) -> None:

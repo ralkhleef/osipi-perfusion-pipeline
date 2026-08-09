@@ -33,6 +33,21 @@ PUBLISHED = sorted(p for p in DOCS.rglob("*")
                    if p.suffix in {".html", ".md"} and p.is_file())
 
 
+def without_comments(html: str) -> str:
+    """The markup a browser acts on, with HTML comments removed.
+
+    Commented-out markup is not a reference. A worked example of a link left
+    in a comment for whoever restores it later must not make the checks below
+    demand that the file exists, or insist the page still links to it.
+    """
+    return re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+
+#: Page text with commented-out markup removed. Use this for anything that
+#: asks "does the site actually point at this?"; use TEXT for prose checks.
+VISIBLE = "\n".join(without_comments(p.read_text()) for p in PAGES)
+
+
 def code_spans(pattern: str) -> set[str]:
     """Everything the docs wrapped in <code> matching ``pattern``."""
     return set(re.findall(rf"<code>({pattern})</code>", TEXT))
@@ -360,7 +375,8 @@ def _offered_downloads() -> list[str]:
     for page in PAGES:
         found += [
             target for target in
-            re.findall(r'class="docs-download" href="([^"]+)"', page.read_text())
+            re.findall(r'class="docs-download" href="([^"]+)"',
+                       without_comments(page.read_text()))
             if not target.startswith(("http://", "https://"))
         ]
     return found
@@ -415,24 +431,30 @@ def test_each_screenshot_slot_names_the_file_that_replaces_it() -> None:
         assert "<figcaption>" in figure, "an empty slot has no caption"
 
 
-def test_no_unreferenced_media_is_deployed() -> None:
-    """Every image and recording under docs/assets must be used by a page.
+def test_no_unreferenced_file_is_deployed() -> None:
+    """Everything under docs/assets and docs/downloads must be linked.
 
     Removing the element that embedded a file is not the same as removing the
     file. Left behind, it is still published, still reachable at its URL, and
     invisible to every other check here because nothing links to it. That is
     how a walkthrough recording describing a scoring registry the code does
     not have stayed deployed after its section was deleted.
+
+    Downloads are covered as well as media. An unpublished document taken off
+    a page leaves a PDF nobody links to, which is the same failure wearing a
+    different extension.
     """
-    media = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
-             ".mp4", ".webm", ".mov", ".mp3", ".ico"}
-    assets = DOCS / "assets"
-    orphans = [
-        path.relative_to(DOCS).as_posix()
-        for path in sorted(assets.rglob("*"))
-        if path.is_file() and path.suffix.lower() in media
-        and path.relative_to(DOCS).as_posix() not in TEXT
-    ]
+    watched = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+               ".mp4", ".webm", ".mov", ".mp3", ".ico",
+               ".pdf", ".csv", ".json", ".zip"}
+    orphans = []
+    for directory in (DOCS / "assets", DOCS / "downloads"):
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.rglob("*")):
+            relative = path.relative_to(DOCS).as_posix()
+            if path.is_file() and path.suffix.lower() in watched and relative not in VISIBLE:
+                orphans.append(relative)
     assert not orphans, f"deployed but referenced by no page: {orphans}"
 
 
@@ -509,7 +531,7 @@ def test_cross_page_links_resolve_to_a_real_file_and_id() -> None:
 def test_every_local_asset_exists() -> None:
     for page in PAGES:
         for asset in re.findall(r'(?:src|href)="(?!https?:|#|mailto:)([^"]+)"',
-                                page.read_text()):
+                                without_comments(page.read_text())):
             path = DOCS / asset.split("#")[0]
             assert path.exists(), f"{page.name} references missing asset {asset}"
 

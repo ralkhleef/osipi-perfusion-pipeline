@@ -205,6 +205,19 @@ challenges:
     expected_maps:
       - cbf
       - att
+    # CBF and ATT are what an ASL submission exists to deliver, so a missing
+    # one is an error rather than a warning. Everything below this line is
+    # structure, not science: no metric or threshold is decided here.
+    required_maps:
+      - cbf
+      - att
+    # No required_artifacts key: nothing beyond the maps is required yet. A
+    # methods document is required for DCE, but that call for ASL is theirs.
+    # No `datasets` block. Whether ASL has one cohort or several, and what
+    # the grid is, has not been stated. Declaring a placeholder dataset would
+    # invent a layout, and the ingest layer reads dataset names from here, so
+    # the invention would change how real archives are unpacked. The schema
+    # now accepts null counts, so the grid can be added the moment it exists.
     keywords:
       - cbf
       - att
@@ -217,6 +230,13 @@ challenges:
       - cbv
       - cbf
       - mtt
+    # CBV, CBF and MTT are the standard DSC outputs and are what this
+    # challenge asks for. Same reasoning as ASL above.
+    required_maps:
+      - cbv
+      - cbf
+      - mtt
+    # No `datasets` block, for the same reason as ASL above.
     keywords:
       - cbv
       - cbf

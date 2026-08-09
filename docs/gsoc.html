@@ -82,6 +82,7 @@
             <li>Reference comparison producing RMSE, mean absolute error, bias and correlation, voxelwise and per ROI.</li>
             <li>Within-scan ROI median, population standard deviation and coefficient of variation.</li>
             <li>HTML and PDF reports generated from one result model, so the two cannot diverge.</li>
+            <li>ASL and DSC require their own maps, so a missing one is an error, not a warning.</li>
             <li>Blinded exports with no identifying information in the document, its metadata or its filename.</li>
           </ul>
         </section>
@@ -101,8 +102,9 @@
             <li><strong>Residual sum of squares.</strong> The measured dynamic signal. Submissions
               supply the modelled signal only.</li>
             <li><strong>ICC.</strong> The ICC model, and whether repeated datasets are provided.</li>
-            <li><strong>ASL and DSC completeness rules.</strong> The required maps and dataset grid
-              for each. The map types are configured; the challenge entries are empty.</li>
+            <li><strong>ASL and DSC dataset grids.</strong> Whether either has one cohort or
+              several, and the counts. The required maps are configured; the grid is not, because
+              a placeholder dataset name would change how archives are unpacked.</li>
             <li><strong>BIDS validation.</strong> Not implemented. NIfTI checks cover readability,
               dimensionality and value sanity.</li>
           </ul>
@@ -146,8 +148,10 @@
 
         <section>
           <h2 id="testing" data-toc-title="Testing">Testing</h2>
-          <p>The suite comprises 704 Python tests and 1,125 frontend checks. Seven production defects
-            were found by running a real archive through the interface rather than by the suite,
+          <p>The suite comprises 778 Python tests and 1,125 frontend checks, covering 79 percent of
+            the statements in <code>backend/</code> and <code>src/</code>. Most of that frontend
+            number is static assertions against the source rather than behaviour. Seven production
+            defects were found by running a real archive through the interface rather than by the suite,
             including a DCE archive that split into two submissions, shared files deleted during the
             batch separation, ROI masks counted twice on case-insensitive filesystems, and a team
             name printed in a blinded report. Each fix carries a regression test, and each test was
@@ -169,12 +173,18 @@
               <span class="docs-download-name">Original proposal</span>
               <span class="docs-download-note">Six pages, submitted before any code was written</span>
             </a>
-            <a class="docs-download" href="downloads/gsoc-work-product.pdf">
-              <span class="docs-download-kind">PDF</span>
-              <span class="docs-download-name">Work product</span>
-              <span class="docs-download-note">Six pages, with the commits and the evidence</span>
-            </a>
           </div>
+          <!-- The work product is not published yet. When it is, add it here:
+               <a class="docs-download" href="downloads/gsoc-work-product.pdf">
+                 <span class="docs-download-kind">PDF</span>
+                 <span class="docs-download-name">Work product</span>
+                 <span class="docs-download-note">...</span>
+               </a>
+               Build it with:
+               pandoc GSoC_WORK_PRODUCT.md -o docs/downloads/gsoc-work-product.pdf \
+                 --pdf-engine=xelatex -V geometry:margin=1in -V fontsize=10pt \
+                 -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
+                 -V colorlinks=true --toc --toc-depth=2 -->
         </section>
 
       </div>

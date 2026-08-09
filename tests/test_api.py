@@ -316,13 +316,25 @@ def test_configured_missing_maps_are_reported_for_each_challenge(client: TestCli
     assert not any("kep" in msg for msg in dce_missing)
     assert not any("vp" in msg for msg in dce_missing)
 
+    # DSC has since migrated too: CBV, CBF and MTT are required, so a missing
+    # MTT is an error rather than a warning. The legacy warning is suppressed
+    # for any map the new rules already cover, so the same absence is not
+    # counted twice in the reviewer's summary.
     dsc_data, dsc_name = _make_maps_zip("dsc_missing.zip", ["cbv_map.nii", "cbf_map.nii"])
     dsc_sid = _upload_and_get_id(client, dsc_data, dsc_name)
     dsc = client.post("/api/validate", json={
         "submission_id": dsc_sid, "challenge_type": "dsc", "mode": "result_only",
     }).json()
-    dsc_missing = [w["message"].lower() for w in dsc.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
-    assert any("mtt" in msg for msg in dsc_missing)
+
+    dsc_warned = [w["message"].lower() for w in dsc.get("warnings", [])
+                  if w.get("code") == "EXPECTED_MAP_MISSING"]
+    assert not any("mtt" in msg for msg in dsc_warned), \
+        "a required map must not also raise the legacy warning"
+
+    dsc_errors = [e["message"].lower() for e in dsc.get("errors", [])
+                  if e.get("code") == "REQUIRED_MAP_MISSING"]
+    assert any("mtt" in msg for msg in dsc_errors), \
+        f"MTT absence was not reported as an error: {dsc.get('errors')}"
 
 
 def test_config_only_pet_perfusion_challenge_end_to_end(

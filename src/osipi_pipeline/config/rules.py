@@ -481,22 +481,25 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                         if ds_map is None:
                             continue
                         _reject_unknown_keys(ds_map, _DATASET_KEYS, ds_path, errors)
-                        for field in ("repeats", "sites"):
+                        # Every count may be null, meaning "not yet decided".
+                        # A placeholder integer would read as a decision
+                        # nobody made and would fail real submissions against
+                        # a number invented here.
+                        #
+                        # Only `participants` used to allow this, which meant
+                        # a challenge could not be declared at all until its
+                        # repeats and sites were settled. That is why the ASL
+                        # and DSC entries sat empty: the schema had no way to
+                        # say "this challenge exists, the grid is pending".
+                        # The key must still be present, so an omitted count
+                        # is a mistake and an undecided one is deliberate.
+                        for field in ("participants", "repeats", "sites"):
                             if field not in ds_map:
                                 errors.append(f"{ds_path}.{field}: required field is missing")
-                            else:
+                            elif ds_map.get(field) is not None:
                                 _require_positive_int(
                                     ds_map.get(field), f"{ds_path}.{field}", errors
                                 )
-                        # participants may be null: OSIPI has not finalised the
-                        # synthetic cohort size, and a placeholder integer would
-                        # read as a decision that has not been made.
-                        if "participants" not in ds_map:
-                            errors.append(f"{ds_path}.participants: required field is missing")
-                        elif ds_map.get("participants") is not None:
-                            _require_positive_int(
-                                ds_map.get("participants"), f"{ds_path}.participants", errors
-                            )
 
     if default_challenge and default_challenge.lower() not in challenge_ids:
         errors.append(f"default_challenge_type: unknown challenge id {default_challenge!r}")

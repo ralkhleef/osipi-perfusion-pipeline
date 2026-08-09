@@ -67,6 +67,7 @@ the project.
 | ROI statistics | Within-scan Ktrans median, population SD (`ddof=0`) and CoV (SD ÷ \|mean\|), computed once and read by every output |
 | Reports | HTML and PDF from one canonical model, with matching sections and table numbers |
 | Exports | Blinded and unblinded JSON and CSV, wide and long form |
+| ASL, DSC | CBF and ATT required for ASL; CBV, CBF and MTT for DSC, so a missing map is an error rather than a warning |
 | Blinding | Team name, contact, submission id and archive name absent from body, metadata and download filename |
 
 ### Not implemented, and why
@@ -81,6 +82,8 @@ blocked on a decision or an input that only the challenge leads can supply.
 | Residual sum of squares | The measured dynamic signal. The pipeline receives the modelled S(t) only; RSS needs both. |
 | ASL 4-D fitted-model comparison | The comparison definition and which ROI masks apply. |
 | ICC | Which ICC model, and whether repeatability is computed from repeated noise-varied datasets. |
+| ASL and DSC dataset grids | Whether either has one cohort or several, and the participant, repeat and site counts. The required maps are configured; the grid is not, because a placeholder dataset name would change how archives are unpacked. |
+| BIDS validation | Not implemented. NIfTI checks cover readability, dimensionality and value sanity. |
 
 The pipeline reports unavailable values as unavailable rather than as zero, and
 does not compute a metric whose formula has not been confirmed.
@@ -89,15 +92,33 @@ does not compute a metric whose formula has not been confirmed.
 
 ## Testing
 
-**705 Python tests, 1 skipped. 1,125 frontend checks.**
+**778 Python tests, 1 skipped. 1,125 frontend checks. 79% statement coverage
+of `backend/` and `src/`.**
 
-| Suite | Count |
-|---|---|
-| Python | 705 passed, 1 skipped |
-| Frontend smoke | 1,014 |
-| Frontend ROI DOM | 53 |
-| Footer logic | 27 |
-| Validation card | 31 |
+| Suite | Count | What it exercises |
+|---|---|---|
+| Python | 778 passed, 1 skipped | Behaviour, through the real API and library |
+| Frontend smoke | 1,014 | Mostly static: asserts the source contains expected markup, selectors and handlers |
+| Frontend ROI DOM | 53 | Behaviour, rendering real records into a DOM |
+| Validation card | 31 | Behaviour, in a DOM |
+| Footer logic | 27 | Behaviour |
+
+The frontend total is worth reading carefully rather than as one number. Of
+the 1,125 checks, about 905 are string assertions against `app.js`,
+`index.html` and `styles.css`. Those catch a deleted handler or a renamed
+class, which is real but narrow, and they cannot catch a handler that runs
+and does the wrong thing. The 111 checks in the ROI, validation-card and
+footer suites drive an actual DOM and are the ones that test behaviour.
+
+Coverage is not uniform, and the gaps are named rather than averaged away:
+
+| Module | Coverage | Note |
+|---|---|---|
+| `backend/services/execution_service.py` | 88% | Was 17%. Runs participant code, so it was the wrong place to be thin |
+| `backend/services/zenodo_service.py` | 88% | Was 18% |
+| `backend/services/github_service.py` | 75% | Was 17% |
+| `backend/scoring.py` | 60% | The largest module; the uncovered part is mostly provider-specific branches |
+| `backend/services/ingest_service.py` | 50% | Archive and URL import variants |
 
 The skip is a POSIX-only branch of a case-normalisation fallback that cannot
 execute on Linux.
@@ -190,7 +211,7 @@ landed in the commits preceding these.
 | `src/osipi_pipeline/` | Library: config, ingestion, validation, scoring |
 | `backend/` | FastAPI application and services |
 | `frontend/` | Interface |
-| `tests/` | 705 Python tests, 1,125 frontend checks |
+| `tests/` | 778 Python tests, 1,125 frontend checks |
 | `docs/` | Documentation site, published by GitHub Pages |
 | `scripts/demo_evidence.py` | Regenerates the evidence bundle |
 | `CODE_WALKTHROUGH.md` | The seven defects, with reproduction |
