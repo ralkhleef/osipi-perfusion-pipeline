@@ -56,54 +56,76 @@
 
         <section>
           <h2 id="interface" data-toc-title="The interface">The interface</h2>
-          <p>The application is one page with six steps down the left. A submission moves through
-            them in order, and each step stays available so you can go back.</p>
-
-          <!-- To add a screenshot, replace the whole docs-shot div with an img
-               element pointing at the path named in the comment above that slot,
-               with alt text describing what the screen shows. Keep the caption.
-               Save the images under assets/images/screens/. -->
+          <p>The application guides each submission through six review stages in order:
+            Upload → Review → Validate → Run → QC &amp; Preview → Export. Select any screenshot
+            to open the full-resolution image.</p>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/upload.png -->
-            <div class="docs-shot"><span class="docs-shot-label">Upload</span></div>
-            <figcaption><strong>1. Upload.</strong> Drop in a ZIP, point at a folder, or paste a
-              GitHub or Zenodo link. Several team folders in one archive are split automatically.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-upload.png"
+               aria-label="Open the full-resolution Upload screenshot">
+              <img src="assets/images/screens/workflow-upload.png" width="1410" height="1430"
+                   alt="Upload screen titled Start a new submission review">
+            </a>
+            <figcaption><strong>1. Upload.</strong> Enter the team and challenge details, then
+              import local files or a folder, a ZIP archive, a GitHub repository, or a Zenodo record.</figcaption>
           </figure>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/review.png -->
-            <div class="docs-shot"><span class="docs-shot-label">Review</span></div>
-            <figcaption><strong>2. Review.</strong> Shows the detected challenge, whether the
-              submission is result-only or reproducible, and every file it found.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-review.png"
+               aria-label="Open the full-resolution Review screenshot">
+              <img src="assets/images/screens/workflow-review.png" width="1410" height="1430"
+                   loading="lazy" decoding="async"
+                   alt="Review screen titled Review detected submission">
+            </a>
+            <figcaption><strong>2. Review.</strong> Confirm the detected challenge, map types,
+              submission type, result-map readiness, and indexed files before validation.</figcaption>
           </figure>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/validate.png -->
-            <div class="docs-shot"><span class="docs-shot-label">Validate</span></div>
-            <figcaption><strong>3. Validate.</strong> Errors block the submission, warnings do not.
-              Each issue names the file it came from.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-validate.png"
+               aria-label="Open the full-resolution Validate screenshot">
+              <img src="assets/images/screens/workflow-validate.png" width="1410" height="1430"
+                   loading="lazy" decoding="async"
+                   alt="Validate screen titled Validate submission files">
+            </a>
+            <figcaption><strong>3. Validate.</strong> Review file, structure, and output-map checks;
+              errors block progress while warnings remain available for reviewer inspection.</figcaption>
           </figure>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/run.png -->
-            <div class="docs-shot"><span class="docs-shot-label">Run</span></div>
-            <figcaption><strong>4. Run.</strong> Builds and runs the team's Dockerfile with no
-              network and a timeout. Result-only submissions skip this step.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-run.png"
+               aria-label="Open the full-resolution Run screenshot">
+              <img src="assets/images/screens/workflow-run.png" width="1410" height="1430"
+                   loading="lazy" decoding="async"
+                   alt="Run screen titled Prepare submission maps">
+            </a>
+            <figcaption><strong>4. Run.</strong> Prepare maps for review. Included result maps are
+              used directly, so result-map-only submissions proceed without running participant code;
+              reproducible submissions run only when processing is needed.</figcaption>
           </figure>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/qc.png -->
-            <div class="docs-shot"><span class="docs-shot-label">QC &amp; Preview</span></div>
-            <figcaption><strong>5. QC &amp; Preview.</strong> Per-map statistics, image previews,
-              and comparison against reference maps where they exist.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-qc-preview.png"
+               aria-label="Open the full-resolution QC and Preview screenshot">
+              <img src="assets/images/screens/workflow-qc-preview.png" width="1410" height="1430"
+                   loading="lazy" decoding="async"
+                   alt="QC and Preview screen showing quality checks and map preview controls">
+            </a>
+            <figcaption><strong>5. QC &amp; Preview.</strong> Inspect quality checks, map previews,
+              ROI statistics, and generic reference comparisons where configured. The prototype
+              does not claim an official OSIPI challenge ranking unless official reference and
+              scoring data are configured.</figcaption>
           </figure>
 
           <figure class="docs-screen">
-            <!-- assets/images/screens/export.png -->
-            <div class="docs-shot"><span class="docs-shot-label">Export</span></div>
-            <figcaption><strong>6. Export.</strong> Reports as HTML and PDF, results as JSON and
-              CSV, each in a blinded and an unblinded form.</figcaption>
+            <a class="docs-screen-link" href="assets/images/screens/workflow-export.png"
+               aria-label="Open the full-resolution Export screenshot">
+              <img src="assets/images/screens/workflow-export.png" width="1410" height="1430"
+                   loading="lazy" decoding="async"
+                   alt="Export screen titled Export review package">
+            </a>
+            <figcaption><strong>6. Export.</strong> Download a PDF report, HTML report, CSV results,
+              JSON results, ROI Ktrans statistics CSV, blinded CSV, or unblinded CSV.</figcaption>
           </figure>
         </section>
 

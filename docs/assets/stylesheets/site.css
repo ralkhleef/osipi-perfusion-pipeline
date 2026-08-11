@@ -389,26 +389,16 @@ h3:hover .docs-anchor,
   border-radius: .375rem;
 }
 
-/* An empty slot waiting for a screenshot. Deliberately plain and clearly
-   empty: a reader should read it as "not here yet", never mistake it for the
-   interface, and never see a broken-image icon. */
-.docs-shot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 16 / 9;
-  border: 1px dashed var(--docs-border);
+.docs-screen-link {
+  display: block;
   border-radius: .375rem;
-  background: #f8f9fa;
 }
 
-/* Classed rather than a bare <span>: the documentation tests find worked
-   examples by matching <span>Label</span> code-block headers, and an unclassed
-   label here matched "Run" ahead of the real docker run block. */
-.docs-shot-label {
-  font-size: .875rem;
-  color: var(--docs-muted);
-  letter-spacing: .02em;
+.docs-screen-link:hover img { border-color: var(--osipi-primary); }
+
+.docs-screen-link:focus-visible {
+  outline: 3px solid rgba(64, 81, 181, .35);
+  outline-offset: 3px;
 }
 
 .docs-screen figcaption {
