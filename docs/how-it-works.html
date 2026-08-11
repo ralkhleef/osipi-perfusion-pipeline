@@ -102,7 +102,7 @@
               <div class="docs-step-rail"><span class="docs-step-num">5</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">QC and Preview</p>
-                <p>Compute quality-control statistics and compare against reference data.</p>
+                <p>Inspect QC and previews for readable maps, with configured ROI, reference or scoring results when their data are available.</p>
               </div>
             </div>
             <div class="docs-step">
@@ -144,7 +144,9 @@
           <p>A submission containing a Dockerfile is built and run in an isolated container with no
             network access, a memory limit and a timeout. The command is read from
             <code>run_config.json</code> in the submission. Result-only submissions skip this step.
-            Where Docker is unavailable the step is disabled and the remaining steps are unaffected.</p>
+            A Docker Compose file by itself is not executable by the reviewer workflow; add a
+            Dockerfile, or submit readable result maps for result-only review. Where Docker is
+            unavailable the step is disabled and result-only review remains available.</p>
 
           <h3 id="statistics">QC and Preview</h3>
           <p>Quality control reports the proportion of finite voxels, counts of NaN and infinity, and
@@ -152,18 +154,27 @@
             are therefore reported separately and never averaged together.</p>
           <p>Where reference maps are available, each submitted map is compared against its reference
             voxelwise and within each ROI mask, producing RMSE, mean absolute error, bias and
-            correlation.</p>
+            correlation, error standard deviation and error coefficient of variation. These are
+            generic comparisons, not automatically official OSIPI scores.</p>
+          <p>QC and previews are always available for readable maps. ROI statistics, reference
+            comparisons and scoring are additional configured analyses: each appears only when its
+            challenge rules and required masks, references or scoring assets are available. Official
+            OSIPI challenge ranking is not currently configured.</p>
           <p>Each ROI additionally reports the median, population standard deviation
             (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|) of one map within one
             scan. These describe spatial spread within a single region. They are not repeatability,
             reproducibility or between-participant variability, and the report states this. Values
             that cannot be computed are reported as unavailable rather than as zero.</p>
+          <p>DCE Ktrans ROI statistics require compatible ROI masks. QC itself does not require a
+            reference map, while generic reference comparisons require compatible reference maps.
+            Provider-specific metrics additionally require an approved provider and its organiser
+            assets.</p>
 
           <h3 id="outputs">Export</h3>
-          <p>All output formats are generated from a single result model, so every figure is computed
-            once. The HTML and PDF reports contain the same sections, rows and table numbers.
-            Additional exports are an ROI statistics CSV with one row per scan and region, and a
-            combined CSV or JSON in wide or long form.</p>
+          <p>All output formats are generated from a single result model. The HTML and PDF reports
+            contain the same sections, rows and table numbers. Additional exports are standard
+            blinded CSV and JSON results, an ROI statistics CSV with one row per scan and region,
+            and an explicit unblinded CSV for organiser review.</p>
           <p>A blinded export omits the team name, contact address, submission id and archive name
             from the document body, the file metadata and the download filename.</p>
         </section>

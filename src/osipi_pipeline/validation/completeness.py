@@ -163,6 +163,40 @@ def validate_completeness(
     return issues
 
 
+def validate_generated_map_completeness(
+    artifacts: Sequence[Any], *, challenge: str
+) -> list[dict]:
+    """Check only the configured result-map requirements after execution.
+
+    Execution output is not a complete submission package, so it must not be
+    checked for methods documents or participant input artifacts.  This gate
+    answers the narrower question needed by the run step: did the process
+    produce the maps required before analysis can continue?
+    """
+    challenge = (challenge or "").strip().lower()
+    required_maps = required_maps_by_challenge().get(challenge, ())
+    optional_maps = optional_maps_by_challenge().get(challenge, ())
+    maps = [a for a in artifacts if a.role == "parameter_map"]
+    if not required_maps:
+        return _dimension_issues(maps, required_maps, optional_maps)
+
+    issues: list[dict] = []
+    identified = [a for a in maps if any(_scan_key(a))]
+    if identified:
+        issues.extend(_scan_requirement_issues(identified, required_maps, ()))
+    else:
+        for map_id in required_maps:
+            if not any(a.map_type == map_id for a in maps):
+                issues.append(_issue(
+                    "error", REQUIRED_MAP_MISSING,
+                    f"Required {_map_label(map_id)} map is missing from generated outputs.",
+                    map_type=map_id,
+                ))
+
+    issues.extend(_dimension_issues(maps, required_maps, optional_maps))
+    return issues
+
+
 def _conflict_issues(identity_conflicts: Iterable[Any]) -> list[dict]:
     """Directory/filename disagreement.
 

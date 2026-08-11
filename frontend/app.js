@@ -230,8 +230,6 @@ function _applyConfigMapOptions(config) {
 function _wireChallengeTypeInputs() {
   document.querySelectorAll("input[name='challenge_type']").forEach((r) => {
     r.addEventListener("change", () => {
-      const wrap = el("challenge-other-wrap");
-      if (wrap) wrap.style.display = (r.value === "other") ? "block" : "none";
       updateMapTypePills(r.value);
     });
   });
@@ -251,7 +249,7 @@ function _renderChallengeTypeOptions() {
     const label = challenge.label || id.toUpperCase();
     const checked = id === selected ? " checked" : "";
     return `<label class="pill"><input type="radio" name="challenge_type" value="${escapeHtml(id)}"${checked} /><span>${escapeHtml(label)}</span></label>`;
-  }).join("") + '<label class="pill"><input type="radio" name="challenge_type" value="other" /><span>Other</span></label>';
+  }).join("");
   if (!row.querySelector("input[name='challenge_type']:checked")) {
     const fallback = row.querySelector(`input[name='challenge_type'][value='${defaultChallengeType()}']`)
       || row.querySelector("input[name='challenge_type']");
@@ -918,7 +916,7 @@ function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
   if (!hasIssue("were expected", "count mismatch", "nifti_count_mismatch", "expected parameter map"))
     checks.push("Map count matches expectations");
   if (errCount === 0 && warnCount === 0)
-    checks.push("All checks passed, submission is ready for scoring");
+    checks.push("All checks passed, submission is ready for QC and configured analysis");
 
   return checks;
 }
@@ -992,7 +990,7 @@ const _WF_FOOTER_CONFIG = {
   upload:   { back: null,       next: null,       nextLabel: "Upload and Continue",     hint: "Fill in team details and choose a submission file below" },
   index:    { back: "upload",   next: "validate", nextLabel: "Validate Submission",     hint: "" },
   validate: { back: "index",    next: "run",       nextLabel: "Continue to Run",        hint: "" },
-  run:      { back: "validate", next: "score",     nextLabel: "Continue to Score",      hint: "" },
+  run:      { back: "validate", next: "score",     nextLabel: "Continue to QC & Preview", hint: "" },
   score:    { back: "run",      next: "export",   nextLabel: "Continue to Export",      hint: "" },
   export:   { back: "score",    next: null,        nextLabel: "Start New Submission",    hint: "" },
 };
@@ -1073,7 +1071,7 @@ function _ensureStepActionRow(step) {
 }
 
 function _stepPrimaryLabel(step) {
-  if (step === "run" && _allValidationResultsAreResultOnly()) return "Continue to Score";
+  if (step === "run" && _allValidationResultsAreResultOnly()) return "Continue to QC & Preview";
   return _WF_FOOTER_CONFIG[step]?.nextLabel || "Continue";
 }
 
@@ -1248,7 +1246,17 @@ function _isStepReady(step) {
       // with warnings still has 0 errors and must be allowed to continue.
       return results.some((r) => r.passed || issueCount(r, "errors") === 0);
     }
-    case "run":    return true;  // always allow continue, non-blocking
+    case "run": {
+      const results = batchState.validationData ? (batchState.validationData.results || []) : [];
+      const valid = results.filter((r) => r.passed || issueCount(r, "errors") === 0);
+      if (!valid.length) return false;
+      return valid.every((r) => {
+        const readiness = r.run_readiness || inferredRunReadiness(r);
+        if (readiness === "result_only") return true;
+        const sid = r.submission_id || r.id;
+        return readiness === "runnable" && !!sid && _execSummaries[sid]?.status === "passed";
+      });
+    }
     case "score":  return true;  // always allow continue to export
     case "export": return false; // no "next" after export
     default: return false;
@@ -1270,6 +1278,8 @@ function _stepBlockedReason(step) {
       if (!results.length) return "Run validation before continuing.";
       return "Every submission has blocking errors. Fix the errors to continue (warnings do not block).";
     }
+    case "run":
+      return "Process runnable submissions and resolve generated-output errors before continuing. Result-map-only submissions do not need a code run.";
     default:
       return "Complete the current step before continuing.";
   }
@@ -1355,12 +1365,7 @@ function getEmail()       { const f = el("contact-email"); return f ? f.value.tr
 function getSourceType()  { return getRadio("submission_type") || "local"; }
 
 function getChallengeType() {
-  const raw = getRadio("challenge_type") || defaultChallengeType();
-  if (raw === "other") {
-    const other = el("challenge-type-other");
-    return (other ? other.value.trim() : "") || "other";
-  }
-  return raw;
+  return getRadio("challenge_type") || defaultChallengeType();
 }
 
 function getMapType() {
@@ -1433,14 +1438,12 @@ function resetAll() {
   const chip = el("session-chip");
   if (chip) chip.style.display = "none";
 
-  ["team-name", "contact-email", "challenge-type-other", "map-type-other"].forEach((id) => {
+  ["team-name", "contact-email", "map-type-other"].forEach((id) => {
     const f = el(id); if (f) f.value = "";
   });
 
   const defaultRadio = document.querySelector(`input[name='challenge_type'][value='${defaultChallengeType()}']`);
   if (defaultRadio) defaultRadio.checked = true;
-  const wrap = el("challenge-other-wrap");
-  if (wrap) wrap.style.display = "none";
 
   updateMapTypePills(defaultChallengeType());
 
@@ -1760,8 +1763,6 @@ async function restoreSessionFromStorage() {
     );
     if (radio) {
       radio.checked = true;
-      const wrap = el("challenge-other-wrap");
-      if (wrap) wrap.style.display = (saved.challengeType === "other") ? "block" : "none";
     }
     updateMapTypePills(saved.challengeType);
   }
@@ -2273,14 +2274,6 @@ function validateForm() {
 
   const ctErr = el("challenge-type-error");
   if (ctErr) ctErr.textContent = "";
-  if (getRadio("challenge_type") === "other") {
-    const otherInp = el("challenge-type-other");
-    if (otherInp && !otherInp.value.trim()) {
-      if (ctErr) ctErr.textContent = "Enter a challenge type.";
-      ok = false;
-    }
-  }
-
   const srcErr = el("source-error");
   if (srcErr) srcErr.textContent = "";
   if (!(state.mode === "edit" && state.submissionId)) {
@@ -3673,7 +3666,7 @@ function renderValidateStep(data, isSingleMode) {
             <div class="validation-detail-chips worklist-meta">
               <span class="validation-meta-with-help">${statusPill(pillText, pillState)}</span>
               ${typeChipHtml}
-              <span class="validation-meta-with-help">${statusPill(runTxt, runState)} ${helpTooltip(isResultOnly ? subTypeHelp : "Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.", "Run readiness help")}</span>
+              <span class="validation-meta-with-help">${statusPill(runTxt, runState)} ${helpTooltip(isResultOnly ? subTypeHelp : "Runnable submissions include executable code. Result-only submissions skip execution and go directly to QC and configured analysis.", "Run readiness help")}</span>
               <span class="br-badge badge-exec-none val-card-exec-badge" style="display:none;font-size:0.65rem"></span>
             </div>`;
       const detailsHtml = `
@@ -4364,7 +4357,7 @@ function _updateRunRow(subId, execData, isError) {
     newExecStatus = "failed";
   } else if (execData.timed_out) {
     newExecStatus = "timed-out";
-  } else if (execData.passed) {
+  } else if (execData.ready_for_analysis === true || (execData.passed && execData.output_validation?.passed)) {
     newExecStatus = "passed";
   } else {
     newExecStatus = "failed";
@@ -4378,6 +4371,9 @@ function _updateRunRow(subId, execData, isError) {
     _execSummaries[subId] = {
       status:          newExecStatus,
       passed:          !!execData.passed,
+      processPassed:   !!execData.passed,
+      outputComplete:  !!execData.output_validation?.passed,
+      readyForAnalysis: execData.ready_for_analysis === true,
       exitCode:        execData.exit_code ?? null,
       outputFileCount: execData.output_file_count ?? (Array.isArray(execData.output_files) ? execData.output_files.length : 0),
       executedAt:      execData.executed_at || execData.finished_at || null,
@@ -4439,6 +4435,7 @@ function _updateRunRow(subId, execData, isError) {
   // Refresh run filter visibility
   _syncCollapsibleSection("run", (batchState.validationData?.results || []).length, _runListSummary(batchState.validationData?.results || []));
   _applyRunFilters();
+  _refreshWizardFooter();
   _syncCompactProgress();
 }
 
@@ -4595,7 +4592,7 @@ async function runBatchExec(btn, subId, challenge) {
     } else {
       _updateRunRow(subId, data, false);
       const fc = data.output_file_count ?? (Array.isArray(data.output_files) ? data.output_files.length : 0);
-      _tickRunProgress(data.passed && !data.timed_out, fc);
+      _tickRunProgress(data.ready_for_analysis === true && !data.timed_out, fc);
     }
   } catch (err) {
     _updateRunRow(subId, null, "Network error: " + err.message);
@@ -4803,7 +4800,7 @@ function _updateValCardExecBadge(subId, newStatus) {
 
 function _leaderboardStatusLabel(status) {
   switch (status) {
-    case "scored":         return "QC complete";
+    case "scored":         return "Analysis complete";
     case "failed":         return "Failed";
     case "not_configured": return "Needs setup";
     case "not_ready":      return "Incomplete";
@@ -4819,7 +4816,7 @@ function _leaderboardStatusLabel(status) {
 
 function _leaderboardReferenceStatusLabel(status) {
   switch (status) {
-    case "scored": return "Reference scored";
+    case "scored": return "Reference comparison available";
     case "reference_not_available": return "Reference unavailable";
     case "partial_reference_scoring": return "Partial reference";
     case "not_configured":
@@ -4908,7 +4905,7 @@ function _renderLeaderboardFilterBar() {
       { value: "passed", label: "Passed" },
       { value: "warnings", label: "Warnings" },
       { value: "errors", label: "Errors" },
-      { value: "scored", label: "Scored" },
+      { value: "scored", label: "Analysis complete" },
       { value: "failed", label: "Failed" },
       { value: "skipped", label: "Skipped" },
     ])}
@@ -4962,7 +4959,7 @@ function _leaderboardSummary(entries) {
   const sorted = [...rows].sort((a, b) => new Date(b.scored_at || 0) - new Date(a.scored_at || 0));
   return [
     _summaryChip("total", rows.length),
-    _summaryChip("scored", scored, "success"),
+    _summaryChip("analysis complete", scored, "success"),
     _summaryChip("failed", failed, failed ? "error" : ""),
     _summaryChip("partial", partial, partial ? "warning" : ""),
     _summaryChip("reference unavailable", unavailable, unavailable ? "muted" : ""),
@@ -4976,7 +4973,7 @@ function _leaderboardSummaryLine(entries) {
   const unavailable = rows.filter((e) => _leaderboardReferenceStatus(e) === "reference_not_available").length;
   const parts = [
     `${rows.length} submission${rows.length === 1 ? "" : "s"}`,
-    scored ? `${scored} QC complete` : "QC pending",
+    scored ? `${scored} analysis complete` : "Analysis pending",
     unavailable ? "Reference unavailable" : "Reference status ready",
   ];
   return parts.join(" · ");
@@ -5009,7 +5006,7 @@ function _renderLeaderboardEntry(entry) {
   const mapCount = mapTypes.length || artifactCount || 0;
   const refScored = refStatus === "available" || refStatus === "compared" || refStatus === "partial_reference_scoring";
   // Compact single meta line, same shape as Review: challenge · maps · state · N maps.
-  const metaHtml = `${escapeHtml(challenge)} · ${escapeHtml(mapLabel)} · ${refScored ? "Reference scored" : "QC only"} · ${mapCount} map${mapCount === 1 ? "" : "s"}`;
+  const metaHtml = `${escapeHtml(challenge)} · ${escapeHtml(mapLabel)} · ${refScored ? "Reference comparison available" : "QC only"} · ${mapCount} map${mapCount === 1 ? "" : "s"}`;
   // Metrics + reference info move into the collapsed details (not the always-visible row).
   const refNote = refScored
     ? "Reference maps were available; reference metrics are included."
@@ -5088,8 +5085,8 @@ function _renderLeaderboardEntries(options = {}) {
       <div class="leaderboard-skeleton"></div>
       <div class="leaderboard-skeleton short"></div>
     </div>`;
-    if (countEl) countEl.textContent = "Loading scored submissions…";
-    if (sub) sub.textContent = "Refreshing scored submissions";
+    if (countEl) countEl.textContent = "Loading processed submissions…";
+    if (sub) sub.textContent = "Refreshing analysis results";
     return;
   }
 
@@ -5116,7 +5113,7 @@ function _renderLeaderboardEntries(options = {}) {
   if (!entries.length) {
     const hasAny = (_leaderboardFilter.entries || []).length > 0;
     list.innerHTML = `<div class="list-empty-state">
-      <p>${hasAny ? "No submissions match these filters." : "No scored submissions yet."}</p>
+      <p>${hasAny ? "No submissions match these filters." : "No processed submissions yet."}</p>
       ${hasAny ? `<button type="button" class="btn btn-secondary btn-sm" id="leaderboard-empty-clear">Clear filters</button>` : ""}
     </div>`;
     const emptyClear = el("leaderboard-empty-clear");
@@ -5171,7 +5168,7 @@ async function loadLeaderboard() {
     const res  = await fetch(`${API}/api/leaderboard`);
     if (!res.ok) {
       _leaderboardFilter.loading = false;
-      _leaderboardFilter.error = "Could not load scored submissions.";
+      _leaderboardFilter.error = "Could not load analysis results.";
       _renderLeaderboardEntries();
       return;
     }
@@ -5182,7 +5179,7 @@ async function loadLeaderboard() {
     _renderLeaderboardEntries();
   } catch (_) {
     _leaderboardFilter.loading = false;
-    _leaderboardFilter.error = "Could not load scored submissions.";
+    _leaderboardFilter.error = "Could not load analysis results.";
     _renderLeaderboardEntries();
   }
 }
@@ -5332,6 +5329,7 @@ if (batchExportExecUnblindedBtn) batchExportExecUnblindedBtn.addEventListener("c
 
 // ── Score progress tracking ───────────────────────────────────────────────────
 const _scoreProgress = { total: 0, scored: 0, failed: 0, notConf: 0 };
+let _scoreOfficialMode = false;
 
 function _initScoreProgress(total) {
   _scoreProgress.total   = total;
@@ -5369,13 +5367,14 @@ function _refreshScoreProgress() {
   if (nEl)  nEl.textContent  = String(notConf);
   if (completed >= total && total > 0) {
     if (panel) panel.classList.add("state-done");
-    if (txt)   txt.textContent = "Scoring complete";
-    if (eta)   eta.textContent = `${scored} scored · ${failed + notConf} not scored`;
+    const noun = _scoreOfficialMode ? "Official scoring" : "Analysis";
+    if (txt)   txt.textContent = `${noun} complete`;
+    if (eta)   eta.textContent = `${scored} complete · ${failed + notConf} need attention`;
     const titleEl = el("score-status-title");
     const subEl = el("score-status-sub");
     const previewEl = el("score-metric-preview");
-    if (titleEl) titleEl.textContent = failed + notConf > 0 ? "Scoring needs attention" : "Scoring complete";
-    if (subEl) subEl.textContent = scored > 0 ? `${scored} submission${scored !== 1 ? "s" : ""} scored.` : "No submissions were scored.";
+    if (titleEl) titleEl.textContent = failed + notConf > 0 ? `${noun} needs attention` : `${noun} complete`;
+    if (subEl) subEl.textContent = scored > 0 ? `${scored} submission${scored !== 1 ? "s" : ""} processed.` : "No submissions were processed.";
     if (previewEl) {
       const preview = _scoreMetricPreviewHtml();
       previewEl.innerHTML = preview;
@@ -5385,7 +5384,7 @@ function _refreshScoreProgress() {
     loadLeaderboard();
     _syncCompactProgress();
   } else {
-    if (txt) txt.textContent = `Scoring submissions… ${completed} of ${total}`;
+    if (txt) txt.textContent = `${_scoreOfficialMode ? "Scoring" : "Analyzing"} submissions… ${completed} of ${total}`;
     if (eta) eta.textContent = "";
     _syncCompactProgress();
   }
@@ -5456,15 +5455,11 @@ function _setScoreStepCopy({ official = false, providerName = "" } = {}) {
   const labelEl = el("score-step-label");
   const titleEl = el("score-step-title");
   const descEl = el("score-step-desc");
-  if (official) {
-    if (labelEl) labelEl.textContent = "Step 5 of 6: Official Scoring & Preview";
-    if (titleEl) titleEl.textContent = providerName || "Official Scoring & Preview";
-    if (descEl) descEl.textContent = "Review the configured official scoring output, QC checks, and map previews before exporting.";
-    return;
-  }
   if (labelEl) labelEl.textContent = "Step 5 of 6: QC & Preview";
   if (titleEl) titleEl.textContent = "QC & Preview";
-  if (descEl) descEl.textContent = "Quality checks and generic reference comparisons before exporting.";
+  if (descEl) descEl.textContent = official
+    ? `QC and previews are available for readable maps. Official scoring results from ${providerName || "the configured provider"} appear when its required reference and scoring data are available.`
+    : "QC and previews are available for readable maps. Additional ROI statistics, reference comparisons, or scoring results appear when the challenge configuration and required reference/scoring data are available.";
 }
 
 function _fmtPercentValue(v) {
@@ -6026,7 +6021,7 @@ function _referenceStatusBadge(status) {
     : raw === "reference_not_available" ? "pending"
     : "ready";
   const label = raw === "available" ? "Complete"
-    : raw === "partial_reference_scoring" ? "Partial reference scoring"
+    : raw === "partial_reference_scoring" ? "Partial reference comparison"
     : raw === "reference_not_available" ? "Reference unavailable"
     : raw === "scoring_error" ? "Scoring error"
     : raw;
@@ -6037,7 +6032,7 @@ function _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount) {
   if (valTotal === 0) return { state: "pending", label: "Needs attention", refStatus: "not_started" };
   if (valFailed > 0) return { state: "error", label: "Needs attention", refStatus: mapSummary.referenceStatus };
   if (mapSummary.referenceStatus === "partial_reference_scoring") {
-    return { state: "warning", label: "Partial reference scoring", refStatus: mapSummary.referenceStatus };
+    return { state: "warning", label: "Partial reference comparison", refStatus: mapSummary.referenceStatus };
   }
   if (mapSummary.referenceStatus === "scoring_error") {
     return { state: "error", label: "Needs attention", refStatus: mapSummary.referenceStatus };
@@ -6074,7 +6069,7 @@ function _renderReferenceReportSection(mapSummary) {
   // Compact status panel; raw per-map strings stay inside the collapsed details.
   return `<section class="compact-review-panel compact-status-panel reference-status-card sdc">
     <div class="sdc-head">
-      <h3>Reference Scoring ${helpTooltip("Reference metrics are calculated only when a matching private ground-truth map is available.", "Reference scoring status help")}</h3>
+      <h3>Reference Comparison ${helpTooltip("Reference metrics are calculated only when a matching private ground-truth map is available.", "Reference comparison status help")}</h3>
       ${refChip}
     </div>
     <p class="sdc-reason">${escapeHtml(refReason)}</p>
@@ -6265,13 +6260,13 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
 
   const isConfigured = !!(activeMode && activeMode !== "none");
   const isOfficial = activeMode === "builtin";
-  const actionText = isOfficial ? "Run Official Scoring" : "Run Quality Checks";
+  const actionText = isOfficial ? "Run Official Scoring" : "Run Analysis";
 
   if (isConfigured) {
     const existingPreview = _scoreMetricPreviewHtml();
     if (titleEl) titleEl.textContent = existingPreview
-      ? (isOfficial ? "Official scoring complete" : "Quality checks complete")
-      : (isOfficial ? "Official scoring is ready" : "Quality checks are ready");
+      ? (isOfficial ? "Official scoring complete" : "Analysis complete")
+      : (isOfficial ? "Official scoring is ready" : "Analysis is ready");
     if (previewEl) {
       previewEl.innerHTML = existingPreview;
       previewEl.style.display = existingPreview ? "" : "none";
@@ -6283,7 +6278,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
       ? "Metrics generated successfully."
       : isOfficial
         ? `${scorerName} is active.`
-        : `${scorerName} is active for quality-control metrics. These are not official OSIPI scores.`;
+        : `${scorerName} is active for configured analysis. These are not official OSIPI scores.`;
     if (subEl)   subEl.textContent  = pkgLabel;
 
     const badgeTxt = "Ready";
@@ -6294,7 +6289,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
     if (btnAll)  btnAll.disabled      = true;
   }
 
-  // Re-wire "Run Scoring" button (clone clears old listeners)
+  // Re-wire the configured analysis action (clone clears old listeners)
   if (btnAll && isConfigured) {
     const fresh = btnAll.cloneNode(true);
     fresh.disabled    = false;
@@ -6648,6 +6643,7 @@ async function renderScoreStep() {
   const statusCard        = el("score-status-card");
   const tableCard         = el("score-table-card");
   const activeIsOfficial = activeMode === "builtin";
+  _scoreOfficialMode = activeIsOfficial;
   _setScoreStepCopy({
     official: activeIsOfficial,
     providerName: activeIsOfficial ? (activePackageName || "Official Scoring & Preview") : "",
@@ -6796,13 +6792,14 @@ function _applyScoreStatus(sid, data) {
   if (!row) { renderScorePreviewPanel(); _syncCompactProgress(); return; }
 
   const status = data.status || "not_configured";
+  const isOfficial = _scorePayload(data).official === true;
   row.dataset.scoreStatus = status;
 
   let badgeCls, badgeTxt;
   switch (status) {
-    case "ready":          badgeCls = "ss-ready";    badgeTxt = "Ready to score"; break;
-    case "scored":         badgeCls = "ss-scored";   badgeTxt = "Scored"; break;
-    case "failed":         badgeCls = "ss-failed";   badgeTxt = "Scoring failed"; break;
+    case "ready":          badgeCls = "ss-ready";    badgeTxt = isOfficial ? "Ready for official scoring" : "Ready for analysis"; break;
+    case "scored":         badgeCls = "ss-scored";   badgeTxt = isOfficial ? "Official scoring complete" : "Analysis complete"; break;
+    case "failed":         badgeCls = "ss-failed";   badgeTxt = isOfficial ? "Official scoring failed" : "Analysis failed"; break;
     case "not_configured": badgeCls = "ss-not-conf"; badgeTxt = "Needs setup"; break;
     case "not_ready":      badgeCls = "ss-not-conf"; badgeTxt = "Incomplete"; break;
     default:               badgeCls = "ss-not-conf"; badgeTxt = "—"; break;
@@ -6850,7 +6847,7 @@ function _applyScoreStatus(sid, data) {
       if (detailRow) detailRow.style.display = "";
     } else if (status === "not_ready" && missing.length > 0) {
       // Show missing prereqs collapsed
-      detail.innerHTML = `<details><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Scoring needs additional setup, expand to see details</summary>`
+      detail.innerHTML = `<details><summary style="font-size:0.73rem;cursor:pointer;color:var(--muted)">Analysis needs additional setup, expand to see details</summary>`
         + `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul></details>`;
       if (detailRow) detailRow.style.display = "";
     } else {
@@ -7437,13 +7434,13 @@ function _renderExportRows() {
   if (!host) return;
   const rows = [
     { id: "export-pdf-report-group", icon: "PDF", iconClass: "export-icon-check", title: "PDF Report",
-      meta: "Concise shareable report with metadata, status summary, QC charts, previews when available, and limitations.",
+      meta: "Concise shareable report with metadata, validation and execution status, QC results, and limitations.",
       btn: `<button type="button" id="export-pdf-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download PDF report" title="Downloads the blinded PDF report.">Download PDF</button>` },
     { id: "export-report-group", icon: "HTML", iconClass: "export-icon-check", title: "HTML Report",
-      meta: "Self-contained visual report with tables, charts, map previews, issues, methodology, and limitations.",
+      meta: "Self-contained report with validation, execution, QC and configured analysis tables, issues, methodology, and limitations.",
       btn: `<button type="button" id="export-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Open HTML report" title="Opens the blinded HTML report in a new tab.">Open Report</button>` },
     { id: "export-combined-csv-group", icon: "CSV", iconClass: "export-icon-score", title: "CSV Results",
-      meta: "Reviewer-safe tabular QC/reference summary for spreadsheet review.",
+      meta: "Standard blinded tabular QC/reference summary without team or contact details.",
       btn: `<button type="button" id="export-combined-csv-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download CSV results" title="Downloads the blinded combined CSV summary.">Download CSV</button>` },
     { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON Results",
       meta: "Machine-readable validation, execution, QC, reference, and limitation summary.",
@@ -7451,9 +7448,6 @@ function _renderExportRows() {
     { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Ktrans Statistics CSV",
       meta: "Scan-level median, SD, and CoV for Ktrans within each configured ROI. Descriptive within-scan values, not accuracy or repeatability.",
       btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI Ktrans statistics CSV" title="Downloads within-ROI Ktrans median, SD, and CoV per scan.">Download CSV</button>` },
-    { id: "export-combined-blinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Blinded CSV",
-      meta: "CSV without team, contact, or original submission identifiers.",
-      btn: `<button type="button" id="export-combined-blinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download blinded combined CSV" title="Blinded export removes team name and contact email.">Download CSV</button>` },
     { id: "export-combined-unblinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Unblinded CSV",
       meta: "CSV with team, contact, and original submission identifiers for internal review.",
       btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
@@ -7509,7 +7503,6 @@ if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
   }
 });
 
-_makeCombinedExportHandler(el("export-combined-blinded-btn"),   true);
 _makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
 _makeCombinedExportHandler(el("export-combined-csv-btn"), true);
 _makeCombinedJsonExportHandler(el("export-combined-json-btn"), true);

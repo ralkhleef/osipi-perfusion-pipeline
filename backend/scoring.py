@@ -2236,7 +2236,7 @@ def scoring_status(
                     "provider_id":   pkg_id,
                     "provider_name": f"{manifest['name']} v{manifest['version']}",
                     "status":        saved.get("status", "scored"),
-                    "message":       saved.get("message", "Scoring complete."),
+                    "message":       saved.get("message", "Analysis complete."),
                     "missing":       [],
                     "outputs_ready": True,
                     "outputs_count": len(nifti_out),
@@ -2305,7 +2305,7 @@ def scoring_status(
             "provider_id":   pid,
             "provider_name": provider["provider_name"],
             "status":        saved.get("status", "scored"),
-            "message":       saved.get("message", "Scoring complete."),
+            "message":       saved.get("message", "Analysis complete."),
             "missing":       [],
             "outputs_ready": True,
             "outputs_count": out_count,
@@ -2626,9 +2626,9 @@ def score_submission(
             "status":         "scored",
             "scored_at":      scored_at,
             "message": (
-                "Scoring complete, metrics parsed."
+                "Analysis complete, metrics parsed."
                 if metrics else
-                "Scoring complete, artifacts saved. Metrics could not be parsed from output."
+                "Analysis complete, artifacts saved. Metrics could not be parsed from output."
             ),
             "stdout":         proc.stdout[:4096],
             "metrics":        metrics,

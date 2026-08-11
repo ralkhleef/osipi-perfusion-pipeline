@@ -507,9 +507,9 @@ def run_package_scoring(
             "status":         "scored",
             "scored_at":      scored_at,
             "message": (
-                "Scoring complete, metrics parsed."
+                "Analysis complete, metrics parsed."
                 if metrics else
-                "Scoring complete, artifacts saved. No metrics.json found in output."
+                "Analysis complete, artifacts saved. No metrics.json found in output."
             ),
             "stdout":         proc.stdout[:4096],
             "metrics":        metrics,

@@ -68,8 +68,9 @@
           <h2 id="what-it-does">What the pipeline does</h2>
           <p>Submissions arrive as ZIP archives of NIfTI parameter maps. The pipeline extracts and
             indexes each archive, checks it against the rules configured for its challenge, runs the
-            participant's code in Docker when the submission includes it, computes quality-control
-            and reference-comparison statistics, and exports reports as JSON, CSV, HTML and PDF.</p>
+            participant's code from a Dockerfile when needed, computes quality-control statistics,
+            and exports reports as JSON, CSV, HTML and PDF. Reference comparisons and configured
+            scoring appear only when their required data are available.</p>
           <p>It runs locally. Imaging data, reference maps and ROI masks stay on the machine.</p>
 
           <h2 id="submission-types">Supported submission types</h2>
@@ -122,14 +123,14 @@
               <div class="docs-step-rail"><span class="docs-step-num">5</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">QC and Preview</p>
-                <p>Quality-control statistics, image previews and reference comparison where reference data exists.</p>
+                <p>QC and previews are available for readable maps. ROI statistics, reference comparisons and scoring depend on the challenge configuration and available data.</p>
               </div>
             </div>
             <div class="docs-step">
               <div class="docs-step-rail"><span class="docs-step-num">6</span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">Export</p>
-                <p>HTML and PDF reports, plus JSON and CSV in blinded and unblinded forms.</p>
+                <p>HTML and PDF reports, blinded CSV and JSON results, ROI statistics CSV, and an explicit unblinded CSV for organisers.</p>
               </div>
             </div>
           </div>

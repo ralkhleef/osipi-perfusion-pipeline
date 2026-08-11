@@ -25,7 +25,7 @@ Screenshots for each step are written to `tests/e2e/screenshots/`.
 - Lena single: upload → detect (ASL) → validate → QC & Preview → export
 - Result-only shows "execution not required"
 - QC title/subtitle + "not official OSIPI scores" disclaimer
-- Missing-ATT is a non-blocking warning (Continue stays enabled)
+- Missing required ATT is a blocking validation error (Continue stays disabled)
 - Batch of three stays isolated
 - Start New clears the session
 - Narrow (390px) viewport keeps the primary action visible

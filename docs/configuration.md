@@ -346,7 +346,7 @@ Masks are read from `masks/`, `Masks/`, or files matching `paths.mask_name_patte
 
 The built-in TF6.2 provider is specific to the DCE Ktrans challenge assets listed in the README. Other official scorers should be installed as trusted custom packages or implemented as new provider hooks once mentors provide the official scripts, references, masks, metric definitions, and accepted outputs.
 
-The pipeline never invents official scores. If references, masks, or official scoring assets are missing, reports say reference scoring is not available and show QC metrics only. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
+QC and previews remain available for readable maps. ROI statistics, reference comparisons, and scoring appear only when the challenge configuration and required masks, references, or scoring assets are available. The pipeline never invents official scores, and official OSIPI challenge ranking is not currently configured. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
 
 ## Custom Scoring Packages
 

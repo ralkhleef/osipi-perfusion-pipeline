@@ -161,6 +161,14 @@ def run_submission(
     else:
         data["stderr_preview"] = _read_log_section(result.stderr_path, "run stderr")
     data["output_validation"]    = output_validation
+    data["process_passed"]       = bool(result.passed)
+    data["output_complete"]      = bool(output_validation.get("passed"))
+    data["ready_for_analysis"]   = bool(result.passed and output_validation.get("passed"))
+    data["analysis_status"]      = (
+        "ready" if data["ready_for_analysis"]
+        else "output_incomplete" if result.passed
+        else "execution_failed"
+    )
     # container_start_failed: exit 125 means docker itself couldn't start the
     # container (not the submission code failing). UI uses this to show a
     # user-friendly explanation instead of a generic "run failed" message.

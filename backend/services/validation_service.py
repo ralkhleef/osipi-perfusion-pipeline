@@ -28,6 +28,7 @@ from osipi_pipeline.validation.validate import duplicate_filename_groups
 from osipi_pipeline.validation.completeness import (
     suppressed_legacy_map_ids,
     validate_completeness,
+    validate_generated_map_completeness,
 )
 from osipi_pipeline.performance import (
     configured_worker_limit,
@@ -505,13 +506,21 @@ def validate_submission(
 
     has_run_instructions = _has_docker(all_files)
     has_dockerfile = any(f.name == "Dockerfile" for f in all_files)
+    if _has_compose(all_files) and not has_run_instructions:
+        warnings.append(_warn(
+            "DOCKERFILE_REQUIRED_FOR_EXECUTION",
+            "Docker Compose configuration was found, but this pipeline currently "
+            "executes participant code from a Dockerfile. Add a Dockerfile to "
+            "enable execution; readable result maps can still use result-only mode.",
+            str(folder),
+        ))
 
     if reproducible:
         if not has_run_instructions:
             errors.append(_err(
                 "NO_RUN_INSTRUCTIONS",
-                "No run instructions found (Dockerfile or docker-compose file). "
-                "This package cannot be executed automatically.",
+                "No Dockerfile was found. A Dockerfile is currently required "
+                "to execute participant code automatically.",
                 str(folder),
             ))
         # In reproducible mode, missing code is a warning only
@@ -550,9 +559,6 @@ def validate_submission(
             ", ".join(str(m) for m in matches),
         ))
 
-    blocking_errors = [e for e in errors if e["code"] != "UNKNOWN_CHALLENGE_TYPE"]
-    runnable = has_run_instructions and len(blocking_errors) == 0
-
     # Detect whether the submission has NIfTI maps inside a results/ or maps/
     # subdirectory (for example: submission_root/results/maps/map.nii.gz).
     # A file only counts when it has a configured NIfTI suffix AND lives under
@@ -566,11 +572,21 @@ def validate_submission(
     # Merge structural completeness into the existing issue lists so the
     # single existing gate (passed = no errors) covers them too. No second
     # status mechanism is introduced.
-    for issue in completeness_issues:
+    # Required parameter maps are outputs for reproducible submissions and are
+    # checked after execution. Input/package artifacts (for example DCE's
+    # modelled signal and methods document) still block the pre-run gate.
+    effective_completeness_issues = [
+        issue for issue in completeness_issues
+        if not (reproducible and issue.get("code") == "REQUIRED_MAP_MISSING")
+    ]
+    for issue in effective_completeness_issues:
         if issue.get("severity") == "error":
             errors.append(issue)
         else:
             warnings.append(issue)
+
+    blocking_errors = [e for e in errors if e["code"] != "UNKNOWN_CHALLENGE_TYPE"]
+    runnable = has_run_instructions and len(blocking_errors) == 0
 
     # run_readiness: "runnable" | "result_only" | "not_runnable"
     if runnable:
@@ -669,14 +685,14 @@ def _has_readme(files: List[Path]) -> bool:
 
 
 def _has_docker(files: List[Path]) -> bool:
-    """Return True only when an actual Dockerfile or docker-compose file is present.
+    """Return True only when the executor-supported Dockerfile is present."""
+    return any(f.name.lower() == "dockerfile" for f in files)
 
-    ``.dockerignore`` alone does NOT satisfy this check, it is meaningless
-    without a corresponding Dockerfile.
-    """
+
+def _has_compose(files: List[Path]) -> bool:
     return any(
-        f.name.lower() == "dockerfile"
-        or f.name.lower().startswith("docker-compose")
+        f.name.lower().startswith("docker-compose")
+        or f.name.lower() in {"compose.yml", "compose.yaml"}
         for f in files
     )
 
@@ -708,7 +724,7 @@ def preflight_check(
 
     Returns a lightweight dict with:
       ``runnable``              , True if execution can be attempted.
-      ``has_run_instructions``  , Dockerfile or docker-compose found.
+      ``has_run_instructions``  , executor-supported Dockerfile found.
       ``run_instructions_path`` , relative path to the Dockerfile, or "".
       ``has_run_config``        , run_config.json found (uses default cmd if absent).
       ``has_existing_maps``     , NIfTI files already present (informational).
@@ -839,6 +855,7 @@ def validate_generated_outputs(
     if not output_dir.exists() or not output_dir.is_dir():
         return {
             "passed": False,
+            "output_complete": False,
             "nifti_count": 0,
             "output_files": [],
             "errors": [_err("OUTPUT_DIR_MISSING", "Output directory was not created during execution.")],
@@ -855,6 +872,7 @@ def validate_generated_outputs(
         )
     output_files_rel = sorted(str(f.relative_to(output_dir)) for f in all_files)
     nifti_files = [f for f in all_files if f.name.lower().endswith(NIFTI_SUFFIXES)]
+    configured_map_ids = suppressed_legacy_map_ids(normalized_challenge)
 
     if not nifti_files:
         errors.append(_err(
@@ -878,6 +896,8 @@ def validate_generated_outputs(
             ]
 
         for label, patterns in expected_groups:
+            if label in configured_map_ids:
+                continue
             if not any(pattern in joined for pattern in patterns):
                 warnings.append(_warn(
                     "EXPECTED_MAP_MISSING",
@@ -892,6 +912,15 @@ def validate_generated_outputs(
                     str(f),
                 ))
 
+        for issue in validate_generated_map_completeness(
+            submission_artifacts(output_dir, normalized_challenge),
+            challenge=normalized_challenge,
+        ):
+            if issue.get("severity") == "error":
+                errors.append(issue)
+            else:
+                warnings.append(issue)
+
     # Duplicate filenames in output
     seen: Dict[str, int] = {}
     for f in all_files:
@@ -902,6 +931,7 @@ def validate_generated_outputs(
 
     return {
         "passed":       len(errors) == 0,
+        "output_complete": len(errors) == 0,
         "nifti_count":  len(nifti_files),
         "output_files": output_files_rel,
         "errors":       errors,

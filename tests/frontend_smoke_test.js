@@ -244,7 +244,7 @@ checkContains("Upload local source gates on file selection", appJs, "return !!st
 checkContains("Upload Zenodo source gates on input", appJs, 'source === "zenodo"');
 checkContains("Upload GitHub source gates on input", appJs, 'source === "github"');
 checkContains("Upload CTA disabled until ready", appJs, "submitBtn.disabled = !canUpload");
-checkContains("Challenge type tooltip text", html, "Select the OSIPI challenge type for this submission.");
+checkContains("Challenge type tooltip text", html, "Select a challenge defined by the active pipeline configuration.");
 checkContains("Parameter map type tooltip text", html, "auto-detect configured parameter maps");
 checkNotContains("Duplicate global Start New wrapper removed", html, "global-start-new");
 checkNotContains("Global Start New styling removed", css, "global-new-btn");
@@ -260,7 +260,7 @@ const footerConfigBlock = appJs.slice(
   appJs.indexOf("const _WF_FOOTER_CONFIG"),
   appJs.indexOf("function _selectedSubmissionCount")
 );
-checkContains("Run action label", footerConfigBlock, 'nextLabel: "Continue to Score"');
+checkContains("Run action label", footerConfigBlock, 'nextLabel: "Continue to QC & Preview"');
 checkContains("Score action label", footerConfigBlock, 'nextLabel: "Continue to Export"');
 checkNotContains("Summary action config removed", footerConfigBlock, 'summary:');
 checkContains("Export action label", footerConfigBlock, 'nextLabel: "Start New Submission"');
@@ -681,8 +681,8 @@ console.log("\n[ Score step ]");
 check("Score not-configured compatibility mount", "score-not-configured-card");
 check("Score status card",         "score-status-card");
 check("Score table card",          "score-table-card");
-check("Run Scoring button",        "btn-score-all");
-checkContains("Score configured shows Run Scoring", html, "Run Scoring");
+check("Run analysis button",        "btn-score-all");
+checkContains("Configured analysis action", html, "Run Analysis");
 checkContains("Score duplicate continue hidden", css, "#btn-score-continue");
 checkContains("Score not-configured mount is hidden in markup", section("step-score"), '<div id="score-not-configured-card" hidden style="display:none"></div>');
 checkNotContains("Score not configured text removed from visible UI", section("step-score"), "Scoring not configured");
@@ -731,8 +731,8 @@ checkContains("Leaderboard show more works", appJs, "leaderboard-show-all-btn");
 checkContains("Leaderboard loading state", appJs, "leaderboard-loading");
 checkContains("Leaderboard error retry state", appJs, "leaderboard-retry-btn");
 checkContains("Leaderboard row cards render", appJs, "leaderboard-row");
-checkContains("Leaderboard main status uses QC complete", appJs, 'case "scored":         return "QC complete";');
-checkContains("Leaderboard reference status uses Reference scored", appJs, 'case "scored": return "Reference scored";');
+checkContains("Leaderboard main status uses analysis wording", appJs, 'case "scored":         return "Analysis complete";');
+checkContains("Leaderboard reference status is explicit", appJs, 'case "scored": return "Reference comparison available";');
 checkContains("Leaderboard reference unavailable is plain language", appJs, "Reference unavailable");
 const leaderboardEntryBlock = appJs.slice(
   appJs.indexOf("function _renderLeaderboardEntry"),
@@ -771,7 +771,7 @@ const scorePreviewBlock = appJs.slice(
 );
 checkContains("Step 5 label is QC & Preview", scoreSection, "Step 5 of 6: QC &amp; Preview");
 checkContains("Step 5 title is QC & Preview", scoreSection, '<h1 class="card-title" id="score-step-title">QC &amp; Preview</h1>');
-checkContains("Step 5 generic QC wording", scoreSection, "Quality checks and generic reference comparisons");
+checkContains("Step 5 generic QC wording", scoreSection, "QC and previews are available for readable maps");
 checkContains("Dynamic official scoring title helper", appJs, "function _setScoreStepCopy");
 checkContains("Step 5 preview panel mount exists", scoreSection, 'id="score-preview-panel"');
 checkContains("Score preview renderer exists", appJs, "function renderScorePreviewPanel");
@@ -791,7 +791,7 @@ checkContains("Score preview has submission case header", appJs, "score-case-bar
 checkContains("Score preview has compact QC panel", appJs, "compact-review-panel qc-results-panel");
 checkContains("Score preview has QC Results section", appJs, "QC Results");
 checkContains("Score preview has Map Preview section", appJs, "Map Preview");
-checkContains("Score preview has Reference Scoring status", appJs, "Reference Scoring");
+checkContains("Score preview has Reference Comparison status", appJs, "Reference Comparison");
 checkOrder("Score preview sections render in review order", appJs, [
   "finalOutputHtml",
   "qcSummaryHtml",
@@ -1068,7 +1068,7 @@ const advanceWizardBlock = appJs.slice(
   appJs.indexOf("function _advanceWizardStep"),
   appJs.indexOf("function _syncStepActionRow")
 );
-checkContains("Combined export blinded btn", appJs, 'id="export-combined-blinded-btn"');
+checkNotContains("Redundant blinded export row removed", mainExportOptions, 'id="export-combined-blinded-btn"');
 checkContains("Combined export unblinded btn", appJs, 'id="export-combined-unblinded-btn"');
 checkContains("HTML report button", appJs, 'id="export-report-btn"');
 checkContains("PDF report button", appJs, 'id="export-pdf-report-btn"');
@@ -1078,16 +1078,15 @@ checkContains("Export summary title", exportSection, "Final review summary");
 checkContains("Export disclaimer moved into a tooltip", exportSection, "Generic QC metrics are not official OSIPI scoring");
 checkContains("Export main list exists", exportSection, "export-main-list");
 checkContains("Export step label is Step 6 of 6", exportSection, "Step 6 of 6: Export");
-checkEqual("Step 6 main UI shows seven main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 7);
+checkEqual("Step 6 main UI shows six main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 6);
 checkContains("Main HTML Report option", mainExportOptions, "HTML Report");
 checkContains("Main PDF Report option", mainExportOptions, "PDF Report");
 checkContains("Main CSV Results option", mainExportOptions, "CSV Results");
 checkContains("Main JSON Results option", mainExportOptions, "JSON Results");
-checkContains("Main Blinded CSV option", mainExportOptions, "Blinded CSV");
+checkNotContains("Redundant Blinded CSV option removed", mainExportOptions, "Blinded CSV");
 checkContains("Main Unblinded CSV option", mainExportOptions, "Unblinded CSV");
-checkContains("Main report description", mainExportOptions, "Self-contained visual report");
+checkContains("Main report description", mainExportOptions, "Self-contained report");
 checkContains("Main PDF report description", mainExportOptions, "Concise shareable report");
-checkContains("Main blinded CSV description", mainExportOptions, "CSV without team, contact");
 checkContains("Main unblinded CSV description", mainExportOptions, "CSV with team, contact");
 checkNotContains("Main copy avoids reviewer-safe wording", mainExportOptions, "reviewer-safe");
 checkNotContains("Main copy avoids external evaluation wording", mainExportOptions, "external evaluation");
@@ -1096,10 +1095,10 @@ checkContains("Main copy explains identifier visibility", mainExportOptions, "or
 checkContains("Main report button label", mainExportOptions, ">Open Report</button>");
 checkContains("Main PDF report button label", mainExportOptions, ">Download PDF</button>");
 checkContains("Main JSON button label", mainExportOptions, ">Download JSON</button>");
-checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 4);
+checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 3);
 checkContains("Main report reuses existing report ID", mainExportOptions, 'id="export-report-btn"');
 checkContains("Main PDF report uses PDF export ID", mainExportOptions, 'id="export-pdf-report-btn"');
-checkContains("Main blinded CSV reuses combined export ID", mainExportOptions, 'id="export-combined-blinded-btn"');
+checkNotContains("Main redundant blinded CSV ID removed", mainExportOptions, 'id="export-combined-blinded-btn"');
 checkContains("Main unblinded CSV reuses combined export ID", mainExportOptions, 'id="export-combined-unblinded-btn"');
 checkContains("Export file list exists", html, "export-file-list");
 checkContains("Export file rows exist", appJs, "export-main-row export-file-row");
@@ -1119,7 +1118,7 @@ checkNotContains("Batch execution raw button removed from UI", exportSection, "b
 checkNotContains("Single validation raw button removed from UI", exportSection, "export-val-blinded-btn");
 checkNotContains("Single execution raw button removed from UI", exportSection, "exec-export-blinded-btn");
 checkNotContains("Scoring raw button removed from UI", exportSection, "export-scoring-blinded-btn");
-checkContains("Export keeps full combined aria labels", appJs, "Download blinded combined CSV");
+checkContains("Export keeps full standard CSV aria label", appJs, "Download CSV results");
 checkContains("Export keeps full report aria label", appJs, "Open HTML report");
 checkContains("Export keeps full PDF aria label", appJs, "Download PDF report");
 checkContains("Step 1 Upload remains intact", section("step-upload"), 'id="drop-zone"');
@@ -1270,7 +1269,7 @@ checkContains("Shared card width variable drives every shell", css, "max-width: 
 
 // Export exposes ONLY the four consolidated worklist rows
 const exportSec = mainExportOptions;
-["HTML Report", "PDF Report", "Blinded CSV", "Unblinded CSV"].forEach((label) => {
+["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Ktrans Statistics CSV", "Unblinded CSV"].forEach((label) => {
   checkContains(`Export shows ${label} row`, exportSec, `title: "${label}"`);
 });
 checkNotContains("Export hides raw Validation CSV", exportSec, "Validation CSV");
@@ -1282,7 +1281,7 @@ checkNotContains("Export drops old export-groups grid", exportSec, "export-group
 checkNotContains("Export drops advanced/raw export UI", exportSec, "export-advanced");
 checkContains("Export keeps HTML report handler id", exportSec, 'id="export-report-btn"');
 checkContains("Export keeps PDF report handler id", exportSec, 'id="export-pdf-report-btn"');
-checkContains("Export keeps blinded CSV handler id", exportSec, 'id="export-combined-blinded-btn"');
+checkNotContains("Export removes redundant blinded CSV handler id", exportSec, 'id="export-combined-blinded-btn"');
 checkContains("Export keeps unblinded CSV handler id", exportSec, 'id="export-combined-unblinded-btn"');
 
 // One shared status-chip system — no bespoke pill markup bypasses it
@@ -1302,7 +1301,7 @@ checkContains("Old Score table hidden in flow", css, "#step-score #score-table-c
 checkContains("Old scoring admin setup hidden in flow", css, "#step-score #scoring-admin-panel,");
 checkNotContains("Score row drops multi-badge cluster", appJs, "list-chip list-chip-strong");
 checkNotContains("Score row drops always-visible metric row extraMain", appJs, "extraMain: metricRow");
-checkContains("Score row meta is one compact line", appJs, 'refScored ? "Reference scored" : "QC only"');
+checkContains("Score row meta is one compact line", appJs, 'refScored ? "Reference comparison available" : "QC only"');
 checkContains("Score metrics moved into details", appJs, "leaderboard-metric-row");
 checkContains("Score head is a row, not a column", css, ".leaderboard-row-title {\n  display: flex;\n  flex-direction: row;");
 checkNotContains("Score collapsed status slot removed from renderer", leaderboardEntryBlock, "leaderboard-row-badges");

@@ -190,3 +190,30 @@ def test_generated_outputs_refresh_manifest(tmp_path: Path, monkeypatch: pytest.
 
     assert result["nifti_count"] == 1
     assert (output_dir / ".osipi_manifest.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("challenge", "present_name", "missing_label"),
+    [
+        ("asl", "CBF_map.nii", "ATT"),
+        ("dce", "vp_map.nii", "Ktrans"),
+    ],
+)
+def test_generated_outputs_require_configured_analysis_maps(
+    tmp_path: Path, challenge: str, present_name: str, missing_label: str
+) -> None:
+    import services.validation_service as vs
+
+    output_dir = tmp_path / challenge
+    output_dir.mkdir()
+    (output_dir / present_name).write_bytes(b"fake")
+
+    result = vs.validate_generated_outputs(output_dir, challenge_type=challenge)
+
+    assert result["passed"] is False
+    assert result["output_complete"] is False
+    assert any(
+        issue["code"] == "REQUIRED_MAP_MISSING"
+        and missing_label.lower() in issue["message"].lower()
+        for issue in result["errors"]
+    )

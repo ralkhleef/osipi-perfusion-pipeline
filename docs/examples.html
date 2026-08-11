@@ -124,43 +124,32 @@
                    loading="lazy" decoding="async"
                    alt="Export screen titled Export review package">
             </a>
-            <figcaption><strong>6. Export.</strong> Download a PDF report, HTML report, CSV results,
-              JSON results, ROI Ktrans statistics CSV, blinded CSV, or unblinded CSV.</figcaption>
+            <figcaption><strong>6. Export.</strong> Download a PDF report, HTML report, standard
+              blinded CSV results, JSON results, ROI Ktrans statistics CSV, or an unblinded CSV for
+              organiser review.</figcaption>
           </figure>
         </section>
 
         <section>
           <h2 id="example-output" data-toc-title="Example output">Example output</h2>
-          <p>A real report, produced by running <code>python3 scripts/demo_evidence.py</code> against
-            a generated DCE submission of 16 scans. Nothing here is mocked up: it is the same code
-            path the Export step uses.</p>
+          <p>This is a real example report created from a demo DCE submission with 16 scans. It uses
+            the same pipeline as the Export step.</p>
 
-          <p>The report below is the <strong>blinded</strong> copy, which is what reviewers see. The
-            team name and contact address are absent and the submission is identified only by
-            number. Its scoring columns are empty because the demo runs without reference maps, so
-            the report shows quality control only and states that.</p>
+          <p>The report is <strong>blinded</strong>, so the team name and contact information are
+            hidden. This demo has no compatible reference maps, so reference-comparison metrics are
+            unavailable for this example.</p>
 
-          <div class="docs-downloads">
-            <a class="docs-download" href="downloads/example-report-blinded.pdf">
-              <span class="docs-download-kind">PDF</span>
-              <span class="docs-download-name">Evaluation report</span>
-              <span class="docs-download-note">Four pages, blinded</span>
-            </a>
-            <a class="docs-download" href="downloads/example-roi-statistics.csv">
-              <span class="docs-download-kind">CSV</span>
-              <span class="docs-download-name">ROI statistics</span>
-              <span class="docs-download-note">32 rows, one per scan and region</span>
-            </a>
-          </div>
+          <ul>
+            <li><a href="https://ralkhleef.github.io/osipi-perfusion-pipeline/downloads/example-report-blinded.pdf">PDF report</a></li>
+            <li><a href="https://ralkhleef.github.io/osipi-perfusion-pipeline/downloads/example-roi-statistics.csv"
+                   aria-label="ROI statistics CSV, 32 rows">ROI statistics CSV</a></li>
+          </ul>
 
-          <p>The CSV is the machine-readable form of the same run: one row per scan and ROI, with
-            the median, standard deviation and coefficient of variation, the voxel count, the units,
-            and a status column recording why any value is unavailable.</p>
+          <p>The CSV includes statistics for each scan and ROI, such as the median, standard
+            deviation, CoV, and voxel count.</p>
 
-          <p>To produce these yourself, along with the HTML report, the JSON exports and the
-            unblinded copies, run the demo from a clone. It writes to
-            <code>data/outputs/demo_evidence/</code> and leaves no submissions behind. See
-            <a href="install.html#tests">Running the tests</a>.</p>
+          <p>You can also generate the HTML, JSON, and unblinded outputs by running the demo
+            locally.</p>
         </section>
 
       </div>

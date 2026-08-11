@@ -34,6 +34,7 @@ function ok(desc, cond) {
 // ── Stubs the extracted functions depend on ────────────────────────────────
 let batchState = { validationData: null, uploadData: null, isBatch: false, selectedIds: new Set() };
 let state = { submissionId: null };
+let _execSummaries = {};
 function issueCount(r, f) {
   if (!r) return 0;
   if (Array.isArray(r[f])) return r[f].length;
@@ -89,9 +90,17 @@ ok("mixed batch with one passing enables Continue", _isStepReady("validate") ===
 batchState.validationData = { results: [] };
 ok("no results blocks with 'Run validation' reason", _isStepReady("validate") === false && /run validation/i.test(_stepBlockedReason("validate")));
 
-// E — downstream steps never trap the user. The "summary" step was retired
-// (its content folds into Score & Preview); Run and Score always allow Continue.
-["run", "score"].forEach((s) => ok(s + " Continue always enabled", _isStepReady(s) === true));
+// E — result-only maps proceed without execution; runnable submissions must
+// finish both the process and generated-output validation.
+batchState.validationData = { results: [{ submission_id: "maps", passed: true, errors: [], run_readiness: "result_only" }] };
+ok("result-only maps enable Run Continue", _isStepReady("run") === true);
+batchState.validationData = { results: [{ submission_id: "code", passed: true, errors: [], run_readiness: "runnable" }] };
+ok("unprocessed runnable submission blocks Run Continue", _isStepReady("run") === false);
+_execSummaries.code = { status: "failed", processPassed: true, outputComplete: false };
+ok("successful process with incomplete outputs stays blocked", _isStepReady("run") === false);
+_execSummaries.code = { status: "passed", processPassed: true, outputComplete: true };
+ok("complete generated outputs enable Run Continue", _isStepReady("run") === true);
+ok("Score Continue remains enabled", _isStepReady("score") === true);
 ok("export has no next", _isStepReady("export") === false);
 
 // ── Upload readiness: footer CTA enables only when a source is selected ─────
@@ -125,7 +134,9 @@ ok("upload uses in-card submit button wired to handleSubmit", /submitBtn\.addEve
 ok("upload submit is disabled-not-hidden when no source chosen", /submitBtn\.disabled = !canUpload/.test(src));
 ok("upload Back hidden via visibility (keeps CTA right-aligned)", /backBtn\.style\.visibility = "hidden"/.test(src));
 ok("validate gate uses error count, not run-readiness", extract("_isStepReady").includes('issueCount(r, "errors") === 0'));
-ok("validate gate (in _isStepReady) does not call inferredRunReadiness", !extract("_isStepReady").includes("inferredRunReadiness"));
+const stepReadySource = extract("_isStepReady");
+const validateGateSource = stepReadySource.slice(stepReadySource.indexOf('case "validate"'), stepReadySource.indexOf('case "run"'));
+ok("validate gate (in _isStepReady) does not call inferredRunReadiness", !validateGateSource.includes("inferredRunReadiness"));
 ok("nav refreshed after async steps (_refreshWizardFooter present)", /function _refreshWizardFooter/.test(src) && (src.match(/_refreshWizardFooter\(\)/g) || []).length >= 3);
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

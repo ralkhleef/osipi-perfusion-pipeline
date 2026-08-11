@@ -59,10 +59,10 @@ test.describe("OSIPI acceptance — full workflow", () => {
     await expect(page.getByText(/execution not required|result maps only|result-only/i).first()).toBeVisible();
 
     // Continue through Run to QC & Preview
-    await page.getByRole("button", { name: /continue to (run|score)/i }).first().click();
-    await page.getByRole("button", { name: /continue to (score|export)/i }).first().click();
+    await page.getByRole("button", { name: /continue to (run|qc)/i }).first().click();
+    await page.getByRole("button", { name: /continue to (qc|export)/i }).first().click();
     await expect(page.getByText(/QC & Preview/i).first()).toBeVisible();
-    await expect(page.getByText(/Quality checks and generic reference comparisons/i)).toBeVisible();
+    await expect(page.getByText(/QC and previews are available for readable maps/i)).toBeVisible();
     await expect(page.getByText(/not official OSIPI/i).first()).toBeVisible();
     await shot(page, "04_qc_preview");
 
@@ -72,16 +72,15 @@ test.describe("OSIPI acceptance — full workflow", () => {
     await shot(page, "05_export");
   });
 
-  test("Missing ATT surfaces a non-blocking warning, not a hard error", async ({ page }) => {
+  test("Missing required ATT is a blocking validation error", async ({ page }) => {
     await page.goto(BASE_URL);
     await uploadZip(page, LENA_MISSING_ATT);
     await page.getByRole("button", { name: /upload.*(detect|continue)/i }).click();
     await page.getByRole("button", { name: /validate/i }).first().click();
     await expect(page.getByText(/ATT|arterial transit/i).first()).toBeVisible({ timeout: 60000 });
-    // Continue must remain enabled (warning, not blocking error)
-    const cont = page.getByRole("button", { name: /continue to (run|score)/i }).first();
-    await expect(cont).toBeEnabled();
-    await shot(page, "06_missing_att_warning");
+    const cont = page.getByRole("button", { name: /continue to run/i }).first();
+    await expect(cont).toBeDisabled();
+    await shot(page, "06_missing_att_error");
   });
 
   test("Batch of three stays isolated", async ({ page }) => {

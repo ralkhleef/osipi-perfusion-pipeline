@@ -325,7 +325,7 @@ def _is_readme(path: Path) -> bool:
 
 def _is_docker_file(path: Path) -> bool:
     name = path.name.lower()
-    return name == "dockerfile" or name == ".dockerignore" or name.startswith("docker-compose")
+    return name == "dockerfile"
 
 
 def _is_code(path: Path, parts: Iterable[str]) -> bool:

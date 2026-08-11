@@ -241,7 +241,7 @@ def _is_readme(path: Path) -> bool:
 
 def _is_docker_file(path: Path) -> bool:
     name = path.name.lower()
-    return name == "dockerfile" or name.startswith("docker-compose")
+    return name == "dockerfile"
 
 def _empty_nifti_warnings(nifti_files: list[Path]) -> list[ValidationIssue]:
     warnings: list[ValidationIssue] = []

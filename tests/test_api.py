@@ -1318,16 +1318,69 @@ def test_result_only_submission_run_readiness(client: TestClient) -> None:
     assert body.get("passed") is True or body.get("nifti_count", 0) >= 1
 
 
-def test_reproducible_submission_is_runnable(client: TestClient) -> None:
-    """A submission with a Dockerfile gets run_readiness == 'runnable'."""
+def test_missing_required_asl_map_blocks_run_readiness(client: TestClient) -> None:
+    data, fname = _make_asl_result_maps_zip("cbf_only.zip", [1, 2, 3, 4])
+    sid = _upload_and_get_id(client, data, fname)
+    body = client.post("/api/validate", json={
+        "submission_id": sid, "challenge_type": "asl", "mode": "result_only",
+    }).json()
+
+    assert body["passed"] is False
+    assert body["runnable"] is False
+    assert body["run_readiness"] == "not_runnable"
+    assert any(
+        issue.get("code") == "REQUIRED_MAP_MISSING"
+        and "att" in issue.get("message", "").lower()
+        for issue in body["errors"]
+    )
+
+
+def test_compose_only_package_is_not_advertised_as_executable(client: TestClient) -> None:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("results/maps/CBF_map.nii", _tiny_nifti_bytes())
+        zf.writestr("results/maps/ATT_map.nii", _tiny_nifti_bytes())
+        zf.writestr("README.md", "# result maps")
+        zf.writestr("docker-compose.yml", "services:\n  pipeline:\n    image: demo\n")
+    sid = _upload_and_get_id(client, buf.getvalue(), "compose-only.zip")
+    body = client.post("/api/validate", json={
+        "submission_id": sid, "challenge_type": "asl", "mode": "result_only",
+    }).json()
+
+    assert body["has_dockerfile"] is False
+    assert body["has_run_instructions"] is False
+    assert body["runnable"] is False
+    assert body["run_readiness"] == "result_only"
+    assert "DOCKERFILE_REQUIRED_FOR_EXECUTION" in _warning_codes(body)
+
+
+def test_dockerfile_does_not_override_missing_dce_artifacts(client: TestClient) -> None:
+    """Execution instructions cannot bypass configured completeness errors."""
     data, fname = _make_reproducible_zip()
     sid = _upload_and_get_id(client, data, fname)
     r = client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "reproducible"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body.get("has_dockerfile") is True
-    rr = body.get("run_readiness", "")
-    assert rr == "runnable", f"Expected 'runnable', got {rr!r}"
+    assert body.get("has_run_instructions") is True
+    assert body.get("runnable") is False
+    assert body.get("run_readiness") == "not_runnable"
+    assert any(
+        issue.get("code") == "REQUIRED_ARTIFACT_MISSING"
+        for issue in body.get("errors", [])
+    )
+
+
+def test_reproducible_asl_can_run_before_output_maps_exist(client: TestClient) -> None:
+    data, fname = _make_reproducible_zip("asl-code.zip")
+    sid = _upload_and_get_id(client, data, fname)
+    body = client.post("/api/validate", json={
+        "submission_id": sid, "challenge_type": "asl", "mode": "reproducible",
+    }).json()
+
+    assert body["passed"] is True
+    assert body["has_dockerfile"] is True
+    assert body["run_readiness"] == "runnable"
 
 
 def test_scoring_not_configured_returns_honest_status(client: TestClient) -> None:

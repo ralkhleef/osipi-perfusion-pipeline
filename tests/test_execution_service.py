@@ -332,6 +332,33 @@ def test_a_missing_output_directory_is_reported_as_a_validation_error(runnable,
     validation = out["output_validation"]
     assert validation["passed"] is False
     assert validation["errors"][0]["code"] == "OUTPUT_DIR_MISSING"
+    assert out["process_passed"] is True
+    assert out["output_complete"] is False
+    assert out["ready_for_analysis"] is False
+    assert out["analysis_status"] == "output_incomplete"
+
+
+def test_process_success_and_output_completeness_are_separate(runnable, monkeypatch,
+                                                               tmp_path):
+    module, _ = runnable
+    output = tmp_path / "generated"
+    output.mkdir()
+    _capture(monkeypatch, module, tmp_path, output_path=str(output), passed=True)
+    monkeypatch.setattr(module, "validate_generated_outputs", lambda *a, **k: {
+        "passed": False,
+        "output_complete": False,
+        "nifti_count": 1,
+        "output_files": ["CBF.nii.gz"],
+        "errors": [{"code": "REQUIRED_MAP_MISSING", "message": "ATT is missing."}],
+        "warnings": [],
+    })
+
+    out = module.run_submission("sub", challenge_type="asl")
+
+    assert out["passed"] is True
+    assert out["process_passed"] is True
+    assert out["output_complete"] is False
+    assert out["ready_for_analysis"] is False
 
 
 def test_the_resource_limits_the_caller_sets_are_passed_through(runnable, monkeypatch,

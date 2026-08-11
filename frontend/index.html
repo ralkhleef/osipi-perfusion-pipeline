@@ -106,14 +106,11 @@
             <div class="field-label-row">
               <label class="label" style="margin-bottom:0">Challenge Type <span class="req">*</span></label>
               <button type="button" class="help-tooltip" aria-label="Challenge type help">?
-                <span class="tooltip-text">Select the OSIPI challenge type for this submission.</span>
+                <span class="tooltip-text">Select a challenge defined by the active pipeline configuration.</span>
               </button>
             </div>
             <div class="pill-row" role="radiogroup" aria-label="Challenge type" style="margin-top:8px">
               <span class="config-placeholder">Configured challenges will appear here.</span>
-            </div>
-            <div id="challenge-other-wrap" style="display:none; margin-top:10px;">
-              <input type="text" id="challenge-type-other" placeholder="Enter challenge type" />
             </div>
             <div id="challenge-type-error" class="field-error"></div>
           </div>
@@ -360,7 +357,7 @@
       <div id="run-skipped-notice" class="run-skipped-notice" style="display:none">
         <h3 style="margin-bottom:6px">Maps ready for review</h3>
         <p>Result maps were included in these submissions. No code run was needed.</p>
-        <button type="button" id="run-skipped-continue-btn" class="btn btn-primary">Continue to Score</button>
+        <button type="button" id="run-skipped-continue-btn" class="btn btn-primary">Continue to QC &amp; Preview</button>
       </div>
 
       <!-- Run summary + action card -->
@@ -454,7 +451,7 @@
         <div class="heading-text">
           <span class="step-label" id="score-step-label">Step 5 of 6: QC &amp; Preview</span>
           <h1 class="card-title" id="score-step-title">QC &amp; Preview</h1>
-          <p class="card-desc" id="score-step-desc">Quality checks and generic reference comparisons before exporting.</p>
+          <p class="card-desc" id="score-step-desc">QC and previews are available for readable maps. Additional configured analyses appear when their required data are available.</p>
         </div>
       </header>
 
@@ -468,16 +465,16 @@
         <div class="smc-icon smc-icon--ready">QC</div>
         <div class="smc-body">
           <div class="smc-title-row">
-            <div class="smc-title" id="score-status-title">Scoring is ready</div>
+            <div class="smc-title" id="score-status-title">Analysis is ready</div>
             <span class="smc-badge smc-badge--ready" id="score-status-badge">Configured</span>
             <button type="button" class="help-tooltip" aria-label="QC metrics help">?
               <span class="tooltip-text">QC metrics describe map validity and statistics. They are not official OSIPI scores.</span>
             </button>
           </div>
-          <p class="smc-desc" id="score-status-sub">Scoring is active.</p>
+          <p class="smc-desc" id="score-status-sub">Configured analysis is active.</p>
           <div id="score-metric-preview" class="score-metric-preview" style="display:none"></div>
           <div class="smc-actions">
-            <button id="btn-score-all" class="btn btn-primary" type="button">Run Scoring</button>
+            <button id="btn-score-all" class="btn btn-primary" type="button">Run Analysis</button>
             <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue to Export</button>
           </div>
           <p class="smc-hint" id="score-status-hint"></p>
@@ -654,15 +651,15 @@
         <p class="smc-hint" id="roi-descriptive-method" style="margin-top:8px"></p>
       </div>
 
-      <!-- Leaderboard: all previously scored submissions -->
+      <!-- Analysis results from previously processed submissions -->
       <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
         <div class="pg-card-header">
           <div class="collapsible-section-header section-row leaderboard-section-toggle">
-            <span class="collapsible-section-title section-title">All Scored Submissions <span class="collapsible-count section-count" id="leaderboard-section-count">0</span></span>
+            <span class="collapsible-section-title section-title">Processed Submissions <span class="collapsible-count section-count" id="leaderboard-section-count">0</span></span>
             <span class="section-actions"></span>
           </div>
           <div class="leaderboard-header-copy">
-            <div class="pg-card-sub" id="leaderboard-sub">Review scored submissions, reference status, and export readiness.</div>
+            <div class="pg-card-sub" id="leaderboard-sub">Review QC, configured analysis results, reference status, and export readiness.</div>
           </div>
           <button type="button" id="leaderboard-refresh-btn" class="btn btn-secondary btn-sm">Refresh</button>
         </div>
@@ -677,7 +674,7 @@
             <tr class="sc-table-head">
               <th>Submission</th>
               <th>Status</th>
-              <th>Scored at</th>
+              <th>Processed at</th>
               <th>Accuracy</th>
               <th>Repeatability</th>
               <th>Silver Score</th>

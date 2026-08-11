@@ -1808,7 +1808,7 @@ def score_batch_endpoint(req: ScoreBatchRequest):
 
 @app.get("/api/leaderboard")
 def get_leaderboard():
-    """Return a list of all scored submissions (simple summary, no ranking).
+    """Return submissions with stored analysis results (summary, no ranking).
 
     Reads every ``*_score.json`` file from the scoring outputs directory and
     returns them sorted by ``scored_at`` descending (most recent first).
