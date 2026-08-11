@@ -57,8 +57,8 @@
         <section id="introduction">
           <p class="docs-breadcrumb">OSIPI / GSoC 2026</p>
           <h1>Perfusion Challenge Pipeline</h1>
-          <p class="docs-lead">A configurable local web application for reviewing <strong>DCE, ASL,
-            and DSC perfusion MRI challenge submissions</strong>.</p>
+          <p class="docs-lead">A configurable local web application for reviewing DCE, ASL,
+            and DSC perfusion MRI challenge submissions.</p>
 
           <div class="d-flex flex-wrap gap-2 mt-4 mb-2">
             <a class="btn btn-primary" href="install.html#installation">Run locally</a>
@@ -69,14 +69,14 @@
           <p>The pipeline gives challenge organisers and reviewers a consistent and reproducible way
             to process perfusion MRI submissions.</p>
 
-          <p>Submissions can be imported from a <strong>ZIP, folder/files, GitHub repository, or
-            Zenodo record</strong>. The pipeline detects and organises the submitted files, validates
+          <p>Submissions can be imported from a ZIP, folder/files, GitHub repository, or
+            Zenodo record. The pipeline detects and organises the submitted files, validates
             them against challenge-specific requirements, and runs participant code in Docker when
             needed.</p>
 
-          <p>It then provides <strong>map QC and previews</strong>, with additional <strong>DCE Ktrans
+          <p>It then provides map QC and previews, with additional DCE Ktrans
             ROI descriptive statistics, generic reference comparisons, and provider-specific analysis
-            or scoring results</strong> when the required masks, reference maps, or configured provider
+            or scoring results when the required masks, reference maps, or configured provider
             assets are available. Official OSIPI challenge ranking is not currently configured.
             Results can be exported as PDF, HTML, CSV, and JSON reports.</p>
 
@@ -88,9 +88,9 @@
             <table>
               <thead><tr><th>Type</th><th>Contains</th><th>What happens</th></tr></thead>
               <tbody>
-                <tr><td><strong>Result-only</strong></td><td>Completed parameter maps</td><td>Maps are validated and reviewed directly</td></tr>
-                <tr><td><strong>Reproducible</strong></td><td>Code plus a Dockerfile</td><td>Code runs in Docker, then generated outputs are validated</td></tr>
-                <tr><td><strong>Batch review</strong></td><td>Multiple submissions</td><td>Submissions are detected and processed separately</td></tr>
+                <tr><td>Result-only</td><td>Completed parameter maps</td><td>Maps are validated and reviewed directly</td></tr>
+                <tr><td>Reproducible</td><td>Code plus a Dockerfile</td><td>Code runs in Docker, then generated outputs are validated</td></tr>
+                <tr><td>Batch review</td><td>Multiple submissions</td><td>Submissions are detected and processed separately</td></tr>
               </tbody>
             </table>
           </div>
