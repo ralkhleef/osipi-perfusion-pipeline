@@ -20,7 +20,7 @@
       links: [
         ["#introduction", "Introduction"],
         ["#what-it-does", "What it does"],
-        ["#submission-types", "Submission types"],
+        ["#submission-workflows", "Submission workflows"],
         ["#pipeline-workflow", "Workflow"],
       ],
     },
@@ -79,10 +79,10 @@
       tab: "GSoC",
       links: [
         ["#project", "The project"],
-        ["#what-shipped", "What shipped"],
-        ["#still-open", "Still open"],
-        ["#who-changes-what", "Who changes what"],
-        ["#testing", "Testing"],
+        ["#challenge-review", "Built for challenge review"],
+        ["#how-built", "How it was built"],
+        ["#testing", "Testing and reliability"],
+        ["#result", "Project result"],
         ["#documents", "Documents"],
       ],
     },

@@ -72,7 +72,7 @@
                 <tr><td>Expected dataset structure</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.datasets</code></td></tr>
                 <tr><td>Map names, labels, units, dimensions</td><td><code>config/validation_rules.yaml</code></td><td>The <code>map_types</code> block</td></tr>
                 <tr><td>Filename identity parsing</td><td><code>config/validation_rules.yaml</code></td><td><code>filename_identity_patterns</code></td></tr>
-                <tr><td>Scoring script and its metrics</td><td>A scoring package</td><td><code>manifest.json</code>, uploaded through Scoring Setup</td></tr>
+                <tr><td>Provider-specific scoring script and metrics</td><td>Built-in legacy provider hook or trusted custom package</td><td>Provider implementation, or <code>manifest.json</code> uploaded through Scoring Setup</td></tr>
                 <tr><td>Reference and mask locations</td><td><code>backend/services/path_config.py</code></td><td>Provider and output directory constants</td></tr>
                 <tr><td>Participant execution command</td><td><code>run_config.json</code> in the submission</td><td><code>command</code>, <code>timeout_seconds</code></td></tr>
               </tbody>
@@ -118,6 +118,8 @@
             Non-map artifacts such as a 4-D modelled signal-time curve or a methods document are
             declared under <code>artifact_types</code> and required per challenge. Where an artifact declares
             <code>dimensions</code>, the value is checked against the NIfTI header.</p>
+          <p>The current ASL rules require CBF and ATT. The current DSC rules require CBV, CBF and
+            MTT. Their missing maps are blocking errors, not legacy expected-map warnings.</p>
 
           <h3 id="example-b">Example: change <code>ve</code> from optional to required</h3>
           <div class="docs-code">
@@ -163,12 +165,19 @@
         </section>
 
         <section>
-          <h2 id="scoring-providers" data-toc-title="Scoring providers">Scoring providers</h2>
-          <p>A scoring provider is an uploaded package, not a registry entry in the source. Each package
-            holds a scoring script and a <code>manifest.json</code> listing the metrics it returns.
-            Packages are installed through Scoring Setup and selected as active per challenge.</p>
+          <h2 id="scoring-providers" data-toc-title="Analysis and scoring">Analysis and scoring</h2>
+          <p>Three mechanisms are distinct. Generic reference comparison is part of the pipeline: it
+            compares readable maps with compatible references and can run even when provider scoring
+            mode is <code>none</code>. The built-in legacy TF6.2 provider is a bundled hook for its
+            specific DCE Ktrans assets; it is not an uploaded package. Trusted custom scoring
+            packages are uploaded ZIPs selected per challenge.</p>
+          <p>Provider mode <code>none</code> disables provider/official scoring, not generic QC,
+            previews, exports, compatible DCE Ktrans ROI descriptive statistics, or compatible
+            generic reference comparisons. Official provider output requires an approved provider
+            and its organiser-owned assets. Official OSIPI challenge ranking is not currently
+            configured.</p>
 
-          <h3 id="package-layout">What a package contains</h3>
+          <h3 id="package-layout">What a custom package contains</h3>
           <p>A package is a ZIP holding the manifest and the script, plus any reference data the
             script needs. <code>manifest.json</code> may sit at the root or one level down, so an
             archive made by zipping a folder works without repacking.</p>
@@ -241,10 +250,11 @@
             <code>.gitignore</code> excludes reference data, masks and imaging files from version
             control.</p>
           <div class="docs-callout">
-            <p>QC and previews remain available for readable maps. ROI statistics, reference
-              comparisons and scoring appear only when the challenge configuration and required
-              masks, references or scoring assets are available. Official OSIPI challenge ranking
-              is not currently configured.</p>
+            <p>QC and previews remain available for readable maps. DCE Ktrans ROI descriptive
+              statistics can appear with compatible ROI masks, generic reference comparisons with
+              compatible reference maps, and provider-specific analysis or scoring when configured
+              with its required assets. Generic reference comparisons are not automatically official
+              scores. Official OSIPI challenge ranking is not currently configured.</p>
           </div>
         </section>
 

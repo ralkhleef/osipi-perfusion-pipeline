@@ -137,8 +137,8 @@ cd osipi-perfusion-pipeline</code></pre>
             <code>${PWD}</code> and the line continuations with backticks.</p>
 
           <p>The <code>config</code> mount is read-only and optional, since the image already
-            contains a copy. With it, an edit to the challenge rules reaches the application on the
-            next start instead of needing the image rebuilt. See
+            contains a copy. With it, an edit to the challenge rules reaches the running application
+            after you press <strong>Reload rules</strong>, without rebuilding the image. See
             <a href="configuration.html#apply-a-change">Apply a change</a>.</p>
 
           <div class="docs-callout">
@@ -146,7 +146,8 @@ cd osipi-perfusion-pipeline</code></pre>
               container start a second container for a participant's code. The backend runs inside
               Docker but calls the host daemon, so the volume paths it passes to
               <code>docker run</code> must be host paths, not container paths. Without these,
-              upload, validation, QC and export still work; the Run step does not.</p>
+              upload, validation, QC, previews, compatible configured analyses and export still work;
+              participant-code execution in the Run step does not.</p>
           </div>
 
           <p>The same configuration is in <code>docker-compose.yml</code>, which expands
@@ -200,7 +201,7 @@ node tests/footer_logic_test.js</code></pre>
           </div>
 
           <p>To exercise the whole pipeline rather than its parts, run the demo. It builds a DCE
-            submission, puts it through upload, validation, scoring and export, and writes the
+            submission, puts it through upload, validation, analysis and export, and writes the
             reports and CSVs to <code>data/outputs/demo_evidence/</code> along with a summary of
             what it checked. It extracts into a temporary directory, so it leaves no submissions
             behind.</p>

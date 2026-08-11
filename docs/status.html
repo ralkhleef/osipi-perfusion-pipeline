@@ -56,16 +56,17 @@
 
         <section>
           <h2 id="scientific-status" data-toc-title="Scientific status">Scientific status</h2>
-          <p>The submission, validation and reporting workflow is complete. The challenge-specific
-            metrics still need definitions.</p>
+          <p>The submission, validation and reporting workflow is implemented. Some
+            challenge-specific metrics still need definitions.</p>
 
           <h3 id="status-implemented">Implemented</h3>
           <ul>
             <li>DCE: Ktrans required; vp, ve and Kep optional; modelled signal-time required as 4-D; methods document required.</li>
             <li>Synthetic and clinical datasets remain one submission, with participant, repeat and site structure validated.</li>
             <li>Within-scan ROI Ktrans statistics: median, population SD, coefficient of variation.</li>
-            <li>ASL: Perfmap and ATTmap recognised, with reference comparison where reference data exists.</li>
-            <li>Blinded and unblinded JSON, CSV, HTML and PDF outputs.</li>
+            <li>ASL: CBF and ATT maps required, with generic reference comparison where compatible reference data exists.</li>
+            <li>DSC: CBV, CBF and MTT maps required.</li>
+            <li>User-facing exports: blinded PDF, blinded HTML, blinded CSV Results, blinded JSON Results, ROI Ktrans Statistics CSV, and an Unblinded CSV for organisers.</li>
           </ul>
 
           <h3 id="status-awaiting">Awaiting definition</h3>
@@ -81,9 +82,10 @@
               rules are confirmed by the challenge leads.</p>
           </div>
           <div class="docs-callout">
-            <p>QC and previews are available for readable maps. ROI statistics, reference comparisons
-              and scoring depend on the active challenge configuration and locally available masks,
-              references or scoring assets. Official OSIPI challenge ranking is not currently configured.</p>
+            <p>QC and previews are available for readable maps. DCE Ktrans ROI descriptive statistics
+              can appear when compatible ROI masks are available, generic reference comparisons when
+              compatible reference maps are available, and provider-specific analysis or scoring when
+              configured. Official OSIPI challenge ranking is not currently configured.</p>
           </div>
         </section>
 

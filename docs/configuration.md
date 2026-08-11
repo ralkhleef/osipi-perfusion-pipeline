@@ -1,8 +1,8 @@
 # Configuration Guide
 
-This app is designed so new challenge validation, map discovery, previews, exports, and custom scoring setup can be added through YAML configuration. Built-in official scoring providers are still provider-specific; new official scoring logic or organiser-owned assets must be installed separately.
+This app is designed so new challenge validation, map discovery, previews, exports, and trusted custom scoring setup can be added through YAML configuration. Generic reference comparison is built into the analysis pipeline; the legacy TF6.2 provider hook and trusted custom packages are separate provider-specific mechanisms.
 
-Configuration is validated when first loaded. Invalid YAML, duplicate ids, missing required fields, unsafe relative paths, bad numeric limits, unknown expected-map references, and default challenge/map mismatches raise startup errors with exact YAML paths such as `challenges.example.expected_maps[0]`.
+Configuration is validated when first loaded and whenever **Reload rules** is used. Invalid YAML, duplicate ids, missing required fields, unsafe relative paths, bad numeric limits, unknown expected-map references, and default challenge/map mismatches are rejected with exact YAML paths such as `challenges.example.expected_maps[0]`; the previously valid rules remain active after a failed reload.
 
 ## Add a New Challenge
 
@@ -17,7 +17,7 @@ Configuration is validated when first loaded. Invalid YAML, duplicate ids, missi
    - `paths.private_path_parts` and `paths.mask_name_patterns` if reference or mask files use different folder/name conventions
    - `paths.mask_label_rules` if common mask filename aliases should display as reviewer-friendly labels
 6. For challenge-specific scoring, upload a custom scoring package whose `manifest.json` has a matching `challenge_type`.
-7. Restart the backend after editing YAML. The shared config loader is cached in-process.
+7. Press **Reload rules** in Scoring Setup after editing mounted YAML. The UI re-reads the files and replaces the cached rules only when the new configuration is valid. If the container uses configuration baked into its image instead of a mounted `config/` directory, rebuild the image first.
 
 Example:
 
@@ -125,11 +125,12 @@ decision that has not been made. `repeats` and `sites` may not be null.
 
 ### Backward compatibility
 
-Every field in this section is optional. A configuration that omits
-`artifact_types`, `required_maps`, `optional_maps`, `required_artifacts`, and
-`datasets` loads and behaves exactly as before — which is why ASL and DSC are
-unaffected. `expected_maps` is unchanged and is **not** migrated or replaced
-by `required_maps`; both may be present, and the accessors return them
+Every field in this section is optional for a newly defined challenge. A
+configuration that omits `artifact_types`, `required_maps`, `optional_maps`,
+`required_artifacts`, and `datasets` retains the legacy expected-map behavior.
+The current built-in rules do not rely on that fallback: ASL requires CBF and
+ATT, while DSC requires CBV, CBF and MTT. `expected_maps` remains separate
+from `required_maps`; both may be present, and the accessors return them
 independently.
 
 ### Filename identity patterns
@@ -294,8 +295,8 @@ Ktrans.nii.gz                                (flat, no identity)
 For challenges declaring `required_maps`/`optional_maps`, the legacy
 `EXPECTED_MAP_MISSING` warning is **suppressed** for those map ids so the two
 systems cannot contradict each other — a map marked optional must not
-generate a "missing" warning. ASL and DSC declare neither field, so their
-warning behaviour is unchanged.
+generate a "missing" warning. ASL requires CBF and ATT; DSC requires CBV, CBF
+and MTT. Missing required maps are blocking `REQUIRED_MAP_MISSING` errors.
 
 Legacy manifest fields remain. `detected_parameter_map_id` is now produced by
 the same boundary-safe classifier as `SubmissionArtifact.map_type`, so
@@ -322,17 +323,17 @@ the same boundary-safe classifier as `SubmissionArtifact.map_type`, so
 | `ingestion.skip_names` | Junk/system filenames skipped during extraction. |
 | `ingestion.structural_subdirs` | Folder names that indicate one internal submission layout, not a batch. |
 
-## Reference Scoring
+## Generic Reference Comparison and Provider Scoring
 
 The app has three scoring modes per challenge type:
 
 | Mode | Behavior |
 |---|---|
-| `none` | Default. Validation, QC, previews, CSV, HTML, and PDF still work. Reference scores are reported as unavailable. |
-| `builtin` | Uses bundled provider hooks. The current built-in official hook is OSIPI TF6.2 DCE Ktrans and requires organiser-owned assets installed locally. |
+| `none` | Default. Disables provider/official scoring. Validation, generic QC, previews, exports, compatible DCE Ktrans ROI descriptive statistics, and compatible generic reference comparisons still work. |
+| `builtin` | Uses the built-in legacy OSIPI TF6.2 DCE Ktrans provider hook. It produces approved provider output only when its required organiser-owned assets are installed and configured. |
 | `custom` | Runs an uploaded trusted scoring package with a `manifest.json` whose `challenge_type` matches the configured challenge id. |
 
-Reference-based QC compares submitted/generated NIfTI maps with matching reference maps when references exist. It searches:
+Generic reference comparison is independent of those provider modes. It compares submitted/generated NIfTI maps with compatible reference maps when they exist, including while mode is `none`. It searches:
 
 - `reference/` inside the extracted submission
 - `data/reference_data/`
@@ -344,9 +345,9 @@ Reference-based QC compares submitted/generated NIfTI maps with matching referen
 
 Masks are read from `masks/`, `Masks/`, or files matching `paths.mask_name_patterns`. Whole-map metrics and mask-level metrics include RMSE, MAE, bias, correlation, finite overlap, and related QC fields when the data can be compared.
 
-The built-in TF6.2 provider is specific to the DCE Ktrans challenge assets listed in the README. Other official scorers should be installed as trusted custom packages or implemented as new provider hooks once mentors provide the official scripts, references, masks, metric definitions, and accepted outputs.
+The built-in legacy TF6.2 provider is specific to the DCE Ktrans challenge assets listed in the README. Trusted custom scoring packages are a separate extension point. Other official scorers require approved scripts, references, masks, metric definitions, and accepted outputs.
 
-QC and previews remain available for readable maps. ROI statistics, reference comparisons, and scoring appear only when the challenge configuration and required masks, references, or scoring assets are available. The pipeline never invents official scores, and official OSIPI challenge ranking is not currently configured. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
+QC and previews remain available for readable maps. DCE Ktrans ROI descriptive statistics can appear when compatible ROI masks are available, generic reference comparisons when compatible reference maps are available, and provider-specific analysis or scoring when configured with its required assets. The pipeline never relabels generic comparison metrics as official scores, and official OSIPI challenge ranking is not currently configured. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
 
 ## Custom Scoring Packages
 

@@ -102,7 +102,10 @@
               <div class="docs-step-rail"><span class="docs-step-num">5</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">QC and Preview</p>
-                <p>Inspect QC and previews for readable maps, with configured ROI, reference or scoring results when their data are available.</p>
+                <p>QC and previews are available for readable maps. DCE Ktrans ROI descriptive
+                  statistics can appear with compatible ROI masks, generic reference comparisons
+                  with compatible reference maps, and provider-specific analysis or scoring when
+                  configured. Official OSIPI challenge ranking is not currently configured.</p>
               </div>
             </div>
             <div class="docs-step">
@@ -156,10 +159,11 @@
             voxelwise and within each ROI mask, producing RMSE, mean absolute error, bias and
             correlation, error standard deviation and error coefficient of variation. These are
             generic comparisons, not automatically official OSIPI scores.</p>
-          <p>QC and previews are always available for readable maps. ROI statistics, reference
-            comparisons and scoring are additional configured analyses: each appears only when its
-            challenge rules and required masks, references or scoring assets are available. Official
-            OSIPI challenge ranking is not currently configured.</p>
+          <p>QC and previews are always available for readable maps. DCE Ktrans ROI descriptive
+            statistics can appear when compatible ROI masks are available, generic reference
+            comparisons when compatible reference maps are available, and provider-specific analysis
+            or scoring when configured with its required assets. Official OSIPI challenge ranking is
+            not currently configured.</p>
           <p>Each ROI additionally reports the median, population standard deviation
             (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|) of one map within one
             scan. These describe spatial spread within a single region. They are not repeatability,

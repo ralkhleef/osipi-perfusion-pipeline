@@ -34,8 +34,8 @@ map_types:
 ```
 
 To add a new map, copy one of these blocks and change the name, units, and the
-`patterns` (the words the app matches in filenames). Save the file and restart
-the app. That's it — no code.
+`patterns` (the words the app matches in filenames). Save the file, then use
+**Reload rules** in the running app. That's it — no code or backend restart.
 
 ---
 
@@ -51,8 +51,8 @@ data/reference_data/masks/    ← the ROI masks (grey matter, white matter, tumo
 
 The app matches a submitted map to the reference of the same type automatically
 (e.g. a submitted Perfmap is compared to the reference CBF). ROI rows appear for
-each mask you drop in `masks/`. No code, just files. Restart the app after
-adding them.
+each compatible mask in `masks/`. No code is required; newly added reference
+assets are used by the next compatible analysis.
 
 > These files are large and challenge-owned, so they are intentionally **not**
 > stored in this repository. They are ignored by git and stay on your machine.
