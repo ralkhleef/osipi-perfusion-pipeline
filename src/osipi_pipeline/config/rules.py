@@ -54,6 +54,8 @@ _CHALLENGE_KEYS = {
     "datasets",
     "filename_identity_patterns",
     "grouped_statistics",
+    "code_execution_required",
+    "reference_dataset_version",
 }
 # Aggregation of per-scan ROI statistics across an axis. Absent or disabled
 # means nothing is computed; the scientific conventions are not confirmed.
@@ -396,6 +398,19 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                 _require_string(spec_map.get("label"), f"{spec_path}.label", errors)
             if "description" in spec_map and spec_map.get("description") is not None:
                 _require_string(spec_map.get("description"), f"{spec_path}.description", errors)
+            if "code_execution_required" in spec_map:
+                _require_bool(
+                    spec_map.get("code_execution_required"),
+                    f"{spec_path}.code_execution_required",
+                    errors,
+                )
+            if "reference_dataset_version" in spec_map and spec_map.get("reference_dataset_version") is not None:
+                _require_string(
+                    spec_map.get("reference_dataset_version"),
+                    f"{spec_path}.reference_dataset_version",
+                    errors,
+                    allow_blank=True,
+                )
             expected = _require_string_list(
                 spec_map.get("expected_maps"),
                 f"{spec_path}.expected_maps",
@@ -416,7 +431,10 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                 if field not in spec_map:
                     continue
                 declared = _require_string_list(
-                    spec_map.get(field), f"{spec_path}.{field}", errors
+                    spec_map.get(field),
+                    f"{spec_path}.{field}",
+                    errors,
+                    allow_empty=field == "optional_maps",
                 )
                 for index, map_id in enumerate(declared):
                     if map_id.lower() not in map_ids:
@@ -429,12 +447,47 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                     spec_map.get("required_artifacts"),
                     f"{spec_path}.required_artifacts",
                     errors,
+                    allow_empty=True,
                 )
                 for index, artifact_id in enumerate(declared):
                     if artifact_id.lower() not in artifact_ids:
                         errors.append(
                             f"{spec_path}.required_artifacts[{index}]: "
                             f"unknown artifact id {artifact_id!r}"
+                        )
+
+            if "grouped_statistics" in spec_map:
+                grouped_path = f"{spec_path}.grouped_statistics"
+                grouped = _require_mapping(
+                    spec_map.get("grouped_statistics"), grouped_path, errors
+                )
+                if grouped is not None:
+                    _reject_unknown_keys(grouped, _GROUPED_KEYS, grouped_path, errors)
+                    if "enabled" in grouped:
+                        _require_bool(grouped.get("enabled"), f"{grouped_path}.enabled", errors)
+                    axes = _require_string_list(
+                        grouped.get("axes", []), f"{grouped_path}.axes", errors
+                    )
+                    allowed_axes = {"inter_repeat", "inter_site", "inter_participant"}
+                    for index, axis in enumerate(axes):
+                        if axis not in allowed_axes:
+                            errors.append(
+                                f"{grouped_path}.axes[{index}]: unknown grouping axis {axis!r}"
+                            )
+                    if "source" in grouped:
+                        source = _require_string(
+                            grouped.get("source"), f"{grouped_path}.source", errors
+                        )
+                        if source not in {
+                            "roi_median", "roi_within_scan_sd", "roi_within_scan_cov"
+                        }:
+                            errors.append(
+                                f"{grouped_path}.source: unsupported ROI field {source!r}"
+                            )
+                    if "minimum_group_size" in grouped:
+                        _require_positive_int(
+                            grouped.get("minimum_group_size"),
+                            f"{grouped_path}.minimum_group_size", errors,
                         )
 
             if "filename_identity_patterns" in spec_map:
@@ -671,6 +724,19 @@ def validation_rules() -> dict[str, Any]:
     return _validate_validation_rules(_read_yaml(VALIDATION_RULES_PATH), VALIDATION_RULES_PATH)
 
 
+def validate_validation_rules_data(
+    candidate: dict[str, Any], *, label: str = "configuration preview"
+) -> dict[str, Any]:
+    """Validate an in-memory rules candidate without changing active caches.
+
+    The Configuration Manager uses this before it writes a version or touches
+    the active YAML file.  Keeping preview validation side-effect free is what
+    lets a failed draft leave the running pipeline unchanged.
+    """
+
+    return _validate_validation_rules(copy.deepcopy(candidate), Path(label))
+
+
 @lru_cache(maxsize=1)
 def app_settings() -> dict[str, Any]:
     """Return validated settings from ``config/settings.yaml``."""
@@ -725,6 +791,20 @@ def challenge_labels() -> dict[str, str]:
         str(key).lower(): str(value.get("label") or key).strip()
         for key, value in validation_rules().get("challenges", {}).items()
         if isinstance(value, dict)
+    }
+
+
+def code_execution_required_by_challenge() -> dict[str, bool]:
+    return {
+        str(key).lower(): bool(value.get("code_execution_required", False))
+        for key, value in validation_rules().get("challenges", {}).items()
+    }
+
+
+def reference_dataset_versions() -> dict[str, str]:
+    return {
+        str(key).lower(): str(value.get("reference_dataset_version") or "").strip()
+        for key, value in validation_rules().get("challenges", {}).items()
     }
 
 

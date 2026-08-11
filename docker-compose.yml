@@ -21,13 +21,10 @@ services:
     volumes:
       - ./data:/app/data
       - ./submissions:/app/submissions
-      # Challenge rules, so editing config/validation_rules.yaml takes effect on
-      # `docker compose restart` rather than needing the image rebuilt. The
-      # image still COPYs config/, so the application runs without this mount;
-      # it only overlays the host copy. Read-only because nothing writes here —
-      # uploaded scoring packages live under data/scoring/packages.
-      # The rules are cached for the life of the process, so the restart is
-      # what makes an edit visible, not the mount alone.
-      - ./config:/app/config:ro
+      # Challenge rules are writable so the local Configuration Manager can
+      # activate a tested version of validation_rules.yaml. The existing
+      # Reload rules action picks up direct YAML edits without rebuilding or
+      # restarting the container. Private data remains under ./data.
+      - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

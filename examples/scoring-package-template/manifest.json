@@ -1,0 +1,15 @@
+{
+  "package_id": "example_dce_analysis_v1",
+  "name": "Example DCE Analysis",
+  "version": "1.0.0",
+  "challenge_type": "dce",
+  "map_type": "ktrans",
+  "description": "Developer template only: reports the number of submitted NIfTI files.",
+  "metrics": ["nifti_file_count"],
+  "required_inputs": ["ktrans"],
+  "required_assets": [],
+  "requirements_file": "requirements.txt",
+  "entry_point": "scorer.py",
+  "call_mode": "standard",
+  "official": false
+}

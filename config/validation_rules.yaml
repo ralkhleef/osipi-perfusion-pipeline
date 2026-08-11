@@ -142,6 +142,17 @@ artifact_types:
       - modelled_st
       - modeled_st
       - fitted_signal
+  measured_st:
+    role: measured_signal
+    label: Measured signal-time curve
+    dimensions: 4
+    suffixes:
+      - .nii
+      - .nii.gz
+    patterns:
+      - measured_st
+      - measured_signal
+      - observed_st
   methods:
     role: methods
     label: Methods document
@@ -174,6 +185,16 @@ challenges:
     required_artifacts:
       - modelled_st
       - methods
+    # Descriptive aggregation of scan-level ROI medians. These are explicitly
+    # provisional summaries, not repeatability, ICC, pass/fail, or ranking.
+    grouped_statistics:
+      enabled: true
+      axes:
+        - inter_repeat
+        - inter_site
+        - inter_participant
+      source: roi_median
+      minimum_group_size: 2
     # Fallback identity parsing, used only when the directory layout does not
     # already supply an identifier. Applied to the filename stem with any
     # .nii/.nii.gz removed; first match wins. The first entry preserves the

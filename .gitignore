@@ -278,6 +278,11 @@ __pycache__/
 *.tmp
 test_data/
 data/scoring/
+data/configuration_manager/
+# Optional organiser-managed scoring references, masks, and unreleased assets.
+# Keep this entire workspace local; packages may declare required_assets that
+# organisers copy into a package before validation/activation.
+private_scoring_assets/
 .codex-ui-audit/
 
 # Local documentation preview renders, produced when checking the Pages site.

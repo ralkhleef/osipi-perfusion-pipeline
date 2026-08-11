@@ -42,9 +42,10 @@ dataset grid of participants, repeats and sites, and its filename identity
 patterns, all in `config/validation_rules.yaml`. The file is read at runtime and
 validated on load. Adding a challenge, changing what it requires, or renaming a
 map does not require touching Python. Scoring providers follow the same
-principle from the other direction: they are uploaded packages carrying a
-`manifest.json` that declares the metrics they return, installed through the
-interface rather than registered in source.
+principle from the other direction: they are uploaded, versioned packages
+carrying a `manifest.json` that declares required inputs, assets, and metrics.
+The app validates a new package before installation and activation, so a bad
+update cannot replace the previously active configuration.
 
 That matters because the people who define the requirements are the challenge
 organisers, not the developer, and the requirements were still moving during
@@ -72,14 +73,14 @@ the project.
 
 ### Not implemented, and why
 
-None of these are unfinished work in the sense of running out of time. Each is
-blocked on a decision or an input that only the challenge leads can supply.
+Most scientific items below await a challenge-team definition or private input.
+BIDS validation is a separate engineering feature that is simply not implemented.
 
 | Item | What is missing |
 |---|---|
 | Accuracy, deviance | The mathematical definition. "Accuracy" could mean signed bias, RMSE, absolute or percentage error. |
-| Inter-participant / inter-repeat / inter-site SD and CoV | Whether to aggregate scan-level ROI medians or pooled voxel values, and whether repeats and sites are paired within participant before aggregation. |
-| Residual sum of squares | The measured dynamic signal. The pipeline receives the modelled S(t) only; RSS needs both. |
+| Final inter-participant / inter-repeat / inter-site definition | The prototype reports descriptive scan-level ROI-median mean, SD and CoV, plus a signed difference for two clearly matched repeats or sites. Whether the final method should instead be voxelwise or use formal repeatability statistics remains undecided. |
+| RSS normalization | Raw voxelwise RSS and ROI summaries are implemented when measured and modelled 4-D signals are both present. Whether RSS should be normalized remains undecided. |
 | ASL 4-D fitted-model comparison | The comparison definition and which ROI masks apply. |
 | ICC | Which ICC model, and whether repeatability is computed from repeated noise-varied datasets. |
 | ASL and DSC dataset grids | Whether either has one cohort or several, and the participant, repeat and site counts. The required maps are configured; the grid is not, because a placeholder dataset name would change how archives are unpacked. |
@@ -92,23 +93,24 @@ does not compute a metric whose formula has not been confirmed.
 
 ## Testing
 
-**778 Python tests, 1 skipped. 1,125 frontend checks. 79% statement coverage
-of `backend/` and `src/`.**
+The automated suite covers the Python API/library and the frontend's static and
+executed-DOM behavior. Exact counts are intentionally omitted here because they
+change as regression coverage is added.
 
-| Suite | Count | What it exercises |
-|---|---|---|
-| Python | 778 passed, 1 skipped | Behaviour, through the real API and library |
-| Frontend smoke | 1,014 | Mostly static: asserts the source contains expected markup, selectors and handlers |
-| Frontend ROI DOM | 53 | Behaviour, rendering real records into a DOM |
-| Validation card | 31 | Behaviour, in a DOM |
-| Footer logic | 27 | Behaviour |
+| Suite | What it exercises |
+|---|---|
+| Python | Behaviour through the real API and library |
+| Frontend smoke | Mostly static: asserts the source contains expected markup, selectors and handlers |
+| Frontend ROI DOM | Behaviour, rendering real records into a DOM |
+| Validation card | Behaviour in a DOM |
+| Footer logic | Behaviour |
 
-The frontend total is worth reading carefully rather than as one number. Of
-the 1,125 checks, about 905 are string assertions against `app.js`,
-`index.html` and `styles.css`. Those catch a deleted handler or a renamed
-class, which is real but narrow, and they cannot catch a handler that runs
-and does the wrong thing. The 111 checks in the ROI, validation-card and
-footer suites drive an actual DOM and are the ones that test behaviour.
+The frontend total is worth reading carefully rather than as one number. Most
+smoke checks are string assertions against `app.js`, `index.html` and
+`styles.css`. Those catch a deleted handler or a renamed class, which is real
+but narrow, and they cannot catch a handler that runs and does the wrong thing.
+The ROI, validation-card and footer suites drive an actual DOM and test rendered
+behaviour.
 
 Coverage is not uniform, and the gaps are named rather than averaged away:
 
@@ -207,11 +209,11 @@ landed in the commits preceding these.
 
 | Path | Contents |
 |---|---|
-| `config/validation_rules.yaml` | Challenge requirements. The file to edit. |
+| `config/validation_rules.yaml` | Underlying challenge-requirements source of truth; routine updates can use the in-app Configuration Manager. |
 | `src/osipi_pipeline/` | Library: config, ingestion, validation, scoring |
 | `backend/` | FastAPI application and services |
 | `frontend/` | Interface |
-| `tests/` | 778 Python tests, 1,125 frontend checks |
+| `tests/` | Automated Python, frontend smoke, and executed-DOM checks |
 | `docs/` | Documentation site, published by GitHub Pages |
 | `scripts/demo_evidence.py` | Regenerates the evidence bundle |
 | `CODE_WALKTHROUGH.md` | The seven defects, with reproduction |
@@ -227,16 +229,17 @@ to whoever picks this up.
 - **Scientific metrics are incomplete by design.** See the table above. The
   configuration schema governs structure, not mathematics; a new statistical
   formula still requires code and tests.
-- **ROI statistics are within-scan only.** Median, SD and CoV describe the
-  spatial spread of one map in one ROI of one scan. They are not repeatability,
-  reproducibility, or inter-participant variability, and are not presented as
-  such anywhere in the outputs.
+- **ROI statistics and grouped descriptions remain distinct.** Within-scan
+  median, SD and CoV describe one map in one ROI. Separately, provisional
+  grouped summaries describe scan-level ROI medians across participants,
+  repeats or sites. Neither is presented as formal repeatability, ICC or ranking.
 - **Statistical conventions await confirmation.** Population SD and a CoV
   denominated on the arithmetic mean were chosen for consistency with the
   pipeline's existing statistics, not because OSIPI has specified them.
-- **ASL support is shallower than DCE.** Perfmap and ATTmap are recognised and
-  compared against reference data, but ASL has no equivalent of the DCE
-  completeness schema.
+- **ASL scientific requirements are less complete than DCE.** CBF/Perfmap and
+  ATT/ATTmap are required and support compatible reference comparisons, but the
+  final ASL dataset grid, 4-D fitted-model comparison and any provider-specific
+  official method remain undecided.
 - **The identity safety net ignores tokens under four characters.** A very
   short team name relies entirely on structural blinding, with no backstop.
 - **The end-to-end browser test is not automated.** `tests/e2e/acceptance.spec.js`
@@ -246,13 +249,11 @@ to whoever picks this up.
 
 In the order I would tackle it:
 
-1. **Grouped statistics**, inter-repeat and inter-site SD and CoV. Every field
-   needed is already on each ROI row, so this is aggregation over existing data
-   rather than new measurement. It only needs the aggregation rule confirmed.
-2. **Accuracy and deviance**, once defined.
-3. **RSS**, if the measured dynamic signal will be available. If it will not,
-   that should be recorded as a scoping decision rather than left as a gap.
-4. **ASL completeness schema**, bringing ASL to parity with DCE.
+1. **Accuracy and deviance**, once defined.
+2. **Confirm grouped-statistics conventions**, including ROI-median versus
+   voxelwise aggregation and any formal repeatability or ICC model.
+3. **Confirm RSS normalization**, while retaining raw RSS as the prototype.
+4. **Final ASL 4-D fitted-model comparison**, once defined.
 5. **Report parity test matrices** across scenarios and both formats.
 
 ---

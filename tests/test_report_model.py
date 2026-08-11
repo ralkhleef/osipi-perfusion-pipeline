@@ -120,6 +120,17 @@ def test_report_reads_in_paper_order():
     assert "withheld" in methods, "blinding must be stated in Methods"
 
 
+def test_report_model_records_reproducible_analysis_provenance():
+    model = _build_report_model([_summary(1, "dce")], tag="t", blinded=True)
+    provenance = model["analysis_provenance"]
+    assert provenance["challenge"] == "DCE"
+    assert provenance["challenge_configuration"]
+    assert provenance["scoring_package"]
+    assert provenance["pipeline_version"]
+    assert provenance["reference_dataset"]
+    assert provenance["analysis_date"]
+
+
 def test_methods_state_when_no_reference_was_available():
     model = _build_report_model([_summary(ref=False)], tag="t", blinded=True)
     methods = " ".join(model["methods_lines"])

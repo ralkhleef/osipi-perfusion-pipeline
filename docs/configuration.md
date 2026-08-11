@@ -1,14 +1,55 @@
 # Configuration Guide
 
-This app is designed so new challenge validation, map discovery, previews, exports, and trusted custom scoring setup can be added through YAML configuration. Generic reference comparison is built into the analysis pipeline; the legacy TF6.2 provider hook and trusted custom packages are separate provider-specific mechanisms.
+This app separates challenge structure from scientific analysis. YAML defines requirements such as maps, artifacts, dimensions, dataset structure, aliases, and filename rules. New or revised scientific formulas belong in tested, versioned analysis/scoring code or a trusted custom package rather than being embedded in YAML. Generic reference comparison is built into the analysis pipeline; the legacy TF6.2 provider hook and trusted custom packages are separate provider-specific mechanisms.
 
 Configuration is validated when first loaded and whenever **Reload rules** is used. Invalid YAML, duplicate ids, missing required fields, unsafe relative paths, bad numeric limits, unknown expected-map references, and default challenge/map mismatches are rejected with exact YAML paths such as `challenges.example.expected_maps[0]`; the previously valid rules remain active after a failed reload.
 
-## Add a New Challenge
+> **Designed for future challenge updates.** Organisers can revise structural rules, install a new versioned analysis package, and add private assets later without changing an existing validated configuration until the replacement is ready.
+
+## In-app Configuration Manager
+
+Routine organiser updates do not require VS Code, a terminal, or direct YAML
+editing. Open **QC & Preview → Reviewer / Admin: Scoring Setup → Challenge
+Configuration Manager**, select DCE, ASL or DSC, and edit map requirements,
+dimensions, filename aliases, required documents/outputs, dataset counts, code
+execution policy, reference-dataset version, and provider-specific scoring
+selection.
+
+Use the guarded sequence:
+
+1. **Test Configuration** checks schema, challenge/map definitions, filename
+   aliases, the selected scorer, and readable local assets without changing
+   active state.
+2. **Preview Changes** shows field-by-field before/after values.
+3. **Save as New Version** creates an inactive immutable version under ignored
+   local data.
+4. **Activate / Restore** re-tests the saved version, then atomically updates
+   active rules and scoring selection. A failure restores the previous state.
+
+The manager shows private reference maps, masks and measured signals stored
+locally under ignored `data/reference_data/` paths. Configuration ZIP exports
+exclude those files, package code and other private organiser data; imports
+always create an inactive version. It also presents a capability matrix so
+generic QC/reference analysis, provider-specific analysis, pending scientific
+definitions and official ranking are not conflated.
+
+Every PDF, HTML and JSON result includes analysis provenance: challenge,
+active challenge-configuration version, scoring package, pipeline version,
+reference-dataset version and analysis date. Set a stable
+`reference_dataset_version` when organiser assets are released internally;
+reports store the label, not private paths.
+
+For future scoring-package development, copy
+`examples/scoring-package-template/`. Its deterministic file-count example
+demonstrates the package contract but is not a scientific score.
+
+## 1. Changing Challenge Requirements
 
 1. Add every parameter map type used by the challenge under `map_types` in `config/validation_rules.yaml`.
 2. Add the challenge under `challenges` in `config/validation_rules.yaml`.
-3. Set `expected_maps` to the map-type ids that should be present for a complete result-only submission.
+3. Set `required_maps` for blocking requirements and `optional_maps` for accepted
+   non-blocking maps. `expected_maps` is retained as a legacy warning list and
+   is not a replacement for those fields.
 4. Set `keywords` to terms that should identify this challenge during ingestion.
 5. If needed, update `config/settings.yaml`:
    - `defaults.challenge_type` and `defaults.scoring_map_type`
@@ -42,7 +83,7 @@ challenges:
       - tmax
 ```
 
-With that change, the UI challenge controls, `/api/config`, validation expected-map checks, preview map labels, combined CSV mean columns, and report summaries can all use the new challenge without code edits.
+With that change, the UI challenge controls, `/api/config`, validation expected-map checks, preview map labels, combined CSV mean columns, and report summaries can all use the new challenge without code edits. A new scientific formula still requires an implemented and tested analysis/scoring module or package.
 
 ## Config Format
 
@@ -83,6 +124,8 @@ Each `challenges.<id>` entry supports:
 | `required_artifacts` | Optional. Artifact ids (from `artifact_types`) a submission must provide. |
 | `datasets` | Optional. Expected dataset structure — see below. |
 | `filename_identity_patterns` | Optional. Ordered regexes used as a fallback when the directory layout does not supply identity — see below. |
+| `code_execution_required` | Optional boolean. When true, validation requires an executor-supported Dockerfile rather than accepting a result-map-only submission. Defaults to false. |
+| `reference_dataset_version` | Optional provenance label for the organiser reference dataset; it does not expose private file paths. |
 
 ### Non-map artifacts
 
@@ -105,7 +148,32 @@ artifact_types:
     dimensions: 4
     suffixes: [.nii, .nii.gz]
     patterns: [modelled_st, modeled_st, fitted_signal]
+  measured_st:
+    role: measured_signal
+    dimensions: 4
+    suffixes: [.nii, .nii.gz]
+    patterns: [measured_st, measured_signal, observed_st]
 ```
+
+`modelled_st` remains required for DCE. `measured_st` is optional: when one
+measured and one modelled 4-D signal can be matched to the same scan, the
+pipeline computes raw voxelwise Residual Sum of Squares (RSS) across time and
+summarizes it for the whole image and compatible ROIs. RSS is not deviance.
+
+### Provisional grouped ROI descriptions
+
+```yaml
+grouped_statistics:
+  enabled: true
+  axes: [inter_repeat, inter_site, inter_participant]
+  source: roi_median
+  minimum_group_size: 2
+```
+
+This DCE setting groups scan-level ROI medians and reports mean, population SD
+and CoV. Exactly two clearly matched repeats or sites also receive a signed
+second-minus-first difference. These are descriptive prototype results, not
+formal repeatability, reproducibility, ICC, pass/fail, or ranking.
 
 ### Dataset structure
 
@@ -116,12 +184,12 @@ should contain. Dataset names are organiser-chosen; `synthetic` and
 | Field | Purpose |
 |---|---|
 | `participants` | Positive integer, or `null` when the count is not yet finalised. |
-| `repeats` | Required positive integer. |
-| `sites` | Required positive integer. |
+| `repeats` | Positive integer, or `null` while the count is awaiting confirmation. |
+| `sites` | Positive integer, or `null` while the count is awaiting confirmation. |
 
-`participants: null` means the organiser has **not decided** the cohort size.
+Any `null` count means the organiser has **not decided** that part of the grid.
 It is deliberately distinct from a placeholder number, which would read as a
-decision that has not been made. `repeats` and `sites` may not be null.
+decision that has not been made.
 
 ### Backward compatibility
 
@@ -303,8 +371,9 @@ the same boundary-safe classifier as `SubmissionArtifact.map_type`, so
 `curve.nii.gz` no longer matches `ve` in either place.
 
 > Completeness validation answers whether a submission is *structurally*
-> valid. It computes no ROI statistics, no grouped variability, and no
-> accuracy, deviance, or RSS — those arrive in later phases.
+> valid. Scientific analysis is separate: compatible ROI statistics and
+> generic reference comparisons run when their inputs exist. DCE can also
+> compute raw RSS when measured and modelled 4-D signals can be matched.
 
 `config/settings.yaml` owns pipeline defaults and operational rules.
 
@@ -323,7 +392,7 @@ the same boundary-safe classifier as `SubmissionArtifact.map_type`, so
 | `ingestion.skip_names` | Junk/system filenames skipped during extraction. |
 | `ingestion.structural_subdirs` | Folder names that indicate one internal submission layout, not a batch. |
 
-## Generic Reference Comparison and Provider Scoring
+## 2. Adding or Updating Analysis and Scoring
 
 The app has three scoring modes per challenge type:
 
@@ -349,7 +418,7 @@ The built-in legacy TF6.2 provider is specific to the DCE Ktrans challenge asset
 
 QC and previews remain available for readable maps. DCE Ktrans ROI descriptive statistics can appear when compatible ROI masks are available, generic reference comparisons when compatible reference maps are available, and provider-specific analysis or scoring when configured with its required assets. The pipeline never relabels generic comparison metrics as official scores, and official OSIPI challenge ranking is not currently configured. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
 
-## Custom Scoring Packages
+### Trusted custom scoring packages
 
 Custom packages are ZIP files installed by trusted reviewers/admins:
 
@@ -357,6 +426,7 @@ Custom packages are ZIP files installed by trusted reviewers/admins:
 my_scoring_package.zip
 ├── manifest.json
 ├── scoring.py
+├── requirements.txt
 ├── reference/
 ├── masks/
 └── README.md
@@ -371,7 +441,10 @@ Minimal `manifest.json`:
   "version": "1.0.0",
   "challenge_type": "example",
   "map_type": "tmax",
+  "required_inputs": ["tmax"],
+  "required_assets": ["reference/tmax.nii.gz"],
   "entry_point": "scoring.py",
+  "requirements_file": "requirements.txt",
   "call_mode": "standard",
   "metrics": ["rmse", "bias"]
 }
@@ -384,7 +457,29 @@ Minimal `manifest.json`:
 | `standard` | Runs `python scoring.py --submission-dir <dir> --output-dir <dir> [--reference-dir <dir>]`. |
 | `osipi_cwd` | Runs the entry point with `cwd` set to the package directory for legacy scripts that expect fixed relative paths. |
 
-The scoring script should write `metrics.json` or `results.json` to the output directory. Numeric metrics are flattened for UI tables and exports; nested details are preserved for technical review.
+The scoring script must write `metrics.json` or `results.json` to the output directory and produce every metric declared in the manifest. Numeric metrics are flattened for UI tables and exports; nested details are preserved for technical review. A declared `requirements_file` is checked for presence but is not installed automatically; a trusted organiser must make those dependencies available in the application environment.
+
+Before installation, the app validates the manifest, known challenge id, version, declared inputs, metric names, safe paths, entry-point presence, required assets, optional requirements file, and Python syntax/importability of the scorer in an isolated subprocess. Extraction happens in a staging directory. A failed package never replaces an installed package.
+
+An already-active legacy package can continue running, but its manifest must be updated to declare `required_inputs` before it can be uploaded or activated again under the stricter contract.
+
+Use a distinct versioned `package_id` for each release, for example `dce_accuracy_v1_0` and `dce_accuracy_v1_1`. Activation is a separate action in **Scoring Setup**. The app checks that the selected package is ready and belongs to the selected challenge, then records its `package_id`, name, and version. Results also record the package version. If activation fails, the previous active configuration remains unchanged.
+
+Unimplemented future analyses are reported as unavailable or not configured. They do not prevent validation, QC, previews, exports, compatible ROI statistics, or compatible generic reference comparisons.
+
+## 3. Adding Private Reference Data
+
+Reference maps, ROI masks, answer keys, and unreleased challenge data are organiser-owned inputs. Keep source copies outside version control or under the gitignored `private_scoring_assets/` workspace. Generic comparison assets may be placed under the gitignored `data/reference_data/` paths. Package-specific assets should be copied into the package's declared relative paths before the trusted ZIP is uploaded; installed packages live under gitignored `data/scoring/packages/`.
+
+Do not add private data to GitHub. The repository ignores common medical-image formats and the private/reference/scoring data directories, but organisers should still inspect `git status` before committing.
+
+## 4. Safe Updates
+
+- For mounted YAML, edit `config/validation_rules.yaml` or `config/settings.yaml`, open **Scoring Setup**, and press **Reload rules**. Invalid rules are rejected and the previously valid in-memory rules stay active. A rebuild is needed only when the container uses configuration baked into its image rather than the Compose `./config` mount.
+- For scientific analysis/scoring, upload a new versioned trusted package, review its validation status, and activate it for the matching challenge. Installation and active-config writes are transactional; a failed validation or activation leaves the previous package/configuration in place.
+- For private assets, copy them locally into the configured gitignored directory or package and validate readiness before activation.
+
+Generic reference comparison remains separate from provider-specific or official scoring. Mode `none` disables provider/official scoring only. Official OSIPI challenge ranking is not currently configured.
 
 ## Verification
 
@@ -442,5 +537,7 @@ the field names say so. Do not confuse them with whole-image SD, spatial
 CoV, or the error SD against a reference — those remain separate fields.
 
 > The population-SD and CoV conventions remain subject to final confirmation
-> by OSIPI. This phase computes no grouped statistics, accuracy, deviance,
-> or RSS.
+> by OSIPI. DCE currently enables provisional descriptive grouping of
+> scan-level ROI medians. This is not formal repeatability, ICC, accuracy,
+> deviance, pass/fail, or ranking. Raw RSS is conditional on a matched measured
+> and modelled 4-D signal and is intentionally not labelled deviance.

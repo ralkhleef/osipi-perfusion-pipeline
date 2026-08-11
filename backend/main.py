@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -34,6 +34,8 @@ from services.ingest_service import (
 )
 from services.path_config import (
     CODECOLLECTION_DIR,
+    CONFIG_MANAGER_DIR,
+    CONFIG_VERSIONS_DIR,
     EXTRACTED_DIR,
     FRONTEND_DIR,
     INCOMING_DIR,
@@ -63,6 +65,17 @@ from services.scoring_package_service import (
     remove_package,
     set_active_entry,
 )
+from services.configuration_manager_service import (
+    activate_version,
+    export_configuration,
+    import_configuration,
+    manager_state,
+    preview_configuration,
+    save_version,
+    store_private_asset,
+    test_configuration,
+)
+from services.provenance_service import analysis_provenance
 from services.nifti_preview_service import (
     get_preview_download_path,
     get_preview_item,
@@ -144,6 +157,8 @@ async def lifespan(app):
         SCORING_PACKAGES_DIR,
         OSIPI_TF62_DIR,
         CODECOLLECTION_DIR,
+        CONFIG_MANAGER_DIR,
+        CONFIG_VERSIONS_DIR,
     ]:
         directory.mkdir(parents=True, exist_ok=True)
     yield
@@ -239,6 +254,101 @@ def app_config():
         "limits": settings.get("limits", {}),
         "reporting": settings.get("reporting", {}),
     }
+
+
+# ---------------------------------------------------------------------------
+# Reviewer Configuration Manager
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/configuration-manager")
+def configuration_manager(challenge_type: str = Query(...)):
+    """Return an editable view, local versions, private assets and capabilities."""
+    try:
+        return manager_state(challenge_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/configuration-manager/test")
+def configuration_manager_test(payload: Dict):
+    """Test a draft without changing active rules or scoring configuration."""
+    return test_configuration(payload)
+
+
+@app.post("/api/configuration-manager/preview")
+def configuration_manager_preview(payload: Dict):
+    try:
+        return preview_configuration(payload)
+    except (ValueError, ConfigValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/configuration-manager/versions")
+def configuration_manager_save(payload: Dict):
+    try:
+        return save_version(payload)
+    except (ValueError, ConfigValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+class ConfigurationActivateRequest(BaseModel):
+    challenge_type: str
+    version_id: str
+
+
+@app.post("/api/configuration-manager/activate")
+def configuration_manager_activate(req: ConfigurationActivateRequest):
+    try:
+        return activate_version(req.challenge_type, req.version_id)
+    except (OSError, ValueError, ConfigValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/configuration-manager/export")
+def configuration_manager_export(
+    challenge_type: str = Query(...),
+    version_id: Optional[str] = Query(None),
+):
+    try:
+        payload, filename = export_configuration(challenge_type, version_id)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return Response(
+        content=payload,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/configuration-manager/import")
+async def configuration_manager_import(file: UploadFile = File(...)):
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Configuration import must be a ZIP archive.")
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".zip")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(tmp_fd, "wb") as handle:
+            while chunk := await file.read(65536):
+                handle.write(chunk)
+        return import_configuration(tmp_path)
+    except (OSError, ValueError, ConfigValidationError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+@app.post("/api/configuration-manager/assets/upload")
+async def configuration_manager_asset_upload(
+    challenge_type: str = Form(...),
+    asset_kind: str = Form(...),
+    file: UploadFile = File(...),
+):
+    content = await file.read()
+    try:
+        return store_private_asset(challenge_type, asset_kind, file.filename or "", content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @app.get("/api/performance/timings")
@@ -2827,6 +2937,9 @@ def export_combined(
                 "report_type": "blinded" if blinded else "unblinded",
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "submission_count": len(summaries),
+                "analysis_provenance": analysis_provenance(
+                    [item.get("challenge_type") for item in summaries]
+                ),
                 "submissions": summaries,
                 "limitations": [
                     "Basic NIfTI QC is not full BIDS validation.",
@@ -3301,6 +3414,36 @@ def export_report(
         + "</tbody></table></div>"
     )
 
+    def _prototype_table(headers, rows, caption):
+        if not rows:
+            return ""
+        return (
+            '<div class="table-wrap"><table><caption>' + _esc(caption)
+            + '</caption><thead><tr>'
+            + "".join(f"<th>{_esc(value)}</th>" for value in headers)
+            + "</tr></thead><tbody>"
+            + "".join(
+                "<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>"
+                for row in rows
+            )
+            + "</tbody></table></div>"
+        )
+
+    grouped_table_html = _prototype_table(
+        report_model.get("grouped_roi_headers") or [],
+        report_model.get("grouped_roi_rows") or [],
+        "Descriptive grouping of scan-level ROI medians. Pair differences are shown only for two clearly matched repeats or sites; these are not ICC, formal repeatability, pass/fail, or ranking.",
+    )
+    rss_table_html = _prototype_table(
+        report_model.get("dce_rss_headers") or [],
+        report_model.get("dce_rss_rows") or [],
+        "Residual Sum of Squares (RSS): raw voxelwise sum across time of (measured − modelled)², summarized by region. This is not deviance or official scoring.",
+    )
+    prototype_analysis_html = (
+        "<h2>Prototype descriptive analyses</h2>" + grouped_table_html + rss_table_html
+        if grouped_table_html or rss_table_html else ""
+    )
+
     lead_html = " ".join(_esc(line) for line in report_model["lead_lines"])
     methods_html = "".join(
         f'<p class="lead">{_esc(line)}</p>'
@@ -3317,12 +3460,27 @@ def export_report(
         # Spelled out rather than "Pipeline" / "Configuration": these are
         # provenance fields, and a bare version number under an ambiguous
         # label is the kind of thing that gets misread in a methods section.
-        ("Pipeline version", _pipeline_version()),
-        ("Configuration version", _configuration_version()),
+        ("Configuration version", report_model["analysis_provenance"]["challenge_configuration"]),
+        ("Scoring package", report_model["analysis_provenance"]["scoring_package"]),
+        ("Pipeline version", report_model["analysis_provenance"]["pipeline_version"]),
+        ("Reference dataset", report_model["analysis_provenance"]["reference_dataset"]),
+        ("Analysis date", report_model["analysis_provenance"]["analysis_date"]),
     ]
     meta_html = "".join(
         f"<dt>{_esc(label)}</dt><dd>{_esc(value)}</dd>"
         for label, value in meta_items
+    )
+    provenance_labels = [
+        ("Challenge", "challenge"),
+        ("Challenge configuration", "challenge_configuration"),
+        ("Scoring package", "scoring_package"),
+        ("Pipeline version", "pipeline_version"),
+        ("Reference dataset", "reference_dataset"),
+        ("Analysis date", "analysis_date"),
+    ]
+    provenance_html = "".join(
+        f"<dt>{_esc(label)}</dt><dd>{_esc(report_model['analysis_provenance'].get(key, 'not available'))}</dd>"
+        for label, key in provenance_labels
     )
 
     # ── Figures ───────────────────────────────────────────────────────────
@@ -3641,6 +3799,8 @@ def export_report(
   <h2>ROI Ktrans statistics</h2>
   {roi_table_html}
 
+  {prototype_analysis_html}
+
   <h2>Results by submission</h2>
   {table_html}
   {detail_html}
@@ -3652,9 +3812,12 @@ def export_report(
   <div class="notes">{notes_html}</div>
   <ul class="limitations-list">{limitations_html}</ul>
 
+  <h2>Analysis provenance</h2>
+  <dl class="meta">{provenance_html}</dl>
+
   <div class="colophon">
     <span>OSIPI Perfusion Pipeline &middot; automated report</span>
-    <span>Pipeline {_esc(_pipeline_version())} &middot; configuration {_esc(_configuration_version())} &middot; {_esc(generated)}</span>
+    <span>Pipeline {_esc(report_model['analysis_provenance']['pipeline_version'])} &middot; configuration {_esc(report_model['analysis_provenance']['challenge_configuration'])} &middot; scoring package {_esc(report_model['analysis_provenance']['scoring_package'])} &middot; reference {_esc(report_model['analysis_provenance']['reference_dataset'])} &middot; {_esc(generated)}</span>
   </div>
 </article>
 </body></html>"""

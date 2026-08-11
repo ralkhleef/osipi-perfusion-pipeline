@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/static/styles.css?v=92" />
+<link rel="stylesheet" href="/static/styles.css?v=93" />
 </head>
 <body data-step="upload">
 
@@ -498,6 +498,104 @@
             </button>
           </p>
 
+          <section class="config-manager" id="configuration-manager">
+            <div class="config-manager-heading">
+              <div>
+                <h3>Challenge Configuration Manager</h3>
+                <p>Edit, test, version, and activate challenge rules without opening the YAML file.</p>
+              </div>
+              <label class="config-manager-challenge" for="config-manager-challenge">
+                Challenge
+                <select id="config-manager-challenge"></select>
+              </label>
+            </div>
+
+            <div id="config-manager-loading" class="config-manager-message">Open this panel to load the active configuration.</div>
+            <div id="config-manager-editor" style="display:none">
+              <div class="config-manager-grid">
+                <div class="config-manager-card config-manager-card-wide">
+                  <h4>Maps and filename aliases</h4>
+                  <p>Choose whether each map is required, optional, or unused. Dimensions and aliases are validated before saving.</p>
+                  <div id="config-manager-maps"></div>
+                </div>
+                <div class="config-manager-card">
+                  <h4>Required documents and outputs</h4>
+                  <div id="config-manager-artifacts"></div>
+                  <label class="config-manager-check">
+                    <input type="checkbox" id="config-manager-code-required">
+                    Participant code execution is required
+                  </label>
+                </div>
+                <div class="config-manager-card">
+                  <h4>Dataset structure</h4>
+                  <div id="config-manager-datasets"></div>
+                  <label class="config-manager-field">
+                    Reference dataset version
+                    <input type="text" id="config-manager-reference-version" placeholder="e.g. synthetic-reference-v1">
+                  </label>
+                </div>
+                <div class="config-manager-card">
+                  <h4>Provider-specific analysis</h4>
+                  <label class="config-manager-field">Mode
+                    <select id="config-manager-scoring-mode">
+                      <option value="none">None</option>
+                      <option value="builtin">Built-in legacy TF6.2 provider</option>
+                      <option value="custom">Trusted custom package</option>
+                    </select>
+                  </label>
+                  <label class="config-manager-field" id="config-manager-package-wrap">Package
+                    <select id="config-manager-package"></select>
+                  </label>
+                  <p class="config-manager-note">Provider scoring is separate from generic QC and compatible generic reference comparisons.</p>
+                </div>
+              </div>
+
+              <div class="config-manager-actions" aria-label="Configuration workflow">
+                <button type="button" id="config-manager-test" class="btn btn-secondary btn-sm">1. Test Configuration</button>
+                <button type="button" id="config-manager-preview" class="btn btn-secondary btn-sm">2. Preview Changes</button>
+                <button type="button" id="config-manager-save" class="btn btn-primary btn-sm">3. Save as New Version</button>
+              </div>
+              <div id="config-manager-results" class="config-manager-results" style="display:none"></div>
+
+              <div class="config-manager-card config-manager-history">
+                <div class="config-manager-subheading">
+                  <div><h4>Version history</h4><p>Activation and restore both re-test the saved version first.</p></div>
+                  <div class="config-manager-inline-actions">
+                    <button type="button" id="config-manager-export" class="btn btn-secondary btn-sm">Export ZIP</button>
+                    <label class="btn btn-secondary btn-sm" for="config-manager-import">Import ZIP</label>
+                    <input type="file" id="config-manager-import" accept=".zip" style="display:none">
+                  </div>
+                </div>
+                <div id="config-manager-versions"></div>
+              </div>
+
+              <div class="config-manager-card config-manager-assets">
+                <div class="config-manager-subheading">
+                  <div>
+                    <h4>Reference Data &amp; Masks</h4>
+                    <p>Private organiser data. These files remain local and are not included in GitHub or configuration exports.</p>
+                  </div>
+                </div>
+                <div id="config-manager-assets-status"></div>
+                <div class="config-manager-asset-upload">
+                  <select id="config-manager-asset-kind" aria-label="Private asset type">
+                    <option value="reference">Reference map</option>
+                    <option value="mask">ROI mask</option>
+                    <option value="measured_signal">Measured signal-time curve</option>
+                  </select>
+                  <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
+                  <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+                </div>
+              </div>
+
+              <div class="config-manager-card config-manager-card-wide">
+                <h4>Current analysis capabilities</h4>
+                <div id="config-manager-capabilities" class="config-manager-table-wrap"></div>
+                <p class="config-manager-note"><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
+              </div>
+            </div>
+          </section>
+
           <!-- Mode selector -->
           <div class="scoring-mode-list" id="scoring-mode-list">
 
@@ -734,6 +832,6 @@
 
 </div><!-- .app -->
 
-<script src="/static/app.js?v=77" defer></script>
+<script src="/static/app.js?v=78" defer></script>
 </body>
 </html>

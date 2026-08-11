@@ -1,15 +1,15 @@
 # Updating the scoring — your options
 
-There are four ways to change how submissions are scored, from easiest (no
-coding) to most technical (editing code). Pick the lowest-numbered one that does
-what you need.
+Challenge requirements and scientific analysis are deliberately separate.
+YAML describes which inputs are valid; versioned analysis/scoring code defines
+scientific formulas. Use the section that matches the kind of change you need.
 
 The app never invents scores: if reference data or an official scorer isn't
 installed, it clearly shows "reference not available" instead of a fake number.
 
 ---
 
-## Option 1 — Change which maps/challenges are expected (no coding)
+## 1 — Change challenge requirements (no coding)
 
 Edit the text file **`config/validation_rules.yaml`**. This controls the
 challenges (ASL, DCE, DSC), the parameter maps the app looks for, and the names
@@ -39,7 +39,7 @@ To add a new map, copy one of these blocks and change the name, units, and the
 
 ---
 
-## Option 2 — Install official reference maps and masks (no coding)
+## 2 — Add private reference maps and masks (no coding)
 
 To turn on the RMSE / bias / ROI comparison, put the challenge's ground-truth
 files into these folders (create them if missing):
@@ -55,11 +55,13 @@ each compatible mask in `masks/`. No code is required; newly added reference
 assets are used by the next compatible analysis.
 
 > These files are large and challenge-owned, so they are intentionally **not**
-> stored in this repository. They are ignored by git and stay on your machine.
+> stored in this repository. Keep source copies outside the repository or in
+> `private_scoring_assets/`; the configured `data/reference_data/` locations are
+> also ignored by git.
 
 ---
 
-## Option 3 — Add a whole custom scoring script (no edits to this app)
+## 3 — Add or update a trusted scoring package
 
 If your team has its own scoring program, package it as a ZIP and upload it in
 the app (Score step → **Scoring Setup**). The core app is not modified.
@@ -70,6 +72,7 @@ The ZIP looks like:
 my_scoring_package.zip
 ├── manifest.json     ← name, challenge_type, map_type, entry_point
 ├── scoring.py        ← your scoring program (Python)
+├── requirements.txt  ← optional dependency declaration
 ├── reference/        ← optional reference maps
 └── masks/            ← optional masks
 ```
@@ -78,31 +81,43 @@ my_scoring_package.zip
 
 ```json
 {
-  "package_id": "asl_official",
-  "name": "Official ASL scoring",
+  "package_id": "asl_analysis_v1_0",
+  "name": "Local ASL analysis",
   "version": "1.0.0",
   "challenge_type": "asl",
   "map_type": "cbf",
+  "required_inputs": ["cbf", "att"],
+  "required_assets": ["reference/cbf.nii.gz", "reference/att.nii.gz"],
   "entry_point": "scoring.py",
+  "requirements_file": "requirements.txt",
   "call_mode": "standard",
+  "official": false,
   "metrics": ["rmse", "bias"]
 }
 ```
 
-Only trusted people should upload packages — a package is a program that runs on
-the server. There are two demo packages in the repo you can practise with:
-`data/sample_submissions/demo_scoring_package.zip` and the ASL QC demo in
-`submissions/incoming/`.
+Before installation, the app checks the manifest and version, challenge id,
+configured inputs, metric names, safe paths, entry point, declared assets,
+optional requirements file, and scorer syntax/importability. It validates in a
+staging directory. Activation is separate and checks package readiness and
+challenge compatibility; a failure leaves the previous active configuration in
+place. The selected package version is stored in the active configuration and
+in its results.
+
+Use a new versioned `package_id` for each release. Only trusted people should
+upload packages because a package is a program that runs on the server. The
+tracked `data/sample_submissions/demo_scoring_package/` directory is a safe
+demo source that can be zipped locally for practice.
 
 ---
 
-## Option 4 — Change a metric formula in the app itself (needs a developer)
+## 4 — Extend generic built-in analysis (needs a developer)
 
-If you want to change how an existing metric (RMSE, MAE, bias, correlation) is
-computed, or add a brand-new one to the built-in comparison, that lives in
-**`backend/scoring.py`**. A developer follows the step-by-step guide in
-**`docs/ADDING_SCORING_METRICS.md`**: add the metric function, expose it in the
-reports, and add a test. Roughly a day's work per metric, no rewrite.
+Cross-challenge capabilities such as generic compatible-map comparison live in
+the built-in analysis code and require implementation, reporting integration,
+and tests. New challenge-specific or not-yet-final scientific definitions
+should normally be delivered as a new versioned package instead of being added
+to YAML or hard-coded into the generic pipeline.
 
 ---
 
@@ -115,4 +130,9 @@ definitions/data — the app does not guess them:
 - The ICC model and confidence-interval method (repeatability CoV and ICC show
   as "unavailable" until repeated, noise-varied datasets are supplied).
 - The official reference maps and masks (Option 2 above).
-- DCE/DSC expected files and metrics.
+- Final challenge-specific DCE/ASL/DSC metrics that have not yet been agreed.
+
+Unimplemented items remain unavailable or not configured; they do not block
+validation, QC, previews, exports, compatible ROI descriptions, or compatible
+generic reference comparisons. Official OSIPI challenge ranking is not
+currently configured.

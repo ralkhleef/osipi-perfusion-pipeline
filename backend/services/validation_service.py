@@ -50,6 +50,7 @@ if str(_SRC_DIR) not in sys.path:
 
 from osipi_pipeline.config.rules import (
     challenge_types,
+    code_execution_required_by_challenge,
     default_challenge_type,
     expected_maps_by_challenge,
     known_auto_detected_labels,
@@ -506,6 +507,16 @@ def validate_submission(
 
     has_run_instructions = _has_docker(all_files)
     has_dockerfile = any(f.name == "Dockerfile" for f in all_files)
+    if (
+        code_execution_required_by_challenge().get(normalized_challenge, False)
+        and not has_run_instructions
+    ):
+        errors.append(_err(
+            "CODE_EXECUTION_REQUIRED",
+            "This challenge configuration requires participant code execution, "
+            "but no Dockerfile was found.",
+            str(folder),
+        ))
     if _has_compose(all_files) and not has_run_instructions:
         warnings.append(_warn(
             "DOCKERFILE_REQUIRED_FOR_EXECUTION",

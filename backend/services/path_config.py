@@ -17,6 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_DIR           = PROJECT_ROOT / "data"
 REFERENCE_DATA_DIR = DATA_DIR / "reference_data"   # Zenodo downloads
 OUTPUTS_DIR        = DATA_DIR / "outputs"           # web-app validation results
+CONFIG_MANAGER_DIR = DATA_DIR / "configuration_manager"
+CONFIG_VERSIONS_DIR = CONFIG_MANAGER_DIR / "versions"
+CONFIG_ACTIVE_VERSION = CONFIG_MANAGER_DIR / "active.json"
 
 # --- submissions/ ---
 SUBMISSIONS_DIR = PROJECT_ROOT / "submissions"

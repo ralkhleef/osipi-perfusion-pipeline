@@ -55,9 +55,38 @@
       <div class="docs-content">
 
         <section>
-          <h2 id="validation-rules" data-toc-title="Validation rules">Validation rules</h2>
-          <p>Challenge requirements are in <code>config/validation_rules.yaml</code>. Changing what a
-            challenge demands is an edit to that file, not a code change. It is read from disk rather
+          <h2 id="configuration-manager" data-toc-title="In-app manager">In-app Configuration Manager</h2>
+          <p>Reviewer/admin users can manage DCE, ASL and DSC requirements from
+            <strong>QC &amp; Preview → Reviewer / Admin: Scoring Setup → Challenge Configuration Manager</strong>.
+            The editor covers required and optional maps, expected dimensions, filename aliases,
+            required documents and outputs, participant/repeat/site counts, whether participant
+            code execution is required, the reference-dataset version, and the selected
+            provider-specific scoring package.</p>
+          <p>The safe workflow is <strong>Test Configuration → Preview Changes → Save as New Version → Activate</strong>.
+            Testing and previewing are side-effect free. Saving creates an inactive, immutable local
+            version. Activation re-tests the saved version before atomically replacing active rules;
+            a failure restores the previous YAML and scoring selection. Version history provides the
+            same tested activation path for rollback.</p>
+          <p>The manager also shows local private reference maps, masks and measured signals, plus a
+            challenge capability matrix. Configuration ZIP export includes rules, version metadata,
+            scoring selection and a public manifest when applicable. It deliberately excludes private
+            images, masks, measured signals, scoring code and other organiser data. Import saves a new
+            inactive version and never silently activates it.</p>
+          <p>PDF, HTML and JSON results record analysis provenance: challenge, active challenge
+            configuration version, scoring package, pipeline version, reference-dataset version and
+            analysis date. Give each released reference dataset a stable version label so a later
+            reviewer can reproduce which assets were intended without exposing their private paths.</p>
+          <div class="docs-callout"><p><strong>No terminal or YAML editor is required for routine handoff updates.</strong>
+            Direct YAML editing remains supported for developers, and the existing Reload rules button
+            remains available for that route.</p></div>
+        </section>
+
+        <section>
+          <h2 id="validation-rules" data-toc-title="Challenge requirements">1. Changing challenge requirements</h2>
+          <p>Challenge structure is in <code>config/validation_rules.yaml</code>. Required and optional
+            maps, artifacts, dimensions, dataset structure, aliases, and filenames belong there. A
+            new scientific formula belongs in implemented and tested analysis/scoring code or a
+            versioned trusted package, not in YAML. The configuration is read from disk rather
             than compiled in, and validated on load: an unknown key, a malformed dataset block or a
             bad regular expression fails immediately rather than being ignored. Editing the file is
             not the whole job. <a href="#apply-a-change">Apply a change</a> covers how the edit
@@ -80,11 +109,14 @@
           </div>
 
           <div class="docs-callout">
-            <p>The schema covers structure: which files are required, their dimensions, how scans are
-              organised. A new statistical formula is implemented and tested in code.</p>
+            <p><strong>Designed for future challenge updates.</strong> Organisers can revise structural
+              rules, install a new versioned analysis package, and add private assets later without
+              replacing the current validated setup until the update is ready.</p>
           </div>
 
           <p>Annotated template: <a href="examples/challenge.example.yaml"><code>docs/examples/challenge.example.yaml</code></a>.</p>
+          <p>Developer template for a new trusted analysis package:
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline/tree/main/examples/scoring-package-template"><code>examples/scoring-package-template/</code></a>.</p>
         </section>
 
         <section>
@@ -120,6 +152,14 @@
             <code>dimensions</code>, the value is checked against the NIfTI header.</p>
           <p>The current ASL rules require CBF and ATT. The current DSC rules require CBV, CBF and
             MTT. Their missing maps are blocking errors, not legacy expected-map warnings.</p>
+          <p>DCE also recognises an optional 4-D <code>measured_st</code> artifact. When one measured
+            and one modelled signal can be matched to the same scan, the pipeline computes raw
+            voxelwise Residual Sum of Squares (RSS) across time and summarizes it for the whole image
+            and compatible ROIs. RSS is descriptive and is not labelled deviance.</p>
+          <p>The DCE <code>grouped_statistics</code> block enables provisional grouping of scan-level
+            ROI medians across participants, repeats and sites. It reports mean, population SD and CoV;
+            exactly two clearly matched repeats or sites also receive a signed difference. These are
+            not formal repeatability, ICC, pass/fail, or ranking results.</p>
 
           <h3 id="example-b">Example: change <code>ve</code> from optional to required</h3>
           <div class="docs-code">
@@ -165,7 +205,7 @@
         </section>
 
         <section>
-          <h2 id="scoring-providers" data-toc-title="Analysis and scoring">Analysis and scoring</h2>
+          <h2 id="scoring-providers" data-toc-title="Analysis and scoring">2. Adding or updating scoring</h2>
           <p>Three mechanisms are distinct. Generic reference comparison is part of the pipeline: it
             compares readable maps with compatible references and can run even when provider scoring
             mode is <code>none</code>. The built-in legacy TF6.2 provider is a bundled hook for its
@@ -186,6 +226,7 @@
             <pre><code>my_scoring_package.zip
   manifest.json      required
   scoring.py         the entry point; the name comes from manifest.entry_point
+  requirements.txt   optional dependency declaration; not installed automatically
   reference/         optional, ground-truth NIfTI maps
   masks/             optional, ROI mask NIfTI files
   README.md          optional</code></pre>
@@ -199,22 +240,27 @@
           <div class="docs-code">
             <div class="docs-code-header"><span>manifest.json</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>{
-  "package_id": "osipi_dce_ktrans",
-  "name": "Approved DCE Ktrans scoring",
+  "package_id": "local_dce_ktrans_v1_0",
+  "name": "Local DCE Ktrans analysis",
   "version": "1.0.0",
   "challenge_type": "dce",
   "map_type": "ktrans",
+  "required_inputs": ["ktrans"],
+  "required_assets": ["reference/Ktrans.nii.gz"],
   "entry_point": "scoring.py",
+  "requirements_file": "requirements.txt",
   "call_mode": "standard",
-  "official": true,
-  "metrics": ["approved_metric_1", "approved_metric_2"]
+  "official": false,
+  "metrics": ["rmse", "bias"]
 }</code></pre>
           </div>
 
           <p><code>call_mode</code> is <code>standard</code> for scripts taking
             <code>--submission-dir</code>, <code>--output-dir</code> and optionally
-            <code>--reference-dir</code>. Only the metrics listed in the manifest are reported.
-            Anything that is not approved OSIPI scoring takes <code>"official": false</code>.</p>
+            <code>--reference-dir</code>. Every metric declared in the manifest must be present in
+            <code>metrics.json</code> or <code>results.json</code>. A requirements file is checked for
+            presence but is not installed automatically. Anything that is not approved OSIPI scoring
+            takes <code>"official": false</code>.</p>
 
           <div class="docs-table-wrap">
             <table>
@@ -232,6 +278,23 @@
             uploaded. <code>package_id</code> is restricted to letters, digits, underscores and
             hyphens, because it becomes a directory name.</p>
 
+          <p>Installation validates the JSON manifest, readable package version, known challenge,
+            configured input ids, metric names, safe paths, entry point, declared assets, optional
+            requirements file, and scorer syntax/importability. The ZIP is checked in a staging
+            directory and is installed only after every check passes. Activation then verifies that
+            the package is ready and belongs to the selected challenge. A failed validation or
+            activation leaves the previous active configuration unchanged.</p>
+
+          <p>An already-active legacy package can continue running, but its manifest must declare
+            <code>required_inputs</code> before it can be uploaded or activated again under the
+            stricter contract.</p>
+
+          <p>Use a distinct versioned <code>package_id</code> for each release, such as
+            <code>dce_accuracy_v1_0</code> and <code>dce_accuracy_v1_1</code>. The selected package id,
+            name, and version are stored in the active configuration, and completed package results
+            also record the package version. Future analyses that are not installed remain
+            unavailable; they do not stop the rest of the pipeline.</p>
+
           <div class="docs-callout">
             <p>A scoring package is Python that executes on the server. Read the script before
               installing one.</p>
@@ -239,16 +302,20 @@
         </section>
 
         <section>
-          <h2 id="reference-data" data-toc-title="Reference data and masks">Reference data and masks</h2>
+          <h2 id="reference-data" data-toc-title="Private reference data">3. Adding private reference data</h2>
           <p>Reference maps and ROI masks come from the organiser. Search order: the submission's own
             <code>reference/</code> directory, the configured reference data directory, then the
             active scoring package's reference directory.</p>
           <p>Within a reference root, maps are read from <code>maps/</code> and masks from
             <code>masks/</code>. Files are de-duplicated by physical file identity rather than path
             text, so on macOS and Windows the same mask cannot be admitted twice under two spellings.</p>
-          <p>Locations are defined in <code>backend/services/path_config.py</code>.
-            <code>.gitignore</code> excludes reference data, masks and imaging files from version
-            control.</p>
+          <p>Keep organiser source copies outside the repository or in the gitignored
+            <code>private_scoring_assets/</code> workspace. Generic comparison data may be copied to
+            the gitignored <code>data/reference_data/</code> paths. Package-specific assets should be
+            copied into the relative paths declared by <code>required_assets</code> before the trusted
+            ZIP is uploaded. Installed packages live under gitignored
+            <code>data/scoring/packages/</code>. Never commit private masks, references, answer keys,
+            or unreleased challenge data.</p>
           <div class="docs-callout">
             <p>QC and previews remain available for readable maps. DCE Ktrans ROI descriptive
               statistics can appear with compatible ROI masks, generic reference comparisons with
@@ -259,10 +326,13 @@
         </section>
 
         <section>
-          <h2 id="apply-a-change" data-toc-title="Apply a change">Apply a change</h2>
-          <p>Editing a file on your machine is not enough on its own. The application runs inside a
-            container, and the rules are read once and kept for the life of the process. What is
-            needed depends on what you changed.</p>
+          <h2 id="apply-a-change" data-toc-title="Safe updates">4. Safe updates</h2>
+          <p>For routine organiser updates, prefer the in-app Configuration Manager above. It provides
+            validation, a readable diff, version history, rollback, import/export and explicit activation.
+            The file-based route below is retained for developers and advanced maintenance.</p>
+          <p>Editing a file on your machine is not enough on its own. The application validates rule
+            reloads and scoring packages before replacing the active configuration. What is needed
+            depends on what you changed.</p>
 
           <div class="docs-table-wrap">
             <table>
@@ -270,8 +340,8 @@
               <tbody>
                 <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td>Press <strong>Reload rules</strong> in Scoring Setup</td><td>The compose file mounts <code>./config</code>, so the file is already current. The button re-reads it and drops everything cached from the old copy.</td></tr>
                 <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use and the button re-reads the same stale file.</td></tr>
-                <tr><td>A scoring package</td><td>Upload it in Scoring Setup</td><td>Packages are stored under <code>data/</code>, which is a mounted volume, and read per run.</td></tr>
-                <tr><td>Reference maps or ROI masks</td><td>Copy the files in</td><td>Also under <code>data/</code>, and located per submission.</td></tr>
+                <tr><td>A scoring package</td><td>Upload a new versioned package, review validation, then activate it in Scoring Setup</td><td>Validation and activation are separate. A failure leaves the previous active package unchanged.</td></tr>
+                <tr><td>Reference maps or ROI masks</td><td>Add them through <strong>Reference Data &amp; Masks</strong> in the Configuration Manager, or copy them into the documented local <code>data/reference_data/</code> layout</td><td>They remain local, are checked for NIfTI readability, and are excluded from configuration exports.</td></tr>
                 <tr><td>Anything under <code>backend/</code>, <code>frontend/</code> or <code>src/</code></td><td><code>docker compose up --build</code></td><td>Source is copied into the image, not mounted.</td></tr>
               </tbody>
             </table>

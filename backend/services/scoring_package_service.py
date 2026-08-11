@@ -10,13 +10,16 @@ A scoring package is a ZIP archive or directory containing:
 manifest.json required fields:
     package_id     , filesystem-safe identifier, e.g. "my_challenge_v1"
     name           , human-readable display name
+    version        , readable package version, e.g. "1.2.0"
     challenge_type , any challenge id configured in config/validation_rules.yaml
+    metrics        , non-empty list of metric names the script produces
+    required_inputs, non-empty list of configured map/artifact ids consumed
 
 manifest.json optional fields:
-    version        , semver string, default "1.0.0"
     map_type       , configured map id/display, e.g. "ktrans" or "cbf"
     description    , free-text description
-    metrics        , list of metric names the script produces
+    required_assets, package-relative files/directories that must exist
+    requirements_file, optional dependency declaration, e.g. "requirements.txt"
     entry_point    , filename of the scoring script, default "scoring.py"
     call_mode      , "standard" (default) | "osipi_cwd"
                       "standard"  → python scoring.py --submission-dir <dir>
@@ -26,7 +29,11 @@ manifest.json optional fields:
 
 Active configuration (data/scoring/active.json):
     {
-      "<challenge_id>": { "mode": "none" | "builtin" | "custom", "package_id": null | "..." }
+      "<challenge_id>": {
+        "mode": "none" | "builtin" | "custom",
+        "package_id": null | "...",
+        "package_version": null | "..."
+      }
     }
 
 NEVER fabricates scoring results.
@@ -39,6 +46,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,7 +58,17 @@ from services.path_config import (
     SCORING_OUTPUTS_DIR,
     SCORING_PACKAGES_DIR,
 )
-from osipi_pipeline.config.rules import challenge_types, default_challenge_type, output_map_subpaths, tuple_setting
+from osipi_pipeline.config.rules import (
+    artifact_type_specs,
+    challenge_types,
+    default_challenge_type,
+    map_type_specs,
+    optional_maps_by_challenge,
+    output_map_subpaths,
+    required_artifacts_by_challenge,
+    required_maps_by_challenge,
+    tuple_setting,
+)
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 
@@ -63,45 +81,134 @@ def _default_challenge_type() -> str:
 
 
 def _default_active_config() -> dict:
-    return {ct: {"mode": "none", "package_id": None} for ct in _known_challenge_types()}
+    return {
+        ct: {
+            "mode": "none",
+            "package_id": None,
+            "package_version": None,
+            "package_name": None,
+        }
+        for ct in _known_challenge_types()
+    }
 
 
 # ---------------------------------------------------------------------------
 # Manifest helpers
 # ---------------------------------------------------------------------------
 
-def _validate_manifest(manifest: dict) -> list[str]:
+def _validate_manifest(manifest: dict, *, require_declared_inputs: bool = True) -> list[str]:
     """Return a list of validation error strings (empty = valid)."""
     errors: list[str] = []
-    for field in ("package_id", "name", "challenge_type"):
-        if not manifest.get(field, "").strip():
+    for field in ("package_id", "name", "version", "challenge_type"):
+        value = manifest.get(field)
+        if not isinstance(value, str) or not value.strip():
             errors.append(f"manifest.json missing required field: {field!r}")
-    ct = manifest.get("challenge_type", "").lower().strip()
+    ct = str(manifest.get("challenge_type") or "").lower().strip()
     known = _known_challenge_types()
     if ct and ct not in known:
         errors.append(
             f"challenge_type must be one of {known}, got {ct!r}"
         )
-    pid = manifest.get("package_id", "")
+    pid = str(manifest.get("package_id") or "")
     if pid and not re.match(r"^[a-zA-Z0-9_\-]+$", pid):
         errors.append(
             "package_id must contain only letters, digits, underscores, hyphens"
         )
+    version = str(manifest.get("version") or "")
+    if version and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}", version):
+        errors.append(
+            "version must be 1-64 readable characters using letters, digits, '.', '_', '+', or '-'"
+        )
+
+    entry_point = manifest.get("entry_point", "scoring.py")
+    if not isinstance(entry_point, str) or not _safe_relative_path(entry_point, require_python=True):
+        errors.append("entry_point must be a safe package-relative Python file path")
+
+    call_mode = manifest.get("call_mode", "standard")
+    if call_mode not in ("standard", "osipi_cwd"):
+        errors.append("call_mode must be 'standard' or 'osipi_cwd'")
+
+    metrics = manifest.get("metrics")
+    if not isinstance(metrics, list) or not metrics:
+        errors.append("metrics must be a non-empty list of metric names")
+    elif any(
+        not isinstance(metric, str)
+        or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.\-]{0,127}", metric)
+        for metric in metrics
+    ):
+        errors.append("each metric name must be a readable identifier")
+    elif len(set(metrics)) != len(metrics):
+        errors.append("metric names must be unique")
+
+    required_inputs = manifest.get("required_inputs") or []
+    if require_declared_inputs and (not isinstance(required_inputs, list) or not required_inputs):
+        errors.append("required_inputs must be a non-empty list of configured map/artifact ids")
+    elif required_inputs and any(not isinstance(item, str) for item in required_inputs):
+        errors.append("required_inputs must contain only configured map/artifact ids")
+    else:
+        configured_for_challenge = (
+            set(required_maps_by_challenge().get(ct, ()))
+            | set(optional_maps_by_challenge().get(ct, ()))
+            | set(required_artifacts_by_challenge().get(ct, ()))
+        )
+        # Legacy/future challenges may only declare expected_maps. In that
+        # compatibility case, allow any globally configured input id.
+        known_inputs = configured_for_challenge or (set(map_type_specs()) | set(artifact_type_specs()))
+        unknown_inputs = sorted({item.lower().strip() for item in required_inputs} - known_inputs)
+        if unknown_inputs:
+            errors.append(
+                "required_inputs contains ids not configured in validation_rules.yaml: "
+                + ", ".join(unknown_inputs)
+            )
+
+    required_assets = manifest.get("required_assets") or []
+    if not isinstance(required_assets, list) or any(
+        not isinstance(item, str) or not _safe_relative_path(item)
+        for item in required_assets
+    ):
+        errors.append("required_assets must be a list of safe package-relative paths")
+    requirements_file = manifest.get("requirements_file") or ""
+    if requirements_file and (
+        not isinstance(requirements_file, str) or not _safe_relative_path(requirements_file)
+    ):
+        errors.append("requirements_file must be a safe package-relative path")
     return errors
+
+
+def _safe_relative_path(value: str, *, require_python: bool = False) -> bool:
+    """Return True for a non-empty relative path contained by a package."""
+    if not isinstance(value, str) or not value.strip():
+        return False
+    path = Path(value.strip())
+    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+        return False
+    return not require_python or path.suffix.lower() == ".py"
 
 
 def _normalise_manifest(raw: dict) -> dict:
     """Fill optional fields with defaults."""
+    def _string(field: str, default: str = "") -> str:
+        value = raw.get(field, default)
+        return value.strip() if isinstance(value, str) else value
+
+    package_id = _string("package_id")
+    challenge_type = _string("challenge_type", _default_challenge_type())
+    map_type = _string("map_type")
+    call_mode = _string("call_mode", "standard")
+
     return {
-        "package_id":     raw.get("package_id", "").strip().lower(),
-        "name":           raw.get("name", "").strip(),
-        "version":        raw.get("version", "1.0.0").strip(),
-        "challenge_type": raw.get("challenge_type", _default_challenge_type()).strip().lower(),
-        "map_type":       raw.get("map_type", "").strip().lower(),
+        "package_id":     package_id.lower() if isinstance(package_id, str) else package_id,
+        "name":           _string("name"),
+        "version":        _string("version"),
+        "challenge_type": challenge_type.lower() if isinstance(challenge_type, str) else challenge_type,
+        "map_type":       map_type.lower() if isinstance(map_type, str) else map_type,
         "description":    raw.get("description", ""),
         "metrics":        raw.get("metrics") or [],
-        "entry_point":    raw.get("entry_point", "scoring.py").strip(),
-        "call_mode":      raw.get("call_mode", "standard").strip().lower(),
+        "required_inputs": raw.get("required_inputs") or [],
+        "required_assets": raw.get("required_assets") or [],
+        "requirements_file": _string("requirements_file"),
+        "entry_point":    _string("entry_point", "scoring.py"),
+        "call_mode":      call_mode.lower() if isinstance(call_mode, str) else call_mode,
         "official":       bool(raw.get("official", False)),
         "expected_input_pattern": raw.get("expected_input_pattern", ""),
         "readme":         raw.get("readme", ""),
@@ -128,9 +235,21 @@ def load_active_config() -> dict:
 def save_active_config(config: dict) -> None:
     """Persist active.json atomically."""
     SCORING_ACTIVE_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    SCORING_ACTIVE_CONFIG.write_text(
-        json.dumps(config, indent=2, default=str), encoding="utf-8"
-    )
+    payload = json.dumps(config, indent=2, default=str)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=SCORING_ACTIVE_CONFIG.parent,
+        prefix=f".{SCORING_ACTIVE_CONFIG.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as temp_file:
+        temp_file.write(payload)
+        temp_path = Path(temp_file.name)
+    try:
+        temp_path.replace(SCORING_ACTIVE_CONFIG)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 def get_active_entry(challenge_type: str) -> dict:
@@ -139,7 +258,15 @@ def get_active_entry(challenge_type: str) -> dict:
     Returns {"mode": "none", "package_id": null} if not found.
     """
     cfg = load_active_config()
-    return cfg.get(challenge_type.lower().strip(), {"mode": "none", "package_id": None})
+    return cfg.get(
+        challenge_type.lower().strip(),
+        {
+            "mode": "none",
+            "package_id": None,
+            "package_version": None,
+            "package_name": None,
+        },
+    )
 
 
 def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] = None) -> dict:
@@ -151,15 +278,49 @@ def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] =
     mode = mode.strip().lower()
     if mode not in ("none", "builtin", "custom"):
         raise ValueError(f"Invalid mode: {mode!r}. Must be 'none', 'builtin', or 'custom'.")
+    challenge_type = challenge_type.lower().strip()
+    if challenge_type not in _known_challenge_types():
+        raise ValueError(f"Unknown challenge type: {challenge_type!r}.")
     if mode == "custom" and not package_id:
         raise ValueError("package_id is required when mode='custom'.")
+    package_version = None
+    package_name = None
+    if mode == "custom":
+        manifest = get_package_manifest(str(package_id))
+        if manifest is None:
+            raise ValueError(
+                "Scoring configuration could not be activated; the previous configuration "
+                f"remains active. Package {package_id!r} is not installed."
+            )
+        if manifest.get("challenge_type") != challenge_type:
+            raise ValueError(
+                "Scoring configuration could not be activated; the previous configuration "
+                f"remains active. Package {package_id!r} is for "
+                f"{manifest.get('challenge_type')!r}, not {challenge_type!r}."
+            )
+        status = _check_package_ready_internal(
+            SCORING_PACKAGES_DIR / str(package_id),
+            manifest,
+            perform_import_check=True,
+            require_declared_inputs=True,
+        )
+        if not status.get("ready"):
+            details = "; ".join(status.get("missing") or ["package validation failed"])
+            raise ValueError(
+                "Scoring configuration could not be activated; the previous configuration "
+                f"remains active. {details}"
+            )
+        package_version = manifest.get("version")
+        package_name = manifest.get("name")
     cfg = load_active_config()
     entry = {
         "mode":       mode,
         "package_id": package_id if mode == "custom" else None,
+        "package_version": package_version,
+        "package_name": package_name,
         "set_at":     datetime.now(timezone.utc).isoformat(),
     }
-    cfg[challenge_type.lower().strip()] = entry
+    cfg[challenge_type] = entry
     save_active_config(cfg)
     return entry
 
@@ -250,12 +411,22 @@ def install_package(zip_path: Path) -> dict:
 
     pkg_id = manifest["package_id"]
 
-    # 4. Extract to packages dir (overwrite if exists)
+    # 4. Extract into an isolated staging directory. Never replace an existing
+    # package until every validation check has passed.
     SCORING_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
     pkg_dir = SCORING_PACKAGES_DIR / pkg_id
     if pkg_dir.exists():
-        shutil.rmtree(pkg_dir)
-    pkg_dir.mkdir(parents=True)
+        existing = get_package_manifest(pkg_id) or {}
+        return {
+            "success": False,
+            "error": (
+                f"Package id {pkg_id!r} is already installed"
+                + (f" at version {existing.get('version')!r}" if existing.get("version") else "")
+                + ". Use a versioned package_id for a new release so an active package "
+                  "cannot change without explicit activation."
+            ),
+        }
+    staging_dir = Path(tempfile.mkdtemp(prefix=".scoring-package-", dir=SCORING_PACKAGES_DIR))
 
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
@@ -266,44 +437,43 @@ def install_package(zip_path: Path) -> dict:
                 rel = name[len(manifest_prefix):]
                 if not rel or rel.endswith("/"):
                     continue
-                # Safety: reject path traversal
-                rel_path = Path(rel)
-                if any(part == ".." for part in rel_path.parts):
-                    continue
-                dest = pkg_dir / rel_path
+                # Safety: reject traversal and absolute archive paths.
+                if not _safe_relative_path(rel):
+                    raise ValueError(f"Unsafe package path: {rel!r}")
+                dest = staging_dir / Path(rel)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(zf.read(name))
     except Exception as exc:
-        shutil.rmtree(pkg_dir, ignore_errors=True)
+        shutil.rmtree(staging_dir, ignore_errors=True)
         return {"success": False, "error": f"Failed to extract ZIP: {exc}"}
 
-    # 5. Re-check entry point
-    script = pkg_dir / manifest["entry_point"]
-    if not script.exists():
-        # Check for challengeScoring.py as a fallback
-        alt = pkg_dir / "challengeScoring.py"
-        if alt.exists():
-            manifest["entry_point"] = "challengeScoring.py"
-            (pkg_dir / "manifest.json").write_text(
-                json.dumps(manifest, indent=2), encoding="utf-8"
-            )
-        else:
-            shutil.rmtree(pkg_dir, ignore_errors=True)
-            return {
-                "success": False,
-                "error": (
-                    f"Entry point {manifest['entry_point']!r} not found in package. "
-                    "Add a scoring.py (or specify entry_point in manifest.json)."
-                ),
-            }
-
-    # 6. Persist manifest (normalised)
-    (pkg_dir / "manifest.json").write_text(
+    # 5. Persist the normalised manifest in staging, then validate the complete
+    # package (entry point, declared assets, and scorer syntax/importability).
+    (staging_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
+    status = _check_package_ready_internal(
+        staging_dir,
+        manifest,
+        perform_import_check=True,
+        require_declared_inputs=True,
+    )
+    if not status["ready"]:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        return {
+            "success": False,
+            "error": "Package validation failed: " + " | ".join(status["missing"]),
+        }
 
+    # 6. The final rename is atomic on the same filesystem. A failed package
+    # therefore never becomes installed or active.
+    try:
+        staging_dir.replace(pkg_dir)
+    except OSError as exc:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        return {"success": False, "error": f"Could not finalize package installation: {exc}"}
     manifest["installed_path"] = str(pkg_dir)
-    manifest["status"] = _check_package_ready_internal(pkg_dir, manifest)
+    manifest["status"] = status
 
     return {"success": True, "package_id": pkg_id, "manifest": manifest}
 
@@ -328,7 +498,12 @@ def remove_package(package_id: str) -> dict:
     for ct in list(cfg.keys()):
         entry = cfg[ct]
         if entry.get("package_id") == package_id:
-            cfg[ct] = {"mode": "none", "package_id": None}
+            cfg[ct] = {
+                "mode": "none",
+                "package_id": None,
+                "package_version": None,
+                "package_name": None,
+            }
             changed = True
     if changed:
         save_active_config(cfg)
@@ -340,17 +515,76 @@ def remove_package(package_id: str) -> dict:
 # Package readiness check
 # ---------------------------------------------------------------------------
 
-def _check_package_ready_internal(pkg_dir: Path, manifest: dict) -> dict:
+def _check_package_ready_internal(
+    pkg_dir: Path,
+    manifest: dict,
+    *,
+    perform_import_check: bool = False,
+    require_declared_inputs: bool = False,
+) -> dict:
     """Internal check, returns a status dict.
 
     A package is "ready" when:
     - The scoring script (entry_point) exists.
     - For packages needing reference data: a reference/ dir or reference files exist.
     """
-    missing: list[str] = []
+    missing: list[str] = _validate_manifest(
+        manifest,
+        require_declared_inputs=require_declared_inputs,
+    )
     entry_point = pkg_dir / manifest.get("entry_point", "scoring.py")
-    if not entry_point.exists():
+    syntax_valid = False
+    if not entry_point.is_file():
         missing.append(f"Scoring script not found: {manifest.get('entry_point', 'scoring.py')}")
+    else:
+        try:
+            source = entry_point.read_text(encoding="utf-8")
+            compile(source, str(entry_point), "exec")
+        except (OSError, UnicodeError, SyntaxError) as exc:
+            missing.append(f"Scoring script import/syntax check failed: {exc}")
+        else:
+            syntax_valid = True
+        if syntax_valid and perform_import_check:
+            try:
+                import_check = subprocess.run(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        (
+                            "import importlib.util,pathlib,sys;"
+                            "sys.dont_write_bytecode=True;"
+                            "p=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(p.parent));"
+                            "s=importlib.util.spec_from_file_location('_osipi_package_check',p);"
+                            "m=importlib.util.module_from_spec(s);s.loader.exec_module(m)"
+                        ),
+                        str(entry_point),
+                    ],
+                    cwd=str(pkg_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            except subprocess.TimeoutExpired:
+                missing.append("Scoring script import/initialization check timed out after 15 seconds")
+            else:
+                if import_check.returncode != 0:
+                    detail = (import_check.stderr or import_check.stdout).strip()[-1000:]
+                    missing.append(
+                        "Scoring script import/initialization check failed"
+                        + (f": {detail}" if detail else "")
+                    )
+
+    for asset in manifest.get("required_assets") or []:
+        asset_path = pkg_dir / asset
+        if not asset_path.exists():
+            missing.append(f"Required asset not found: {asset}")
+        elif asset_path.is_dir() and not any(item.is_file() for item in asset_path.rglob("*")):
+            missing.append(f"Required asset directory is empty: {asset}")
+
+    requirements_file = manifest.get("requirements_file")
+    if requirements_file and not (pkg_dir / requirements_file).is_file():
+        missing.append(f"Requirements file not found: {requirements_file}")
 
     # Check for reference data (any NIfTI in reference/, masks/, or root)
     nifti_count = _count_niftis_in(pkg_dir)
@@ -377,15 +611,25 @@ def _count_niftis_in(path: Path) -> int:
     return sum(1 for f in path.rglob("*") if f.is_file() and f.name.lower().endswith(NIFTI_SUFFIXES))
 
 
-def check_package_ready(package_id: str) -> dict:
-    """Public wrapper, check readiness of an installed package."""
+def check_package_ready(
+    package_id: str,
+    *,
+    perform_import_check: bool = False,
+    require_declared_inputs: bool = False,
+) -> dict:
+    """Check an installed package, optionally including scorer import/init."""
     pkg_dir = SCORING_PACKAGES_DIR / package_id
     if not pkg_dir.exists():
         return {"ready": False, "missing": [f"Package {package_id!r} not installed."]}
     manifest = get_package_manifest(package_id)
     if manifest is None:
         return {"ready": False, "missing": ["manifest.json not found or invalid."]}
-    return _check_package_ready_internal(pkg_dir, manifest)
+    return _check_package_ready_internal(
+        pkg_dir,
+        manifest,
+        perform_import_check=perform_import_check,
+        require_declared_inputs=require_declared_inputs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +663,9 @@ def run_package_scoring(
             "success":    False,
             "status":     "not_configured",
             "message":    "Scoring package is not ready.",
+            "package_id": package_id,
+            "package_name": manifest.get("name"),
+            "package_version": manifest.get("version"),
             "missing":    readiness["missing"],
             "metrics":    {},
             "artifacts":  [],
@@ -440,6 +687,9 @@ def run_package_scoring(
                 "success":    False,
                 "status":     "not_configured",
                 "message":    "Submission files not found. Upload the submission first.",
+                "package_id": package_id,
+                "package_name": manifest.get("name"),
+                "package_version": manifest.get("version"),
                 "metrics":    {},
                 "artifacts":  [],
             }
@@ -481,13 +731,23 @@ def run_package_scoring(
         # nested structure (summary + per_file) is kept under metrics_detail
         # for the advanced view.  Booleans/strings are excluded so the UI shows
         # only real numeric metric values (RMSE, CoV, finite %, …).
-        metrics       = _flatten_metrics(metrics_full)
+        parsed_metrics = _flatten_metrics(metrics_full)
+        declared_metrics = set(manifest.get("metrics") or [])
+        # The manifest is the public metric contract. Extra numeric fields may
+        # remain in metrics_detail as technical metadata, but are not promoted
+        # into UI/export metric columns unless declared.
+        metrics = {
+            name: value for name, value in parsed_metrics.items()
+            if name in declared_metrics
+        }
 
         if proc.returncode != 0:
             return {
                 "success":        False,
                 "submission_id":  submission_id,
                 "package_id":     package_id,
+                "package_name":   manifest.get("name"),
+                "package_version": manifest.get("version"),
                 "status":         "failed",
                 "scored_at":      scored_at,
                 "message":        "Scoring script exited with a non-zero return code.",
@@ -498,12 +758,34 @@ def run_package_scoring(
                 "artifact_count": len(artifacts),
             }
 
+        missing_metrics = sorted(declared_metrics - set(metrics))
+        if missing_metrics:
+            return {
+                "success": False,
+                "submission_id": submission_id,
+                "package_id": package_id,
+                "package_name": manifest.get("name"),
+                "package_version": manifest.get("version"),
+                "status": "failed",
+                "scored_at": scored_at,
+                "message": (
+                    "Scoring package output is missing declared metrics: "
+                    + ", ".join(missing_metrics)
+                ),
+                "stdout": proc.stdout[:4096],
+                "stderr": proc.stderr[:4096],
+                "metrics": metrics,
+                "metrics_detail": metrics_full,
+                "artifacts": artifacts,
+                "artifact_count": len(artifacts),
+            }
+
         return {
             "success":        True,
             "submission_id":  submission_id,
             "package_id":     package_id,
-            "package_name":   manifest["name"],
-            "package_version": manifest["version"],
+            "package_name":   manifest.get("name"),
+            "package_version": manifest.get("version"),
             "status":         "scored",
             "scored_at":      scored_at,
             "message": (
@@ -525,6 +807,8 @@ def run_package_scoring(
             "success":        False,
             "submission_id":  submission_id,
             "package_id":     package_id,
+            "package_name":   manifest.get("name"),
+            "package_version": manifest.get("version"),
             "status":         "failed",
             "scored_at":      scored_at,
             "message":        "Scoring script timed out after 300 seconds.",

@@ -60,6 +60,20 @@ def test_the_documentation_site_is_present() -> None:
     assert (DOCS / "index.html").exists()
 
 
+def test_configuration_page_has_the_safe_future_update_handoff() -> None:
+    html = (DOCS / "configuration.html").read_text(encoding="utf-8").lower()
+    for phrase in (
+        "1. changing challenge requirements",
+        "2. adding or updating scoring",
+        "3. adding private reference data",
+        "4. safe updates",
+        "designed for future challenge updates",
+        "previous active configuration unchanged",
+        "official osipi challenge ranking is not currently configured",
+    ):
+        assert phrase in html, f"configuration handoff is missing: {phrase!r}"
+
+
 # ── Configuration keys ────────────────────────────────────────────────────
 
 def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
@@ -88,18 +102,22 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
             if re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[a-z]+[A-Z][A-Za-z]*",
                             segment):
                 candidates.add(segment)
-    known = (
-        rules._CHALLENGE_KEYS
-        | rules._ARTIFACT_TYPE_KEYS
-        | rules._DATASET_KEYS
-        | {"map_types", "artifact_types", "challenges", "run_config",
-           "package_id", "challenge_type", "map_type", "entry_point",
-           "call_mode", "timeout_seconds", "scoring_package",
-           "private_path_parts", "structural_subdirs", "grouped_statistics"}
+        known = (
+            rules._CHALLENGE_KEYS
+            | rules._ARTIFACT_TYPE_KEYS
+            | rules._DATASET_KEYS
+            | set(rules.validation_rules().get("artifact_types", {}))
+            | set(rules.validation_rules().get("map_types", {}))
+            | set(rules.validation_rules().get("challenges", {}))
+            | {"map_types", "artifact_types", "challenges", "run_config",
+               "package_id", "package_version", "challenge_type", "map_type", "entry_point",
+               "call_mode", "timeout_seconds", "scoring_package", "required_inputs",
+               "required_assets", "requirements_file",
+               "private_path_parts", "structural_subdirs", "grouped_statistics"}
         # `osipi_cwd` is a *value* of call_mode, not a key, and only looks like
         # one because it is snake_case. It is pinned against the code that
         # implements it in test_the_documented_call_modes_are_implemented.
-        | {"osipi_cwd"}
+            | {"osipi_cwd", "dce_accuracy_v1_0", "dce_accuracy_v1_1"}
         # Issue codes are upper case; environment variables are handled
         # separately. Anything left must be a real configuration key.
     )
@@ -266,7 +284,10 @@ def test_the_documented_port_is_the_one_the_app_serves() -> None:
 def test_every_repository_path_the_docs_cite_exists() -> None:
     cited = code_spans(r"[\w./-]+\.(?:py|yaml|json|js)")
     # Paths inside examples refer to a user's submission, not this repository.
-    cited -= {"run_config.json", "manifest.json", "scoring.py", "index.html"}
+    cited -= {
+        "run_config.json", "manifest.json", "metrics.json", "results.json",
+        "scoring.py", "index.html",
+    }
     missing = [c for c in cited if not (ROOT / c).exists()]
     assert not missing, f"documented paths that do not exist: {sorted(missing)}"
 
@@ -608,8 +629,8 @@ def test_the_config_mount_the_instructions_depend_on_is_present() -> None:
     """
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     mounts = compose["services"]["osipi-backend"]["volumes"]
-    assert "./config:/app/config:ro" in mounts, \
-        "compose no longer mounts config/, so Reload rules cannot see an edit"
+    assert "./config:/app/config" in mounts, \
+        "compose no longer mounts writable config/, so the Configuration Manager cannot activate a version"
     assert "Reload rules" in TEXT, "the docs no longer name the button"
 
 

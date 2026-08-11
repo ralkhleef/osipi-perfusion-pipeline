@@ -204,6 +204,9 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
     monkeypatch.setattr(pc, "CODECOLLECTION_DIR",     tmp_path / "codecol",         raising=False)
     monkeypatch.setattr(pc, "SCORING_PACKAGES_DIR",   scoring_packages_dir,         raising=False)
     monkeypatch.setattr(pc, "SCORING_ACTIVE_CONFIG",  scoring_active_cfg,           raising=False)
+    monkeypatch.setattr(pc, "CONFIG_MANAGER_DIR",     tmp_path / "configuration_manager", raising=False)
+    monkeypatch.setattr(pc, "CONFIG_VERSIONS_DIR",    tmp_path / "configuration_manager" / "versions", raising=False)
+    monkeypatch.setattr(pc, "CONFIG_ACTIVE_VERSION",  tmp_path / "configuration_manager" / "active.json", raising=False)
 
     # Patch the same constants in already-imported modules that captured them.
     for mod_name in list(sys.modules.keys()):
@@ -223,6 +226,9 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
             ("PREVIEW_ROOT",         tmp_path / "outputs" / "previews"),
             ("SCORING_PACKAGES_DIR", scoring_packages_dir),
             ("SCORING_ACTIVE_CONFIG",scoring_active_cfg),
+            ("CONFIG_MANAGER_DIR",    tmp_path / "configuration_manager"),
+            ("CONFIG_VERSIONS_DIR",   tmp_path / "configuration_manager" / "versions"),
+            ("CONFIG_ACTIVE_VERSION", tmp_path / "configuration_manager" / "active.json"),
         ]:
             if hasattr(mod, attr):
                 monkeypatch.setattr(mod, attr, val, raising=False)
@@ -234,6 +240,7 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
         tmp_path / "ref", tmp_path / "scoring", tmp_path / "score_out",
         tmp_path / "tf62", tmp_path / "codecol",
         scoring_packages_dir,
+        tmp_path / "configuration_manager", tmp_path / "configuration_manager" / "versions",
     ]:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -250,6 +257,58 @@ def test_health(client: TestClient) -> None:
     r = client.get("/api/health")
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
+
+
+def test_configuration_manager_safe_lifecycle_endpoints(client: TestClient) -> None:
+    state_response = client.get("/api/configuration-manager", params={"challenge_type": "dce"})
+    assert state_response.status_code == 200, state_response.text
+    state = state_response.json()
+    assert state["editable"]["challenge_type"] == "dce"
+    assert state["assets"]["local_only"] is True
+    assert all(row["official_ranking"] == "Not configured" for row in state["capabilities"])
+
+    payload = {"challenge_type": "dce", "configuration": state["editable"]}
+    tested = client.post("/api/configuration-manager/test", json=payload)
+    assert tested.status_code == 200 and tested.json()["ready"] is True
+    assert "has not changed" in tested.json()["message"].lower()
+
+    preview = client.post("/api/configuration-manager/preview", json=payload)
+    assert preview.status_code == 200 and preview.json()["valid"] is True
+
+    saved = client.post("/api/configuration-manager/versions", json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["version"]["version_id"] == "dce-v001"
+    assert state_response.json()["versions"] == []
+
+    exported = client.get("/api/configuration-manager/export", params={"challenge_type": "dce"})
+    assert exported.status_code == 200
+    assert exported.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(io.BytesIO(exported.content)) as archive:
+        assert "validation_rules.yaml" in archive.namelist()
+        assert "metadata.json" in archive.namelist()
+        assert not any(name.lower().endswith((".nii", ".nii.gz")) for name in archive.namelist())
+
+
+def test_configured_code_execution_requirement_is_enforced(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import services.validation_service as validation_service
+
+    monkeypatch.setattr(
+        validation_service,
+        "code_execution_required_by_challenge",
+        lambda: {"dce": True, "asl": False, "dsc": False},
+    )
+    data, filename = _make_result_only_zip("execution_required.zip")
+    submission_id = _upload_and_get_id(client, data, filename)
+    response = client.post("/api/validate", json={
+        "submission_id": submission_id,
+        "challenge_type": "dce",
+        "mode": "result_only",
+    })
+    assert response.status_code == 200, response.text
+    codes = {item.get("code") for item in response.json().get("errors", [])}
+    assert "CODE_EXECUTION_REQUIRED" in codes
 
 
 def test_execution_status_returns_docker_info(client: TestClient) -> None:
@@ -852,17 +911,21 @@ def _make_scoring_package_zip(
         "map_type":       map_type,
         "description":    "DEMO/TEST package only.",
         "metrics":        [metric_name],
+        "required_inputs": [map_type],
         "entry_point":    "scoring.py",
         "call_mode":      "standard",
     }
     scoring_py = (
         "import argparse, json, pathlib, sys\n"
-        "p = argparse.ArgumentParser()\n"
-        "p.add_argument('--submission-dir'); p.add_argument('--output-dir'); p.add_argument('--reference-dir', default='')\n"
-        "a = p.parse_args()\n"
-        "out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
-        f"(out / 'metrics.json').write_text(json.dumps({{{metric_name!r}: {metric_value!r}}}))\n"
-        "sys.exit(0)\n"
+        "def main():\n"
+        "    p = argparse.ArgumentParser()\n"
+        "    p.add_argument('--submission-dir'); p.add_argument('--output-dir'); p.add_argument('--reference-dir', default='')\n"
+        "    a = p.parse_args()\n"
+        "    out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
+        f"    (out / 'metrics.json').write_text(json.dumps({{{metric_name!r}: {metric_value!r}}}))\n"
+        "    return 0\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(main())\n"
     )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -890,6 +953,7 @@ def _make_zip_no_script() -> bytes:
         "map_type":       "ktrans",
         "description":    "Missing script.",
         "metrics":        ["x"],
+        "required_inputs": ["ktrans"],
         "entry_point":    "scoring.py",
         "call_mode":      "standard",
     }
@@ -903,6 +967,34 @@ def _make_zip_no_script() -> bytes:
 def _make_invalid_zip() -> bytes:
     """Return bytes that are NOT a valid ZIP file."""
     return b"this is not a zip file at all \x00\x01\x02"
+
+
+def _rewrite_scoring_package_zip(
+    package_bytes: bytes,
+    *,
+    manifest_updates: dict | None = None,
+    scoring_source: str | None = None,
+    extra_files: dict[str, bytes | str] | None = None,
+) -> bytes:
+    """Return a scoring package with selected manifest/script changes."""
+    with zipfile.ZipFile(io.BytesIO(package_bytes), "r") as source:
+        files = {name: source.read(name) for name in source.namelist()}
+    manifest = json.loads(files["manifest.json"].decode("utf-8"))
+    for key, value in (manifest_updates or {}).items():
+        if value is None:
+            manifest.pop(key, None)
+        else:
+            manifest[key] = value
+    files["manifest.json"] = json.dumps(manifest).encode("utf-8")
+    if scoring_source is not None:
+        files["scoring.py"] = scoring_source.encode("utf-8")
+    for name, value in (extra_files or {}).items():
+        files[name] = value.encode("utf-8") if isinstance(value, str) else value
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as target:
+        for name, value in files.items():
+            target.writestr(name, value)
+    return output.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -964,6 +1056,62 @@ def test_scoring_package_upload_no_script(client: TestClient) -> None:
     # Either way a later check_ready would return not ready.
     # We accept 200 or 4xx: the key invariant is it must NOT 500 silently with a bad state.
     assert r.status_code != 500 or "error" in r.text.lower()
+
+
+@pytest.mark.parametrize(
+    ("manifest_updates", "expected"),
+    [
+        ({"version": None}, "version"),
+        ({"metrics": ["not a metric"]}, "metric"),
+        ({"required_inputs": ["invented_map"]}, "validation_rules.yaml"),
+        ({"required_assets": ["reference/ground_truth.nii.gz"]}, "Required asset not found"),
+        ({"requirements_file": "requirements.txt"}, "Requirements file not found"),
+    ],
+)
+def test_scoring_package_upload_rejects_invalid_contract(
+    client: TestClient,
+    manifest_updates: dict,
+    expected: str,
+) -> None:
+    package = _rewrite_scoring_package_zip(
+        _make_scoring_package_zip("invalid_contract_pkg"),
+        manifest_updates=manifest_updates,
+    )
+    response = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("invalid_contract_pkg.zip", package, "application/zip")},
+    )
+    assert response.status_code == 400
+    assert expected.lower() in response.text.lower()
+    assert client.get("/api/scoring/packages").json() == []
+
+
+def test_scoring_package_upload_rejects_invalid_scorer_syntax(client: TestClient) -> None:
+    package = _rewrite_scoring_package_zip(
+        _make_scoring_package_zip("invalid_syntax_pkg"),
+        scoring_source="def broken(:\n",
+    )
+    response = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("invalid_syntax_pkg.zip", package, "application/zip")},
+    )
+    assert response.status_code == 400
+    assert "syntax check failed" in response.text.lower()
+    assert client.get("/api/scoring/packages").json() == []
+
+
+def test_scoring_package_upload_rejects_scorer_initialization_failure(client: TestClient) -> None:
+    package = _rewrite_scoring_package_zip(
+        _make_scoring_package_zip("invalid_initialization_pkg"),
+        scoring_source="raise RuntimeError('initialization failed')\n",
+    )
+    response = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("invalid_initialization_pkg.zip", package, "application/zip")},
+    )
+    assert response.status_code == 400
+    assert "import/initialization check failed" in response.text.lower()
+    assert client.get("/api/scoring/packages").json() == []
 
 
 def test_scoring_package_remove(client: TestClient) -> None:
@@ -1044,6 +1192,37 @@ def test_scoring_set_active_custom_with_package(client: TestClient) -> None:
     active = r3.json()["active"]
     assert active["dce"]["mode"] == "custom"
     assert active["dce"]["package_id"] == "custom_pkg"
+    assert active["dce"]["package_version"] == "1.0.0"
+
+
+def test_scoring_set_active_rejects_challenge_mismatch_and_preserves_previous(
+    client: TestClient,
+) -> None:
+    client.post("/api/scoring/set-active", json={
+        "challenge_type": "dce",
+        "mode": "builtin",
+    })
+    package = _make_scoring_package_zip(
+        "asl_only_pkg",
+        challenge_type="asl",
+        map_type="cbf",
+    )
+    installed = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("asl_only_pkg.zip", package, "application/zip")},
+    )
+    assert installed.status_code == 200, installed.text
+
+    activation = client.post("/api/scoring/set-active", json={
+        "challenge_type": "dce",
+        "mode": "custom",
+        "package_id": "asl_only_pkg",
+    })
+    assert activation.status_code == 400
+    assert "previous configuration remains active" in activation.text
+    active = client.get("/api/scoring/active-config").json()["active"]
+    assert active["dce"]["mode"] == "builtin"
+    assert active["dce"]["package_id"] is None
 
 
 def test_scoring_set_active_custom_no_package(client: TestClient) -> None:
@@ -1069,6 +1248,49 @@ def test_scoring_disabled_mode_returns_not_configured(client: TestClient) -> Non
     assert r.status_code == 200
     body = r.json()
     assert body.get("status") in ("not_configured", "not_ready", "failed")
+
+
+def test_custom_scoring_rejects_outputs_missing_manifest_metrics(client: TestClient) -> None:
+    data, fname = _make_result_only_zip("missing_metric_output.zip")
+    submission_id = _upload_and_get_id(client, data, fname)
+    source = (
+        "import argparse, json, pathlib, sys\n"
+        "def main():\n"
+        "    p = argparse.ArgumentParser()\n"
+        "    p.add_argument('--submission-dir'); p.add_argument('--output-dir'); "
+        "p.add_argument('--reference-dir', default='')\n"
+        "    a = p.parse_args()\n"
+        "    out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
+        "    (out / 'metrics.json').write_text(json.dumps({'unexpected_metric': 1.0}))\n"
+        "    return 0\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(main())\n"
+    )
+    package = _rewrite_scoring_package_zip(
+        _make_scoring_package_zip("missing_metric_pkg", metric_name="declared_metric"),
+        scoring_source=source,
+    )
+    installed = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("missing_metric_pkg.zip", package, "application/zip")},
+    )
+    assert installed.status_code == 200, installed.text
+    activated = client.post("/api/scoring/set-active", json={
+        "challenge_type": "dce",
+        "mode": "custom",
+        "package_id": "missing_metric_pkg",
+    })
+    assert activated.status_code == 200, activated.text
+
+    scored = client.post("/api/score", json={
+        "submission_id": submission_id,
+        "challenge_type": "dce",
+        "map_type": "ktrans",
+    })
+    assert scored.status_code == 200, scored.text
+    assert scored.json()["status"] == "failed"
+    assert "missing declared metrics: declared_metric" in scored.json()["message"]
+    assert scored.json()["package_version"] == "1.0.0"
 
 
 def test_score_single_disabled_mode(client: TestClient) -> None:
@@ -1140,17 +1362,21 @@ def _make_asl_scoring_package_zip() -> bytes:
         "map_type":       "cbf",
         "description":    "DEMO/TEST ASL package.",
         "metrics":        ["demo_cbf_error"],
+        "required_inputs": ["cbf"],
         "entry_point":    "scoring.py",
         "call_mode":      "standard",
     }
     scoring_py = (
         "import argparse, json, pathlib, sys\n"
-        "p = argparse.ArgumentParser()\n"
-        "p.add_argument('--submission-dir'); p.add_argument('--output-dir'); p.add_argument('--reference-dir', default='')\n"
-        "a = p.parse_args()\n"
-        "out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
-        "(out / 'metrics.json').write_text(json.dumps({'demo_cbf_error': 0.05}))\n"
-        "sys.exit(0)\n"
+        "def main():\n"
+        "    p = argparse.ArgumentParser()\n"
+        "    p.add_argument('--submission-dir'); p.add_argument('--output-dir'); p.add_argument('--reference-dir', default='')\n"
+        "    a = p.parse_args()\n"
+        "    out = pathlib.Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)\n"
+        "    (out / 'metrics.json').write_text(json.dumps({'demo_cbf_error': 0.05}))\n"
+        "    return 0\n"
+        "if __name__ == '__main__':\n"
+        "    sys.exit(main())\n"
     )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
@@ -1763,6 +1989,9 @@ def test_export_combined_json_blinded_summary(client: TestClient) -> None:
     body = r.json()
     assert body["report_type"] == "blinded"
     assert body["submission_count"] == 1
+    assert body["analysis_provenance"]["challenge"] == "DCE"
+    assert body["analysis_provenance"]["challenge_configuration"]
+    assert body["analysis_provenance"]["scoring_package"]
     item = body["submissions"][0]
     assert item["blinded_submission_id"] == "submission_001"
     assert item["submission_id"] is None
@@ -1813,6 +2042,8 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Finite voxels" in r.text
     assert "Reference status" in r.text
     assert "Pipeline version" in r.text and "Configuration version" in r.text
+    assert "Analysis provenance" in r.text
+    assert "Scoring package" in r.text and "Reference dataset" in r.text
     assert r.text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
     # Plain printable report: no purple-heavy app/dashboard styling.
     assert "#4c2a86" not in r.text
@@ -1890,8 +2121,9 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     )
     for expected in (
         "Evaluation report",
-        "SUMMARY", "METHODS", "RESULTS", "LIMITATIONS",
+        "SUMMARY", "METHODS", "RESULTS", "LIMITATIONS", "ANALYSIS PROVENANCE",
         "Pipeline version", "Configuration version",
+        "Scoring package", "Reference dataset", "Analysis date",
         "Finite voxels", "Reference status",
         "Table 2. Aggregate quality-control",
     ):

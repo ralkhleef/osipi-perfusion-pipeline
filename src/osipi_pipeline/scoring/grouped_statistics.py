@@ -95,6 +95,9 @@ class GroupedResult:
     mean: float | None = None
     standard_deviation: float | None = None
     coefficient_of_variation: float | None = None
+    paired_difference: float | None = None
+    paired_from: str | None = None
+    paired_to: str | None = None
     status: str = STATUS_AVAILABLE
     unavailable_reason: str | None = None
 
@@ -110,7 +113,8 @@ class GroupedResult:
 CSV_COLUMNS: tuple[str, ...] = (
     "axis", "challenge", "dataset", "roi_id", "roi_label", "map_type",
     "participant", "site", "repeat", "scan_count",
-    "group_mean", "group_sd", "group_cov", "units", "status",
+    "group_mean", "group_sd", "group_cov", "paired_difference",
+    "paired_from", "paired_to", "units", "status",
     "unavailable_reason",
 )
 
@@ -123,7 +127,8 @@ def csv_row(result: GroupedResult) -> list[Any]:
         result.roi_label, result.map_type,
         fixed.get("participant"), fixed.get("site"), fixed.get("repeat"),
         result.scan_count, result.mean, result.standard_deviation,
-        result.coefficient_of_variation, result.units, result.status,
+        result.coefficient_of_variation, result.paired_difference,
+        result.paired_from, result.paired_to, result.units, result.status,
         result.unavailable_reason,
     ]
 
@@ -237,9 +242,31 @@ def compute_grouped_statistics(
                 continue
 
             mean, sd, cov, reason = _describe(values)
+            paired_difference = None
+            paired_from = None
+            paired_to = None
+            # A signed paired difference is meaningful only when exactly two
+            # repeats or sites are present while all other identity fields are
+            # held fixed. Participants are a population, not an ordered pair.
+            if axis in {AXIS_REPEAT, AXIS_SITE} and len(varied) == 2:
+                by_axis = {
+                    str(_field(member, varies)): _value_of(member, source)
+                    for member in members
+                }
+                try:
+                    first = float(by_axis[varied[0]])
+                    second = float(by_axis[varied[1]])
+                except (KeyError, TypeError, ValueError):
+                    pass
+                else:
+                    if math.isfinite(first) and math.isfinite(second):
+                        paired_difference = second - first
+                        paired_from, paired_to = varied
             results.append(GroupedResult(
                 **base, scan_count=len(values), mean=mean,
                 standard_deviation=sd, coefficient_of_variation=cov,
+                paired_difference=paired_difference,
+                paired_from=paired_from, paired_to=paired_to,
                 status=STATUS_AVAILABLE, unavailable_reason=reason))
 
     return results

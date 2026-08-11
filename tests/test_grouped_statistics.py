@@ -187,14 +187,16 @@ def test_minimum_group_size_is_configurable() -> None:
 
 # ── Configuration ─────────────────────────────────────────────────────────
 
-def test_the_feature_is_off_for_every_configured_challenge() -> None:
-    """Nothing is computed until OSIPI confirms the conventions."""
+def test_dce_descriptive_grouping_is_enabled_but_other_challenges_stay_off() -> None:
+    """DCE opts into provisional descriptions, never formal repeatability."""
     from osipi_pipeline.config.rules import grouped_statistics_by_challenge
 
     settings = grouped_statistics_by_challenge()
     assert settings, "no challenges configured"
+    assert settings["dce"]["enabled"] is True
     for challenge, spec in settings.items():
-        assert spec["enabled"] is False, f"{challenge} enables unconfirmed statistics"
+        if challenge != "dce":
+            assert spec["enabled"] is False
 
 
 def test_defaults_are_the_documented_ones() -> None:
@@ -213,6 +215,20 @@ def test_the_aggregated_field_is_configurable() -> None:
     (result,) = compute_grouped_statistics(
         rows, axes=[AXIS_REPEAT], source="roi_within_scan_sd")
     assert result.mean == pytest.approx(EXPECTED_MEAN)
+
+
+def test_two_clearly_matched_repeats_include_signed_paired_difference() -> None:
+    rows = [row(repeat="1", median=0.10), row(repeat="2", median=0.16)]
+    (result,) = compute_grouped_statistics(rows, axes=[AXIS_REPEAT])
+    assert result.paired_from == "1"
+    assert result.paired_to == "2"
+    assert result.paired_difference == pytest.approx(0.06)
+
+
+def test_participants_do_not_get_an_invented_paired_difference() -> None:
+    rows = [row(participant="1", median=0.10), row(participant="2", median=0.16)]
+    (result,) = compute_grouped_statistics(rows, axes=[AXIS_PARTICIPANT])
+    assert result.paired_difference is None
 
 
 def test_an_unknown_axis_is_rejected() -> None:

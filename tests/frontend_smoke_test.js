@@ -322,8 +322,8 @@ checkContains("Items-to-review list is neutral gray", css, ".issue-list li.revie
 checkContains("Run notice hides success icon", css, "#step-run .run-skipped-notice .rsn-icon { display: none; }");
 checkContains("Run completion banner stays neutral", css, "#run-completion-banner.step-completion-banner");
 checkNotContains("Validate subtitle no longer repeats run readiness", section("step-validate"), "run readiness, and output-map");
-checkContains("CSS version bumped for visual QA cleanup", html, "styles.css?v=92");
-checkContains("JS version bumped for visual QA cleanup", html, "app.js?v=77");
+checkContains("CSS version bumped for configuration manager", html, "styles.css?v=93");
+checkContains("JS version bumped for configuration manager", html, "app.js?v=78");
 
 console.log("\n[ v90 filter dropdown never clipped ]");
 checkContains("Filter menu opens as fixed overlay", css, ".filter-menu.filter-menu--floating");
@@ -695,6 +695,13 @@ checkContains("Score table hidden until useful", appJs, 'tableCard.style.display
 checkContains("Score metric preview present", html, 'id="score-metric-preview"');
 checkContains("QC metrics tooltip", html, "QC metrics describe map validity and statistics. They are not official OSIPI scores.");
 checkContains("Reference scoring status tooltip", appJs, "Reference metrics are calculated only when a matching private ground-truth map is available.");
+checkContains("Configuration Manager UI", html, "Challenge Configuration Manager");
+checkContains("Configuration test action", html, "1. Test Configuration");
+checkContains("Configuration preview action", html, "2. Preview Changes");
+checkContains("Configuration version save action", html, "3. Save as New Version");
+checkContains("Private assets local-only warning", html, "These files remain local and are not included in GitHub or configuration exports.");
+checkContains("Configuration Manager API", appJs, "/api/configuration-manager");
+checkContains("Official ranking capability disclaimer", html, "Official OSIPI challenge ranking is not currently configured.");
 checkContains("Leaderboard professional status badges", appJs, "leaderboard-status-badge");
 checkContains("Leaderboard long-name truncation", css, ".leaderboard-submission-cell span");
 checkContains("Leaderboard timestamp formatting", appJs, "function _formatLeaderboardTimestamp");
@@ -1297,8 +1304,10 @@ checkNotContains("Score collapsed row does not show reference unavailable chip",
 checkContains("Score details use plain reference wording", leaderboardEntryBlock, "Reference maps were not available, so this is QC only.");
 
 console.log("\n[ v80 visible mirroring ]");
-checkContains("Old Score table hidden in flow", css, "#step-score #score-table-card,");
-checkContains("Old scoring admin setup hidden in flow", css, "#step-score #scoring-admin-panel,");
+checkContains("Old Score table hidden in flow", css, "#step-score #score-table-card {\n  display: none !important;");
+checkContains("Configuration Manager admin panel visible", css, "#step-score #scoring-admin-panel {\n  display: block !important;");
+checkContains("Configuration Manager defaults to the current workflow challenge", appJs, "challengeType || _getSessionChallengeType() || select.value");
+checkContains("Configuration Manager uses restored challenge after reload", appJs, "getChallengeType() || defaultChallengeType()");
 checkNotContains("Score row drops multi-badge cluster", appJs, "list-chip list-chip-strong");
 checkNotContains("Score row drops always-visible metric row extraMain", appJs, "extraMain: metricRow");
 checkContains("Score row meta is one compact line", appJs, 'refScored ? "Reference comparison available" : "QC only"');

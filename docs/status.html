@@ -64,6 +64,8 @@
             <li>DCE: Ktrans required; vp, ve and Kep optional; modelled signal-time required as 4-D; methods document required.</li>
             <li>Synthetic and clinical datasets remain one submission, with participant, repeat and site structure validated.</li>
             <li>Within-scan ROI Ktrans statistics: median, population SD, coefficient of variation.</li>
+            <li>DCE measured-versus-modelled 4-D signal analysis: raw voxelwise Residual Sum of Squares (RSS), with median, mean, population SD and voxel count summaries when a measured signal is available.</li>
+            <li>Provisional descriptive grouping of scan-level ROI medians by participant, repeat and site, including SD, CoV and a signed difference for two clearly matched repeats or sites.</li>
             <li>ASL: CBF and ATT maps required, with generic reference comparison where compatible reference data exists.</li>
             <li>DSC: CBV, CBF and MTT maps required.</li>
             <li>User-facing exports: blinded PDF, blinded HTML, blinded CSV Results, blinded JSON Results, ROI Ktrans Statistics CSV, and an Unblinded CSV for organisers.</li>
@@ -71,15 +73,16 @@
 
           <h3 id="status-awaiting">Awaiting definition</h3>
           <ul>
-            <li>The exact formula for accuracy and deviance.</li>
-            <li>Inter-participant, inter-repeat and inter-site SD and CoV, and whether they aggregate scan-level ROI medians or voxel values.</li>
-            <li>Residual sum of squares, which needs the measured dynamic signal in addition to the modelled one.</li>
-            <li>ASL 4-D fitted-model comparison, and the ICC model if ICC is required.</li>
+            <li>The exact formula for a single official accuracy metric and for deviance.</li>
+            <li>Whether RSS should remain raw or be normalized.</li>
+            <li>Whether final repeat/site variability should be ROI-median based, voxelwise, or both, and which ICC model to use if ICC is required.</li>
+            <li>Formal thresholds, pass/fail rules, participant ranking, final ASL 4-D comparison requirements, and the final ROI/mask set.</li>
           </ul>
 
           <div class="docs-callout">
-            <p>Final challenge metrics are enabled after their formulas, inputs, masks and aggregation
-              rules are confirmed by the challenge leads.</p>
+            <p>The prototype implements independently definable metrics now. Final challenge-specific
+              formulas, thresholds and ranking rules will be added only after confirmation by the challenge leads.
+              See the maintained <a href="pending-requirements.html">Pending scientific requirements</a> page.</p>
           </div>
           <div class="docs-callout">
             <p>QC and previews are available for readable maps. DCE Ktrans ROI descriptive statistics

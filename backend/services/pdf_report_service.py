@@ -26,6 +26,7 @@ from osipi_pipeline.scoring.descriptive_statistics import (
     METHODOLOGY as DESCRIPTIVE_METHODOLOGY,
 )
 from services.report_figures import bland_altman_figure, to_drawing
+from services.provenance_service import analysis_provenance
 from osipi_pipeline.config.rules import challenge_labels, map_type_specs
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,69 @@ def _roi_descriptive_model(
             "unavailable_rows": len(records) - available,
             "datasets": sorted({str(r.get("dataset") or "") for r in records} - {""}),
         },
+    }
+
+
+def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Pre-format provisional grouped ROI and conditional DCE RSS records."""
+    grouped: list[dict] = []
+    rss_records: list[dict] = []
+    for summary in summaries:
+        analysis = summary.get("nifti_analysis")
+        analysis = analysis if isinstance(analysis, Mapping) else {}
+        scoring = analysis.get("reference_scoring")
+        scoring = scoring if isinstance(scoring, Mapping) else {}
+        grouped.extend(
+            dict(row) for row in scoring.get("grouped_roi_statistics") or ()
+            if isinstance(row, Mapping)
+        )
+        rss = scoring.get("dce_signal_rss")
+        rss = rss if isinstance(rss, Mapping) else {}
+        rss_records.extend(
+            dict(row) for row in rss.get("records") or () if isinstance(row, Mapping)
+        )
+
+    grouped_rows = []
+    for row in grouped:
+        fixed = row.get("held_fixed") if isinstance(row.get("held_fixed"), Mapping) else {}
+        fixed_text = ", ".join(
+            f"{key}={value}" for key, value in fixed.items() if value not in (None, "")
+        ) or "—"
+        pair = (
+            f"{row.get('paired_from')}→{row.get('paired_to')}: "
+            f"{_roi_number(row.get('paired_difference'))}"
+            if row.get("paired_difference") is not None else "—"
+        )
+        grouped_rows.append([
+            str(row.get("axis") or "—").replace("inter_", ""),
+            fixed_text, str(row.get("roi_label") or row.get("roi_id") or "—"),
+            str(row.get("map_type") or "—"), _fmt(row.get("scan_count") or 0, 0),
+            _roi_number(row.get("mean")), _roi_number(row.get("standard_deviation")),
+            _roi_percent(row.get("coefficient_of_variation")), pair,
+            str(row.get("status") or "—").replace("_", " "),
+        ])
+
+    rss_rows = []
+    for record in rss_records:
+        scopes = [("Whole image", record.get("whole_image") or {})]
+        scopes.extend(
+            (str(roi.get("roi_label") or roi.get("mask_name") or "ROI"), roi)
+            for roi in record.get("rois") or () if isinstance(roi, Mapping)
+        )
+        for scope, values in scopes:
+            rss_rows.append([
+                str(record.get("dataset") or "—"), str(record.get("participant") or "—"),
+                str(record.get("repeat") or "—"), str(record.get("site") or "—"), scope,
+                _roi_number(values.get("median")), _roi_number(values.get("mean")),
+                _roi_number(values.get("standard_deviation")),
+                _fmt(values.get("voxel_count") or 0, 0),
+                str(values.get("status") or record.get("status") or "—").replace("_", " "),
+            ])
+    return {
+        "grouped_roi_headers": ["Axis", "Held fixed", "ROI", "Map", "Scans", "Mean", "SD", "CoV", "Pair Δ", "Status"],
+        "grouped_roi_rows": grouped_rows,
+        "dce_rss_headers": ["Dataset", "Participant", "Repeat", "Site", "Region", "RSS median", "RSS mean", "RSS SD", "Voxels", "Status"],
+        "dce_rss_rows": rss_rows,
     }
 
 
@@ -774,6 +838,10 @@ def _build_report_model(
         for s in summaries
         if str(s.get("challenge_type") or "").strip()
     })
+    provenance = analysis_provenance(
+        [str(s.get("challenge_type") or "") for s in summaries],
+        generated=generated,
+    )
     is_mixed_challenge = len(challenges) > 1
 
     def _pdf_reference_agg(ch: str) -> dict:
@@ -963,8 +1031,9 @@ def _build_report_model(
         "challenge_type": _challenge_text(summaries),
         "generated": generated.strftime("%Y-%m-%d %H:%M UTC"),
         "export_date": generated.strftime("%Y-%m-%d"),
-        "pipeline_version": _pipeline_version(),
-        "configuration_version": _configuration_version(),
+        "pipeline_version": provenance["pipeline_version"],
+        "configuration_version": provenance["challenge_configuration"],
+        "analysis_provenance": provenance,
         # Submission contents, grouped. A clean 16-scan DCE submission is
         # eight rows here where the per-map appendix was sixty-seven cards
         # across a dozen pages, which buried the results it was meant to
@@ -1008,6 +1077,7 @@ def _build_report_model(
         # these exact rows in this exact order, neither reformats, refilters,
         # or recomputes, which is what kept the two formats in step before.
         **_roi_descriptive_model(summaries),
+        **_prototype_analysis_model(summaries),
         "agreement_points": agreement_points(summaries, blinded=blinded),
         "map_units": {
             mt: _map_units(summaries, mt)
@@ -1112,6 +1182,11 @@ def _report_lines(model: Mapping[str, Any]) -> list[str]:
     lines.extend(["", "Notes / Limitations"])
     lines.extend(f"- {item}" for item in model["notes"])
     lines.extend(f"- {item}" for item in model["limitations"])
+    lines.extend(["", "Analysis provenance"])
+    lines.extend(
+        f"- {key.replace('_', ' ').title()}: {value}"
+        for key, value in (model.get("analysis_provenance") or {}).items()
+    )
     if model["issues"]:
         lines.extend(["", "Issues and Recommendations"])
         lines.append("Severity | Submission | Message | Affected file | Recommended action")
@@ -1893,6 +1968,28 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             "Table 4. Within-ROI Ktrans statistics. None were available for "
             f"this submission. {ROI_METHOD_TEXT}"))
 
+    grouped_rows = model.get("grouped_roi_rows") or []
+    rss_rows = model.get("dce_rss_rows") or []
+    if grouped_rows or rss_rows:
+        story.append(section("Prototype descriptive analyses"))
+    if grouped_rows:
+        story.append(data_table(
+            model["grouped_roi_headers"], grouped_rows, num_cols=[4, 5, 6, 7]
+        ))
+        story.append(caption(
+            "Grouped scan-level ROI medians with population SD and CoV. "
+            "A signed pair difference is shown only for two clearly matched repeats or sites. "
+            "These values are descriptive and are not ICC, formal repeatability, pass/fail, or ranking."
+        ))
+    if rss_rows:
+        story.append(data_table(
+            model["dce_rss_headers"], rss_rows, num_cols=[5, 6, 7, 8]
+        ))
+        story.append(caption(
+            "Residual Sum of Squares (RSS): raw voxelwise sum across time of "
+            "(measured − modelled)², summarized by region. This is not deviance or official scoring."
+        ))
+
     story.append(NextPageTemplate("later"))
     story.append(PageBreak())
     # Always a captioned table, even when empty. Dropping it on a clean run
@@ -1920,6 +2017,21 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         Paragraph(esc(item), bullet_style, bulletText="—")
         for item in list(model["notes"]) + list(model["limitations"])
     )
+
+    story.append(section("Analysis provenance"))
+    provenance = model.get("analysis_provenance") or {}
+    provenance_labels = {
+        "challenge": "Challenge",
+        "challenge_configuration": "Challenge configuration",
+        "scoring_package": "Scoring package",
+        "pipeline_version": "Pipeline version",
+        "reference_dataset": "Reference dataset",
+        "analysis_date": "Analysis date",
+    }
+    story.append(kv_table({
+        provenance_labels[key]: provenance.get(key, "not available")
+        for key in provenance_labels
+    }, width=CONTENT_W))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     return buffer.getvalue()

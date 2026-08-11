@@ -63,6 +63,8 @@ from services.scoring_package_service import (
     run_package_scoring,
 )
 from osipi_pipeline.config.rules import (
+    artifact_type_specs,
+    grouped_statistics_by_challenge,
     map_type_specs,
     mask_label_rules,
     mask_name_patterns,
@@ -281,6 +283,11 @@ def load_scoring_result(submission_id: str) -> Optional[dict]:
 
 def _save_scoring_result(submission_id: str, result: dict) -> None:
     try:
+        from services.provenance_service import analysis_provenance
+        result.setdefault(
+            "analysis_provenance",
+            analysis_provenance(str(result.get("challenge_type") or "")),
+        )
         _scoring_result_path(submission_id).write_text(
             json.dumps(result, indent=2, default=str), encoding="utf-8"
         )
@@ -1015,6 +1022,187 @@ def _attach_roi_descriptives(
             "ROI descriptive statistics failed for %s", submission_id)
         reference_scoring.setdefault("roi_descriptive_statistics", [])
         reference_scoring["roi_descriptive_status"] = "calculation_error"
+
+
+def _artifact_identity(artifact) -> tuple:
+    return tuple(
+        getattr(artifact, field, None)
+        for field in ("dataset", "participant", "repeat", "site")
+    )
+
+
+def _unique_signal_match(model_path: Path, candidates: list[Path]) -> Optional[Path]:
+    """Return a reference signal only when filename/path tokens identify it clearly."""
+    if len(candidates) == 1:
+        return candidates[0]
+    model_tokens = _filename_tokens(model_path)
+    ranked = sorted(
+        ((len(model_tokens.intersection(_filename_tokens(path))), path) for path in candidates),
+        key=lambda item: (item[0], str(item[1])), reverse=True,
+    )
+    if not ranked or ranked[0][0] == 0:
+        return None
+    if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+        return None
+    return ranked[0][1]
+
+
+def _score_dce_signal_rss(
+    reference_scoring: dict,
+    submission_id: str,
+    challenge_type: str,
+    *,
+    artifact_dir: Optional[Path] = None,
+) -> None:
+    """Attach conditional measured-vs-modelled 4-D RSS analysis.
+
+    The measured signal is optional. Absence is an explicit normal status, not
+    an error and not a reason to suppress map QC or other analyses.
+    """
+    from osipi_pipeline.scoring.rss_statistics import (
+        METHODOLOGY as RSS_METHODOLOGY,
+        summarize_rss,
+        voxelwise_rss,
+    )
+
+    result = {
+        "status": "not_applicable" if challenge_type != "dce" else "measured_signal_not_available",
+        "available": False,
+        "methodology": dict(RSS_METHODOLOGY),
+        "records": [],
+        "warnings": [],
+    }
+    reference_scoring["dce_signal_rss"] = result
+    if challenge_type != "dce":
+        return
+
+    artifacts = submission_artifacts(submission_id)
+    modelled = [a for a in artifacts if getattr(a, "artifact_type", None) == "modelled_st"]
+    measured = [a for a in artifacts if getattr(a, "artifact_type", None) == "measured_st"]
+    if not modelled:
+        result["status"] = "modelled_signal_not_available"
+        return
+
+    models_by_id: dict[tuple, list] = {}
+    measured_by_id: dict[tuple, list] = {}
+    for artifact in modelled:
+        models_by_id.setdefault(_artifact_identity(artifact), []).append(artifact)
+    for artifact in measured:
+        measured_by_id.setdefault(_artifact_identity(artifact), []).append(artifact)
+
+    root = EXTRACTED_DIR / submission_id
+    reference_root = reference_scoring.get("reference_root")
+    masks = _reference_masks(Path(reference_root)) if reference_root else []
+    measured_spec = artifact_type_specs().get("measured_st") or {}
+    measured_patterns = tuple(str(value).lower() for value in measured_spec.get("patterns") or ())
+    reference_measured = [
+        path for path in (_nifti_file_list(Path(reference_root)) if reference_root else [])
+        if any(pattern in path.name.lower() for pattern in measured_patterns)
+        and not _is_mask_like(path)
+    ]
+    if not measured and not reference_measured:
+        return
+
+    for identity in sorted(set(models_by_id) | set(measured_by_id), key=str):
+        model_items = models_by_id.get(identity, [])
+        measured_items = measured_by_id.get(identity, [])
+        if not measured_items and len(model_items) == 1 and reference_measured:
+            from types import SimpleNamespace
+            model_path_for_match = root / str(model_items[0].path)
+            matched = _unique_signal_match(model_path_for_match, reference_measured)
+            if matched is not None:
+                measured_items = [SimpleNamespace(path=str(matched))]
+        record = {
+            "dataset": identity[0], "participant": identity[1],
+            "repeat": identity[2], "site": identity[3],
+            "status": "not_compared", "whole_image": None, "rois": [],
+            "rss_map": None,
+        }
+        if len(model_items) != 1 or len(measured_items) != 1:
+            record["status"] = "ambiguous_or_missing_pair"
+            record["error"] = (
+                f"Expected one measured and one modelled signal for this scan; "
+                f"found {len(measured_items)} measured and {len(model_items)} modelled."
+            )
+            result["records"].append(record)
+            continue
+
+        model_artifact, measured_artifact = model_items[0], measured_items[0]
+        model_path = root / str(model_artifact.path)
+        measured_path = root / str(measured_artifact.path)
+        record["modelled_file"] = str(model_artifact.path)
+        record["measured_file"] = str(measured_artifact.path)
+        try:
+            model_data = _load_nifti_values(model_path)
+            measured_data = _load_nifti_values(measured_path)
+            if len(model_data["shape"]) != 4 or len(measured_data["shape"]) != 4:
+                raise ValueError("RSS requires measured and modelled 4-D signals")
+            if model_data["shape"] != measured_data["shape"]:
+                raise ValueError(
+                    f"Measured shape {measured_data['shape']} does not match "
+                    f"modelled shape {model_data['shape']}"
+                )
+            grid_ok = _grids_compatible(measured_data, model_data)
+            if grid_ok is False:
+                raise ValueError("Measured and modelled signals use different spatial grids")
+            rss = voxelwise_rss(
+                measured_data["values"], model_data["values"], measured_data["shape"]
+            )
+            record["whole_image"] = summarize_rss(rss).to_dict()
+            spatial_shape = tuple(measured_data["shape"][:3])
+            for mask in masks:
+                roi = {"mask_name": mask["name"], "roi_label": mask["label"]}
+                try:
+                    mask_data = _load_nifti_values(mask["path"])
+                    if tuple(mask_data["shape"]) != spatial_shape:
+                        raise ValueError(
+                            f"Mask shape {mask_data['shape']} does not match RSS shape {spatial_shape}"
+                        )
+                    selector = _mask_selector(mask_data["values"])
+                    roi.update(summarize_rss(rss, selector).to_dict())
+                except Exception as exc:
+                    roi.update({"status": "unavailable", "error": str(exc)})
+                record["rois"].append(roi)
+            if artifact_dir is not None:
+                rss_dir = artifact_dir / "dce_signal_rss"
+                label = "_".join(str(value or "unknown") for value in identity)
+                rss_path = rss_dir / f"{label}_rss.nii"
+                _write_float32_nifti(
+                    rss_path, spatial_shape, rss.reshape(-1), affine=measured_data.get("affine")
+                )
+                record["rss_map"] = str(rss_path.relative_to(artifact_dir))
+            record["status"] = "available"
+        except Exception as exc:
+            record["status"] = "calculation_error"
+            record["error"] = str(exc)
+        result["records"].append(record)
+
+    available = sum(1 for row in result["records"] if row.get("status") == "available")
+    result["available"] = available > 0
+    result["status"] = "available" if available == len(result["records"]) else (
+        "partial" if available else "unavailable"
+    )
+
+
+def _attach_grouped_roi_statistics(reference_scoring: dict, challenge_type: str) -> None:
+    """Attach configured descriptive grouping of scan-level ROI statistics."""
+    from osipi_pipeline.scoring.grouped_statistics import METHODOLOGY, compute_grouped_statistics
+
+    spec = grouped_statistics_by_challenge().get(challenge_type, {})
+    reference_scoring["grouped_roi_methodology"] = dict(METHODOLOGY)
+    reference_scoring["grouped_roi_statistics"] = []
+    if not spec.get("enabled"):
+        reference_scoring["grouped_roi_status"] = "disabled"
+        return
+    rows = reference_scoring.get("roi_descriptive_statistics") or []
+    results = compute_grouped_statistics(
+        rows,
+        axes=spec.get("axes") or (),
+        source=str(spec.get("source") or "roi_median"),
+        minimum_group_size=int(spec.get("minimum_group_size") or 2),
+    )
+    reference_scoring["grouped_roi_statistics"] = [item.to_dict() for item in results]
+    reference_scoring["grouped_roi_status"] = "available" if results else "no_groups"
 
 
 def _reference_scoring_result_keys_probe() -> dict:
@@ -1863,6 +2051,10 @@ def analyze_submission_niftis(
     # (API, JSON, CSV, HTML, PDF, frontend) reads the records off this result
     # rather than recomputing them.
     _attach_roi_descriptives(reference_scoring, submission_id, challenge_type)
+    _attach_grouped_roi_statistics(reference_scoring, challenge_type)
+    _score_dce_signal_rss(
+        reference_scoring, submission_id, challenge_type, artifact_dir=artifact_dir
+    )
     if artifact_dir is not None:
         try:
             _write_reference_scoring_artifacts(artifact_dir, reference_scoring)

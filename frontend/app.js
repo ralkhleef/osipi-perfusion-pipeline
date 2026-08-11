@@ -6322,13 +6322,253 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
 // Admin Scoring Setup Panel
 // ═══════════════════════════════════════════════════════════════════════════
 
+let _configurationManagerState = null;
+
+function _configurationManagerChallenge() {
+  return String(el("config-manager-challenge")?.value || _getSessionChallengeType() || defaultChallengeType()).toLowerCase();
+}
+
+function _configurationManagerShow(message, ok = null, html = "") {
+  const target = el("config-manager-results");
+  if (!target) return;
+  target.className = `config-manager-results${ok === true ? " ok" : ok === false ? " err" : ""}`;
+  target.innerHTML = html || escapeHtml(message || "");
+  target.style.display = "";
+}
+
+function _renderConfigurationManager(state) {
+  _configurationManagerState = state;
+  const editable = state.editable || {};
+  const editor = el("config-manager-editor");
+  const loading = el("config-manager-loading");
+  if (loading) loading.style.display = "none";
+  if (editor) editor.style.display = "";
+
+  const maps = el("config-manager-maps");
+  if (maps) maps.innerHTML = (editable.maps || []).map((item) => `
+    <div class="config-map-row" data-map-id="${escapeHtml(item.id)}">
+      <div class="config-map-name">${escapeHtml(item.display)}<small>${escapeHtml(item.label)}</small></div>
+      <label class="config-manager-field">Requirement
+        <select class="config-map-state">
+          ${["required", "optional", "unused"].map((value) => `<option value="${value}"${item.state === value ? " selected" : ""}>${value[0].toUpperCase() + value.slice(1)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="config-manager-field">Dimensions
+        <input class="config-map-dimensions" type="number" min="2" max="7" value="${item.dimensions ?? ""}" placeholder="any">
+      </label>
+      <label class="config-manager-field">Filename aliases (comma separated)
+        <input class="config-map-aliases" type="text" value="${escapeHtml((item.aliases || []).join(", "))}">
+      </label>
+    </div>`).join("");
+
+  const artifacts = el("config-manager-artifacts");
+  if (artifacts) artifacts.innerHTML = (editable.required_artifacts || []).map((item) => `
+    <label class="config-manager-check" data-artifact-id="${escapeHtml(item.id)}">
+      <input type="checkbox" class="config-artifact-required"${item.required ? " checked" : ""}>
+      ${escapeHtml(item.label)}
+    </label>`).join("") || `<p>No artifact types are configured.</p>`;
+
+  const datasets = el("config-manager-datasets");
+  if (datasets) datasets.innerHTML = Object.entries(editable.datasets || {}).map(([name, counts]) => `
+    <div class="config-dataset-row" data-dataset-name="${escapeHtml(name)}">
+      <strong>${escapeHtml(name)}</strong>
+      ${["participants", "repeats", "sites"].map((field) => `<label>${field}<input class="config-dataset-${field}" type="number" min="1" value="${counts?.[field] ?? ""}" placeholder="pending"></label>`).join("")}
+    </div>`).join("") || `<p>No dataset grid is configured for this challenge.</p>`;
+
+  const codeRequired = el("config-manager-code-required");
+  if (codeRequired) codeRequired.checked = !!editable.code_execution_required;
+  const referenceVersion = el("config-manager-reference-version");
+  if (referenceVersion) referenceVersion.value = editable.reference_dataset_version || "";
+
+  const scoringMode = el("config-manager-scoring-mode");
+  if (scoringMode) scoringMode.value = editable.scoring?.mode || "none";
+  const packageSelect = el("config-manager-package");
+  const packages = (state.packages || []).filter((item) => item.challenge_type === editable.challenge_type);
+  if (packageSelect) packageSelect.innerHTML = packages.map((item) =>
+    `<option value="${escapeHtml(item.package_id)}"${item.package_id === editable.scoring?.package_id ? " selected" : ""}>${escapeHtml(item.name)} v${escapeHtml(item.version)}${item.ready ? "" : " (not ready)"}</option>`
+  ).join("") || `<option value="">No compatible package installed</option>`;
+  _syncConfigurationPackageVisibility();
+  _renderConfigurationVersions(state.versions || []);
+  _renderConfigurationAssets(state.assets || {});
+  _renderConfigurationCapabilities(state.capabilities || []);
+}
+
+function _syncConfigurationPackageVisibility() {
+  const wrap = el("config-manager-package-wrap");
+  if (wrap) wrap.style.display = el("config-manager-scoring-mode")?.value === "custom" ? "" : "none";
+}
+
+function _renderConfigurationVersions(versions) {
+  const target = el("config-manager-versions");
+  if (!target) return;
+  target.innerHTML = versions.length ? versions.map((item) => `
+    <div class="config-version-row">
+      <span><span class="${item.active ? "config-version-active" : ""}">${escapeHtml(item.version_id)}${item.active ? " · active" : ""}</span><br><small>${escapeHtml(item.created_at || "")} · ${escapeHtml(item.source || "saved")}</small></span>
+      <button type="button" class="btn btn-secondary btn-sm config-version-activate" data-version-id="${escapeHtml(item.version_id)}">${item.active ? "Re-test active" : "Activate / Restore"}</button>
+    </div>`).join("") : `<p>No saved versions yet. Test, preview, then save the first version.</p>`;
+}
+
+function _renderConfigurationAssets(assets) {
+  const target = el("config-manager-assets-status");
+  if (!target) return;
+  const counts = assets.counts || {};
+  const summary = `<p>${Number(counts.reference || 0)} reference map(s) · ${Number(counts.mask || 0)} mask(s) · ${Number(counts.measured_signal || 0)} measured signal(s)</p>`;
+  const rows = (assets.items || []).map((item) => `
+    <div class="config-asset-row"><span>${escapeHtml(item.name)}<br><small>${escapeHtml(item.kind.replaceAll("_", " "))}</small></span><span class="${item.readable ? "config-version-active" : ""}">${item.readable ? "Readable" : "Unreadable"}${item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : ""}</span></div>`).join("");
+  target.innerHTML = summary + (rows || `<p>No private assets have been added for this challenge.</p>`);
+}
+
+function _renderConfigurationCapabilities(rows) {
+  const target = el("config-manager-capabilities");
+  if (!target) return;
+  target.innerHTML = `<table class="config-manager-table"><thead><tr><th>Challenge</th><th>QC &amp; previews</th><th>ROI statistics</th><th>Reference / difference maps</th><th>RSS</th><th>Provider analysis</th><th>ICC</th><th>Official ranking</th></tr></thead><tbody>${rows.map((row) => `
+    <tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.map_qc)}</td><td>${escapeHtml(row.roi_statistics)}</td><td>${escapeHtml(row.reference_comparison)}; ${escapeHtml(row.difference_maps)}</td><td>${escapeHtml(row.rss)}</td><td>${escapeHtml(row.provider_analysis)}</td><td>${escapeHtml(row.icc)}</td><td>${escapeHtml(row.official_ranking)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function _collectConfigurationDraft() {
+  if (!_configurationManagerState?.editable) throw new Error("Configuration is not loaded.");
+  const editable = JSON.parse(JSON.stringify(_configurationManagerState.editable));
+  editable.maps = Array.from(document.querySelectorAll("#config-manager-maps .config-map-row")).map((row) => ({
+    id: row.dataset.mapId,
+    state: row.querySelector(".config-map-state")?.value || "unused",
+    dimensions: row.querySelector(".config-map-dimensions")?.value || null,
+    aliases: (row.querySelector(".config-map-aliases")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
+  }));
+  editable.required_artifacts = Array.from(document.querySelectorAll("#config-manager-artifacts [data-artifact-id]")).map((row) => ({
+    id: row.dataset.artifactId,
+    required: !!row.querySelector(".config-artifact-required")?.checked,
+  }));
+  editable.datasets = {};
+  document.querySelectorAll("#config-manager-datasets [data-dataset-name]").forEach((row) => {
+    const read = (field) => row.querySelector(`.config-dataset-${field}`)?.value || null;
+    editable.datasets[row.dataset.datasetName] = { participants: read("participants"), repeats: read("repeats"), sites: read("sites") };
+  });
+  editable.code_execution_required = !!el("config-manager-code-required")?.checked;
+  editable.reference_dataset_version = el("config-manager-reference-version")?.value.trim() || "";
+  editable.scoring = {
+    mode: el("config-manager-scoring-mode")?.value || "none",
+    package_id: el("config-manager-scoring-mode")?.value === "custom" ? (el("config-manager-package")?.value || null) : null,
+  };
+  return { challenge_type: _configurationManagerChallenge(), configuration: editable };
+}
+
+async function _loadConfigurationManager(challengeType = null) {
+  const select = el("config-manager-challenge");
+  if (!select) return;
+  if (!select.options.length) {
+    select.innerHTML = (_appConfig.challengeTypes || []).map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("");
+  }
+  const challenge = String(challengeType || _getSessionChallengeType() || select.value || defaultChallengeType()).toLowerCase();
+  if ([...select.options].some((item) => item.value === challenge)) select.value = challenge;
+  const loading = el("config-manager-loading");
+  if (loading) { loading.textContent = "Loading active configuration…"; loading.style.display = ""; }
+  try {
+    const response = await fetch(`${API}/api/configuration-manager?challenge_type=${encodeURIComponent(challenge)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Could not load configuration.");
+    _renderConfigurationManager(data);
+  } catch (error) {
+    if (loading) loading.textContent = error.message;
+  }
+}
+
+async function _configurationManagerPost(path, payload) {
+  const response = await fetch(`${API}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Request failed.");
+  return data;
+}
+
+async function _testConfigurationManager() {
+  try {
+    const data = await _configurationManagerPost("/api/configuration-manager/test", _collectConfigurationDraft());
+    const items = (data.checks || []).map((item) => `<li><strong>${escapeHtml(item.status.toUpperCase())}</strong> · ${escapeHtml(item.name)}: ${escapeHtml(item.detail)}</li>`).join("");
+    _configurationManagerShow(data.message, data.ready, `<strong>${escapeHtml(data.message)}</strong><ul>${items}</ul>`);
+  } catch (error) { _configurationManagerShow(error.message, false); }
+}
+
+async function _previewConfigurationManager() {
+  try {
+    const data = await _configurationManagerPost("/api/configuration-manager/preview", _collectConfigurationDraft());
+    const rows = (data.changes || []).map((item) => `<li><strong>${escapeHtml(item.field)}</strong>: ${escapeHtml(JSON.stringify(item.before))} → ${escapeHtml(JSON.stringify(item.after))}</li>`).join("");
+    _configurationManagerShow("Preview ready", true, data.change_count ? `<strong>${data.change_count} change(s)</strong><ul>${rows}</ul>` : `<strong>No changes from the active configuration.</strong>`);
+  } catch (error) { _configurationManagerShow(error.message, false); }
+}
+
+async function _saveConfigurationManager() {
+  try {
+    const data = await _configurationManagerPost("/api/configuration-manager/versions", _collectConfigurationDraft());
+    _configurationManagerShow(`${data.version.version_id} saved. It is not active yet.`, true);
+    await _loadConfigurationManager(_configurationManagerChallenge());
+  } catch (error) { _configurationManagerShow(error.message, false); }
+}
+
+async function _activateConfigurationVersion(versionId) {
+  try {
+    const data = await _configurationManagerPost("/api/configuration-manager/activate", { challenge_type: _configurationManagerChallenge(), version_id: versionId });
+    _configurationManagerShow(`${data.version_id} is now active.`, true);
+    await hydrateAppConfig();
+    await _loadConfigurationManager(data.challenge_type);
+    await _loadScoringSetup();
+  } catch (error) { _configurationManagerShow(error.message, false); }
+}
+
+function _wireConfigurationManager() {
+  const panel = el("scoring-admin-panel");
+  if (!panel || panel.dataset.configurationManagerWired) return;
+  panel.dataset.configurationManagerWired = "true";
+  panel.addEventListener("toggle", () => { if (panel.open && !_configurationManagerState) _loadConfigurationManager(); });
+  el("config-manager-challenge")?.addEventListener("change", (event) => _loadConfigurationManager(event.target.value));
+  el("config-manager-scoring-mode")?.addEventListener("change", _syncConfigurationPackageVisibility);
+  el("config-manager-test")?.addEventListener("click", _testConfigurationManager);
+  el("config-manager-preview")?.addEventListener("click", _previewConfigurationManager);
+  el("config-manager-save")?.addEventListener("click", _saveConfigurationManager);
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".config-version-activate");
+    if (button) _activateConfigurationVersion(button.dataset.versionId);
+  });
+  el("config-manager-export")?.addEventListener("click", () => {
+    window.location.href = `${API}/api/configuration-manager/export?challenge_type=${encodeURIComponent(_configurationManagerChallenge())}`;
+  });
+  el("config-manager-import")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const body = new FormData(); body.append("file", file);
+    try {
+      const response = await fetch(`${API}/api/configuration-manager/import`, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Import failed.");
+      _configurationManagerShow(`${data.version.version_id} imported as an inactive version.`, true);
+      await _loadConfigurationManager(data.version.challenge_type);
+    } catch (error) { _configurationManagerShow(error.message, false); }
+    event.target.value = "";
+  });
+  el("config-manager-asset-upload")?.addEventListener("click", async () => {
+    const file = el("config-manager-asset-file")?.files?.[0];
+    if (!file) return _configurationManagerShow("Choose a NIfTI asset first.", false);
+    const body = new FormData();
+    body.append("challenge_type", _configurationManagerChallenge());
+    body.append("asset_kind", el("config-manager-asset-kind")?.value || "reference");
+    body.append("file", file);
+    try {
+      const response = await fetch(`${API}/api/configuration-manager/assets/upload`, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Asset upload failed.");
+      _configurationManagerShow(`${data.asset.name} added to local private assets.`, true);
+      await _loadConfigurationManager(_configurationManagerChallenge());
+    } catch (error) { _configurationManagerShow(error.message, false); }
+  });
+}
+
 // Detect challenge type from the current session state.
 function _getSessionChallengeType() {
   if (batchState.validationData && batchState.validationData.results) {
     const first = batchState.validationData.results[0];
     if (first && first.challenge_type) return first.challenge_type.toLowerCase();
   }
-  return defaultChallengeType();
+  // Reload restoration intentionally does not persist full validation payloads.
+  // In that state the restored challenge radio is the authoritative fallback.
+  return String(getChallengeType() || defaultChallengeType()).toLowerCase();
 }
 
 // Load active config from backend and sync radio buttons + badge.
@@ -6512,6 +6752,7 @@ async function _saveScoringSetup() {
 
 // Wire up radio change, file upload, package remove, and save button.
 (function _wireScoringSetup() {
+  _wireConfigurationManager();
   // Radio buttons: show/hide custom section
   document.querySelectorAll('input[name="scoring-mode"]').forEach((radio) => {
     radio.addEventListener("change", () => {

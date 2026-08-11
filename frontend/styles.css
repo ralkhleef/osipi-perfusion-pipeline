@@ -3946,6 +3946,123 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .config-reload-msg.ok  { color: #276749; }
 .config-reload-msg.err { color: #c53030; }
 
+/* Reviewer Configuration Manager: scoped to the collapsed admin panel. */
+.config-manager {
+  margin: 14px 0 20px;
+  padding: 16px;
+  border: 1px solid #ddd6fe;
+  border-radius: 12px;
+  background: #fbfaff;
+}
+.config-manager-heading,
+.config-manager-subheading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.config-manager h3,
+.config-manager h4 { margin: 0 0 4px; color: var(--text); }
+.config-manager h3 { font-size: 0.95rem; }
+.config-manager h4 { font-size: 0.82rem; }
+.config-manager p { margin: 0; color: var(--muted); font-size: 0.73rem; line-height: 1.45; }
+.config-manager-challenge,
+.config-manager-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4a5568;
+}
+.config-manager select,
+.config-manager input[type="text"],
+.config-manager input[type="number"] {
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+.config-manager-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.config-manager-card {
+  padding: 12px;
+  border: 1px solid #e8e3f7;
+  border-radius: 9px;
+  background: #fff;
+}
+.config-manager-card-wide { grid-column: 1 / -1; }
+.config-map-row {
+  display: grid;
+  grid-template-columns: minmax(100px, .65fr) 130px 90px minmax(180px, 1.4fr);
+  gap: 8px;
+  align-items: end;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0edf8;
+}
+.config-map-row:last-child { border-bottom: 0; }
+.config-map-name { align-self: center; font-size: 0.76rem; font-weight: 600; }
+.config-map-name small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.config-manager-check { display: flex; align-items: center; gap: 7px; margin: 8px 0; font-size: 0.76rem; }
+.config-dataset-row {
+  display: grid;
+  grid-template-columns: 1fr repeat(3, minmax(62px, .65fr));
+  gap: 7px;
+  align-items: end;
+  margin: 8px 0;
+}
+.config-dataset-row label { font-size: 0.66rem; color: var(--muted); }
+.config-dataset-row strong { font-size: 0.74rem; align-self: center; }
+.config-manager-actions,
+.config-manager-inline-actions,
+.config-manager-asset-upload {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 12px;
+}
+.config-manager-results { margin-top: 10px; padding: 10px; border-radius: 8px; background: #f6f4fc; font-size: 0.74rem; }
+.config-manager-results.ok { background: #f0fff4; color: #276749; }
+.config-manager-results.err { background: #fff5f5; color: #c53030; }
+.config-manager-results ul { margin: 7px 0 0 18px; padding: 0; }
+.config-manager-history,
+.config-manager-assets { margin-top: 10px; }
+.config-version-row,
+.config-asset-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0edf8;
+  font-size: 0.74rem;
+}
+.config-version-active { color: #276749; font-weight: 600; }
+.config-manager-table-wrap { overflow-x: auto; margin-top: 8px; }
+.config-manager-table { width: 100%; border-collapse: collapse; font-size: 0.69rem; }
+.config-manager-table th,
+.config-manager-table td { padding: 7px; text-align: left; vertical-align: top; border-bottom: 1px solid #eeeaf8; }
+.config-manager-table th { color: #553c9a; white-space: nowrap; }
+.config-manager-note { margin-top: 8px !important; }
+.config-manager-message { padding: 12px 0; color: var(--muted); font-size: 0.75rem; }
+
+@media (max-width: 760px) {
+  .config-manager-grid { grid-template-columns: 1fr; }
+  .config-manager-card-wide { grid-column: auto; }
+  .config-map-row { grid-template-columns: 1fr 1fr; }
+  .config-map-name { grid-column: 1 / -1; }
+  .config-dataset-row { grid-template-columns: 1fr 1fr; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    RUN STEP — Card layout  (v41)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -10204,11 +10321,13 @@ body[data-step] .wizard-footer,
    exact worklist row layout (title left, single chip + actions on the right).
    ========================================================================== */
 
-/* Remove the old table-style Score UI + Reviewer/Admin setup from the flow. */
-#step-score #score-table-card,
-#step-score #scoring-admin-panel,
-#step-score .scoring-admin-panel {
+/* Remove the old table-style Score UI. The Reviewer/Admin panel is visible
+   again because it now contains the supported Configuration Manager. */
+#step-score #score-table-card {
   display: none !important;
+}
+#step-score #scoring-admin-panel {
+  display: block !important;
 }
 
 /* Step 3 validation stats/dashboard UI is intentionally removed. */

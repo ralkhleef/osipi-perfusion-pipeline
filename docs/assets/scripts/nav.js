@@ -1,7 +1,7 @@
 /* Shared navigation for every documentation page.
  *
- * The site is static with no build step, so five pages would otherwise mean
- * five copies of the navbar and sidebar to keep in sync. Defining the
+ * The site is static with no build step, so its pages would otherwise need
+ * separate copies of the navbar and sidebar kept in sync. Defining the
  * structure once here and rendering it at load means a new page or a renamed
  * section is a one-line change in one file.
  *
@@ -64,6 +64,7 @@
       file: "configuration.html",
       tab: "Configuration",
       links: [
+        ["#configuration-manager", "In-app manager"],
         ["#validation-rules", "Validation rules"],
         ["#dataset-structure", "Dataset structure"],
         ["#map-requirements", "Map requirements"],
@@ -84,6 +85,18 @@
         ["#testing", "Testing and reliability"],
         ["#result", "Project result"],
         ["#documents", "Documents"],
+      ],
+    },
+    {
+      id: "pending-requirements",
+      file: "pending-requirements.html",
+      tab: "Pending",
+      links: [
+        ["#purpose", "Purpose"],
+        ["#dce", "DCE"],
+        ["#asl", "ASL"],
+        ["#dsc", "DSC"],
+        ["#shared", "Shared decisions"],
       ],
     },
   ];
