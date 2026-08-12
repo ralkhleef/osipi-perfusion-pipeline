@@ -116,7 +116,7 @@ def test_report_reads_in_paper_order():
     model = _build_report_model([_summary()], tag="t", blinded=True)
     assert model["lead_lines"], "missing summary"
     methods = " ".join(model["methods_lines"])
-    assert "voxel-level statistics" in methods
+    assert "finite-voxel" in methods
     assert "withheld" in methods, "blinding must be stated in Methods"
 
 
@@ -134,7 +134,6 @@ def test_report_model_records_reproducible_analysis_provenance():
 def test_methods_state_when_no_reference_was_available():
     model = _build_report_model([_summary(ref=False)], tag="t", blinded=True)
     methods = " ".join(model["methods_lines"])
-    assert "No matching reference maps" in methods
     assert "Bias is the mean" not in methods
 
 

@@ -1052,13 +1052,18 @@ def export_manifest(submission_id: str = Query(...)):
 
 
 # ---------------------------------------------------------------------------
-# Rankings: all validation results sorted by score
+# Legacy validation-review ordering (not scientific scoring or ranking)
 # ---------------------------------------------------------------------------
 
 
 @app.get("/api/rankings")
 def get_rankings():
-    """Return all validation results ranked: passed first, then fewest errors, fewest warnings."""
+    """Return the legacy validation review order.
+
+    The compatibility route name is retained for existing clients. Its order
+    is based only on validation state and must never be presented as an OSIPI
+    scientific score or challenge ranking.
+    """
     results = []
     for f in _find_validation_files():
         try:
@@ -1088,7 +1093,16 @@ def get_rankings():
             "validated_at": r.get("validated_at") or r.get("checked_at", ""),
         })
 
-    return {"rankings": ranked, "count": len(ranked)}
+    return {
+        "rankings": ranked,
+        "count": len(ranked),
+        "ordering_basis": "validation review priority",
+        "official_ranking": False,
+        "deprecation_note": (
+            "Compatibility endpoint only; official OSIPI challenge ranking "
+            "is not configured."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -2021,7 +2035,39 @@ def scoring_active_config():
     clients keep working.
     """
     cfg = load_active_config()
-    return {"active": cfg, "active_config": cfg, "packages": list_packages()}
+    providers = all_providers_status()
+    enriched: dict[str, dict] = {}
+    for challenge, raw_entry in cfg.items():
+        entry = dict(raw_entry or {})
+        mode = str(entry.get("mode") or "none")
+        provider = None
+        if mode == "builtin":
+            provider = next((
+                item for item in providers
+                if item.get("source") == "builtin"
+                and not item.get("not_for_scoring")
+                and str(item.get("challenge_type") or "").lower() == str(challenge).lower()
+            ), None)
+        elif mode == "custom" and entry.get("package_id"):
+            provider = next((
+                item for item in providers
+                if item.get("provider_id") == entry.get("package_id")
+            ), None)
+        entry.update({
+            "provider_id": provider.get("provider_id") if provider else entry.get("package_id"),
+            "provider_name": provider.get("provider_name") if provider else entry.get("package_name"),
+            "official": bool(provider and provider.get("official")),
+            "provider_ready": bool(
+                provider and provider.get("status") in {"ready", "dev_data_available"}
+            ),
+        })
+        enriched[str(challenge)] = entry
+    return {
+        "active": enriched,
+        "active_config": enriched,
+        "packages": list_packages(),
+        "providers": providers,
+    }
 
 
 class ScoringSetActiveRequest(BaseModel):
@@ -2360,16 +2406,8 @@ def _fmt_report_num(value, digits: int = 3) -> str:
 
 
 REFERENCE_UNAVAILABLE_NOTE = (
-    "Reference maps were not available, so this report shows QC metrics only."
-)
-
-# Repeatability CoV and ICC require repeated (noise-varied) datasets, which a
-# single submitted map cannot provide. Surfaced in every report so the shown
-# accuracy CoV is never mistaken for a repeatability measure.
-REPEATABILITY_UNAVAILABLE_NOTE = (
-    "Repeatability CoV and ICC are unavailable: they require repeated "
-    "(noise-varied) datasets, which have not been provided. The coefficient of "
-    "variation reported here is an accuracy error-CoV, not a repeatability CoV."
+    "Compatible reference maps were not available, so reference-comparison "
+    "metrics were not calculated."
 )
 
 
@@ -3064,34 +3102,14 @@ def _status_chip_html(label: str, tone: str | None = None) -> str:
 
 
 
-def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
+def _issue_rows_html(issue_rows: list[list[str]]) -> str:
     rows: list[str] = []
-    for idx, summary in enumerate(summaries, start=1):
-        label = _submission_display_name(summary, idx, blinded=blinded)
-        for severity, source in (("Blocking error", "errors"), ("Needs review", "warnings")):
-            messages = summary.get(source) or []
-            if not isinstance(messages, list):
-                continue
-            for msg in messages:
-                if isinstance(msg, dict):
-                    text = str(msg.get("message") or msg.get("code") or "Issue recorded.")
-                    affected = msg.get("path")
-                else:
-                    text = str(msg)
-                    affected = ""
-                # Shared with the PDF renderer so the two cannot disagree about
-                # what a blinded report may show.
-                affected_label = affected_display(affected, summary, label, blinded=blinded)
-                action = (
-                    "Fix the blocking issue and validate again."
-                    if severity == "Blocking error"
-                    else "Review the item; warnings do not block export."
-                )
-                rows.append(
-                    "<tr>"
-                    f"<td>{_status_chip_html(severity)}</td><td>{_esc(label)}</td><td>{_esc(text)}</td><td>{_esc(affected_label)}</td><td>{_esc(action)}</td>"
-                    "</tr>"
-                )
+    for severity, label, text, affected, action in issue_rows:
+        rows.append(
+            "<tr>"
+            f"<td>{_status_chip_html(severity)}</td><td>{_esc(label)}</td><td>{_esc(text)}</td><td>{_esc(affected)}</td><td>{_esc(action)}</td>"
+            "</tr>"
+        )
     if not rows:
         rows.append(
             '<tr><td colspan="5">'
@@ -3100,7 +3118,7 @@ def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
         )
     return (
         '<div class="table-wrap"><table>'
-        "<caption>Table 5. Errors and warnings raised during validation, with the "
+        "<caption>Errors and warnings raised during validation, with the "
         "action required before the submission can be shared.</caption>"
         '<thead><tr><th>Severity</th><th>Submission</th><th>Message</th>'
         "<th>Affected file</th><th>Recommended action</th></tr></thead>"
@@ -3109,7 +3127,7 @@ def _issue_rows_html(summaries: list[dict], *, blinded: bool) -> str:
 
 
 CONTENTS_CAPTION = (
-    "Table 1. What the submission contains, grouped by dataset and type. "
+    "What the submission contains, grouped by dataset and type. "
     "Parameter maps, fitted signals and documents are counted separately; "
     "organiser reference data is not counted as submitted content."
 )
@@ -3137,7 +3155,6 @@ def export_report(
         s.get("analysis_fields") if isinstance(s.get("analysis_fields"), dict) else {}
         for s in summaries
     ]
-    warning_count = sum(int(s.get("warning_count") or 0) for s in summaries)
     map_types = sorted({
         mt.strip()
         for af in fields
@@ -3156,17 +3173,6 @@ def export_report(
         else (_submission_display_name(summaries[0], 1, blinded=blinded) if len(summaries) == 1 else "Export session")
     )
 
-    combined_mean_columns = _combined_mean_columns()
-    mean_by_map_type = {
-        display: _mean_numeric((af.get("means_by_map_type") or {}).get(display) for af in fields)
-        for _key, display in combined_mean_columns
-    }
-    report_mean_types = [
-        display for _key, display in combined_mean_columns
-        if mean_by_map_type.get(display) is not None
-    ]
-    cov = _mean_numeric(af.get("mean_coefficient_of_variation") for af in fields)
-
     # Built exactly once. This walks every submission, map, and ROI, so the
     # HTML path used to pay for it twice: once here and once again further
     # down purely to read the Methods paragraphs off it. Per-challenge
@@ -3179,172 +3185,74 @@ def export_report(
 
     # No QC bar charts and no map thumbnails: the researchers asked for a
     # table-focused printable report. Previews stay in the interactive app.
-    issues_html = _issue_rows_html(summaries, blinded=blinded)
+    issues_html = _issue_rows_html(report_model.get("issues") or [])
 
-    metadata_rows_html = []
-    for idx, s in enumerate(summaries, start=1):
-        af = s["analysis_fields"]
-        unblinded_cells = "" if blinded else (
-            f"<td>{_esc(s.get('team_name', ''))}</td>"
-            f"<td>{_esc(s.get('contact_email', ''))}</td>"
+    reference_comparison_rows_html = []
+    for idx, summary in enumerate(summaries, start=1):
+        analysis_fields = summary["analysis_fields"]
+        if not _reference_available(analysis_fields):
+            continue
+        submission_label = _submission_display_name(
+            summary, idx, blinded=blinded
         )
-        metadata_rows_html.append(
-            "<tr>"
-            f"<td>{_esc(_submission_display_name(s, idx, blinded=blinded))}</td>"
-            f"<td>{_esc(str(s.get('challenge_type') or '').upper() or 'Not available')}</td>"
-            f"<td>{_esc(af.get('parameter_maps_detected') or 'Not available')}</td>"
-            f'<td class="num">{_esc(af.get("map_count") or 0)}</td>'
-            f"{unblinded_cells}"
-            "</tr>"
-        )
-
-    rows_html = []
-    map_details_html = []
-    for idx, s in enumerate(summaries, start=1):
-        af = s["analysis_fields"]
-        analysis = s["nifti_analysis"] if isinstance(s.get("nifti_analysis"), dict) else {}
-        detected = af["parameter_maps_detected"] or "Not available"
-        reference_cell = _reference_status_label(af)
-        notes = _research_notes(s, include_reference_note=False) or ""
-        submission_label = _submission_display_name(s, idx, blinded=blinded)
-        unblinded_cells = "" if blinded else (
-            f"<td>{_esc(s.get('team_name', ''))}</td>"
-            f"<td>{_esc(s.get('contact_email', ''))}</td>"
-        )
-        rows_html.append(
-            "<tr>"
-            f"<td>{_esc(submission_label)}</td>"
-            f"{unblinded_cells}"
-            f"<td>{_esc(s['challenge_type'])}</td>"
-            f"<td>{_esc(detected)}</td>"
-            f'<td class="num">{_esc(af["map_count"])}</td>'
-            f'<td class="num">{_esc(_fmt_report_cell(af["finite_voxels_percent"]))}</td>'
-            f'<td class="num">{_esc(af["nan_count"])} / {_esc(af["inf_count"])}</td>'
-            f'<td class="num">{_esc(_fmt_report_cell(af["negative_voxels_percent"]))}</td>'
-            + "".join(
-                f'<td class="num">{_esc(_fmt_report_cell((af.get("means_by_map_type") or {}).get(display)))}</td>'
-                for display in report_mean_types
-            )
-            +
-            f"<td>{_status_chip_html(reference_cell)}</td>"
-            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_rmse"]) if _reference_available(af) else "—")}</td>'
-            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_mae"]) if _reference_available(af) else "—")}</td>'
-            f'<td class="num">{_esc(_fmt_report_cell(af["reference_mean_bias"]) if _reference_available(af) else "—")}</td>'
-            "</tr>"
-        )
-
-        maps = analysis.get("maps") if isinstance(analysis, dict) else []
-        maps = maps if isinstance(maps, list) else []
-        map_rows = []
-        for map_idx, item in enumerate(maps, start=1):
-            if not isinstance(item, dict):
-                continue
-            meta = item.get("metadata") or {}
-            stats = item.get("stats") or {}
-            map_label = f"Map {map_idx}" if blinded else item.get("file_name", f"Map {map_idx}")
-            _shape = meta.get("shape") or []
-            _vox = meta.get("voxel_size") or []
-            _units = item.get("units") or "not provided"
-            map_rows.append(
+        for reference_row in analysis_fields["reference_metric_rows"]:
+            reference_comparison_rows_html.append(
                 "<tr>"
-                f"<td>{_esc(map_label)}</td>"
-                f"<td>{_esc(item.get('detected_map_type', 'Unknown'))}</td>"
-                f"<td>{_esc(_units)}</td>"
-                f"<td>{_esc(str(len(_shape)) + 'D' if _shape else 'n/a')}</td>"
-                f"<td>{_esc('×'.join(str(x) for x in _shape) if _shape else 'n/a')}</td>"
-                f"<td>{_esc('×'.join(str(x) for x in _vox) if _vox else 'n/a')}</td>"
-                f"<td>{_esc(_fmt_report_cell(stats.get('finite_percent')))}</td>"
-                f"<td>{_esc(meta.get('nan_count', 0))} / {_esc(meta.get('inf_count', 0))}</td>"
-                f"<td>{_esc(_fmt_report_cell(stats.get('negative_voxel_percent')))}</td>"
-                f"<td>{_esc(_fmt_report_cell(stats.get('mean')))}</td>"
-                f"<td>{_esc(_fmt_report_cell(stats.get('coefficient_of_variation')))}</td>"
+                f"<td>{_esc(submission_label)}</td>"
+                f"<td>{_esc(reference_row.get('detected_map_type', ''))}</td>"
+                f"<td>{_esc(reference_row.get('scope', ''))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('rmse')))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('mae')))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('bias')))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('coefficient_of_variation')))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('correlation')))}</td>"
+                f"<td>{_esc(_fmt_report_cell(reference_row.get('voxel_count'), 0))}</td>"
                 "</tr>"
             )
-        reference_rows = []
-        if _reference_available(af):
-            for ref_idx, ref_row in enumerate(af["reference_metric_rows"], start=1):
-                reference_rows.append(
-                    "<tr>"
-                    f"<td>{_esc(ref_row.get('detected_map_type', ''))}</td>"
-                    f"<td>{_esc(ref_row.get('scope', ''))}</td>"
-                    f"<td>{_status_chip_html(_reference_status_label({'reference_scoring_status': ref_row.get('status'), 'reference_compared_map_count': 1 if ref_row.get('status') == 'compared' else 0}))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('rmse')))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('mae')))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('bias')))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('coefficient_of_variation')))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('correlation')))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('voxel_count'), 0))}</td>"
-                    f"<td>{_esc(_fmt_report_cell(ref_row.get('excluded_voxel_count'), 0))}</td>"
-                    "</tr>"
-                )
-        map_table = (
-            "<h3>Submitted outputs <span class=\"report-muted\">(one entry per parameter type)</span></h3>"
-            "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
-            "<th>Map</th><th>Type</th><th>Units</th><th>Dims</th><th>Shape</th><th>Voxel size</th>"
-            "<th>Finite voxels</th><th>NaN / Inf</th>"
-            "<th>Negative voxels</th><th>Mean</th><th>CoV</th>"
-            "</tr></thead><tbody>"
-            + ("".join(map_rows) if map_rows else '<tr><td colspan="11">No readable NIfTI maps found.</td></tr>')
-            + "</tbody></table></div>"
+    _main_map_headers = report_model.get("main_map_metric_headers") or []
+    _main_map_rows = report_model.get("main_map_metric_rows") or []
+    main_map_results_html = (
+        '<div class="table-wrap"><table><thead><tr>'
+        + "".join(f"<th>{_esc(value)}</th>" for value in _main_map_headers)
+        + "</tr></thead><tbody>"
+        + "".join(
+            "<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>"
+            for row in _main_map_rows
         )
-        reference_table = ""
-        if reference_rows:
-            reference_table = (
-                "<h3>Reference comparison <span class=\"report-muted\">(per parameter type and ROI; types are never combined)</span></h3>"
-                "<div class=\"table-wrap\"><table class=\"detail-table\"><thead><tr>"
-                "<th>Map type</th><th>ROI</th><th>Reference status</th>"
-                "<th>RMSE</th><th>MAE</th><th>Bias</th><th>Error CoV</th><th>Correlation</th>"
-                "<th>Valid voxels</th><th>Excluded voxels</th>"
-                "</tr></thead><tbody>"
-                + "".join(reference_rows)
-                + "</tbody></table></div>"
-                + f"<p class=\"report-note\">{_esc(REPEATABILITY_UNAVAILABLE_NOTE)}</p>"
-            )
-        map_details_html.append(
-            f"<details class=\"report-details\"><summary>Map-level results for {_esc(submission_label)}</summary>"
-            f"{map_table}{reference_table}"
-            "</details>"
-        )
-
-    table_html = (
-        '<div class="table-wrap"><table>'
-        "<caption>Table 3. Per-submission quality control and reference agreement. "
-        "Dashes and &ldquo;Not available&rdquo; denote measures that could not be "
-        "computed; they are never reported as zero.</caption>"
-        "<thead><tr>"
-        "<th>Submission</th>"
-        + ("" if blinded else "<th>Team</th><th>Contact</th>")
-        + '<th>Challenge</th><th>Map types</th><th class="num">Maps</th>'
-        '<th class="num">Finite voxels</th><th class="num">NaN / Inf</th>'
-        '<th class="num">Negative voxels</th>'
-        + "".join(f'<th class="num">Mean {_esc(display)}</th>' for display in report_mean_types)
-        + "<th>Reference status</th>"
-        '<th class="num">RMSE</th><th class="num">MAE</th><th class="num">Bias</th>'
-        "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>"
+        + "</tbody></table></div>"
+        if _main_map_rows else
+        '<p class="report-note">No readable map metrics were available.</p>'
     )
-    detail_html = "".join(map_details_html)
-    # The bulleted executive summary was replaced by the leader paragraph
-    # under the title, which states the same facts in prose. The repeatability
-    # caveat still has to appear exactly once, so it moves into the notes.
-    notes = []
-    if reference_available:
-        notes.append(REPEATABILITY_UNAVAILABLE_NOTE)
-    if warning_count:
-        notes.append("Warnings indicate files or metadata that may need review but did not prevent QC export.")
-    if not notes:
-        notes.append("No additional limitations were reported for this export.")
-    notes_html = "".join(f"<p>{_esc(note)}</p>" for note in notes)
-
+    reference_comparison_html = (
+        '<div class="table-wrap"><table><thead><tr>'
+        '<th>Submission</th><th>Map</th><th>ROI</th><th>RMSE</th>'
+        '<th>MAE</th><th>Bias</th><th>Error CoV</th><th>Corr.</th><th>Valid voxels</th>'
+        '</tr></thead><tbody>'
+        + "".join(reference_comparison_rows_html)
+        + "</tbody></table></div>"
+        if reference_comparison_rows_html else
+        '<p class="report-note">No compatible reference comparison was available.</p>'
+    )
+    challenge_reference_rows = []
+    for challenge, metrics in (
+        report_model.get("reference_metrics_by_challenge") or {}
+    ).items():
+        for metric, value in metrics.items():
+            challenge_reference_rows.append(
+                f"<tr><th>{_esc(challenge)} {_esc(metric)}</th>"
+                f"<td>{_esc(_fmt_report_cell(value))}</td></tr>"
+            )
+    challenge_reference_summary_html = (
+        '<div class="table-wrap compact-kv"><table class="kv"><tbody>'
+        + "".join(challenge_reference_rows)
+        + "</tbody></table></div>"
+        if len(challenges) > 1 and challenge_reference_rows else ""
+    )
     # Only the caveats that apply to this run, shared with the PDF so both
     # reports carry identical wording.
     limitations_html = "".join(
         f"<li>{_esc(item)}</li>"
-        for item in build_limitations(
-            reference_available=reference_available,
-            map_types=map_types,
-            challenges=challenges,
-            cov_reported=cov is not None,
-        )
+        for item in report_model.get("limitations", [])
     )
 
     blind_label = "Blinded report" if blinded else "Unblinded report"
@@ -3367,30 +3275,18 @@ def export_report(
     else:
         logo_html = '<div class="wordmark">OSIPI<span>Perfusion pipeline</span></div>'
 
-    # Prose and table rows both come from the shared model. Writing them out
-    # here as well is what let the HTML and the PDF drift apart before.
-    summary_rows_html = "".join(
-        f"<tr><td>{_esc(measure)}</td><td>"
-        + (_status_chip_html(value) if measure == "Reference status"
-           else _esc(_fmt_report_cell(value)))
-        + "</td></tr>"
-        for measure, value in {
-            **report_model["qc"], **report_model["scoring"],
-        }.items()
-    )
-
-    # Rendered from the same pre-formatted rows the PDF uses, in the same
-    # order. Nothing is recomputed or refiltered here; a permanently numbered
-    # Table 3 appears even when empty so cross-references stay aligned.
+    # Rendered from the same pre-formatted records summarized by the PDF.
+    # Nothing is recomputed or refiltered here; HTML keeps the complete table
+    # while the printable report carries a compact availability summary.
     _roi_rows = report_model.get("roi_descriptive_rows") or []
     _roi_headers = report_model.get("roi_descriptive_headers") or []
     _roi_summary = report_model.get("roi_descriptive_summary") or {}
     _roi_caption = (
-        f"Table 4. Within-ROI Ktrans statistics: "
+        f"Within-ROI Ktrans statistics: "
         f"{_roi_summary.get('available_rows', 0)} of "
         f"{_roi_summary.get('total_rows', 0)} scan-ROI combinations available. "
         if _roi_rows else
-        "Table 4. Within-ROI Ktrans statistics. None were available for this "
+        "Within-ROI Ktrans statistics. None were available for this "
         "submission. "
     ) + ROI_METHOD_TEXT
     _roi_numeric = {5, 6, 7, 8}
@@ -3440,14 +3336,8 @@ def export_report(
         "Residual Sum of Squares (RSS): raw voxelwise sum across time of (measured − modelled)², summarized by region. This is not deviance or official scoring.",
     )
     prototype_analysis_html = (
-        "<h2>Prototype descriptive analyses</h2>" + grouped_table_html + rss_table_html
+        grouped_table_html + rss_table_html
         if grouped_table_html or rss_table_html else ""
-    )
-
-    lead_html = " ".join(_esc(line) for line in report_model["lead_lines"])
-    methods_html = "".join(
-        f'<p class="lead">{_esc(line)}</p>'
-        for line in report_model["methods_lines"]
     )
 
     meta_items = [
@@ -3466,6 +3356,14 @@ def export_report(
         ("Reference dataset", report_model["analysis_provenance"]["reference_dataset"]),
         ("Analysis date", report_model["analysis_provenance"]["analysis_date"]),
     ]
+    if not blinded and len(summaries) == 1:
+        # A single-submission report does not render the batch overview table,
+        # so organiser identity belongs in the metadata block.  Blinded output
+        # never enters this branch.
+        meta_items[1:1] = [
+            ("Team", summaries[0].get("team_name") or "Not provided"),
+            ("Contact", summaries[0].get("contact_email") or "Not provided"),
+        ]
     meta_html = "".join(
         f"<dt>{_esc(label)}</dt><dd>{_esc(value)}</dd>"
         for label, value in meta_items
@@ -3481,6 +3379,20 @@ def export_report(
     provenance_html = "".join(
         f"<dt>{_esc(label)}</dt><dd>{_esc(report_model['analysis_provenance'].get(key, 'not available'))}</dd>"
         for label, key in provenance_labels
+    )
+    reviewer_summary_html = "".join(
+        f"<div class=\"reviewer-line\"><strong>{_esc(label)}:</strong> "
+        f"<span>{_esc(value)}</span></div>"
+        for label, value in report_model.get("reviewer_summary", [])
+    )
+    review_status_html = "".join(
+        f"<div class=\"review-item\"><span>{_esc(label)}</span>"
+        f"<strong>{_esc(value)}</strong></div>"
+        for label, value in report_model.get("review_statuses", {}).items()
+    )
+    executive_metrics_html = "".join(
+        f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>"
+        for label, value in report_model.get("executive_metrics", {}).items()
     )
 
     # ── Figures ───────────────────────────────────────────────────────────
@@ -3511,7 +3423,7 @@ def export_report(
     figures_html = ""
     if _figure_blocks:
         figures_html = (
-            '<h2>Figures</h2><div class="figure-grid">'
+            '<div class="figure-grid">'
             + "".join(
                 f'<figure class="fig-block">{svg}'
                 f"<figcaption>{_esc(cap)}</figcaption></figure>"
@@ -3520,34 +3432,10 @@ def export_report(
             + "</div>"
         )
 
-    # Submission contents, from the same model rows the PDF renders, so the
-    # two formats cannot disagree about what the submission contains.
-    contents_rows_model = report_model.get("submission_contents") or []
-    contents_headers = "".join(
-        f"<th>{_esc(h)}</th>" for h in report_model["submission_contents_headers"])
-    if contents_rows_model:
-        contents_body = "".join(
-            "<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>"
-            for row in contents_rows_model
-        )
-    else:
-        # Rendered even when empty so table numbering stays identical in both
-        # formats; an absent Table 1 would read as a broken report.
-        span = len(report_model["submission_contents_headers"])
-        contents_body = (
-            f'<tr><td colspan="{span}">Not available for this submission.</td></tr>')
-    contents_html = (
-        '<h2>Submission contents</h2>'
-        '<div class="table-wrap"><table>'
-        f'<caption>{CONTENTS_CAPTION}</caption>'
-        f'<thead><tr>{contents_headers}</tr></thead>'
-        f'<tbody>{contents_body}</tbody></table></div>'
-    )
-
     html = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OSIPI Perfusion Pipeline &mdash; Evaluation Report &mdash; {_esc(session_name)}</title>
+<title>OSIPI Perfusion Pipeline &mdash; Submission Review Report &mdash; {_esc(session_name)}</title>
 <style>
   :root {{
     --ink:{BRAND['ink']}; --ink-soft:{BRAND['ink_soft']}; --muted:{BRAND['muted']};
@@ -3648,6 +3536,14 @@ def export_report(
     font-variant-numeric:tabular-nums; letter-spacing:-.01em;
   }}
   .fig-note {{ display:block; font-size:11px; color:var(--muted); margin-top:1px; }}
+  .review-grid {{
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:1px; margin:20px 0 0; background:var(--hairline);
+    border:1px solid var(--hairline); border-radius:8px; overflow:hidden;
+  }}
+  .review-item {{ background:#fff; padding:13px 14px; min-width:0; }}
+  .review-item strong {{ display:block; font-size:16px; font-weight:600; margin-top:2px; overflow-wrap:anywhere; }}
+  .review-item span {{ font-family:var(--mono); font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--subtle); }}
 
   /* ── Section headings: small caps over a hairline ─────────────────── */
   h2 {{
@@ -3717,6 +3613,37 @@ def export_report(
   }}
   .report-details[open] > summary::before {{ content:"\\2212"; }}
   .report-details > summary:hover {{ color:var(--muted); }}
+  .data-details {{ margin-top:14px; }}
+  .data-details > summary {{ font-family:var(--sans); font-weight:600; font-size:13px; }}
+
+  /* ── Reviewer-oriented disclosure sections ───────────────────────── */
+  .report-section {{ margin:24px 0 0; border-top:1px solid var(--rule); }}
+  .report-section > summary {{
+    cursor:pointer; list-style:none; padding:12px 0 10px;
+    font-family:var(--mono); font-size:11px; font-weight:700;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--subtle);
+    display:flex; align-items:center; gap:8px;
+  }}
+  .report-section > summary::-webkit-details-marker {{ display:none; }}
+  .report-section > summary::before {{
+    content:"+"; width:14px; font-family:var(--sans); font-size:15px;
+    font-weight:400; line-height:1; color:var(--muted);
+  }}
+  .report-section[open] > summary::before {{ content:"\2212"; }}
+  .report-section-body {{ padding:0 0 4px 22px; }}
+  .section-count {{
+    min-width:21px; padding:1px 6px; border:1px solid var(--hairline);
+    border-radius:999px; text-align:center; letter-spacing:0;
+    font-family:var(--sans); font-size:10px; color:var(--muted);
+  }}
+  .reviewer-summary {{
+    border-left:3px solid #7a4fc2; padding:9px 0 9px 16px;
+    font-family:var(--serif); font-size:14.5px; line-height:1.55;
+  }}
+  .reviewer-line + .reviewer-line {{ margin-top:4px; }}
+  .reviewer-line strong {{ color:var(--ink); }}
+  .reviewer-line span {{ color:var(--ink-soft); }}
+  .compact-kv {{ max-width:520px; margin-bottom:20px; }}
 
   /* ── Notes ────────────────────────────────────────────────────────── */
   .notes {{ font-size:13.5px; color:var(--ink-soft); margin-top:12px; }}
@@ -3743,6 +3670,8 @@ def export_report(
     body {{ padding:0; background:#fff; }}
     .sheet {{ padding:24px 20px 36px; }}
     .meta {{ grid-template-columns:auto 1fr; }}
+    .review-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+    .report-section-body {{ padding-left:0; }}
     h1 {{ font-size:24px; }}
   }}
 
@@ -3771,49 +3700,55 @@ def export_report(
       <div class="issue">{_esc(export_date)}<br>{_esc(blind_label)}</div>
     </div>
     <div class="titleblock">
-      <h1>Evaluation report</h1>
+      <h1>Submission review report</h1>
       <p class="deck">{_esc(session_name)}{_esc(' · ' + ', '.join(challenges) if challenges else '')}</p>
     </div>
     <dl class="meta">{meta_html}</dl>
   </header>
 
-  <h2>Summary</h2>
-  <p class="lead">{lead_html}</p>
+  <details class="report-section" open>
+    <summary>Submission Summary</summary>
+    <div class="report-section-body">
+      <div class="reviewer-summary">{reviewer_summary_html}</div>
+      <div class="review-grid">{review_status_html}</div>
+    </div>
+  </details>
 
-  <h2>Methods</h2>
-  {methods_html}
+  <details class="report-section" open>
+    <summary>Key Results</summary>
+    <div class="report-section-body">
+      <div class="table-wrap compact-kv"><table class="kv"><tbody>{executive_metrics_html}</tbody></table></div>
+      {main_map_results_html}
+    </div>
+  </details>
 
-  {contents_html}
+  {f'''<details class="report-section">
+    <summary>ROI Results <span class="section-count">{len(_roi_rows)}</span></summary>
+    <div class="report-section-body">{roi_table_html}</div>
+  </details>''' if _roi_rows else ''}
 
-  <!-- The submissions table was removed: submission, challenge, map types
-       and map count are all columns of the results table below. -->
-  <h2>Results</h2>
-  <div class="table-wrap"><table class="kv">
-    <caption>Table 2. Aggregate quality-control statistics and reference agreement. Values are weighted across included maps; parameter types with different units are reported separately and never averaged together.</caption>
-    <thead><tr><th>Measure</th><th>Value</th></tr></thead>
-    <tbody>{summary_rows_html}</tbody>
-  </table></div>
+  <details class="report-section">
+    <summary>Reference Comparison</summary>
+    <div class="report-section-body">{challenge_reference_summary_html}{reference_comparison_html}{figures_html}</div>
+  </details>
 
-  {figures_html}
+  {f'''<details class="report-section">
+    <summary>Additional Analysis</summary>
+    <div class="report-section-body">{prototype_analysis_html}</div>
+  </details>''' if prototype_analysis_html else ''}
 
-  <h2>ROI Ktrans statistics</h2>
-  {roi_table_html}
+  <details class="report-section">
+    <summary>Issues &amp; Limitations <span class="section-count">{len(report_model['issues'])}</span></summary>
+    <div class="report-section-body">
+      {issues_html if report_model['issues'] else '<p class="report-note">No review items were recorded.</p>'}
+      <ul class="limitations-list">{limitations_html}</ul>
+    </div>
+  </details>
 
-  {prototype_analysis_html}
-
-  <h2>Results by submission</h2>
-  {table_html}
-  {detail_html}
-
-  <h2>Errors and warnings</h2>
-  {issues_html}
-
-  <h2>Limitations</h2>
-  <div class="notes">{notes_html}</div>
-  <ul class="limitations-list">{limitations_html}</ul>
-
-  <h2>Analysis provenance</h2>
-  <dl class="meta">{provenance_html}</dl>
+  <details class="report-section">
+    <summary>Provenance</summary>
+    <div class="report-section-body"><dl class="meta">{provenance_html}</dl></div>
+  </details>
 
   <div class="colophon">
     <span>OSIPI Perfusion Pipeline &middot; automated report</span>

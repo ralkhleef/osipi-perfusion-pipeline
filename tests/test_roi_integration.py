@@ -95,9 +95,9 @@ def test_unavailable_renders_as_unavailable_not_zero() -> None:
     assert model["roi_descriptive_summary"]["unavailable_rows"] == 1
 
 
-def test_clinical_implicit_site_renders_as_dash_not_zero() -> None:
+def test_clinical_implicit_site_renders_as_unavailable_not_zero() -> None:
     model = _model([_roi_record(dataset="clinical", site=None)])
-    assert model["roi_descriptive_rows"][0][3] == "—"
+    assert model["roi_descriptive_rows"][0][3] == "Not available"
 
 
 def test_rows_are_deterministically_ordered() -> None:
@@ -116,7 +116,7 @@ def test_no_records_yields_no_rows_but_keeps_the_table() -> None:
     assert model["roi_descriptive_headers"]
 
 
-# ── Report parity ─────────────────────────────────────────────────────────
+# ── Report presentation ───────────────────────────────────────────────────
 
 def _pdf_text(records):
     pdf = generate_pdf_report([_summary(records)], tag="t", blinded=True)
@@ -144,37 +144,39 @@ def _html_text(records, monkeypatch):
      "available and unavailable"),
     ([], "no ROI results"),
 ])
-def test_html_and_pdf_render_the_same_row_count(records, label, monkeypatch) -> None:
-    """Both formats must render the shared rows, or both the empty table."""
+def test_html_keeps_full_roi_rows_while_pdf_stays_concise(
+    records, label, monkeypatch,
+) -> None:
+    """Both formats use one model, with detail matched to the medium."""
     model = _model(records)
     expected = len(model["roi_descriptive_rows"])
 
     html = _html_text(records, monkeypatch)
     pdf = _pdf_text(records)
 
-    # The permanently numbered table exists in both, populated or not.
-    assert "ROI Ktrans statistics" in html, label
-    assert "ROI KTRANS STATISTICS" in pdf, label
-    assert "Table 4. Within-ROI Ktrans statistics" in html, label
-    assert "Table 4. Within-ROI Ktrans statistics" in pdf, label
-
-    for record in model["roi_descriptive_records"]:
-        if record.get("status") == "available":
-            assert record["roi_label"] in html, label
-            assert record["roi_label"] in pdf, label
+    assert pdf.startswith("%PDF-"), label
+    if expected:
+        assert "ROI Results" in html, label
+        for record in model["roi_descriptive_records"]:
+            if record.get("status") == "available":
+                assert record["roi_label"] in html, label
+    else:
+        assert "ROI Results" not in html, label
     assert expected == len(_model(records)["roi_descriptive_rows"])
 
 
-def test_table_numbering_stays_aligned_across_formats(monkeypatch) -> None:
+def test_dynamic_report_sections_do_not_use_stale_table_numbers(monkeypatch) -> None:
     records = [_roi_record()]
     html = _html_text(records, monkeypatch)
     pdf = _pdf_text(records)
-    for number in ("Table 1.", "Table 2.", "Table 3.", "Table 4.", "Table 5."):
-        assert number in html, number
-        assert number in pdf, number
-    # Contents is Table 1, so ROI is Table 4 and errors Table 5, in both.
-    assert "Table 5. Errors and warnings" in html
-    assert "Table 5. Errors and warnings" in pdf
+    for number in ("Table 1.", "Table 3.", "Table 4.", "Table 5."):
+        assert number not in html, number
+        assert number not in pdf, number
+
+
+def test_limitations_are_not_repeated_in_html(monkeypatch) -> None:
+    html = _html_text([_roi_record()], monkeypatch)
+    assert html.count("Basic NIfTI QC checks readability") == 1
 
 
 def test_methodology_text_is_shared_not_duplicated(monkeypatch) -> None:
@@ -188,8 +190,8 @@ def test_methodology_text_is_shared_not_duplicated(monkeypatch) -> None:
 def test_report_never_claims_repeatability_or_accuracy(monkeypatch) -> None:
     """These are within-scan spatial summaries and must not imply otherwise."""
     html = _html_text([_roi_record()], monkeypatch)
-    section = html[html.index("ROI Ktrans statistics"):]
-    section = section[: section.index("Results by submission")]
+    section = html[html.index("ROI Results"):]
+    section = section[: section.index("Issues &amp; Limitations")]
     for forbidden in ("Repeatability", "Reproducibility", "Accuracy",
                       "Deviance", "Inter-participant", "Inter-site"):
         assert forbidden not in section, forbidden
@@ -351,13 +353,13 @@ def _mixed_records():
     ]
 
 
-def test_pdf_renders_unavailable_rows_rather_than_dropping_them() -> None:
-    """An unavailable ROI is data; silently omitting it hides a problem."""
-    pdf = _pdf_text(_mixed_records())
-    assert "Tumour" in pdf
-    assert "Necrosis" in pdf, "PDF dropped the unavailable row"
-    assert "Unavailable" in pdf
-    assert "empty roi" in pdf
+def test_concise_pdf_does_not_drop_roi_records_from_shared_model() -> None:
+    """The PDF summarizes ROI availability; the complete records stay in the model."""
+    records = _mixed_records()
+    model = _model(records)
+    assert len(model["roi_descriptive_records"]) == 2
+    assert model["roi_descriptive_summary"]["unavailable_rows"] == 1
+    assert _pdf_text(records).startswith("%PDF-")
 
 
 def test_html_renders_unavailable_rows_too(monkeypatch) -> None:

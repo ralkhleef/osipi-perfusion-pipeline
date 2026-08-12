@@ -25,7 +25,6 @@ from services.report_branding import (
 from osipi_pipeline.scoring.descriptive_statistics import (
     METHODOLOGY as DESCRIPTIVE_METHODOLOGY,
 )
-from services.report_figures import bland_altman_figure, to_drawing
 from services.provenance_service import analysis_provenance
 from osipi_pipeline.config.rules import challenge_labels, map_type_specs
 
@@ -33,7 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 REFERENCE_UNAVAILABLE_NOTE = (
-    "Reference maps were not available, so this report shows QC metrics only."
+    "Compatible reference maps were not available, so reference-comparison "
+    "metrics were not calculated."
 )
 
 UNAVAILABLE_METRICS_NOTE = (
@@ -66,7 +66,9 @@ def _err_cov(metrics: Mapping[str, Any]):
 
 
 CONTENTS_CAPTION = (
-    "Table 1. What the submission contains, grouped by dataset and type. Parameter maps, fitted signals and documents are counted separately; organiser reference data is not counted as submitted content."
+    "What the submission contains, grouped by dataset and type. Parameter "
+    "maps, fitted signals and documents are counted separately; organiser "
+    "reference data is not counted as submitted content."
 )
 
 CAPTION_AGGREGATE_TAIL = (
@@ -93,7 +95,7 @@ def _submission_contents_rows(summaries: Sequence[Mapping[str, Any]]) -> list[li
                 str(row.get("dataset") or "Not specified"),
                 str(row.get("label") or ""),
                 str(row.get("count") or 0),
-                str(row.get("dimensions") or "—"),
+                str(row.get("dimensions") or "Not available"),
                 _units_display(row.get("units"), row.get("units_configured")),
                 str(row.get("status") or "Valid"),
             ])
@@ -240,18 +242,18 @@ def _roi_descriptive_model(
     ))
 
     rows = [[
-        str(r.get("dataset") or "—"),
-        str(r.get("participant") or "—"),
-        str(r.get("repeat") or "—"),
+        str(r.get("dataset") or "Not available"),
+        str(r.get("participant") or "Not available"),
+        str(r.get("repeat") or "Not available"),
         # Clinical datasets leave the site implicit; shown as a dash, not "0".
-        str(r.get("site") or "—"),
-        str(r.get("roi_label") or r.get("roi_id") or "—"),
+        str(r.get("site") or "Not available"),
+        str(r.get("roi_label") or r.get("roi_id") or "Not available"),
         _roi_number(r.get("roi_median")),
         _roi_number(r.get("roi_within_scan_sd")),
         _roi_percent(r.get("roi_within_scan_cov")),
         _fmt(r.get("voxel_count") or 0, 0),
-        str(r.get("units") or "—"),
-        str(r.get("unavailable_reason") or r.get("status") or "—").replace("_", " "),
+        str(r.get("units") or "Not available"),
+        str(r.get("unavailable_reason") or r.get("status") or "Not available").replace("_", " "),
     ] for r in records]
 
     available = sum(1 for r in records if r.get("status") == "available")
@@ -293,19 +295,19 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
         fixed = row.get("held_fixed") if isinstance(row.get("held_fixed"), Mapping) else {}
         fixed_text = ", ".join(
             f"{key}={value}" for key, value in fixed.items() if value not in (None, "")
-        ) or "—"
+        ) or "Not available"
         pair = (
             f"{row.get('paired_from')}→{row.get('paired_to')}: "
             f"{_roi_number(row.get('paired_difference'))}"
-            if row.get("paired_difference") is not None else "—"
+            if row.get("paired_difference") is not None else "Not available"
         )
         grouped_rows.append([
-            str(row.get("axis") or "—").replace("inter_", ""),
-            fixed_text, str(row.get("roi_label") or row.get("roi_id") or "—"),
-            str(row.get("map_type") or "—"), _fmt(row.get("scan_count") or 0, 0),
+            str(row.get("axis") or "Not available").replace("inter_", ""),
+            fixed_text, str(row.get("roi_label") or row.get("roi_id") or "Not available"),
+            str(row.get("map_type") or "Not available"), _fmt(row.get("scan_count") or 0, 0),
             _roi_number(row.get("mean")), _roi_number(row.get("standard_deviation")),
             _roi_percent(row.get("coefficient_of_variation")), pair,
-            str(row.get("status") or "—").replace("_", " "),
+            str(row.get("status") or "Not available").replace("_", " "),
         ])
 
     rss_rows = []
@@ -317,12 +319,12 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
         )
         for scope, values in scopes:
             rss_rows.append([
-                str(record.get("dataset") or "—"), str(record.get("participant") or "—"),
-                str(record.get("repeat") or "—"), str(record.get("site") or "—"), scope,
+                str(record.get("dataset") or "Not available"), str(record.get("participant") or "Not available"),
+                str(record.get("repeat") or "Not available"), str(record.get("site") or "Not available"), scope,
                 _roi_number(values.get("median")), _roi_number(values.get("mean")),
                 _roi_number(values.get("standard_deviation")),
                 _fmt(values.get("voxel_count") or 0, 0),
-                str(values.get("status") or record.get("status") or "—").replace("_", " "),
+                str(values.get("status") or record.get("status") or "Not available").replace("_", " "),
             ])
     return {
         "grouped_roi_headers": ["Axis", "Held fixed", "ROI", "Map", "Scans", "Mean", "SD", "CoV", "Pair Δ", "Status"],
@@ -469,8 +471,8 @@ def build_limitations(
     """Build the caveat list, including only caveats that actually apply.
 
     Shared by the HTML and PDF renderers. Previously both printed the same
-    eight bullets on every report, which trained readers to skip the section
-   , a caveat about repeatability CoV is noise on a run that computed no
+    eight bullets on every report, which trained readers to skip the section.
+    A caveat about repeatability CoV is noise on a run that computed no
     reference metrics at all. Wording is derived from the run rather than
     hardcoded, so a DCE-only report no longer claims something about ASL.
     """
@@ -478,35 +480,49 @@ def build_limitations(
         "Basic NIfTI QC checks readability and generic voxel statistics; "
         "it is not full BIDS validation.",
     ]
-    if reference_available:
+    known = [str(c).strip() for c in challenges if str(c).strip()]
+    if len(set(known)) > 1:
         items.append(
+            "Because this batch spans more than one challenge, results are "
+            "reported per challenge; no cross-challenge totals are computed."
+        )
+    if reference_available:
+        official_note = (
             "Generic reference metrics are not official OSIPI scores unless "
             "an official scoring provider is configured."
         )
-        items.append(UNAVAILABLE_METRICS_NOTE)
+        if known:
+            official_note += (
+                f" No official overall {'/'.join(known)} score has been defined, "
+                "and no pass/fail scientific threshold is applied."
+            )
+        items.append(official_note)
+        repeatability_note = UNAVAILABLE_METRICS_NOTE
         if cov_reported:
-            items.append(
-                "The reported coefficient of variation is an accuracy "
+            repeatability_note += (
+                " The reported coefficient of variation is an accuracy "
                 "error-CoV, not a repeatability CoV."
             )
+        items.append(repeatability_note)
     # Only meaningful once more than one parameter type is present, and it
     # should name the types actually found rather than assume CBF and ATT.
     named = [str(m).strip() for m in map_types if str(m).strip()]
     if len(named) > 1:
         items.append(
             f"{' and '.join((', '.join(named[:-1]), named[-1]))} are reported "
-            "separately and never averaged together, because their units differ."
+            "separately and never averaged together, because their units differ. "
+            "Missing values are reported as Not available and are never converted to zero."
         )
-    known = [str(c).strip() for c in challenges if str(c).strip()]
-    if known:
+    if known and not reference_available:
         items.append(
             f"No official overall {'/'.join(known)} score has been defined; "
             "no pass/fail scientific threshold is applied."
         )
-    items.append(
-        "Missing values are reported as Not available and are never "
-        "converted to zero."
-    )
+    if len(named) <= 1:
+        items.append(
+            "Missing values are reported as Not available and are never "
+            "converted to zero."
+        )
     return items
 
 
@@ -819,18 +835,22 @@ def _build_report_model(
     inf_count = sum(int(af.get("inf_count") or 0) for af in fields)
     map_count = sum(int(af.get("map_count") or 0) for af in fields)
 
-    map_mean_parts = []
+    map_mean_items: dict[str, str] = {}
     for display in _configured_map_displays():
         value = _mean(_means_by_map_type(s, display) for s in summaries)
         if value is not None:
-            map_mean_parts.append(f"{display}: {_fmt(value)}")
-    map_means = "; ".join(map_mean_parts) if map_mean_parts else "Not available"
+            map_mean_items[f"Mean {display}"] = _fmt(value)
     cov = _mean(af.get("mean_coefficient_of_variation") for af in fields)
     reference_available = any(_reference_available(af) for af in fields)
     reference_status = "Available" if reference_available else "Not available"
     rmse = _mean(af.get("reference_mean_rmse") for af in fields if _reference_available(af))
     mae = _mean(af.get("reference_mean_mae") for af in fields if _reference_available(af))
     bias = _mean(af.get("reference_mean_bias") for af in fields if _reference_available(af))
+    roi_model = _roi_descriptive_model(summaries)
+    prototype_model = _prototype_analysis_model(summaries)
+    roi_available = bool(roi_model.get("roi_descriptive_rows"))
+    grouped_available = bool(prototype_model.get("grouped_roi_rows"))
+    rss_available = bool(prototype_model.get("dce_rss_rows"))
 
     # Challenge scoping: never combine RMSE/MAE/Bias/CoV across challenges.
     challenges = sorted({
@@ -844,21 +864,25 @@ def _build_report_model(
     )
     is_mixed_challenge = len(challenges) > 1
 
-    def _pdf_reference_agg(ch: str) -> dict:
-        sub = [
-            _analysis_fields(s) for s in summaries
-            if str(s.get("challenge_type") or "").strip().upper() == ch
+    # Keep the complete challenge-scoped aggregates in the shared model so
+    # interactive/structured formats can label them explicitly.  The compact
+    # PDF deliberately renders only a pointer for mixed batches because map
+    # units must never be pooled across challenges.
+    reference_metrics_by_challenge: dict[str, dict[str, str]] = {}
+    for challenge in challenges:
+        scoped_fields = [
+            af for summary, af in zip(summaries, fields)
+            if str(summary.get("challenge_type") or "").strip().upper() == challenge
+            and _reference_available(af)
         ]
-        ref_sub = [af for af in sub if _reference_available(af)]
-        return {
-            "available": bool(ref_sub),
-            "rmse": _mean(af.get("reference_mean_rmse") for af in ref_sub),
-            "mae": _mean(af.get("reference_mean_mae") for af in ref_sub),
-            "bias": _mean(af.get("reference_mean_bias") for af in ref_sub),
-            "cov": _mean(af.get("mean_coefficient_of_variation") for af in sub),
+        def _scoped_metric(key: str) -> str:
+            value = _mean(af.get(key) for af in scoped_fields)
+            return _fmt(value) if value is not None else "Not available"
+        reference_metrics_by_challenge[challenge] = {
+            "RMSE": _scoped_metric("reference_mean_rmse"),
+            "MAE": _scoped_metric("reference_mean_mae"),
+            "Bias": _scoped_metric("reference_mean_bias"),
         }
-
-    per_challenge_reference = {ch: _pdf_reference_agg(ch) for ch in challenges}
 
     def _reference_metric_items() -> dict:
         if not is_mixed_challenge:
@@ -868,17 +892,12 @@ def _build_report_model(
                 "Bias": _fmt(bias) if reference_available else "Not available",
                 "Spatial CoV": _fmt(cov),
             }
-        # The "grouped by challenge" caveat is a sentence, not a measure, and
-        # the leader paragraph already states it; it no longer occupies a row.
-        out = {}
-        for ch in challenges:
-            agg = per_challenge_reference[ch]
-            avail = agg["available"]
-            out[f"{ch} RMSE"] = _fmt(agg["rmse"]) if avail else "Not available"
-            out[f"{ch} MAE"] = _fmt(agg["mae"]) if avail else "Not available"
-            out[f"{ch} Bias"] = _fmt(agg["bias"]) if avail else "Not available"
-            out[f"{ch} Spatial CoV"] = _fmt(agg["cov"])
-        return out
+        # A compact overview must not become a second results appendix. Mixed
+        # challenges use different units, so the complete per-challenge values
+        # stay in the expandable HTML and structured exports.
+        return {
+            "Reference metrics": "Reported separately by challenge in HTML/JSON"
+        }
     execution_statuses = sorted({
         _status_text(s.get("exec_status"))
         for s in summaries
@@ -888,7 +907,107 @@ def _build_report_model(
     validation_status = "Unable to continue" if errors else ("Needs review" if warnings else "Complete")
     qc_status = "QC complete" if map_count and not errors else ("Unable to continue" if errors else "Not available")
     export_readiness = "Ready with limitations" if errors or warnings or not reference_available else "Ready"
+
+    modes = {
+        str(s.get("mode") or "").strip().lower()
+        for s in summaries if str(s.get("mode") or "").strip()
+    }
+    if not modes and all(str(s.get("exec_status") or "").lower() == "skipped_result_maps"
+                         for s in summaries):
+        modes = {"result_only"}
+    mode_labels = {
+        "result_only": "Result maps provided",
+        "result_validation": "Result maps provided",
+        "reproducible": "Reproducible code",
+        "reproducible_execution": "Reproducible code",
+    }
+    submission_type = (
+        next(iter({mode_labels.get(mode, mode.replace("_", " ").title()) for mode in modes}))
+        if len(modes) == 1 else
+        "Mixed submission types" if modes else "Not recorded"
+    )
+    execution_review_status = (
+        "Skipped - result maps provided"
+        if execution_statuses == ["Execution not required"] else
+        execution_status
+    )
+    validation_review_status = (
+        "Failed" if errors else "Passed with review items" if warnings else "Passed"
+    )
+    qc_review_status = "Available" if map_count else "Not available"
+
+    available_analysis = ["Map QC"] if map_count else []
+    if roi_available:
+        available_analysis.append("ROI statistics")
+    if reference_available:
+        available_analysis.append("reference comparison")
+    if grouped_available:
+        available_analysis.append("grouped descriptive analysis")
+    if rss_available:
+        available_analysis.append("signal RSS")
+    analysis_finding = (
+        ", ".join(available_analysis) + "."
+        if available_analysis else "No map analysis was available."
+    )
+    if not reference_available and map_count:
+        analysis_finding += " No compatible reference was provided."
+    analysis_finding += " Official OSIPI ranking is not configured."
+
+    reviewer_summary = [
+        ["Result", (
+            "Submission cannot complete review until blocking errors are resolved."
+            if errors else
+            "Structural validation passed; review the warnings before sharing."
+            if warnings else
+            "Submission passed structural validation."
+        )],
+        ["Maps", (
+            f"{_detected_map_types(fields)} available ({map_count} total)."
+            if map_count else "No readable parameter maps were available."
+        )],
+        ["Analysis", analysis_finding],
+        ["Review items", (
+            f"{errors} blocking error{'s' if errors != 1 else ''}; "
+            f"{warnings} warning{'s' if warnings != 1 else ''}."
+            if errors or warnings else "None."
+        )],
+    ]
+
+    main_map_metric_rows: list[list[str]] = []
+    for idx, summary in enumerate(summaries, start=1):
+        af = _analysis_fields(summary)
+        reference_rows = af.get("reference_metric_rows") or []
+        analysis = summary.get("nifti_analysis")
+        analysis = analysis if isinstance(analysis, Mapping) else {}
+        maps = analysis.get("maps")
+        maps = maps if isinstance(maps, list) else []
+        for item in maps:
+            if not isinstance(item, Mapping):
+                continue
+            map_type = str(item.get("detected_map_type") or item.get("parameter_label") or "Unknown")
+            stats = item.get("stats") if isinstance(item.get("stats"), Mapping) else {}
+            whole = next((
+                row for row in reference_rows
+                if isinstance(row, Mapping)
+                and str(row.get("detected_map_type") or "").lower() == map_type.lower()
+                and str(row.get("scope") or "").lower() in {"whole image", "whole map", "whole"}
+            ), None)
+            row = []
+            if len(summaries) > 1:
+                row.append(_submission_label(summary, idx, blinded=blinded))
+            row.extend([
+                map_type,
+                str(item.get("units") or "Not provided"),
+                _pct(stats.get("finite_percent")),
+                _fmt(stats.get("mean")),
+                _fmt(whole.get("rmse") if whole else None),
+                _fmt(whole.get("mae") if whole else None),
+                _fmt(whole.get("bias") if whole else None),
+                _fmt(whole.get("correlation") if whole else None),
+            ])
+            main_map_metric_rows.append(row)
     issues: list[list[str]] = []
+    seen_issues: set[tuple[str, str, str, str, str]] = set()
     for idx, s in enumerate(summaries, start=1):
         label = _submission_label(s, idx, blinded=blinded)
         for severity, key in (("Blocking error", "errors"), ("Needs review", "warnings")):
@@ -900,13 +1019,17 @@ def _build_report_model(
                 else:
                     message = str(msg)
                     affected = "Not specified"
-                issues.append([
+                row = [
                     severity,
                     label,
                     message,
                     affected,
                     "Fix and validate again." if severity == "Blocking error" else "Review before sharing.",
-                ])
+                ]
+                signature = tuple(row)
+                if signature not in seen_issues:
+                    seen_issues.add(signature)
+                    issues.append(row)
 
     rows = []
     for idx, s in enumerate(summaries, start=1):
@@ -932,18 +1055,15 @@ def _build_report_model(
         ])
         rows.append(row)
 
-    # Leader paragraph for the PDF: the same facts as the old bullet list,
-    # set as prose so the report opens the way a paper opens.
     lead_lines = [
-        f"This report covers {len(summaries)} "
-        f"submission{'s' if len(summaries) != 1 else ''} comprising {map_count} "
-        f"parameter map{'s' if map_count != 1 else ''}"
+        f"{len(summaries)} submission{'s' if len(summaries) != 1 else ''}; "
+        f"{map_count} readable parameter map{'s' if map_count != 1 else ''}"
         + (f" across {', '.join(challenges)}." if challenges else "."),
     ]
     if errors:
         lead_lines.append(
             f"{errors} blocking error{'s' if errors != 1 else ''} prevented "
-            "completion; affected submissions are listed in Table 4."
+            "completion; affected submissions are listed under Items requiring review."
         )
     elif warnings:
         lead_lines.append(
@@ -953,7 +1073,7 @@ def _build_report_model(
     else:
         lead_lines.append("No blocking errors or warnings were recorded.")
     lead_lines.append(
-        "Reference maps were available and reference metrics are reported."
+        "Compatible reference maps were available; comparison metrics are reported."
         if reference_available else REFERENCE_UNAVAILABLE_NOTE
     )
     if is_mixed_challenge:
@@ -962,41 +1082,24 @@ def _build_report_model(
             "reported per challenge; no cross-challenge totals are computed."
         )
 
-    # Methods: what was actually done to this batch, in prose. A reader has
-    # to be able to tell what "bias" here means and what it was measured
-    # against before the numbers mean anything.
     compared = sum(1 for af in fields if _reference_available(af))
     methods_lines = [
-        "Each submission was checked for readable NIfTI volumes and "
-        "summarised by voxel-level statistics: the proportion of finite "
-        "voxels, counts of NaN and infinite values, and the proportion of "
-        "negative voxels."
+        "Readable NIfTI maps were summarised using finite-voxel, NaN/Inf, "
+        "negative-voxel, and map-level descriptive checks."
     ]
     if reference_available:
         methods_lines.append(
-            f"Reference maps were available for {compared} of "
-            f"{len(summaries)} submission{'s' if len(summaries) != 1 else ''}. "
-            "For those, each submitted map was compared against its reference "
-            "over the whole image and over each supplied region of interest. "
-            "Bias is the mean of submitted minus reference; MAE and RMSE are "
-            "the mean absolute and root-mean-square voxelwise errors; the "
-            "coefficient of variation is the standard deviation of that error "
-            "divided by the reference mean."
-        )
-    else:
-        methods_lines.append(
-            "No matching reference maps were available, so no agreement "
-            "metrics were computed and only quality-control statistics are "
-            "reported below."
+            f"Reference comparisons were available for {compared} of "
+            f"{len(summaries)} submission{'s' if len(summaries) != 1 else ''}: "
+            "bias is submitted minus reference; MAE and RMSE summarise "
+            "voxelwise error, with ROI results reported where masks match."
         )
     methods_lines.append(
-        "All metrics carry the units of the parameter they describe and are "
-        "never pooled across parameters or challenges."
-    )
-    methods_lines.append(
-        "Team and contact details were withheld from this report."
+        "Values retain their configured map units and are not pooled across "
+        "parameters or challenges. Team and contact details were withheld."
         if blinded else
-        "This is an unblinded report and includes team and contact details."
+        "Values retain their configured map units and are not pooled across "
+        "parameters or challenges. This organiser report includes identity fields."
     )
 
     summary_lines = [
@@ -1021,12 +1124,13 @@ def _build_report_model(
 
     notes = []
     if warnings:
-        notes.append("Warnings indicate files or metadata that may need review but did not prevent QC export.")
-    if not notes:
-        notes.append("No additional limitations were reported for this export.")
+        notes.append(
+            "Warnings indicate files or metadata that may need review but did "
+            "not prevent report export."
+        )
 
     return {
-        "title": "OSIPI Perfusion Pipeline Report",
+        "title": "OSIPI Submission Review Report",
         "session_name": _summary_title(summaries, tag, blinded=blinded),
         "challenge_type": _challenge_text(summaries),
         "generated": generated.strftime("%Y-%m-%d %H:%M UTC"),
@@ -1076,8 +1180,41 @@ def _build_report_model(
         # ROI descriptive rows, formatted once here. HTML and PDF both render
         # these exact rows in this exact order, neither reformats, refilters,
         # or recomputes, which is what kept the two formats in step before.
-        **_roi_descriptive_model(summaries),
-        **_prototype_analysis_model(summaries),
+        **roi_model,
+        **prototype_model,
+        "analysis_availability": {
+            "qc_and_previews": bool(map_count),
+            "roi_statistics": roi_available,
+            "reference_comparison": reference_available,
+            "grouped_descriptive": grouped_available,
+            "signal_rss": rss_available,
+            "provider_analysis": any(
+                bool((s.get("score_result") or s.get("scoring_result") or {}).get("metrics"))
+                for s in summaries
+            ),
+            "official_ranking": False,
+        },
+        "submission_type": submission_type,
+        "reviewer_summary": reviewer_summary,
+        "review_statuses": {
+            "Validation": validation_review_status,
+            "Execution": execution_review_status,
+            "QC": qc_review_status,
+            "Reference comparison": reference_status,
+        },
+        "executive_metrics": {
+            "Maps": map_count,
+            "Map types": _detected_map_types(fields),
+            "Finite voxels": _pct(finite),
+            "NaN / Inf": f"{nan_count} / {inf_count}",
+            "Negative voxels": _pct(negative),
+            "Reference": reference_status,
+        },
+        "main_map_metric_headers": (
+            (["Submission"] if len(summaries) > 1 else [])
+            + ["Map", "Units", "Finite", "Mean", "RMSE", "MAE", "Bias", "Corr."]
+        ),
+        "main_map_metric_rows": main_map_metric_rows,
         "agreement_points": agreement_points(summaries, blinded=blinded),
         "map_units": {
             mt: _map_units(summaries, mt)
@@ -1111,7 +1248,10 @@ def _build_report_model(
             "Finite voxels": _pct(finite),
             "NaN / Inf": f"{nan_count} / {inf_count}",
             "Negative voxels": _pct(negative),
-            "Map means": ("Reported per challenge" if is_mixed_challenge else map_means),
+            **(
+                {"Map means": "Reported per challenge"}
+                if is_mixed_challenge else map_mean_items
+            ),
         },
         # "Reference comparisons" was a second field carrying the same
         # available/not-available value as "Reference status"; dropped.
@@ -1120,6 +1260,7 @@ def _build_report_model(
             **_reference_metric_items(),
         },
         "reference_status": reference_status,
+        "reference_metrics_by_challenge": reference_metrics_by_challenge,
         "notes": notes,
         "issues": issues,
         "limitations": build_limitations(
@@ -1291,9 +1432,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     PAGE_W, PAGE_H = letter
     MARGIN = 0.75 * inch
     CONTENT_W = PAGE_W - 2 * MARGIN
-    # Kept as a name because the two formerly landscape tables still refer to
-    # their own measure. It is now the same measure as everything else.
-    WIDE_CONTENT_W = CONTENT_W
     # Must clear the whole canvas-drawn masthead: 0.50in top gap + the
     # lockup height + 0.13in to the rule + 0.58in down to the deck
     # baseline, plus descenders and a gap before the leader paragraph.
@@ -1311,11 +1449,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     body_style = ParagraphStyle(
         "OsipiBody", parent=styles["BodyText"],
         fontName="Helvetica", fontSize=8.5, leading=11.5, textColor=C["ink"],
-    )
-    lead_style = ParagraphStyle(
-        "OsipiLead", parent=body_style,
-        fontName="Times-Roman", fontSize=10.5, leading=14.5,
-        textColor=C["ink_soft"], spaceAfter=0,
     )
     # Section headings: letterspaced small caps over a hairline. The rule is
     # drawn by the wrapper table in section(), not by the paragraph.
@@ -1506,6 +1639,42 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ]))
         return table
 
+    def paired_kv_table(items: Mapping[str, Any], width: float = 6.4 * inch) -> Table:
+        """Compact two-pair key/value table for short availability metadata.
+
+        The earlier one-item-per-row layout stranded half a batch report on
+        its own page. Pairing related statuses keeps all values readable while
+        cutting the table height roughly in half.
+        """
+        pairs = list(items.items())
+        rows = []
+        for index in range(0, len(pairs), 2):
+            left = pairs[index]
+            right = pairs[index + 1] if index + 1 < len(pairs) else ("", "")
+            rows.append([
+                para(left[0], table_cell_style),
+                para(left[1], table_cell_right),
+                para(right[0], table_cell_style),
+                para(right[1], table_cell_right),
+            ])
+        table = Table(
+            rows,
+            colWidths=[width * 0.27, width * 0.23, width * 0.27, width * 0.23],
+            hAlign="LEFT",
+        )
+        table.setStyle(TableStyle(_BASE_TABLE + [
+            ("TEXTCOLOR", (0, 0), (0, -1), C["muted"]),
+            ("TEXTCOLOR", (2, 0), (2, -1), C["muted"]),
+            ("LINEABOVE", (0, 0), (-1, 0), 0.7, C["rule"]),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.3, C["faint"]),
+            ("LINEBELOW", (0, -1), (-1, -1), 0.7, C["rule"]),
+            ("LINEBEFORE", (2, 0), (2, -1), 0.3, C["faint"]),
+            ("LEFTPADDING", (2, 0), (2, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ]))
+        return table
+
     def two_up(left, right, ratio: float = 0.5, gap: float = 0.22 * inch) -> Table:
         """Place two flowables side by side.
 
@@ -1658,7 +1827,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         # Title block hangs below the rule pair.
         canvas.setFillColor(C["ink"])
         canvas.setFont("Times-Roman", 26)
-        canvas.drawString(MARGIN, rule_y - 0.40 * inch, "Evaluation report")
+        canvas.drawString(MARGIN, rule_y - 0.40 * inch, "Submission review report")
         canvas.setFillColor(C["muted"])
         canvas.setFont("Times-Italic", 10)
         deck = str(model["session_name"])
@@ -1679,7 +1848,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         end = _spaced(canvas, x, y + 0.12 * inch, "OSIPI", PDF_MONO_BOLD, 8.5, 1.8)
         canvas.setFillColor(C["muted"])
         canvas.setFont("Times-Italic", 8)
-        canvas.drawString(end + 0.10 * inch, y + 0.12 * inch, "Evaluation report")
+        canvas.drawString(end + 0.10 * inch, y + 0.12 * inch, "Submission review report")
         canvas.setFont("Helvetica", 7.5)
         canvas.drawRightString(page_w - MARGIN, y + 0.10 * inch,
                                str(model["session_name"]))
@@ -1710,6 +1879,24 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         def _draw_footer(self, total: int):
             self.saveState()
             page_w = self._pagesize[0]
+            provenance = model.get("analysis_provenance") or {}
+
+            def _compact_provenance(value: Any) -> str:
+                text = str(value or "not configured")
+                parts = [part.strip() for part in text.split(";") if part.strip()]
+                scoped_values = {
+                    part.split(":", 1)[1].strip()
+                    for part in parts if ":" in part
+                }
+                if parts and len(scoped_values) == 1 and len(scoped_values) == len({
+                    part.split(":", 1)[1].strip() for part in parts if ":" in part
+                }):
+                    # ASL/DCE/DSC often share one version or one unconfigured
+                    # state. Printing that common value once avoids a footer
+                    # longer than the page measure.
+                    return next(iter(scoped_values))
+                return text if len(text) <= 62 else "per challenge; full details in HTML/JSON"
+
             self.setStrokeColor(C["hairline"])
             self.setLineWidth(0.5)
             self.line(MARGIN, FOOTER_H, page_w - MARGIN, FOOTER_H)
@@ -1723,6 +1910,14 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             )
             self.drawRightString(page_w - MARGIN, FOOTER_H - 11,
                                  f"{self._pageNumber} / {total}")
+            self.setFont("Helvetica", 6.2)
+            self.drawString(
+                MARGIN, FOOTER_H - 20,
+                "ANALYSIS PROVENANCE  ·  "
+                f"Scoring package: {_compact_provenance(provenance.get('scoring_package'))}  ·  "
+                f"Reference dataset: {_compact_provenance(provenance.get('reference_dataset'))}  ·  "
+                f"Analysis date: {provenance.get('analysis_date', 'not available')}",
+            )
             self.restoreState()
 
     buffer = io.BytesIO()
@@ -1731,7 +1926,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         leftMargin=MARGIN, rightMargin=MARGIN,
         topMargin=MARGIN, bottomMargin=FOOTER_H + 0.12 * inch,
         title=str(model["title"]), author="OSIPI Perfusion Pipeline",
-        subject=f"Evaluation report, {model['session_name']}",
+        subject=f"Submission review report, {model['session_name']}",
         # Deliberately uncompressed. Compression saves ~25% but hides page
         # text inside Flate streams, and the blinded-report guarantee is
         # verified by grepping the PDF bytes for team names and folder paths.
@@ -1771,89 +1966,53 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     # ── Story ─────────────────────────────────────────────────────────────
     story: list = [NextPageTemplate("later")]
 
-    def constrained(flowable, width: float) -> Table:
-        """Hold a flowable to a set measure, capping the line at about 80
-        characters."""
-        table = Table([[flowable]], colWidths=[width], hAlign="LEFT")
-        table.setStyle(TableStyle([
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]))
-        return table
+    story.append(section("Reviewer summary"))
+    story.append(kv_table(
+        {
+            "Submission": model["session_name"],
+            "Challenge": model["challenge_type"],
+            "Submission type": model["submission_type"],
+        },
+        width=CONTENT_W,
+    ))
+    story.append(Spacer(1, 0.10 * inch))
+    story.append(kv_table(
+        {label: value for label, value in model["reviewer_summary"]},
+        width=CONTENT_W,
+    ))
 
-    # Leader paragraph: the outcome in sentences, the way a paper states it,
-    # rather than as a row of status tiles.
-    # ── Summary ───────────────────────────────────────────────────────────
-    # The status band and the key-figures band both went: the band repeated
-    # the results table, and the four statuses restated what this paragraph
-    # already says in sentences.
-    story.append(section("Summary"))
-    story.append(constrained(
-        Paragraph(esc(" ".join(model["lead_lines"])), lead_style), CONTENT_W))
+    story.append(section("Status"))
+    story.append(figures(model["review_statuses"]))
 
-    story.append(section("Methods"))
-    for line in model["methods_lines"]:
-        story.append(constrained(Paragraph(esc(line), lead_style), CONTENT_W))
-        story.append(Spacer(1, 0.06 * inch))
+    story.append(section("Key metrics"))
+    story.append(paired_kv_table(model["executive_metrics"], width=CONTENT_W))
 
-    # Emitted even when empty, so the HTML and the PDF number their tables the
-    # same way.
-    contents = model.get("submission_contents") or [
-        ["Not available for this submission.", "", "", "", "", ""]]
-    story.append(section("Submission contents"))
-    story.append(data_table(model["submission_contents_headers"], contents))
-    story.append(caption(CONTENTS_CAPTION))
-
+    # The printable report is intentionally executive: results begin on page
+    # two, while richer figures and per-file details remain in HTML/JSON.
+    story.append(PageBreak())
     story.append(section("Results"))
-    story.append(kv_table({**model["qc"], **model["scoring"]},
-                          width=CONTENT_W,
-                          tone_keys=["Reference status"]))
-    story.append(caption(
-        "Table 2. Aggregate quality-control statistics and reference agreement. "
-        + CAPTION_AGGREGATE_TAIL))
+    map_rows = model.get("main_map_metric_rows") or []
+    if map_rows:
+        map_headers = model["main_map_metric_headers"]
+        story.append(data_table(
+            map_headers,
+            map_rows,
+            num_cols=[i for i, value in enumerate(map_headers)
+                      if value in {"Finite", "Mean", "RMSE", "MAE", "Bias", "Corr."}],
+        ))
+    else:
+        story.append(Paragraph("No readable map metrics were available.", note_style))
 
-    # ── Figures ───────────────────────────────────────────────────────────
-    # One Bland-Altman per map type. RMSE, MAE and bias carry the units of the
-    # map they describe, so ASL and DCE cannot share an axis.
-    fig_w = (CONTENT_W - 0.30 * inch) / 2
-    blocks: list[list] = []
-    for map_type, pts in (model.get("agreement_points") or {}).items():
-        units = (model.get("map_units") or {}).get(map_type, "map units")
-        ba = bland_altman_figure(pts, units=units, width=fig_w)
-        if not ba:
-            continue
-        n = len(blocks) + 1
-        limits = ba.get("limits")
-        interval = (
-            f" Limits of agreement: {_fmt(limits[0], 2)} to "
-            f"{_fmt(limits[1], 2)} {units}." if limits else ""
-        )
-        blocks.append([
-            sub_label(f"Figure {n} · Bland-Altman, {map_type}"),
-            Spacer(1, 4), to_drawing(ba),
-            caption(f"Figure {n}. Agreement between submitted and reference "
-                    f"{map_type}. Each point is one region of one submission; "
-                    "the solid line is zero bias and the dashed lines are the "
-                    "pooled 95% limits of agreement." + interval),
-        ])
-    if blocks:
-        # Two across; a trailing odd figure pairs with an empty cell. Each
-        # row is a nested table and so cannot split, so the heading is bound
-        # to the first row, otherwise it strands at the foot of a page with
-        # its figures overleaf.
-        rows_out = [
-            two_up(pair[0], pair[1] if len(pair) > 1 else [Spacer(1, 1)])
-            for pair in (blocks[i:i + 2] for i in range(0, len(blocks), 2))
-        ]
-        story.append(KeepTogether([section("Figures"), rows_out[0]]))
-        for row in rows_out[1:]:
-            # A caption's spaceAfter is absorbed by its table cell, so without
-            # an explicit gap the next row's label butts against it.
-            story.append(Spacer(1, 0.20 * inch))
-            story.append(row)
+    roi_rows = model.get("roi_descriptive_rows") or []
+    if roi_rows:
+        # The HTML/CSV retain every identifier and status column. The PDF
+        # keeps the reviewer-facing subset that fits comfortably on a page.
+        compact_roi_headers = ["Dataset", "Participant", "ROI", "Median", "SD", "CoV", "Voxels"]
+        compact_roi_rows = [[row[i] for i in (0, 1, 4, 5, 6, 7, 8)] for row in roi_rows]
+        story.append(section("ROI results"))
+        story.append(data_table(
+            compact_roi_headers, compact_roi_rows, num_cols=[3, 4, 5, 6]
+        ))
 
     # ── Submitted outputs & reference comparison, per submission and per map ──
     ref_cols = ["ROI", "RMSE", "MAE", "Bias", "Error CoV", "Corr", "Valid vox", "Excl vox"]
@@ -1904,7 +2063,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 story.append(properties)
             if m.get("difference_map"):
                 story.append(Paragraph(
-                    "Difference map generated (submitted − reference), "
+                    "Difference map generated (submitted - reference), "
                     "preserving the source affine.", note_style))
             story.append(Spacer(1, 0.1 * inch))
 
@@ -1928,46 +2087,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ]))
         story.append(preview_table)
 
-    # The two widest tables start here on a page of their own.
-    story.append(NextPageTemplate("wide"))
-    story.append(PageBreak())
-    story.append(section("Results by submission", WIDE_CONTENT_W))
-    headers = list(model["table_headers"])
-    # Column positions shift with blinding (Team/Contact are dropped), so
-    # locate them by name rather than hard-coding indices.
-    ref_col = headers.index("Reference status") if "Reference status" in headers else None
-    numeric_names = {"Maps", "Finite voxels", "NaN / Inf", "Negative voxels",
-                     "RMSE", "MAE", "Bias"}
-    num_cols = [i for i, h in enumerate(headers)
-                if h in numeric_names or str(h).startswith("Mean ")]
-    story.append(data_table(headers, model["rows"], tone_col=ref_col,
-                            num_cols=num_cols))
-    story.append(caption(
-        "Table 3. Per-submission quality control and reference agreement. "
-        "Measures that could not be computed are reported as Not available "
-        "and are never converted to zero."))
-
-    # Permanently numbered Table 3, present whether or not rows exist, so a
-    # cross-reference means the same thing in both formats.
-    story.append(section("ROI Ktrans statistics"))
-    roi_rows = model.get("roi_descriptive_rows") or []
-    roi_summary = model.get("roi_descriptive_summary") or {}
-    story.append(data_table(
-        model.get("roi_descriptive_headers") or list(ROI_TABLE_HEADERS),
-        roi_rows or [["—"] * len(ROI_TABLE_HEADERS)],
-        num_cols=[5, 6, 7, 8],
-    ))
-    if roi_rows:
-        story.append(caption(
-            f"Table 4. Within-ROI Ktrans statistics: "
-            f"{roi_summary.get('available_rows', 0)} of "
-            f"{roi_summary.get('total_rows', 0)} scan-ROI combinations "
-            f"available. {ROI_METHOD_TEXT}"))
-    else:
-        story.append(caption(
-            "Table 4. Within-ROI Ktrans statistics. None were available for "
-            f"this submission. {ROI_METHOD_TEXT}"))
-
     grouped_rows = model.get("grouped_roi_rows") or []
     rss_rows = model.get("dce_rss_rows") or []
     if grouped_rows or rss_rows:
@@ -1987,51 +2106,34 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ))
         story.append(caption(
             "Residual Sum of Squares (RSS): raw voxelwise sum across time of "
-            "(measured − modelled)², summarized by region. This is not deviance or official scoring."
+            "(measured - modelled)^2, summarized by region. This is not deviance or official scoring."
         ))
 
-    story.append(NextPageTemplate("later"))
-    story.append(PageBreak())
-    # Always a captioned table, even when empty. Dropping it on a clean run
-    # made the PDF number its tables 1-2 while the HTML numbered 1-3, so a
-    # caption reference meant different things in the two formats.
-    story.append(section("Errors and warnings"))
-    story.append(data_table(
-        ["Severity", "Submission", "Message", "Affected file", "Recommended action"],
-        model["issues"][:24] or [["None recorded", "—", "—", "—", "—"]],
-        col_widths=[0.85 * inch, 1.05 * inch, CONTENT_W - 4.35 * inch,
-                    1.05 * inch, 1.40 * inch],
-        tone_col=0,
-    ))
-    omitted = (
-        f" {len(model['issues']) - 24} further issues are omitted here; see "
-        "the HTML report or CSV export for the full list."
-        if len(model["issues"]) > 24 else ""
-    )
-    story.append(caption(
-        "Table 5. Errors and warnings raised during validation, with the "
-        "action required before the submission can be shared." + omitted))
+    if model["issues"]:
+        story.append(PageBreak())
+        story.append(section("Issues and recommendations"))
+        pdf_issues = sorted(
+            model["issues"],
+            key=lambda row: (0 if row and row[0] == "Blocking error" else 1,
+                             row[1] if len(row) > 1 else ""),
+        )[:3]
+        story.append(data_table(
+            ["Severity", "Submission", "Message", "Affected file", "Recommended action"],
+            pdf_issues,
+            col_widths=[0.85 * inch, 1.05 * inch, CONTENT_W - 4.35 * inch,
+                        1.05 * inch, 1.40 * inch],
+            tone_col=0,
+        ))
+        if len(model["issues"]) > len(pdf_issues):
+            story.append(caption(
+                f"{len(model['issues']) - len(pdf_issues)} further item(s) are available in the HTML report."
+            ))
 
-    story.append(section("Limitations"))
+    story.append(section("Notes and limitations"))
     story.extend(
-        Paragraph(esc(item), bullet_style, bulletText="—")
-        for item in list(model["notes"]) + list(model["limitations"])
+        Paragraph(esc(item), bullet_style, bulletText="-")
+        for item in (list(model["notes"]) + list(model["limitations"]))[:4]
     )
-
-    story.append(section("Analysis provenance"))
-    provenance = model.get("analysis_provenance") or {}
-    provenance_labels = {
-        "challenge": "Challenge",
-        "challenge_configuration": "Challenge configuration",
-        "scoring_package": "Scoring package",
-        "pipeline_version": "Pipeline version",
-        "reference_dataset": "Reference dataset",
-        "analysis_date": "Analysis date",
-    }
-    story.append(kv_table({
-        provenance_labels[key]: provenance.get(key, "not available")
-        for key in provenance_labels
-    }, width=CONTENT_W))
 
     doc.build(story, canvasmaker=NumberedCanvas)
     return buffer.getvalue()

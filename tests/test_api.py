@@ -506,7 +506,8 @@ def test_config_only_pet_perfusion_challenge_end_to_end(
     html_report = client.get(f"/api/report?submission_id={sid}&blinded=true")
     assert html_report.status_code == 200, html_report.text
     assert "PET_PERFUSION" in html_report.text
-    assert "Mean Flow" in html_report.text
+    assert ">Flow<" in html_report.text
+    assert ">Mean<" in html_report.text
 
     pdf_report = client.get(f"/api/export/report/pdf?submission_id={sid}&blinded=true")
     assert pdf_report.status_code == 200, pdf_report.text
@@ -557,6 +558,8 @@ def test_rankings_empty(client: TestClient) -> None:
     data = r.json()
     assert data["count"] == 0
     assert data["rankings"] == []
+    assert data["official_ranking"] is False
+    assert data["ordering_basis"] == "validation review priority"
 
 
 def test_outputs_empty(client: TestClient) -> None:
@@ -1943,7 +1946,7 @@ def test_export_combined_csv_is_researcher_facing(client: TestClient) -> None:
     assert row["blinded_submission_id"] == "submission_001"
     assert row["map_types"] == "Ktrans"
     assert row["reference_status"] == "Not available"
-    assert "Reference maps were not available" in row["notes"]
+    assert "Compatible reference maps were not available" in row["notes"]
 
 
 def test_export_combined_blinded_strips_pii(client: TestClient) -> None:
@@ -2004,7 +2007,7 @@ def test_export_combined_json_blinded_summary(client: TestClient) -> None:
 
 
 def test_report_html_generated(client: TestClient) -> None:
-    """/api/report returns a self-contained HTML evaluation report."""
+    """/api/report returns a self-contained HTML submission review report."""
     data, fname = _make_result_only_zip("report_test.zip")
     sid = _upload_and_get_id(client, data, fname)
     client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "result_only"})
@@ -2015,14 +2018,15 @@ def test_report_html_generated(client: TestClient) -> None:
     # headings were renamed when the report moved to a journal layout, and
     # tests that pin exact section titles break on every restyle.
     assert "OSIPI" in r.text
-    assert "Evaluation report" in r.text
+    assert "Submission review report" in r.text
     # Generic QC bar charts were removed to keep the report table-focused.
     assert "Visual Summary" not in r.text
-    # Paper structure: summary, methods, results, limitations.
-    assert "Summary" in r.text
-    assert "Methods" in r.text
-    assert "Results" in r.text
-    assert "Limitations" in r.text
+    # Reviewer structure: summary and results open, detail sections collapsed.
+    assert "Submission Summary" in r.text
+    assert "Key Results" in r.text
+    assert "Reference Comparison" in r.text
+    assert "Issues &amp; Limitations" in r.text
+    assert r.text.count('<details class="report-section" open>') == 2
     # The submissions table was folded into the results table; its columns
     # must still be reachable somewhere in the document.
     assert "Challenge" in r.text and "Map types" in r.text
@@ -2030,7 +2034,6 @@ def test_report_html_generated(client: TestClient) -> None:
     # gallery were removed from the printable report to reduce clutter.
     assert "Scoring Summary" not in r.text
     assert "Parameter Map Previews" not in r.text
-    assert "Errors and warnings" in r.text
     assert "Basic NIfTI QC" in r.text
     assert "not full BIDS validation" in r.text
     # Report metadata: the labels lost their trailing colons when the block
@@ -2040,17 +2043,17 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Map types" in r.text
     assert "Maps" in r.text
     assert "Finite voxels" in r.text
-    assert "Reference status" in r.text
+    assert "Reference comparison" in r.text
     assert "Pipeline version" in r.text and "Configuration version" in r.text
-    assert "Analysis provenance" in r.text
+    assert ">Provenance<" in r.text
     assert "Scoring package" in r.text and "Reference dataset" in r.text
-    assert r.text.count("Reference maps were not available, so this report shows QC metrics only.") == 1
+    assert r.text.count("No compatible reference was provided") == 1
     # Plain printable report: no purple-heavy app/dashboard styling.
     assert "#4c2a86" not in r.text
     assert 'class="cards"' not in r.text
     assert 'class="metrics"' not in r.text
     for forbidden in (
-        "Validation summary", "Execution summary", "Result maps provided",
+        "Validation summary", "Execution summary",
         "<th>Validation</th>", "<th>Execution</th>", "<th>Scoring</th>",
         "Scoring is not configured", "reference_not_available",
     ):
@@ -2120,12 +2123,12 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
         "PDF page text is not extractable; is pageCompression enabled?"
     )
     for expected in (
-        "Evaluation report",
-        "SUMMARY", "METHODS", "RESULTS", "LIMITATIONS", "ANALYSIS PROVENANCE",
+        "Submission review report",
+        "REVIEWER SUMMARY", "STATUS", "KEY METRICS", "RESULTS",
+        "NOTES AND LIMITATIONS", "ANALYSIS PROVENANCE",
         "Pipeline version", "Configuration version",
         "Scoring package", "Reference dataset", "Analysis date",
-        "Finite voxels", "Reference status",
-        "Table 2. Aggregate quality-control",
+        "Finite voxels", "Reference",
     ):
         assert expected in pdf_text
     # The decorative "Small QC Charts" section was removed to reduce noise.
@@ -2134,10 +2137,10 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     # repeated in both the summary and the per-row notes). Matched on a short
     # fragment because ReportLab emits each wrapped line as its own text
     # operator, so the full sentence is never contiguous in the byte stream.
-    assert pdf_text.count("Reference maps were not available") == 1
+    assert pdf_text.count("No compatible reference was provided") == 1
     for forbidden in (
-        "Execution summary", "Validation summary", "Result maps provided",
-        "Ran", "Skipped", "reference_not_available",
+        "Execution summary", "Validation summary",
+        "Ran", "reference_not_available",
     ):
         assert forbidden not in pdf_text
 
@@ -2390,7 +2393,7 @@ def test_wide_csv_and_json_exports_still_compatible(client, tmp_path):
 # PDF / HTML report improvements (versions, per-map sections, voxel counts)
 # ---------------------------------------------------------------------------
 
-def test_html_report_has_versions_permap_and_voxel_counts(client, tmp_path):
+def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_path):
     sid = _asl_with_ref(client, tmp_path)
     _write_reference_mask(tmp_path, "gray_matter.nii.gz", [1, 1, 0, 1])
     client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
@@ -2398,11 +2401,12 @@ def test_html_report_has_versions_permap_and_voxel_counts(client, tmp_path):
     html = client.get(f"/api/report?submission_id={sid}").text
     # versions
     assert "Pipeline version" in html and "Configuration version" in html
-    # per-map submitted-outputs properties
-    assert "Submitted outputs" in html and ">Units<" in html and "Voxel size" in html
-    # reference comparison per map/ROI with valid/excluded voxel counts
-    assert "Reference comparison" in html
-    assert "Valid voxels" in html and "Excluded voxels" in html
+    # concise per-map results (full file geometry remains in JSON/CSV)
+    assert "Key Results" in html and ">Units<" in html and ">Finite<" in html
+    assert "Voxel size" not in html
+    # reference comparison per map/ROI with the useful overlap count
+    assert "Reference Comparison" in html
+    assert "Valid voxels" in html
     assert "<th>ROI</th>" in html
     # unavailable-metric note, CBF and ATT both present
     assert "Repeatability CoV and ICC are unavailable" in html

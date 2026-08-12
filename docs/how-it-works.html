@@ -175,10 +175,14 @@
             assets.</p>
 
           <h3 id="outputs">Export</h3>
-          <p>All output formats are generated from a single result model. The HTML and PDF reports
-            contain the same sections, rows and table numbers. Additional exports are standard
-            blinded CSV and JSON results, an ROI statistics CSV with one row per scan and region,
-            and an explicit unblinded CSV for organiser review.</p>
+          <p>The HTML and PDF reports are rendered from one report model, so their values,
+            availability states, limitations and provenance stay consistent. The PDF is a concise
+            review summary with status and key findings first, results next, and an issues page only
+            when review items exist. The HTML opens its summary and key results by default, while ROI
+            results, reference comparison, additional analysis, issues and provenance stay in
+            expandable sections.
+            Additional exports are blinded CSV and JSON results, an ROI statistics CSV with one row
+            per scan and region, and an explicit unblinded CSV for organiser review.</p>
           <p>A blinded export omits the team name, contact address, submission id and archive name
             from the document body, the file metadata and the download filename.</p>
         </section>
