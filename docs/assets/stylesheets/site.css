@@ -455,6 +455,20 @@ h3:hover .docs-anchor,
   font-size: .95rem;
 }
 
+.docs-disclosure {
+  margin-top: 1.5rem;
+  padding: .9rem 1rem;
+  border: 1px solid var(--docs-border, #dfe3eb);
+  border-radius: .75rem;
+  background: #fafafe;
+}
+
+.docs-disclosure > summary {
+  color: var(--docs-heading, #20243a);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .docs-callout p:last-child { margin-bottom: 0; }
 
 /* Footer */

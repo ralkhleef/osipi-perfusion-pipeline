@@ -56,334 +56,180 @@
 
         <section>
           <h2 id="configuration-manager" data-toc-title="In-app manager">In-app Configuration Manager</h2>
-          <p>Reviewer/admin users can manage DCE, ASL and DSC requirements from
-            <strong>QC &amp; Preview → Reviewer / Admin: Scoring Setup → Challenge Configuration Manager</strong>.
-            The editor covers required and optional maps, expected dimensions, filename aliases,
-            required documents and outputs, participant/repeat/site counts, whether participant
-            code execution is required, the reference-dataset version, and the selected
-            provider-specific scoring package.</p>
-          <p>The safe workflow is <strong>Test Configuration → Preview Changes → Save as New Version → Activate</strong>.
-            Testing and previewing are side-effect free. Saving creates an inactive, immutable local
-            version. Activation re-tests the saved version before atomically replacing active rules;
-            a failure restores the previous YAML and scoring selection. Version history provides the
-            same tested activation path for rollback.</p>
-          <p>The manager also shows local private reference maps, masks and measured signals, plus a
-            challenge capability matrix. Configuration ZIP export includes rules, version metadata,
-            scoring selection and a public manifest when applicable. It excludes private
-            images, masks, measured signals, scoring code and other organiser data. Import saves a new
-            inactive version and never silently activates it.</p>
-          <p>PDF, HTML and JSON results record analysis provenance: challenge, active challenge
-            configuration version, scoring package, pipeline version, reference-dataset version and
-            analysis date. Give each released reference dataset a stable version label so a later
-            reviewer can reproduce which assets were intended without exposing their private paths.</p>
-          <div class="docs-callout"><p><strong>No terminal or YAML editor is required for routine handoff updates.</strong>
-            Direct YAML editing remains supported for developers, and the existing Reload rules button
-            remains available for that route.</p></div>
+          <p>Open <strong>QC &amp; Preview → Reviewer settings → Challenge Configuration Manager</strong>
+            to manage DCE, ASL, or DSC without editing YAML. Each card opens a focused editor for maps,
+            dataset structure, required files, analysis providers, private assets, capabilities, or
+            saved versions.</p>
+
+          <h3>Safe workflow</h3>
+          <ol>
+            <li><strong>Test Configuration</strong> checks the draft without changing the active rules.</li>
+            <li><strong>Preview Changes</strong> shows what is different.</li>
+            <li><strong>Save as New Version</strong> stores an inactive version.</li>
+            <li><strong>Activate</strong> applies that saved version only after it passes another test.</li>
+          </ol>
+
+          <div class="docs-callout">
+            <p>Nothing is activated automatically. If a test or activation fails, the previous active
+              configuration remains unchanged.</p>
+          </div>
+
+          <p>The manager can also show private reference files and export or import configuration ZIPs.
+            Private images, masks, measured signals, and scoring code are excluded from those exports.
+            Reports record the active configuration and analysis versions for reproducibility.</p>
         </section>
 
         <section>
-          <h2 id="validation-rules" data-toc-title="Challenge requirements">1. Changing challenge requirements</h2>
-          <p>Challenge structure is in <code>config/validation_rules.yaml</code>. Required and optional
-            maps, artifacts, dimensions, dataset structure, aliases, and filenames belong there. A
-            new scientific formula belongs in implemented and tested analysis/scoring code or a
-            versioned trusted package, not in YAML. The configuration is read from disk rather
-            than compiled in, and validated on load: an unknown key, a malformed dataset block or a
-            bad regular expression fails immediately rather than being ignored. Editing the file is
-            not the whole job. <a href="#apply-a-change">Apply a change</a> covers how the edit
-            reaches the running application.</p>
+          <h2 id="validation-rules" data-toc-title="Challenge rules">1. Changing challenge requirements</h2>
+          <p>Most routine changes can be made in the Configuration Manager. Developers can edit
+            <code>config/validation_rules.yaml</code> directly when needed.</p>
 
           <div class="docs-table-wrap">
             <table>
-              <thead><tr><th>What changes</th><th>Where</th><th>Key</th></tr></thead>
+              <thead><tr><th>Setting</th><th>What it controls</th></tr></thead>
               <tbody>
-                <tr><td>Required and optional maps</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.required_maps</code>, <code>optional_maps</code></td></tr>
-                <tr><td>Required non-map artifacts</td><td><code>config/validation_rules.yaml</code></td><td><code>required_artifacts</code> and the <code>artifact_types</code> block</td></tr>
-                <tr><td>Expected dataset structure</td><td><code>config/validation_rules.yaml</code></td><td><code>challenges.&lt;id&gt;.datasets</code></td></tr>
-                <tr><td>Map names, labels, units, dimensions</td><td><code>config/validation_rules.yaml</code></td><td>The <code>map_types</code> block</td></tr>
-                <tr><td>Filename identity parsing</td><td><code>config/validation_rules.yaml</code></td><td><code>filename_identity_patterns</code></td></tr>
-                <tr><td>Provider-specific scoring script and metrics</td><td>Built-in legacy provider hook or trusted custom package</td><td>Provider implementation, or <code>manifest.json</code> uploaded through Scoring Setup</td></tr>
-                <tr><td>Reference and mask locations</td><td><code>backend/services/path_config.py</code></td><td>Provider and output directory constants</td></tr>
-                <tr><td>Participant execution command</td><td><code>run_config.json</code> in the submission</td><td><code>command</code>, <code>timeout_seconds</code></td></tr>
+                <tr><td>Maps</td><td>Required and optional maps, dimensions, units, and filename aliases</td></tr>
+                <tr><td>Dataset structure</td><td>Expected participants, repeats, and sites</td></tr>
+                <tr><td>Required artifacts</td><td>Methods documents, modelled signals, and other required files</td></tr>
+                <tr><td>Code execution</td><td>Whether participant code must run or submitted result maps can be used directly</td></tr>
+                <tr><td>Analysis</td><td>Which built-in analyses are enabled and which configured inputs they use</td></tr>
               </tbody>
             </table>
           </div>
 
-          <p>Annotated template: <a href="examples/challenge.example.yaml"><code>docs/examples/challenge.example.yaml</code></a>.</p>
-          <p>Developer template for a new trusted analysis package:
-            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline/tree/main/examples/scoring-package-template"><code>examples/scoring-package-template/</code></a>.</p>
-        </section>
+          <p>A missing required map is a blocking error; a missing optional map is not. The current ASL
+            rules require CBF and ATT. DSC requires CBV, CBF, and MTT.</p>
 
-        <section>
-          <h2 id="dataset-structure" data-toc-title="Dataset structure">Dataset structure</h2>
-          <p>Each dataset declares its expected participants, repeats and sites. Validation counts
-            resolved scan identities against that grid. A <code>null</code> count is not checked,
-            which is how an undecided number is expressed.</p>
+          <p>DCE can produce Ktrans ROI descriptive statistics when compatible masks are available. It
+            can also calculate Residual Sum of Squares (RSS) when matching measured and modelled 4-D
+            signals are present. RSS is descriptive and is not labelled deviance.</p>
 
-          <h3 id="example-c">Example: change expected participant, repeat or site counts</h3>
+          <div class="docs-callout">
+            <p>YAML controls requirements and enables analyses. Scientific formulas stay in tested code
+              or a trusted versioned package.</p>
+          </div>
+
+          <h3 id="example-b">Example: make <code>ve</code> required for DCE</h3>
           <div class="docs-code">
             <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>challenges:
   dce:
-    datasets:
-      synthetic:
-        participants: 4      # was null, now checked
-        repeats: 2
-        sites: 3
-      clinical:
-        participants: 5
-        repeats: 2
-        sites: 1</code></pre>
+    required_maps: [ktrans, ve]
+    optional_maps: [vp, kep]</code></pre>
           </div>
-          <p>That grid expects 24 synthetic scans (4 × 2 × 3) and 10 clinical (5 × 2 × 1). A shortfall
-            is reported as <code>DATASET_COUNT_MISMATCH</code>.</p>
-        </section>
-
-        <section>
-          <h2 id="map-requirements" data-toc-title="Map requirements">Map requirements</h2>
-          <p>A missing required map is a blocking error. An optional map is never reported as missing.
-            Non-map artifacts such as a 4-D modelled signal-time curve or a methods document are
-            declared under <code>artifact_types</code> and required per challenge. Where an artifact declares
-            <code>dimensions</code>, the value is checked against the NIfTI header.</p>
-          <p>The current ASL rules require CBF and ATT. The current DSC rules require CBV, CBF and
-            MTT. Their missing maps are blocking errors, not legacy expected-map warnings.</p>
-          <p>DCE also recognises an optional 4-D <code>measured_st</code> artifact. When one measured
-            and one modelled signal can be matched to the same scan, the pipeline computes raw
-            voxelwise Residual Sum of Squares (RSS) across time and summarizes it for the whole image
-            and compatible ROIs. RSS is descriptive and is not labelled deviance.</p>
-          <p>The challenge's <code>analysis</code> block controls which built-in analyses are enabled
-            and maps their inputs to configured map and artifact ids. Scientific formulas remain in
-            tested Python; changing labels or aliases cannot silently change a calculation.</p>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>analysis:
-  roi_descriptive:
-    enabled: true
-    map_types: [ktrans]
-  signal_rss:
-    enabled: true
-    modelled_artifact: modelled_st
-    measured_artifact: measured_st</code></pre>
-          </div>
-          <p>Enabled analyses must name their map or artifact inputs explicitly; there are no hidden
-            challenge-specific fallback ids. Unknown analysis keys or input ids are rejected.
-            Disabling one analysis does not disable readable-map QC, previews, or other compatible analyses.</p>
-          <p>The DCE <code>grouped_statistics</code> block enables provisional grouping of scan-level
-            ROI medians across participants, repeats and sites. It reports mean, population SD and CoV;
-            exactly two clearly matched repeats or sites also receive a signed difference. These are
-            not formal repeatability, ICC, pass/fail, or ranking results.</p>
-
-          <h3 id="example-b">Example: change <code>ve</code> from optional to required</h3>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>challenges:
-  dce:
-    required_maps:
-      - ktrans
-      - ve             # moved up from optional_maps
-    optional_maps:
-      - vp
-      - kep
-    required_artifacts:
-      - modelled_st    # 4-D, checked against the NIfTI header
-      - methods</code></pre>
-          </div>
-        </section>
-
-        <section>
-          <h2 id="filename-aliases" data-toc-title="Filename aliases">Filename aliases</h2>
-          <p>Filename detection uses the <code>patterns</code> list on each map type. An alias affects
-            detection and labelling only.</p>
-
-          <h3 id="example-a">Example: add another filename alias for Ktrans</h3>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>map_types:
-  ktrans:
-    display: Ktrans
-    label: Volume transfer constant
-    units: min^-1
-    dimensions: 3
-    patterns:
-      - ktrans
-      - k_trans
-      - transfer_constant
-      - ktrans_map        # new alias</code></pre>
-          </div>
-          <p>Add a validation test covering the new alias.</p>
-
-          <p>Challenge type names come from the same file. <code>KNOWN_CHALLENGE_TYPES</code> exists at
-            runtime but is derived from the configuration at startup, not maintained by hand.</p>
+          <p>For more fields and examples, see the
+            <a href="examples/challenge.example.yaml">annotated challenge template</a> and the
+            <a href="configuration.md">developer configuration reference</a>.</p>
         </section>
 
         <section>
           <h2 id="scoring-providers" data-toc-title="Analysis and scoring">2. Adding or updating scoring</h2>
-          <p>Three mechanisms are distinct. Generic reference comparison is part of the pipeline: it
-            compares readable maps with compatible references and can run even when provider scoring
-            mode is <code>none</code>. The built-in legacy TF6.2 provider is a bundled hook for its
-            specific DCE Ktrans assets; it is not an uploaded package. It is offered only for DCE;
-            ASL and DSC do not currently have compatible built-in providers. Trusted custom scoring
-            packages are uploaded ZIPs selected per challenge.</p>
-          <p>Provider mode <code>none</code> disables provider/official scoring, not generic QC,
-            previews, exports, compatible DCE Ktrans ROI descriptive statistics, or compatible
-            generic reference comparisons. Official provider output requires an approved provider
-            and its organiser-owned assets. Official OSIPI challenge ranking is not currently
-            configured.</p>
-
-          <h3 id="package-layout">What a custom package contains</h3>
-          <p>A package is a ZIP holding the manifest and the script, plus any reference data the
-            script needs. <code>manifest.json</code> may sit at the root or one level down, so an
-            archive made by zipping a folder works without repacking.</p>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>Package layout</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>my_scoring_package.zip
-  manifest.json      required
-  scoring.py         the entry point; the name comes from manifest.entry_point
-  requirements.txt   optional dependency declaration; not installed automatically
-  reference/         optional, ground-truth NIfTI maps
-  masks/             optional, ROI mask NIfTI files
-  README.md          optional</code></pre>
-          </div>
-          <p>Installed packages live in <code>data/scoring/packages/</code>, one directory per
-            <code>package_id</code>. Which package is active per challenge is recorded in
-            <code>data/scoring/active.json</code>. Both are under <code>data/</code>, which is a
-            mounted volume, so installing a package does not involve rebuilding the image.</p>
-
-          <h3 id="example-d">Example: scoring package manifest</h3>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>manifest.json</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>{
-  "package_id": "local_dce_ktrans_v1_0",
-  "name": "Local DCE Ktrans analysis",
-  "version": "1.0.0",
-  "challenge_type": "dce",
-  "map_type": "ktrans",
-  "required_inputs": ["ktrans"],
-  "required_assets": ["reference/Ktrans.nii.gz"],
-  "entry_point": "scoring.py",
-  "requirements_file": "requirements.txt",
-  "call_mode": "standard",
-  "official": false,
-  "metrics": ["rmse", "bias"]
-}</code></pre>
-          </div>
-
-          <p><code>call_mode</code> is <code>standard</code> for scripts taking
-            <code>--submission-dir</code>, <code>--output-dir</code> and optionally
-            <code>--reference-dir</code>. Every metric declared in the manifest must be present in
-            <code>metrics.json</code> or <code>results.json</code>. A requirements file is checked for
-            presence but is not installed automatically. Anything that is not approved OSIPI scoring
-            takes <code>"official": false</code>.</p>
+          <p>The pipeline keeps general analysis separate from provider-specific scoring.</p>
 
           <div class="docs-table-wrap">
             <table>
-              <thead><tr><th><code>call_mode</code></th><th>How the script is invoked</th><th>Use when</th></tr></thead>
+              <thead><tr><th>Type</th><th>When it is available</th></tr></thead>
               <tbody>
-                <tr><td><code>standard</code></td><td><code>python scoring.py --submission-dir &lt;dir&gt; --output-dir &lt;dir&gt; [--reference-dir &lt;dir&gt;]</code></td><td>Writing a new script. The directories are passed in, so nothing is hardcoded.</td></tr>
-                <tr><td><code>osipi_cwd</code></td><td>Run with the working directory set to the package directory; the script resolves its own relative paths</td><td>Adopting an existing OSIPI script that expects the legacy TF6.2 layout, without editing it.</td></tr>
+                <tr><td>QC and previews</td><td>For readable maps</td></tr>
+                <tr><td>ROI statistics</td><td>When compatible ROI masks are available</td></tr>
+                <tr><td>Generic reference comparison</td><td>When compatible reference maps are available, even if provider mode is <code>none</code></td></tr>
+                <tr><td>Built-in legacy TF6.2 provider</td><td>For its specific DCE Ktrans workflow and required organiser assets</td></tr>
+                <tr><td>Trusted custom package</td><td>After a reviewed package is uploaded, validated, and selected for the matching challenge</td></tr>
               </tbody>
             </table>
           </div>
 
-          <p><code>challenge_type</code> is checked at install against the challenges configured in
-            <code>config/validation_rules.yaml</code>, and a manifest naming one that does not exist
-            is rejected. So a new challenge is added to the YAML before its scoring package is
-            uploaded. <code>package_id</code> is restricted to letters, digits, underscores and
-            hyphens, because it becomes a directory name.</p>
-
-          <p>Installation validates the JSON manifest, readable package version, known challenge,
-            configured input ids, metric names, safe paths, entry point, declared assets, optional
-            requirements file, and scorer syntax/importability. The ZIP is checked in a staging
-            directory and is installed only after every check passes. Activation then verifies that
-            the package is ready and belongs to the selected challenge. A failed validation or
-            activation leaves the previous active configuration unchanged.</p>
-
-          <p>An already-active legacy package can continue running, but its manifest must declare
-            <code>required_inputs</code> before it can be uploaded or activated again under the
-            stricter contract.</p>
-
-          <p>Use a distinct versioned <code>package_id</code> for each release, such as
-            <code>dce_accuracy_v1_0</code> and <code>dce_accuracy_v1_1</code>. The selected package id,
-            name, and version are stored in the active configuration, and completed package results
-            also record the package version. Future analyses that are not installed remain
-            unavailable; they do not stop the rest of the pipeline.</p>
+          <p>Provider mode <code>none</code> disables provider scoring only. It does not disable QC,
+            previews, exports, compatible ROI statistics, or generic reference comparisons.</p>
 
           <div class="docs-callout">
-            <p>A scoring package is Python that executes on the server. Read the script before
-              installing one.</p>
+            <p>Generic reference comparisons are not automatically official scores. Official OSIPI challenge ranking is not currently configured.</p>
           </div>
+
+          <p>A custom package runs Python on the server, so only trusted reviewer-approved packages
+            should be installed. See
+            <a href="ADDING_SCORING_METRICS.md">Adding scoring metrics</a> for the package format and
+            <a href="https://github.com/ralkhleef/osipi-perfusion-pipeline/tree/main/examples/scoring-package-template">the package template</a>
+            for a working example.</p>
         </section>
 
         <section>
           <h2 id="reference-data" data-toc-title="Private reference data">3. Adding private reference data</h2>
-          <p>Reference maps and ROI masks come from the organiser. Search order: the submission's own
-            <code>reference/</code> directory, the configured reference data directory, then the
-            active scoring package's reference directory.</p>
-          <p>Within a reference root, maps are read from <code>maps/</code> and masks from
-            <code>masks/</code>. Files are de-duplicated by physical file identity rather than path
-            text, so on macOS and Windows the same mask cannot be admitted twice under two spellings.</p>
-          <p>Keep organiser source copies outside the repository or in the gitignored
-            <code>private_scoring_assets/</code> workspace. Generic comparison data may be copied to
-            the gitignored <code>data/reference_data/</code> paths. Package-specific assets should be
-            copied into the relative paths declared by <code>required_assets</code> before the trusted
-            ZIP is uploaded. Installed packages live under gitignored
-            <code>data/scoring/packages/</code>. Never commit private masks, references, answer keys,
-            or unreleased challenge data.</p>
-          <div class="docs-callout">
-            <p>QC and previews remain available for readable maps. DCE Ktrans ROI descriptive
-              statistics can appear with compatible ROI masks, generic reference comparisons with
-              compatible reference maps, and provider-specific analysis or scoring when configured
-              with its required assets. Generic reference comparisons are not automatically official
-              scores. Official OSIPI challenge ranking is not currently configured.</p>
-          </div>
+          <p>Reference maps, ROI masks, and measured signals are organiser-owned inputs. Add them from
+            <strong>Private Reference Assets</strong> in the Configuration Manager, or place them in the
+            documented local <code>data/reference_data/</code> structure.</p>
+          <p>These files remain local. Do not commit private masks, reference maps, answer keys, or
+            unreleased challenge data to GitHub.</p>
+          <p>Adding a file does not turn a generic comparison into official scoring. The available
+            result depends on the challenge configuration and any selected provider.</p>
         </section>
 
         <section>
           <h2 id="apply-a-change" data-toc-title="Safe updates">4. Safe updates</h2>
-          <p>For routine organiser updates, prefer the in-app Configuration Manager above. It provides
-            validation, a readable diff, version history, rollback, import/export and explicit activation.
-            The file-based route below is retained for developers and advanced maintenance.</p>
-          <p>Editing a file on your machine is not enough on its own. The application validates rule
-            reloads and scoring packages before replacing the active configuration. What is needed
-            depends on what you changed.</p>
+          <p>Use the Configuration Manager for routine updates. Use the file-based route only when a
+            setting is not exposed in the manager or when developing the application.</p>
 
           <div class="docs-table-wrap">
             <table>
-              <thead><tr><th>What you changed</th><th>To apply it</th><th>Why</th></tr></thead>
+              <thead><tr><th>What changed</th><th>How to apply it</th></tr></thead>
               <tbody>
-                <tr><td><code>config/validation_rules.yaml</code> or <code>config/settings.yaml</code></td><td>Press <strong>Reload rules</strong> in Scoring Setup</td><td>The compose file mounts <code>./config</code>, so the file is already current. The button re-reads it and drops everything cached from the old copy.</td></tr>
-                <tr><td>The same, but running without the <code>config</code> mount</td><td><code>docker compose up --build</code></td><td>The image holds its own copy taken at build time. Without the mount, that copy is the one in use and the button re-reads the same stale file.</td></tr>
-                <tr><td>A scoring package</td><td>Upload a new versioned package, review validation, then activate it in Scoring Setup</td><td>Validation and activation are separate. A failure leaves the previous active package unchanged.</td></tr>
-                <tr><td>Reference maps or ROI masks</td><td>Add them through <strong>Reference Data &amp; Masks</strong> in the Configuration Manager, or copy them into the documented local <code>data/reference_data/</code> layout</td><td>They remain local, are checked for NIfTI readability, and are excluded from configuration exports.</td></tr>
-                <tr><td>Anything under <code>backend/</code>, <code>frontend/</code> or <code>src/</code></td><td><code>docker compose up --build</code></td><td>Source is copied into the image, not mounted.</td></tr>
+                <tr><td>A Configuration Manager draft</td><td>Test → Preview → Save as New Version → Activate</td></tr>
+                <tr><td>Mounted YAML in <code>config/</code></td><td>Press <strong>Reload rules</strong> in Reviewer settings</td></tr>
+                <tr><td>A scoring package</td><td>Upload a new version, review its status, then select and activate it</td></tr>
+                <tr><td>Private references or masks</td><td>Add them through Private Reference Assets or the local reference-data directory</td></tr>
+                <tr><td>Application code under <code>backend/</code>, <code>frontend/</code>, or <code>src/</code></td><td>Run <code>docker compose up --build</code></td></tr>
               </tbody>
             </table>
           </div>
 
-          <div class="docs-callout">
-            <p>A rules edit that appears to do nothing is almost always this: the file changed on
-              disk but nobody pressed Reload, or the container is running the copy baked into the
-              image because <code>./config</code> is not mounted.</p>
-          </div>
+          <p>Invalid rules or packages are rejected, leaving the previous active configuration unchanged.
+            If YAML is baked into a container instead of mounted through Compose, rebuild
+            the image before using Reload rules.</p>
 
-          <p>Reload reports a bad edit on screen and changes nothing. Whatever configuration was
-            running keeps running until a valid one replaces it, so a typo cannot take the pipeline
-            down mid-review.</p>
+          <p>Developer details are kept in the
+            <a href="configuration.md">configuration reference</a>,
+            <a href="UPDATING_SCORING.md">scoring update guide</a>, and
+            <a href="ADDING_SCORING_METRICS.md">scoring-package guide</a>.</p>
 
-          <h3 id="check-the-edit">Check the edit from a terminal</h3>
-          <p>The button is the normal route. If you would rather see the parsed result directly, or
-            you are working outside the container, reading the file says whether it parses and what
-            the application will see:</p>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>Check</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>PYTHONPATH=src python3 -c "
+          <details class="docs-disclosure">
+            <summary>Developer reference</summary>
+            <div class="pt-3">
+              <p>Direct YAML editing supports <code>required_maps</code>, <code>optional_maps</code>,
+                <code>required_artifacts</code>, <code>datasets</code>, and
+                <code>filename_identity_patterns</code>. Use <strong>Scoring Setup</strong> for the
+                legacy Reload rules route.</p>
+
+              <h3>Minimal custom-package manifest</h3>
+              <div class="docs-code">
+                <div class="docs-code-header"><span>manifest.json</span><button class="docs-copy" type="button">Copy</button></div>
+                <pre><code>{
+  "package_id": "example_scoring_v1",
+  "name": "Example analysis",
+  "version": "1.0.0",
+  "challenge_type": "dce",
+  "map_type": "ktrans",
+  "required_inputs": ["ktrans"],
+  "entry_point": "scoring.py",
+  "call_mode": "standard",
+  "official": false,
+  "metrics": ["rmse", "bias"]
+}</code></pre>
+              </div>
+              <p><code>standard</code> passes submission and output directories to a new package.
+                <code>osipi_cwd</code> supports a reviewed legacy script that resolves paths from its
+                package directory. Dependencies listed by a package are not installed automatically.</p>
+
+              <h3>Check a YAML edit</h3>
+              <div class="docs-code">
+                <div class="docs-code-header"><span>Check</span><button class="docs-copy" type="button">Copy</button></div>
+                <pre><code>PYTHONPATH=src python3 -c "
 from osipi_pipeline.config.rules import datasets_by_challenge, map_type_specs
 print(sorted(map_type_specs()))
 print(datasets_by_challenge()['dce'])
 "</code></pre>
-          </div>
-          <p>An invalid file raises <code>ConfigValidationError</code> naming the key at fault. A
-            change to required maps or dataset counts also belongs in the test suite, so that a later
-            edit reverting it fails visibly rather than quietly.</p>
+              </div>
+            </div>
+          </details>
         </section>
 
       </div>
