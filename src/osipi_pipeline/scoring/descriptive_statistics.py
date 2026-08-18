@@ -1,6 +1,6 @@
 """Within-ROI descriptive statistics for a single parameter map.
 
-Scope is deliberately narrow: this describes the **spatial spread of one map
+This describes the **spatial spread of one map
 inside one ROI of one scan**. It is not repeatability, not reproducibility,
 and not inter-participant variability, those compare *across* scans and
 belong to a later phase. The field names carry `within_scan` so the two can

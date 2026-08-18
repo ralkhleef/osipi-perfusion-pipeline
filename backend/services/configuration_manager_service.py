@@ -3,7 +3,7 @@
 The active repository YAML remains the single source of truth.  This service
 adds a non-destructive workflow around it: construct and test an in-memory
 candidate, preview a human-readable diff, save an immutable local version,
-and only then activate it.  Private assets and history are intentionally kept
+and only then activate it. Private assets and history are kept
 under ignored ``data/`` paths.
 """
 
@@ -24,6 +24,7 @@ import yaml
 from services import path_config as paths
 from services.scoring_package_service import (
     check_package_ready,
+    compatible_builtin_providers,
     get_active_entry,
     get_package_manifest,
     list_packages,
@@ -121,6 +122,15 @@ def _editable_from_rules(challenge: str, rules: dict[str, Any]) -> dict[str, Any
 def manager_state(challenge_type: str) -> dict[str, Any]:
     challenge = _challenge_id(challenge_type)
     rules = rules_module.validation_rules()
+    from scoring import all_providers_status
+
+    builtin_providers = [
+        item
+        for item in all_providers_status()
+        if item.get("source") == "builtin"
+        and not item.get("not_for_scoring")
+        and str(item.get("challenge_type") or "").lower() == challenge
+    ]
     return {
         "editable": _editable_from_rules(challenge, rules),
         "versions": list_versions(challenge),
@@ -136,6 +146,7 @@ def manager_state(challenge_type: str) -> dict[str, Any]:
             }
             for item in list_packages()
         ],
+        "builtin_providers": builtin_providers,
         "private_data_notice": (
             "Private organiser data. These files remain local and are not included "
             "in configuration exports or GitHub."
@@ -358,12 +369,45 @@ def test_configuration(payload: dict[str, Any]) -> dict[str, Any]:
             ),
         })
     elif mode == "builtin":
-        ready = paths.OSIPI_TF62_DIR.exists() and any(paths.OSIPI_TF62_DIR.iterdir())
-        checks.append({
-            "status": "pass" if ready else "fail",
-            "name": "Built-in provider",
-            "detail": "Built-in provider assets found." if ready else "Built-in provider assets are not installed.",
-        })
+        compatible = compatible_builtin_providers(challenge)
+        if len(compatible) != 1:
+            checks.append({
+                "status": "fail",
+                "name": "Built-in provider",
+                "detail": (
+                    f"No compatible built-in provider is registered for {challenge.upper()}."
+                    if not compatible else
+                    f"Multiple built-in providers are registered for {challenge.upper()}; "
+                    "selecting one implicitly would be unsafe."
+                ),
+            })
+        else:
+            from scoring import all_providers_status
+
+            provider_id = compatible[0].get("provider_id")
+            provider_status = next(
+                (
+                    item for item in all_providers_status()
+                    if item.get("provider_id") == provider_id
+                ),
+                None,
+            )
+            ready = bool(provider_status and provider_status.get("status") == "ready")
+            provider_name = str(
+                compatible[0].get("display_name")
+                or compatible[0].get("provider_name")
+                or compatible[0].get("provider_id")
+                or "Built-in provider"
+            )
+            missing = "; ".join((provider_status or {}).get("missing") or [])
+            checks.append({
+                "status": "pass" if ready else "fail",
+                "name": provider_name,
+                "detail": (
+                    "Built-in provider requirements are available."
+                    if ready else missing or "Built-in provider requirements are not installed."
+                ),
+            })
     else:
         checks.append({
             "status": "pass", "name": "Provider scoring",
@@ -536,7 +580,7 @@ def export_configuration(challenge_type: str, version_id: str | None = None) -> 
             archive.writestr("scoring-manifest.json", json.dumps(public_manifest, indent=2))
         archive.writestr(
             "README.txt",
-            "OSIPI challenge configuration export. Private reference maps, masks, measured signals, and scoring code are intentionally excluded.\n",
+            "OSIPI challenge configuration export. Private reference maps, masks, measured signals, and scoring code are excluded.\n",
         )
     return output.getvalue(), f"osipi-{challenge}-configuration.zip"
 
@@ -558,34 +602,55 @@ def import_configuration(zip_path: Path) -> dict[str, Any]:
     challenge = str(metadata.get("challenge_type") or "").lower()
     if challenge not in candidate.get("challenges", {}):
         raise ValueError("Imported metadata names a challenge not present in the rules.")
-    # Import is deliberately save-only. The organiser must test and explicitly activate it.
+    # Import is save-only. The organiser must test and explicitly activate it.
     saved = _save_full_rules(challenge, candidate, scoring, "import")
     return {"imported": True, "activated": False, "version": {**saved, "active": False}}
 
 
 def capability_matrix() -> list[dict[str, Any]]:
     rows = []
+    analysis_rules = rules_module.analysis_by_challenge()
+    map_specs = rules_module.map_type_specs()
+    artifact_specs = rules_module.artifact_type_specs()
     for challenge in rules_module.challenge_types():
         assets = asset_status(challenge)
         counts = assets["counts"]
         active = get_active_entry(challenge)
+        analysis = analysis_rules.get(challenge, {})
+        roi = analysis.get("roi_descriptive") or {}
+        roi_maps = [
+            str((map_specs.get(str(map_id).lower()) or {}).get("display") or map_id)
+            for map_id in roi.get("map_types") or []
+        ] if roi.get("enabled", False) else []
+        rss = analysis.get("signal_rss") or {}
+        modelled_id = str(rss.get("modelled_artifact") or "")
+        measured_id = str(rss.get("measured_artifact") or "")
+        modelled_label = str(
+            (artifact_specs.get(modelled_id) or {}).get("label") or modelled_id
+        )
+        measured_label = str(
+            (artifact_specs.get(measured_id) or {}).get("label") or measured_id
+        )
         rows.append({
             "challenge_type": challenge,
             "label": rules_module.challenge_labels().get(challenge, challenge.upper()),
             "map_qc": "Available for readable maps",
             "previews": "Available for readable maps",
             "roi_statistics": (
-                "DCE Ktrans descriptive statistics when compatible masks are available"
-                if challenge == "dce" else "ROI-level reference metrics when compatible masks and references are available"
+                f"Descriptive statistics for {', '.join(roi_maps)} when compatible masks are available"
+                if roi_maps else "Not configured"
             ),
             "reference_comparison": "Available when compatible reference maps are available",
             "difference_maps": "Available with compatible reference comparisons",
-            "rss": "Available for paired compatible measured/modelled 4-D DCE signals" if challenge == "dce" else "Not applicable",
+            "rss": (
+                f"Available for compatible paired {measured_label} and {modelled_label}"
+                if rss.get("enabled", False) else "Not configured"
+            ),
             "provider_analysis": (
                 f"Configured: {active.get('package_name') or active.get('package_id') or active.get('mode')}"
                 if active.get("mode") != "none" else "Not configured"
             ),
-            "icc": "Waiting on scientific definition" if challenge in {"dce", "asl"} else "Not configured",
+            "icc": "Not configured",
             "official_ranking": "Not configured",
             "local_assets": counts,
         })

@@ -496,11 +496,7 @@ def _finalize_staged_dir(
 
     # ── Batch: carve per-team submission dirs ─────────────────────────────────
     #
-    # Files sitting beside the batch directories are shared by every submission
-    # in it: a methods document, a README, a licence. The carve moves only what
-    # is inside each directory and then deletes the staging area, so without
-    # this they are destroyed and every submission is reported as missing a
-    # required artifact it did supply. See CODE_WALKTHROUGH.md §B2.
+    # Files beside team directories are shared artifacts for every submission.
     shared_files = sorted(
         item for item in batch_dirs[0].parent.iterdir() if item.is_file()
     )
@@ -586,11 +582,6 @@ def _is_structural_layout(dirs: List[Path]) -> bool:
         dce_team_alpha/
             Synthetic/    ← dataset partition
             Clinical/     ← dataset partition
-
-    Splitting on dataset directories moves the dataset name *above* the
-    submission root, where the identity parser can never see it again; every
-    file then fails identity resolution and dataset-count validation is
-    silently disabled. See CODE_WALKTHROUGH.md §B1.
 
     A real batch has team-named subdirectories::
 

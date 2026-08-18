@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 
-# Artifact roles. `parameter_map` and the configured artifact roles
-# (`fitted_signal`, `methods`) are the DCE-2026 additions; the rest mirror
-# the legacy manifest categories so every file can be represented.
+# Common artifact roles. Configured artifact types can define additional roles.
 ROLE_PARAMETER_MAP = "parameter_map"
 ROLE_METADATA = "metadata"
 ROLE_CODE = "code"
@@ -18,13 +16,11 @@ ROLE_UNKNOWN = "unknown"
 class SubmissionArtifact:
     """One submitted file, with whatever identity could be resolved.
 
-    Identity fields are ``None`` when they could not be determined, a flat
-    legacy submission has no participant or site, and inventing one would be
-    worse than admitting the gap. Nothing in Phase 2 enforces completeness;
-    this record only states what was found.
+    Identity fields remain ``None`` when they cannot be determined. Validation
+    decides whether missing identity is allowed for the selected challenge.
 
     ``map_type`` is set only for ``role == "parameter_map"``. A 4-D fitted
-    signal is deliberately not a parameter map, so it carries ``None``.
+    signal is not a parameter map, so it carries ``None``.
     """
 
     path: str
@@ -47,9 +43,7 @@ class SubmissionArtifact:
 class IdentityConflict:
     """Recorded when directory and filename identity disagree.
 
-    Directory wins (see ``identity_parser``); this exists so the disagreement
-    is visible rather than silently resolved. Phase 2 does not fail an upload
-    on a conflict.
+    Directory identity wins; the conflict remains available to validation.
     """
 
     path: str
@@ -83,9 +77,7 @@ class Manifest:
     files: list[dict[str, object]] = field(default_factory=list)
     directories: list[dict[str, object]] = field(default_factory=list)
     config_fingerprint: str = ""
-    # Additive. The legacy list fields above are unchanged and remain the
-    # source for existing callers; `artifacts` is the normalized view that
-    # DCE processing will build on.
+    # Normalized artifact and identity data used by validation and analysis.
     artifacts: tuple[SubmissionArtifact, ...] = ()
     identity_conflicts: tuple[IdentityConflict, ...] = ()
 

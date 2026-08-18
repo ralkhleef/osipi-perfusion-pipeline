@@ -1,9 +1,8 @@
 # Scoring-package template
 
-Copy this directory when adding a trusted, challenge-specific analysis. The
-example deliberately implements only one transparent metric: the number of
-NIfTI files supplied to the package. It is a package-interface example, not a
-scientific score and not official OSIPI ranking.
+Copy this directory when adding a trusted challenge-specific analysis. The
+example only counts the supplied NIfTI files. It demonstrates the package
+interface; it is not a scientific score or official OSIPI ranking.
 
 1. Give `package_id` a new versioned id and update `version`.
 2. Set `challenge_type`, `required_inputs`, `required_assets`, and `metrics`.

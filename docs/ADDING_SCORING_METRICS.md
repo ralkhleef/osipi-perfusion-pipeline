@@ -3,7 +3,7 @@
 This guide is for OSIPI maintainers who want to extend the pipeline after the
 GSoC project. It shows how to add **one** new voxelwise comparison metric and
 surface it everywhere (JSON, CSV, HTML/PDF reports), plus how map types, ROIs,
-and dimensionality rules are configured. It deliberately does **not** define any
+and dimensionality rules are configured. It does **not** define any
 official OSIPI score, weighting, threshold, or ranking — those remain scientific
 decisions for the challenge teams.
 
@@ -139,5 +139,6 @@ challenge-approved definition first:
   and not scored as parameter maps.
 - **Overall/composite score, weighting, and ranking** — the ASL team has not
   approved a formula; ASL results are shown per-metric and per-map, not ranked.
-- **DCE / DSC rules** — expected files, references, masks, and metrics come from
-  the respective challenge teams.
+- **Unconfirmed DCE / ASL / DSC rules** — references, masks, thresholds, and
+  official metrics still need challenge-team approval where noted in
+  `SCIENTIFIC_REQUIREMENTS_PENDING.md`.

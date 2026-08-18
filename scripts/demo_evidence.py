@@ -1,8 +1,7 @@
-"""Produce the DCE_Test_Clean demo evidence bundle.
+"""Build an end-to-end DCE demo bundle.
 
-Runs the exact scenario that used to fail, a DCE-2026 team submission with
-both Synthetic and Clinical datasets, through the real upload, validation,
-scoring and export path, and writes every artefact a reviewer needs:
+The script creates a synthetic DCE submission with Clinical and Synthetic
+datasets, then runs upload, validation, analysis, and export:
 
     data/outputs/demo_evidence/
         DCE_Test_Clean.zip            the input, reproducible
@@ -12,10 +11,9 @@ scoring and export path, and writes every artefact a reviewer needs:
         results_unblinded.csv         organiser export
         report_blinded.html/.pdf      no team identity anywhere
         report_unblinded.html/.pdf    organiser copy
-        EVIDENCE.md                   the checks, with actual values
+        EVIDENCE.md                   check results
 
-Extraction happens in a temporary directory, so running this leaves no
-submissions behind in the working tree.
+Temporary submission files are removed when the script finishes.
 
     python3 scripts/demo_evidence.py
 """
@@ -138,7 +136,6 @@ def main() -> None:
         import main
         from fastapi.testclient import TestClient
 
-        summary = main._gather_summary.__wrapped__ if hasattr(main._gather_summary, "__wrapped__") else None
         analysis = {"reference_scoring": {
             "roi_descriptive_statistics": [r.to_dict() for r in rows],
             "roi_descriptive_status": "available",
@@ -219,8 +216,7 @@ def _write_evidence(checks, written, sid: str) -> None:
     lines = [
         "# DCE_Test_Clean, demo evidence",
         "",
-        "The scenario that used to fail, run end to end through the real upload,",
-        "validation, scoring and export path. Regenerate with:",
+        "End-to-end upload, validation, analysis, and export check. Regenerate with:",
         "",
         "    python3 scripts/demo_evidence.py",
         "",
@@ -242,16 +238,12 @@ def _write_evidence(checks, written, sid: str) -> None:
 
     lines += [
         "",
-        "## What this demonstrates",
+        "## Coverage",
         "",
-        "Before the fixes this submission split into two, produced 41 spurious",
-        "identity errors, lost its methods document, double-counted every ROI on",
-        "macOS, and printed the team name in the blinded report. It now yields one",
-        "submission, zero structural errors, exactly 32 unique ROI rows, and blinded",
-        "outputs with no identity in body, metadata, or download filename.",
-        "",
-        "The reference tree deliberately contains both `masks/` and `Masks/` so the",
-        "case-insensitive deduplication is exercised, not assumed.",
+        "- One submission is preserved across Clinical and Synthetic datasets.",
+        "- Required artifacts and scan identities are validated.",
+        "- ROI masks are deduplicated on case-insensitive filesystems.",
+        "- Blinded outputs exclude team and contact identity.",
         "",
     ]
     (OUT / "EVIDENCE.md").write_text("\n".join(lines), encoding="utf-8")

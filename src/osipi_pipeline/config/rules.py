@@ -34,15 +34,12 @@ _RULE_TOP_LEVEL_KEYS = {
     "code_folder_names",
     "map_types",
     "challenges",
-    # Optional. Describes submitted files that are not parameter maps, a 4-D
-    # fitted signal, a methods document. Absent in older configs.
+    # Optional non-map inputs such as a fitted signal or methods document.
     "artifact_types",
 }
 _MAP_TYPE_KEYS = {"display", "label", "units", "patterns", "dimensions"}
-# `expected_maps` is retained unchanged: it means "maps that should be present",
-# and a missing one is a warning. `required_maps` / `optional_maps` are the
-# newer, explicit split. A challenge that declares neither keeps exactly its
-# current behaviour, which is what leaves ASL and DSC untouched.
+# `expected_maps` keeps the legacy warning behavior. `required_maps` and
+# `optional_maps` provide the explicit split used by current challenges.
 _CHALLENGE_KEYS = {
     "label",
     "description",
@@ -54,15 +51,20 @@ _CHALLENGE_KEYS = {
     "datasets",
     "filename_identity_patterns",
     "grouped_statistics",
+    "analysis",
     "code_execution_required",
     "reference_dataset_version",
 }
-# Aggregation of per-scan ROI statistics across an axis. Absent or disabled
-# means nothing is computed; the scientific conventions are not confirmed.
+# Optional aggregation of per-scan ROI statistics.
 _GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size"}
-# Named groups a filename identity pattern may capture. Anything else is a
-# typo or an attempt to smuggle logic into configuration, so it is rejected
-# rather than silently ignored.
+_ANALYSIS_KEYS = {"roi_descriptive", "signal_rss"}
+_ROI_DESCRIPTIVE_KEYS = {"enabled", "map_types"}
+_SIGNAL_RSS_KEYS = {
+    "enabled",
+    "modelled_artifact",
+    "measured_artifact",
+}
+# Allowed capture groups in filename identity patterns.
 _IDENTITY_GROUPS = {"dataset", "participant", "repeat", "site"}
 _ARTIFACT_TYPE_KEYS = {"role", "dimensions", "suffixes", "patterns", "label"}
 _DATASET_KEYS = {"participants", "repeats", "sites"}
@@ -490,6 +492,72 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                             f"{grouped_path}.minimum_group_size", errors,
                         )
 
+            if "analysis" in spec_map:
+                analysis_path = f"{spec_path}.analysis"
+                analysis = _require_mapping(spec_map.get("analysis"), analysis_path, errors)
+                if analysis is not None:
+                    _reject_unknown_keys(analysis, _ANALYSIS_KEYS, analysis_path, errors)
+                    roi = analysis.get("roi_descriptive")
+                    if roi is not None:
+                        roi_path = f"{analysis_path}.roi_descriptive"
+                        roi_map = _require_mapping(roi, roi_path, errors)
+                        if roi_map is not None:
+                            _reject_unknown_keys(
+                                roi_map, _ROI_DESCRIPTIVE_KEYS, roi_path, errors
+                            )
+                            roi_enabled = roi_map.get("enabled") is True
+                            if "enabled" in roi_map:
+                                _require_bool(
+                                    roi_map.get("enabled"), f"{roi_path}.enabled", errors
+                                )
+                            if roi_enabled and "map_types" not in roi_map:
+                                errors.append(
+                                    f"{roi_path}.map_types: required when enabled is true"
+                                )
+                            roi_maps = (
+                                _require_string_list(
+                                    roi_map.get("map_types"),
+                                    f"{roi_path}.map_types",
+                                    errors,
+                                    allow_empty=not roi_enabled,
+                                )
+                                if "map_types" in roi_map else []
+                            )
+                            for index, map_id in enumerate(roi_maps):
+                                if map_id.lower() not in map_ids:
+                                    errors.append(
+                                        f"{roi_path}.map_types[{index}]: "
+                                        f"unknown map id {map_id!r}"
+                                    )
+                    rss = analysis.get("signal_rss")
+                    if rss is not None:
+                        rss_path = f"{analysis_path}.signal_rss"
+                        rss_map = _require_mapping(rss, rss_path, errors)
+                        if rss_map is not None:
+                            _reject_unknown_keys(
+                                rss_map, _SIGNAL_RSS_KEYS, rss_path, errors
+                            )
+                            rss_enabled = rss_map.get("enabled") is True
+                            if "enabled" in rss_map:
+                                _require_bool(
+                                    rss_map.get("enabled"), f"{rss_path}.enabled", errors
+                                )
+                            for field in ("modelled_artifact", "measured_artifact"):
+                                if field not in rss_map and rss_enabled:
+                                    errors.append(
+                                        f"{rss_path}.{field}: required when enabled is true"
+                                    )
+                                    continue
+                                if field not in rss_map:
+                                    continue
+                                artifact_id = _require_string(
+                                    rss_map.get(field), f"{rss_path}.{field}", errors
+                                )
+                                if artifact_id and artifact_id.lower() not in artifact_ids:
+                                    errors.append(
+                                        f"{rss_path}.{field}: unknown artifact id "
+                                        f"{artifact_id!r}"
+                                    )
             if "filename_identity_patterns" in spec_map:
                 patterns = _require_string_list(
                     spec_map.get("filename_identity_patterns"),
@@ -534,18 +602,8 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                         if ds_map is None:
                             continue
                         _reject_unknown_keys(ds_map, _DATASET_KEYS, ds_path, errors)
-                        # Every count may be null, meaning "not yet decided".
-                        # A placeholder integer would read as a decision
-                        # nobody made and would fail real submissions against
-                        # a number invented here.
-                        #
-                        # Only `participants` used to allow this, which meant
-                        # a challenge could not be declared at all until its
-                        # repeats and sites were settled. That is why the ASL
-                        # and DSC entries sat empty: the schema had no way to
-                        # say "this challenge exists, the grid is pending".
-                        # The key must still be present, so an omitted count
-                        # is a mistake and an undecided one is deliberate.
+                        # Null means that the count is still undecided. The key
+                        # remains required so omitted and pending are distinct.
                         for field in ("participants", "repeats", "sites"):
                             if field not in ds_map:
                                 errors.append(f"{ds_path}.{field}: required field is missing")
@@ -830,13 +888,7 @@ def _challenge_id_list(field: str) -> dict[str, tuple[str, ...]]:
 
 
 def required_maps_by_challenge() -> dict[str, tuple[str, ...]]:
-    """Map ids a submission must provide, per challenge.
-
-    Empty for any challenge that has not declared ``required_maps``. Nothing
-    enforces this yet, Phase 1 only describes the requirement. Existing
-    ``expected_maps`` behaviour is untouched, which is what keeps ASL and DSC
-    validation identical.
-    """
+    """Return map ids that validation requires for each challenge."""
     return _challenge_id_list("required_maps")
 
 
@@ -851,6 +903,19 @@ def required_artifacts_by_challenge() -> dict[str, tuple[str, ...]]:
     Ids are guaranteed by schema validation to exist in ``artifact_types``.
     """
     return _challenge_id_list("required_artifacts")
+
+
+def analysis_by_challenge() -> dict[str, dict[str, Any]]:
+    """Validated analysis enablement and input pairing for each challenge.
+
+    Scientific formulas remain implementation code; this mapping only says
+    which generic analysis is enabled and which configured maps/artifacts it
+    consumes. A missing block means the analysis is not enabled.
+    """
+    return {
+        str(challenge).lower(): copy.deepcopy(config.get("analysis") or {})
+        for challenge, config in validation_rules().get("challenges", {}).items()
+    }
 
 
 def filename_identity_patterns_by_challenge() -> dict[str, tuple[str, ...]]:
@@ -919,7 +984,7 @@ def datasets_by_challenge() -> dict[str, dict[str, dict[str, int | None]]]:
 
     Each dataset yields ``participants``, ``repeats`` and ``sites``.
     ``participants`` is ``None`` when the organiser has not finalised the
-    cohort size; the schema permits this deliberately so an unknown count is
+    cohort size; the schema permits this so an unknown count is
     not misrepresented as a decided one. Dataset names are not restricted to
     synthetic/clinical, a future challenge may define its own.
     """

@@ -185,6 +185,18 @@ challenges:
     required_artifacts:
       - modelled_st
       - methods
+    # Analysis selection belongs in configuration; the mathematical formulas
+    # remain tested implementation code. This keeps challenge enablement and
+    # artifact/map pairing out of service-level conditionals.
+    analysis:
+      roi_descriptive:
+        enabled: true
+        map_types:
+          - ktrans
+      signal_rss:
+        enabled: true
+        modelled_artifact: modelled_st
+        measured_artifact: measured_st
     # Descriptive aggregation of scan-level ROI medians. These are explicitly
     # provisional summaries, not repeatability, ICC, pass/fail, or ranking.
     grouped_statistics:

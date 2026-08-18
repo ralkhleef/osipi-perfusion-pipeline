@@ -1,4 +1,4 @@
-"""Phase 4C: ROI statistics through the real production path, on real files.
+"""ROI statistics through the production path using real NIfTI files.
 
 Everything here uses genuine NIfTI files written to disk and the actual
 scoring entry point. Masks are discovered by the production

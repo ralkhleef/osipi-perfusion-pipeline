@@ -1,15 +1,4 @@
-"""Shared pytest configuration.
-
-Its one job is to stop the suite reporting green when large parts of it never
-ran. ``tests/test_api.py`` guards itself with ``pytest.importorskip`` so the
-suite still works in a minimal environment, but that means a missing ``httpx``
-silently disables every API and report-rendering test while pytest prints a
-reassuring "passed". A report redesign shipped with five broken tests exactly
-that way.
-
-Set ``OSIPI_REQUIRE_FULL_TESTS=1`` (do this in CI) to turn those skips into a
-hard failure.
-"""
+"""Shared pytest configuration and full-suite dependency checks."""
 
 from __future__ import annotations
 
@@ -56,7 +45,7 @@ _WARNING_KEY: pytest.StashKey[list[str]] = pytest.StashKey()
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
-    """Repeat the warning at the end, where it will actually be read."""
+    """Repeat missing-dependency warnings in the terminal summary."""
     for message in config.stash.get(_WARNING_KEY, []) or []:
         terminalreporter.write_sep("!", "incomplete test run", yellow=True)
         terminalreporter.write_line(message)

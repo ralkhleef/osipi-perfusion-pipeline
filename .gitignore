@@ -1,354 +1,93 @@
-# Byte-compiled / optimized / DLL files
+# Local editor and operating-system files
 .DS_Store
+.idea/
+.vscode/
+*.log
+*.tmp
+
+# Python environments, caches, and build products
+.venv/
+venv/
 __pycache__/
-*.py[codz]
-*$py.class
-
-# C extensions
-*.so
-
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-# Root-anchored: this is the pip download cache. Unanchored it matched any
-# directory called downloads, which silently excluded docs/downloads/ and the
-# example reports the documentation site offers.
-/downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.py[cod]
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-#   Usually these files are written by a python script from a template
-#   before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
+build/
+dist/
+.pytest_cache/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-.hypothesis/
-.pytest_cache/
-cover/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-# Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-# uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-# poetry.lock
-# poetry.toml
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-# pdm.lock
-# pdm.toml
-.pdm-python
-.pdm-build/
-
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-# pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# Redis
-*.rdb
-*.aof
-*.pid
-
-# RabbitMQ
-mnesia/
-rabbitmq/
-rabbitmq-data/
-
-# ActiveMQ
-activemq-data/
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
+htmlcov/
 .mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#   and can be added to the global gitignore or merged into this file.  For a more nuclear
-#   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-# .idea/
-
-# Abstra
-#   Abstra is an AI-powered process automation framework.
-#   Ignore directories containing user credentials, local state, and settings.
-#   Learn more at https://abstra.io/docs
-.abstra/
-
-# Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
-#   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, 
-#   you could uncomment the following to ignore the entire vscode folder
-# .vscode/
-# Temporary file for partial code execution
-tempCodeRunnerFile.py
-
-# Ruff stuff:
 .ruff_cache/
 
-# PyPI configuration file
-.pypirc
+# Frontend test output
+node_modules/
+playwright-report/
+test-results/
 
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
+# Local credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.token
 
-# Streamlit
-.streamlit/secrets.toml
+# Uploaded and extracted submissions
+/submissions/incoming/*
+!/submissions/incoming/.gitkeep
+/submissions/extracted/*
+!/submissions/extracted/.gitkeep
+/submissions/validated/*
+!/submissions/validated/.gitkeep
 
-# OSIPI local data and submission workspaces
-submissions/incoming/*
-!submissions/incoming/.gitkeep
-submissions/incoming/*.tmp
-submissions/extracted/*
-!submissions/extracted/.gitkeep
-submissions/extracted/_*_temp_*/
-submissions/validated/*
-!submissions/validated/.gitkeep
-data/reference_data/*
-!data/reference_data/.gitkeep
-
-# Generated output directories — keep only .gitkeep sentinels
-data/outputs/*
-!data/outputs/.gitkeep
-!data/outputs/execution/
-data/outputs/execution/*
-!data/outputs/execution/.gitkeep
-!data/outputs/execution_results/
-data/outputs/execution_results/*
-!data/outputs/manifests/
-data/outputs/manifests/*
-!data/outputs/manifests/.gitkeep
-!data/outputs/validation/
-data/outputs/validation/*
-!data/outputs/validation/.gitkeep
-!data/outputs/scoring/
-data/outputs/scoring/*
-data/outputs/previews/
-/release/
-
-# Legacy generated output folder from older CLI defaults.
+# Generated pipeline output
+/data/outputs/*
+!/data/outputs/.gitkeep
+!/data/outputs/execution/
+!/data/outputs/manifests/
+!/data/outputs/validation/
+/data/outputs/execution/*
+!/data/outputs/execution/.gitkeep
+/data/outputs/manifests/*
+!/data/outputs/manifests/.gitkeep
+/data/outputs/validation/*
+!/data/outputs/validation/.gitkeep
 /outputs/
+/release/
+/tmp/
 
-# Large medical imaging data should stay outside version control.
-# (Exceptions: test fixtures under tests/ are tracked intentionally.)
+# Organiser-managed configuration, packages, references, and private assets
+/data/configuration_manager/
+/data/scoring/
+/data/reference_data/*
+!/data/reference_data/.gitkeep
+/private_scoring_assets/
+/data/hidden/
+/data/organizer_data/
+/data/organiser_data/
+/data/ground_truth/
+/data/ground-truth/
+/data/challenge_data/
+/data/masks/
+/data/measured_st/
+/data/scoring_results/
+
+# Medical images and uploaded archives are local unless tracked as test fixtures
 *.nii
 *.nii.gz
 *.dcm
-*.ima
-*.mha
-*.mhd
-*.nrrd
-!tests/**/*.nii
-!tests/**/*.nii.gz
-
-# Uploaded ZIPs
-*.zip
-!tests/**/*.zip
-
-# Local environment
-.env
-.venv/
-__pycache__/
-*.tmp
-test_data/
-data/scoring/
-data/configuration_manager/
-# Optional organiser-managed scoring references, masks, and unreleased assets.
-# Keep this entire workspace local; packages may declare required_assets that
-# organisers copy into a package before validation/activation.
-private_scoring_assets/
-.codex-ui-audit/
-
-# Local documentation preview renders, produced when checking the Pages site.
-docs-preview.png
-video-preview.png
-
-# ── Organiser-owned and hidden challenge assets ───────────────────────────────
-# Answer keys, blinded lookup tables and ground truth are not always imaging
-# files, so the medical-image rules below do not cover them. These directories
-# are excluded by name, whatever they contain.
-data/hidden/
-data/organizer_data/
-data/organiser_data/
-data/ground_truth/
-data/ground-truth/
-data/challenge_data/
-data/masks/
-data/measured_st/
-data/scoring_results/
-
-# Provider and package payloads: reference maps, masks and DRO data that ship
-# with an installed scoring package. Named explicitly rather than with a broad
-# **/masks/** rule, which would also catch legitimate documentation and demo
-# paths.
-data/scoring/providers/*/reference/
-data/scoring/providers/*/references/
-data/scoring/providers/*/mask/
-data/scoring/providers/*/masks/
-data/scoring/providers/*/Masks/
-data/scoring/providers/*/ground_truth/
-data/scoring/providers/*/hidden/
-data/scoring/providers/*/DROKtransNifti/
-data/scoring/packages/*/reference/
-data/scoring/packages/*/references/
-data/scoring/packages/*/mask/
-data/scoring/packages/*/masks/
-data/scoring/packages/*/Masks/
-data/scoring/packages/*/ground_truth/
-data/scoring/packages/*/hidden/
-
-# Additional medical-image formats not already listed above.
 *.dicom
 *.ima
 *.mha
 *.mhd
 *.nrrd
+*.zip
+!tests/**/*.nii
+!tests/**/*.nii.gz
+!tests/**/*.zip
 
-# Credentials and tokens.
-*.token
-*.pem
-*.key
-.env.*
-!.env.example
-
-# Runtime sentinels that must survive the rules above, so the empty
-# directories the application expects still exist on a fresh clone.
-!data/reference_data/.gitkeep
-!data/outputs/.gitkeep
-!data/outputs/execution/.gitkeep
-!data/outputs/manifests/.gitkeep
-!data/outputs/validation/.gitkeep
-!submissions/incoming/.gitkeep
-!submissions/extracted/.gitkeep
-!submissions/validated/.gitkeep
-
-# Demo scoring package: the manifest and script are documentation, not data.
-!data/sample_submissions/demo_scoring_package/manifest.json
-!data/sample_submissions/demo_scoring_package/scoring.py
-!data/sample_submissions/demo_scoring_package/README.md
+# Local preview and audit files
+/.codex-ui-audit/
+/docs-preview.png
+/video-preview.png

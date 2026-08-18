@@ -25,8 +25,7 @@ from typing import Any, Mapping, Sequence
 
 from services.report_branding import BRAND, SANS_STACK
 
-# Series inks. Deliberately only three, and distinguishable in greyscale by
-# fill as well as hue (solid / hollow / solid-accent).
+# Three series styles that remain distinct in greyscale.
 SERIES = {
     "primary":   BRAND["ink"],
     "secondary": BRAND["subtle"],

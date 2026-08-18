@@ -69,7 +69,7 @@
             same tested activation path for rollback.</p>
           <p>The manager also shows local private reference maps, masks and measured signals, plus a
             challenge capability matrix. Configuration ZIP export includes rules, version metadata,
-            scoring selection and a public manifest when applicable. It deliberately excludes private
+            scoring selection and a public manifest when applicable. It excludes private
             images, masks, measured signals, scoring code and other organiser data. Import saves a new
             inactive version and never silently activates it.</p>
           <p>PDF, HTML and JSON results record analysis provenance: challenge, active challenge
@@ -106,12 +106,6 @@
                 <tr><td>Participant execution command</td><td><code>run_config.json</code> in the submission</td><td><code>command</code>, <code>timeout_seconds</code></td></tr>
               </tbody>
             </table>
-          </div>
-
-          <div class="docs-callout">
-            <p><strong>Designed for future challenge updates.</strong> Organisers can revise structural
-              rules, install a new versioned analysis package, and add private assets later without
-              replacing the current validated setup until the update is ready.</p>
           </div>
 
           <p>Annotated template: <a href="examples/challenge.example.yaml"><code>docs/examples/challenge.example.yaml</code></a>.</p>
@@ -156,6 +150,23 @@
             and one modelled signal can be matched to the same scan, the pipeline computes raw
             voxelwise Residual Sum of Squares (RSS) across time and summarizes it for the whole image
             and compatible ROIs. RSS is descriptive and is not labelled deviance.</p>
+          <p>The challenge's <code>analysis</code> block controls which built-in analyses are enabled
+            and maps their inputs to configured map and artifact ids. Scientific formulas remain in
+            tested Python; changing labels or aliases cannot silently change a calculation.</p>
+          <div class="docs-code">
+            <div class="docs-code-header"><span>config/validation_rules.yaml</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>analysis:
+  roi_descriptive:
+    enabled: true
+    map_types: [ktrans]
+  signal_rss:
+    enabled: true
+    modelled_artifact: modelled_st
+    measured_artifact: measured_st</code></pre>
+          </div>
+          <p>Enabled analyses must name their map or artifact inputs explicitly; there are no hidden
+            challenge-specific fallback ids. Unknown analysis keys or input ids are rejected.
+            Disabling one analysis does not disable readable-map QC, previews, or other compatible analyses.</p>
           <p>The DCE <code>grouped_statistics</code> block enables provisional grouping of scan-level
             ROI medians across participants, repeats and sites. It reports mean, population SD and CoV;
             exactly two clearly matched repeats or sites also receive a signed difference. These are
@@ -209,7 +220,8 @@
           <p>Three mechanisms are distinct. Generic reference comparison is part of the pipeline: it
             compares readable maps with compatible references and can run even when provider scoring
             mode is <code>none</code>. The built-in legacy TF6.2 provider is a bundled hook for its
-            specific DCE Ktrans assets; it is not an uploaded package. Trusted custom scoring
+            specific DCE Ktrans assets; it is not an uploaded package. It is offered only for DCE;
+            ASL and DSC do not currently have compatible built-in providers. Trusted custom scoring
             packages are uploaded ZIPs selected per challenge.</p>
           <p>Provider mode <code>none</code> disables provider/official scoring, not generic QC,
             previews, exports, compatible DCE Ktrans ROI descriptive statistics, or compatible

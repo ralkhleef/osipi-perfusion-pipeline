@@ -7,12 +7,7 @@ from dataclasses import asdict, dataclass
 
 @dataclass(frozen=True)
 class ExecutionResult:
-    """A summary of one Docker execution attempt.
-
-    Fields with defaults (``output_path``, ``output_files``, ``timed_out``) are
-    optional so that existing code that constructs ``ExecutionResult`` with only
-    the core fields continues to work without modification.
-    """
+    """A summary of one Docker execution attempt."""
 
     submission_path: str
     challenge_type: str
@@ -24,12 +19,11 @@ class ExecutionResult:
     started_at: str
     finished_at: str
     passed: bool
-    # --- fields added in execution v2 ---
     output_path: str = ""
     output_files: tuple[str, ...] = ()
     timed_out: bool = False
     build_failed: bool = False
-    # --- fields added for DooD debugging ---
+    # Commands are retained for local troubleshooting and provenance.
     docker_build_cmd: str = ""
     docker_run_cmd: str = ""
 

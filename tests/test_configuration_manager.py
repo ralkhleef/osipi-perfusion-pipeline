@@ -49,6 +49,45 @@ def test_manager_exposes_handoff_fields(isolated_manager: Path) -> None:
     assert "reference_dataset_version" in editable
     assert state["private_data_notice"].startswith("Private organiser data")
     assert all(row["official_ranking"] == "Not configured" for row in state["capabilities"])
+    assert [item["provider_id"] for item in state["builtin_providers"]] == [
+        "osipi_tf62_dce_ktrans"
+    ]
+
+
+@pytest.mark.parametrize("challenge", ["asl", "dsc"])
+def test_manager_does_not_offer_incompatible_builtin_provider(
+    isolated_manager: Path,
+    challenge: str,
+) -> None:
+    assert manager.manager_state(challenge)["builtin_providers"] == []
+
+
+def test_incompatible_builtin_activation_preserves_active_configuration(
+    isolated_manager: Path,
+) -> None:
+    before = packages.load_active_config()
+    with pytest.raises(ValueError, match="No compatible built-in provider"):
+        packages.set_active_entry("asl", "builtin")
+    assert packages.load_active_config() == before
+
+
+def test_configuration_test_rejects_incompatible_builtin_without_saving(
+    isolated_manager: Path,
+) -> None:
+    payload = _payload("asl")
+    payload["configuration"]["scoring"] = {"mode": "builtin", "package_id": None}
+    before_rules = rules_module.VALIDATION_RULES_PATH.read_text(encoding="utf-8")
+    before_active = packages.load_active_config()
+
+    result = manager.test_configuration(payload)
+
+    assert result["ready"] is False
+    assert any(
+        "No compatible built-in provider" in item["detail"]
+        for item in result["checks"]
+    )
+    assert rules_module.VALIDATION_RULES_PATH.read_text(encoding="utf-8") == before_rules
+    assert packages.load_active_config() == before_active
 
 
 @pytest.mark.parametrize("challenge", ["dce", "asl", "dsc"])
@@ -73,6 +112,16 @@ def test_preview_is_side_effect_free_and_readable(isolated_manager: Path) -> Non
     assert preview["valid"] is True
     assert any(row["field"].endswith("maps") or "state" in row["field"] for row in preview["changes"])
     assert rules_module.VALIDATION_RULES_PATH.read_text(encoding="utf-8") == original
+
+
+def test_candidate_rules_preserve_analysis_and_optional_map_order(
+    isolated_manager: Path,
+) -> None:
+    payload = _payload("dce")
+    _challenge, candidate, _scoring = manager.candidate_rules(payload)
+    spec = candidate["challenges"]["dce"]
+    assert spec["optional_maps"] == ["ve", "kep", "vp"]
+    assert spec["analysis"] == rules_module.validation_rules()["challenges"]["dce"]["analysis"]
 
 
 def test_invalid_draft_never_changes_active_rules(isolated_manager: Path) -> None:
@@ -177,3 +226,21 @@ def test_provenance_names_configuration_package_reference_and_date(isolated_mana
     assert provenance["challenge_configuration"].startswith("rules-v")
     assert provenance["scoring_package"] == "not configured"
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", provenance["analysis_date"])
+
+
+def test_builtin_provenance_uses_only_a_compatible_provider(
+    isolated_manager: Path, monkeypatch,
+) -> None:
+    from services import provenance_service
+
+    monkeypatch.setattr(
+        provenance_service,
+        "get_active_entry",
+        lambda _challenge: {"mode": "builtin", "package_id": None},
+    )
+    assert provenance_service.analysis_provenance("dce")["scoring_package"] == (
+        "OSIPI TF6.2 DCE Ktrans"
+    )
+    assert provenance_service.analysis_provenance("asl")["scoring_package"] == (
+        "not configured for this challenge"
+    )

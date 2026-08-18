@@ -269,6 +269,25 @@ def get_active_entry(challenge_type: str) -> dict:
     )
 
 
+def compatible_builtin_providers(challenge_type: str) -> list[dict]:
+    """Return runnable built-in providers registered for one challenge.
+
+    The registry lives in :mod:`scoring`, which imports this service for
+    package dispatch.  Importing lazily avoids a module cycle while keeping
+    provider compatibility in one registry instead of duplicating challenge
+    names in configuration and UI code.
+    """
+    from scoring import PROVIDERS
+
+    challenge = str(challenge_type or "").strip().lower()
+    return [
+        dict(provider)
+        for provider in PROVIDERS.values()
+        if str(provider.get("challenge_type") or "").strip().lower() == challenge
+        and not provider.get("not_for_scoring")
+    ]
+
+
 def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] = None) -> dict:
     """Set active mode for a challenge type and persist.
 
@@ -285,6 +304,24 @@ def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] =
         raise ValueError("package_id is required when mode='custom'.")
     package_version = None
     package_name = None
+    provider_id = None
+    official = False
+    if mode == "builtin":
+        compatible = compatible_builtin_providers(challenge_type)
+        if len(compatible) != 1:
+            raise ValueError(
+                "Scoring configuration could not be activated; the previous "
+                "configuration remains active. No compatible built-in provider "
+                f"is registered for {challenge_type.upper()}."
+            )
+        provider = compatible[0]
+        provider_id = provider.get("provider_id")
+        package_name = (
+            provider.get("display_name")
+            or provider.get("provider_name")
+            or provider_id
+        )
+        official = bool(provider.get("official", False))
     if mode == "custom":
         manifest = get_package_manifest(str(package_id))
         if manifest is None:
@@ -312,12 +349,16 @@ def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] =
             )
         package_version = manifest.get("version")
         package_name = manifest.get("name")
+        provider_id = str(package_id)
+        official = bool(manifest.get("official", False))
     cfg = load_active_config()
     entry = {
         "mode":       mode,
         "package_id": package_id if mode == "custom" else None,
         "package_version": package_version,
         "package_name": package_name,
+        "provider_id": provider_id,
+        "official": official,
         "set_at":     datetime.now(timezone.utc).isoformat(),
     }
     cfg[challenge_type] = entry

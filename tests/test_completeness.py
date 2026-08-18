@@ -1,8 +1,4 @@
-"""Phase 3: configuration-driven submission completeness.
-
-Exercises the pure checker against normalized artifacts. Structural validity
-only, no scientific quantity is computed anywhere in this phase.
-"""
+"""Configuration-driven structural completeness tests."""
 
 from __future__ import annotations
 
@@ -358,11 +354,7 @@ def test_conflict_message_states_directory_won() -> None:
 def test_a_missing_required_map_is_an_error_for_asl_and_dsc(
     challenge: str, present: str, missing: str
 ) -> None:
-    """These used to pass silently.
-
-    ASL and DSC declared no required maps, so a submission carrying one map
-    out of three raised nothing at all. Now the absent one is reported.
-    """
+    """ASL and DSC report missing required maps as errors."""
     # A full scan identity, so the run reaches the required-map check rather
     # than stopping at INCOMPLETE_ARTIFACT_IDENTITY.
     flat = [SubmissionArtifact(path=f"main/P1/S1/R1/{present}.nii.gz",

@@ -4,7 +4,7 @@ RSS is computed independently at every spatial voxel across the time axis::
 
     RSS = sum_t((S_measured,t - S_modelled,t) ** 2)
 
-This is deliberately named RSS, not deviance. It is an unnormalised,
+This is named RSS, not deviance. It is an unnormalised,
 descriptive prototype measure and is not an official OSIPI score.
 """
 

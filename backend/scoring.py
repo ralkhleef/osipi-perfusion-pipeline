@@ -63,6 +63,7 @@ from services.scoring_package_service import (
     run_package_scoring,
 )
 from osipi_pipeline.config.rules import (
+    analysis_by_challenge,
     artifact_type_specs,
     grouped_statistics_by_challenge,
     map_type_specs,
@@ -852,21 +853,7 @@ def _is_mask_like(path: Path) -> bool:
 
 
 def canonical_path_key(path: Path):
-    """A key that is equal for two paths naming the same physical file.
-
-    ``Path`` equality is textual, and ``Path.resolve()`` does not normalise
-    case on macOS, so ``reference/masks/t.nii.gz`` and
-    ``reference/Masks/t.nii.gz`` compare as different paths while being the
-    same file on any case-insensitive filesystem, macOS APFS by default, and
-    Windows. Deduplicating on ``Path`` therefore admits every reference map
-    and every ROI mask twice, and because ROI identity is derived from the
-    mask *filename*, the duplicate statistics are indistinguishable in the
-    CSV, the report tables, and any aggregate. See CODE_WALKTHROUGH.md §B4.
-
-    ``(st_dev, st_ino)`` is the filesystem's own answer to "is this the same
-    file", so it also collapses symlinks and hard links. Where stat is not
-    available the case-normalised real path is a sound fallback.
-    """
+    """Return one identity for physical aliases, symlinks, and hard links."""
     try:
         stat = path.stat()
         return (stat.st_dev, stat.st_ino)
@@ -1065,20 +1052,31 @@ def _score_dce_signal_rss(
         voxelwise_rss,
     )
 
+    analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
+    rss_config = analysis.get("signal_rss") or {}
+    rss_enabled = bool(rss_config.get("enabled", False))
+    modelled_artifact = str(rss_config.get("modelled_artifact") or "").strip().lower()
+    measured_artifact = str(rss_config.get("measured_artifact") or "").strip().lower()
     result = {
-        "status": "not_applicable" if challenge_type != "dce" else "measured_signal_not_available",
+        "status": "measured_signal_not_available" if rss_enabled else "not_applicable",
         "available": False,
         "methodology": dict(RSS_METHODOLOGY),
         "records": [],
         "warnings": [],
     }
     reference_scoring["dce_signal_rss"] = result
-    if challenge_type != "dce":
+    if not rss_enabled:
         return
 
     artifacts = submission_artifacts(submission_id)
-    modelled = [a for a in artifacts if getattr(a, "artifact_type", None) == "modelled_st"]
-    measured = [a for a in artifacts if getattr(a, "artifact_type", None) == "measured_st"]
+    modelled = [
+        a for a in artifacts
+        if getattr(a, "artifact_type", None) == modelled_artifact
+    ]
+    measured = [
+        a for a in artifacts
+        if getattr(a, "artifact_type", None) == measured_artifact
+    ]
     if not modelled:
         result["status"] = "modelled_signal_not_available"
         return
@@ -1093,7 +1091,7 @@ def _score_dce_signal_rss(
     root = EXTRACTED_DIR / submission_id
     reference_root = reference_scoring.get("reference_root")
     masks = _reference_masks(Path(reference_root)) if reference_root else []
-    measured_spec = artifact_type_specs().get("measured_st") or {}
+    measured_spec = artifact_type_specs().get(measured_artifact) or {}
     measured_patterns = tuple(str(value).lower() for value in measured_spec.get("patterns") or ())
     reference_measured = [
         path for path in (_nifti_file_list(Path(reference_root)) if reference_root else [])
@@ -1248,10 +1246,7 @@ def attach_roi_descriptive_statistics(
     reference_root = reference_result.get("reference_root")
     masks = _reference_masks(Path(reference_root)) if reference_root else []
     rois = roi_definitions_from_masks(masks)
-    # Deliberately not wrapped in try/except here. The caller owns failure
-    # handling and sets the status; catching it twice meant the inner handler
-    # swallowed the error and the caller then recorded "available" for a run
-    # that had actually failed.
+    # Let the caller record failures and availability accurately.
     results = compute_roi_descriptive_statistics(
         artifacts, rois, challenge=challenge_type, root=root,
     )
@@ -1262,14 +1257,7 @@ def attach_roi_descriptive_statistics(
 
 
 def _reference_masks(root: Path) -> list[dict]:
-    """ROI masks under a reference root, one entry per physical file.
-
-    Both spellings of the masks directory are searched, so deduplication must
-    be by physical file identity: on a case-insensitive filesystem the two
-    spellings are one directory, and keying on ``Path`` admitted every mask
-    twice, doubling every ROI statistic in every output. See
-    CODE_WALKTHROUGH.md §B4.
-    """
+    """Find ROI masks under a reference root, once per physical file."""
     mask_dirs = _dedupe_paths([root / "masks", root / "Masks"])
     paths: list[Path] = []
     for mask_dir in mask_dirs:
@@ -1551,10 +1539,7 @@ def _score_reference_maps(
         "mask_count": 0,
         "warnings": [],
         "maps": [],
-        # Additive (Phase 4). Within-ROI descriptive statistics for the
-        # submitted maps, distinct from the reference-error metrics below,
-        # and never a substitute for them. Populated by
-        # attach_roi_descriptive_statistics once scan identity is available.
+        # ROI descriptive statistics are separate from reference-error metrics.
         "roi_descriptive_statistics": [],
         "roi_descriptive_methodology": _roi_methodology(),
         "roi_descriptive_status": "not_calculated",
@@ -2259,7 +2244,7 @@ def all_providers_status() -> list[dict]:
             "provider_name":   f"{pkg['name']} v{pkg['version']}",
             "display_name":    pkg["name"],
             "category":        "custom",
-            "official":        False,
+            "official":        bool(pkg.get("official", False)),
             "not_for_scoring": False,
             "source":          "package",
             "status":          "ready" if status_info.get("ready") else "not_configured",

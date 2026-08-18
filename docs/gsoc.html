@@ -64,58 +64,44 @@
             <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the ISMRM
             Perfusion Study Group.</p>
 
-          <p>This project is a local web application that gives OSIPI challenge organisers and
-            reviewers a more consistent and reproducible way to process perfusion MRI submissions.</p>
+          <p>I built a local web application for reviewing OSIPI perfusion MRI challenge submissions.</p>
 
           <p>OSIPI works on improving and standardising perfusion imaging methods. Different analysis
             methods can produce different results from the same MRI data, so challenges are used to
             compare those methods fairly.</p>
 
-          <p>The pipeline supports <strong>DCE, ASL, and DSC perfusion MRI submissions</strong> and
-            guides reviewers through a six-step workflow:</p>
+          <p>The pipeline supports DCE, ASL, and DSC submissions and guides reviewers through six steps:</p>
 
           <p><strong>Upload → Review → Validate → Run → QC &amp; Preview → Export</strong></p>
 
-          <p>It can accept completed result maps or reproducible submissions containing code. The app
-            checks the submitted files, runs participant code when needed, reviews NIfTI maps, creates
-            visual previews and QC results, and can provide ROI statistics or reference comparisons
-            when the required data are available. Results can then be exported as blinded reports and
-            structured files for further review.</p>
+          <p>It accepts completed result maps or submissions containing code. It checks the files,
+            runs code in Docker when needed, creates QC and previews, and adds ROI statistics or
+            reference comparison when compatible data are available. Results can be exported as
+            blinded reports and structured files.</p>
 
-          <p>The goal is to reduce the amount of manual work needed to review challenge submissions
-            and make the process easier to repeat consistently across different participants.</p>
+          <p>The goal is to reduce manual review and apply the same checks to every submission.</p>
 
           <p>See <a href="how-it-works.html">How it works</a> for the full workflow and
             <a href="examples.html">Examples</a> for screenshots and example outputs.</p>
         </section>
 
         <section>
-          <h2 id="challenge-review" data-toc-title="Built for challenge review">Built for challenge review</h2>
-          <p>A major part of the project was making the pipeline flexible enough to support different
-            perfusion challenges without rewriting the application each time.</p>
+          <h2 id="challenge-review" data-toc-title="What I built">What I built</h2>
+          <p>Challenge rules such as required maps, file names, dimensions, and dataset structure are
+            configurable. The Configuration Manager tests drafts and saves inactive versions before
+            an organiser activates them.</p>
 
-          <p>Challenge requirements such as required maps, file names, dataset structure, dimensions,
-            and other rules can be defined through configuration. This allows organisers to adapt the
-            same pipeline for DCE, ASL, DSC, or future challenges.</p>
-
-          <p>Reference maps, ROI masks, and scoring tools can also be added when they are available.
-            General QC and previews still work without them.</p>
-
-          <p>Scientific requirements that are still awaiting agreement, and private organiser assets
-            that are not ready for release, can be added later through validated, versioned analysis
-            packages without rewriting the challenge-structure YAML or interrupting the existing
-            workflow.</p>
+          <p>Reference maps, ROI masks, and trusted analysis packages can be added when available.
+            QC and previews do not require them.</p>
 
           <p>See <a href="configuration.html">Configuration</a> for more detail.</p>
         </section>
 
         <section>
           <h2 id="how-built" data-toc-title="How it was built">How it was built</h2>
-          <p>The application uses <strong>Python and FastAPI</strong> for the backend and
-            <strong>HTML, CSS, and JavaScript</strong> for the web interface.</p>
+          <p>The backend uses Python and FastAPI. The interface uses HTML, CSS, and JavaScript.</p>
 
-          <p>Docker is used when a participant submits reproducible code that needs to be run. YAML
-            configuration is used to define challenge-specific requirements, while the reporting
+          <p>Docker runs reproducible submissions. YAML stores challenge rules, and the reporting
             system creates HTML, PDF, CSV, and JSON outputs.</p>
 
           <p>The entire application runs locally so challenge data, reference images, masks, and
@@ -124,26 +110,18 @@
 
         <section>
           <h2 id="testing" data-toc-title="Testing and reliability">Testing and reliability</h2>
-          <p>The pipeline has automated backend and frontend tests covering uploading, validation,
-            execution, configuration, QC, reporting, exports, and challenge-specific behavior.</p>
-
-          <p>It was also tested using real example submissions through the full web interface. This
-            helped identify issues that were not obvious from automated tests alone, including
-            batch-upload handling, duplicate ROI masks, and protecting identifying information in
-            blinded reports.</p>
+          <p>Automated backend and frontend tests cover upload, validation, execution, configuration,
+            analysis, reports, exports, and blinding. I also tested real DCE and ASL submissions
+            through the rebuilt Docker application.</p>
 
         </section>
 
         <section>
           <h2 id="result" data-toc-title="Project result">Project result</h2>
-          <p>The project now provides a working local workflow for taking a perfusion challenge
-            submission from its original files through validation, optional execution, analysis,
-            review, and export.</p>
+          <p>The result is a working local workflow from submission files to review and export.</p>
 
-          <p>The scientific results available depend on the challenge and the data provided. QC and
-            previews can be generated for readable maps, while DCE Ktrans ROI descriptive statistics,
-            generic reference comparisons, and provider-specific analysis or scoring become available
-            when the required masks, references, or configured scoring tools are provided.</p>
+          <p>QC and previews are available for readable maps. DCE Ktrans ROI statistics, generic
+            reference comparison, and provider analysis appear when their required inputs are present.</p>
 
           <p><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
 
@@ -152,7 +130,7 @@
             <li><a href="how-it-works.html">How it works</a> — full pipeline workflow</li>
             <li><a href="examples.html">Examples</a> — real interface screenshots and outputs</li>
             <li><a href="configuration.html">Configuration</a> — how challenge rules can be changed</li>
-            <li><a href="pending-requirements.html">Pending scientific requirements</a> — decisions intentionally left for challenge leads</li>
+            <li><a href="pending-requirements.html">Pending scientific requirements</a> — decisions for challenge leads</li>
             <li><a href="install.html">Install</a> — how to run the pipeline locally</li>
           </ul>
         </section>
@@ -166,17 +144,6 @@
               <span class="docs-download-note">Six pages, submitted before any code was written</span>
             </a>
           </div>
-          <!-- The work product is not published yet. When it is, add it here:
-               <a class="docs-download" href="downloads/gsoc-work-product.pdf">
-                 <span class="docs-download-kind">PDF</span>
-                 <span class="docs-download-name">Work product</span>
-                 <span class="docs-download-note">...</span>
-               </a>
-               Build it with:
-               pandoc GSoC_WORK_PRODUCT.md -o docs/downloads/gsoc-work-product.pdf \
-                 --pdf-engine=xelatex -V geometry:margin=1in -V fontsize=10pt \
-                 -V mainfont="DejaVu Serif" -V monofont="DejaVu Sans Mono" \
-                 -V colorlinks=true --toc --toc-depth=2 -->
         </section>
 
       </div>

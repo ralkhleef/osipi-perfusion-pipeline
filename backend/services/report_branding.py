@@ -42,17 +42,14 @@ LOGO_SVG_PATH = FRONTEND_DIR / "assets" / "logo.svg"
 LOGO_LOCKUP_PATH = FRONTEND_DIR / "assets" / "logo-lockup.png"
 
 # ── Palette ───────────────────────────────────────────────────────────────
-# Deliberately small. Black ink, three greys, two rule weights, three status
-# inks, and the two logo colours. Anything beyond this is decoration.
+# Compact report palette.
 BRAND = {
     # Ink
     "ink":        "#16161a",   # body text, strong rules
     "ink_soft":   "#33353d",   # table cell text
     "muted":      "#6b6e7a",   # captions, deck lines
     "subtle":     "#83868f",   # section labels, column heads
-    # Rules. Kept deliberately light: booktabs calls for *thin* rules, and a
-    # page of heavy black bars reads as noise rather than structure. The
-    # strongest rule in the document is 0.7pt of `rule`, not solid black.
+    # Light table and section rules.
     "rule":       "#4a4d57",   # table top/bottom rule, masthead rule
     "hairline":   "#c9ccd3",   # section underline
     "faint":      "#eceef1",   # row separators in dense tables
@@ -68,9 +65,7 @@ BRAND = {
     "neutral":    "#6b6e7a",
 }
 
-# Tone backgrounds are intentionally near-paper. The journal treatment marks
-# status with a coloured dot and coloured text, never a filled pill, but
-# tone_colors() still needs a complete triple for any caller that wants one.
+# Near-white status backgrounds for callers that need a full tone set.
 _TONE_BG = {
     "ok": "#f4f8ef", "warn": "#fdf8ee", "bad": "#fbf1f1", "neutral": "#f6f7f8",
 }

@@ -1,13 +1,4 @@
-"""A submission id resolves to that submission, or to nothing.
-
-Regression tests for CODE_WALKTHROUGH.md §B3. Validation results are stored as
-``<submission_id>_validation.json`` and were matched by **substring**, so any
-id that is a prefix of a real one silently resolved to that other submission's
-results. Batch carving manufactures exactly those prefixes, ``team_gamma``
-against ``team_gamma_Clinical`` and ``team_gamma_Synthetic``, and the report
-then rendered another team's findings under the requested label, blinded or
-not.
-"""
+"""Submission lookups use exact ids, including ids with common prefixes."""
 
 from __future__ import annotations
 
@@ -20,7 +11,7 @@ pytest.importorskip("fastapi")
 
 CLINICAL = "team_gamma_Clinical"
 SYNTHETIC = "team_gamma_Synthetic"
-PREFIX = "team_gamma"          # a real prefix of both, but not a submission
+PREFIX = "team_gamma"  # A prefix of both ids, but not a submission itself.
 
 
 def _validation(sid: str, *, errors: int, team: str) -> dict:
@@ -61,7 +52,7 @@ def outputs(tmp_path: Path, monkeypatch):
     return main
 
 
-# ── Exact matching ────────────────────────────────────────────────────────
+# Exact matching
 
 def test_each_real_id_finds_its_own_file(outputs) -> None:
     for sid in (CLINICAL, SYNTHETIC):

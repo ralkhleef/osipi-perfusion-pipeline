@@ -346,15 +346,7 @@ def _is_mask(path: Path, parts: Iterable[str]) -> bool:
 
 
 def _detect_parameter_map_id(path: Path) -> str:
-    """Legacy manifest field, now backed by the boundary-safe classifier.
-
-    This previously asked whether a configured pattern appeared anywhere in
-    the filename, so ``curve.nii.gz`` matched ``ve`` and ``developer.nii.gz``
-    matched it twice (yielding "mixed"). Required-map enforcement cannot rest
-    on that, and keeping two different matchers would guarantee they drift,
-    so both this field and ``SubmissionArtifact.map_type`` now come from
-    :func:`detect_map_type`.
-    """
+    """Populate the legacy manifest field with the shared map classifier."""
     return detect_map_type(path.name) or ""
 
 

@@ -3,7 +3,7 @@
    ============================================================ */
 
 :root {
-  /* ── Design tokens (v78): one source of truth for the worklist system ──
+  /* Shared worklist design tokens
      Shared spacing, sizing, and typography so every step renders identically.
      Referenced by the shared .worklist-*, .status-chip, and section rules. */
   --wl-gutter:       18px;    /* horizontal content gutter on every step */
@@ -253,7 +253,7 @@ html, body {
 }
 
 /* ============================================================
-   Sections — dividers only, no own cards
+   Sections
    ============================================================ */
 
 .form-section {
@@ -656,7 +656,7 @@ input[type="file"] {
 }
 
 /* ============================================================
-   Results — banner (no divider above; sits right below card top border)
+   Results
    ============================================================ */
 
 .result-banner {
@@ -705,7 +705,7 @@ input[type="file"] {
 }
 
 /* ============================================================
-   Results — section heading color overrides
+   Results
    ============================================================ */
 
 .error-section .section-heading { color: var(--error); border-color: var(--error-border); }
@@ -1533,7 +1533,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ============================================================
-   Batch results v2 — Table / list layout (Linear-style)
+   Batch results table and list layout
    ============================================================ */
 
 /* Header bar */
@@ -1794,63 +1794,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 .br-hdr-link:hover { color: var(--text); background: var(--surface); }
-
-/* Row detail panel */
-.br-row-detail {
-  background: var(--surface);
-  border-top: 1px solid var(--divider);
-  padding: 14px 28px 16px 56px;
-}
-
-.br-detail-content {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 24px;
-}
-
-.br-detail-issues { min-width: 0; }
-
-.br-detail-meta {
-  font-size: 0.70rem;
-  color: var(--subtle);
-  margin-top: 8px;
-  line-height: 1.6;
-}
-
-.br-detail-empty {
-  font-size: 0.78rem;
-  color: var(--subtle);
-  font-style: italic;
-  padding: 4px 0;
-}
-
-.br-detail-exec {
-  min-width: 240px;
-  max-width: 380px;
-  flex-shrink: 0;
-}
-
-.br-exec-note {
-  font-size: 0.74rem;
-  color: var(--subtle);
-  font-style: italic;
-  padding: 6px 0;
-}
-
-/* Section (Run Package / Export below table) */
-.br-section {
-  padding: 20px 28px;
-  border-top: 1px solid var(--divider);
-}
-
-.br-section-title {
-  font-size: 0.70rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--subtle);
-  margin-bottom: 14px;
-}
 
 /* ============================================================
    Single submission — Panel layout (Stripe-style)
@@ -2390,6 +2333,357 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .tech-checks-toggle[open] > summary::before { transform: rotate(90deg); }
 .tech-checks-toggle > summary::-webkit-details-marker { display: none; }
 
+/* Current UI readability and workflow guidance. */
+
+:root {
+  --card-w: 840px;
+  --wizard-card-h: 820px;
+  --wl-row-pad-y: 13px;
+  --wl-row-pad-x: 15px;
+  --wl-row-gap: 10px;
+  --btn-h: 36px;
+  --fs-page-title: 1.2rem;
+  --fs-intro-title: 1rem;
+  --fs-section: 0.82rem;
+  --fs-row-title: 0.9rem;
+  --fs-meta: 0.8rem;
+}
+
+html,
+body {
+  font-size: 15px;
+}
+
+.upload-form-card {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+.upload-form-card .form-header,
+.step-shell-header {
+  padding-top: 22px !important;
+  padding-bottom: 20px !important;
+}
+
+.upload-form-card .card-title,
+.step-shell-header .card-title {
+  font-size: 1.2rem !important;
+  line-height: 1.3 !important;
+}
+
+.upload-form-card .card-desc,
+.step-shell-header .card-desc {
+  max-width: 64ch;
+  font-size: 0.88rem !important;
+  line-height: 1.55 !important;
+}
+
+.step-label,
+.step-label-inline {
+  font-size: 0.73rem !important;
+  letter-spacing: 0.035em !important;
+}
+
+.upload-form-card .form-section {
+  padding-top: 18px !important;
+  padding-bottom: 18px !important;
+}
+
+.upload-form-card .section-heading,
+.section-title,
+.collapsible-section-title {
+  color: var(--text) !important;
+  font-size: var(--fs-section) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.35 !important;
+  text-transform: none !important;
+}
+
+.upload-form-card .section-heading {
+  margin-bottom: 5px !important;
+  padding-bottom: 0 !important;
+  border-bottom: 0 !important;
+}
+
+.section-intro {
+  max-width: 72ch;
+  margin: 0 0 15px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.label,
+.upload-form-card .label {
+  font-size: 0.84rem !important;
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .review-challenge-suggestion {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .review-challenge-use {
+    align-self: flex-start;
+  }
+}
+
+.optional-tag,
+.field-hint,
+.drop-hint,
+.field-error {
+  font-size: 0.76rem !important;
+  line-height: 1.45;
+}
+
+.upload-form-card input[type="text"],
+.upload-form-card input[type="email"],
+.upload-form-card input[type="url"],
+.upload-form-card input[type="number"],
+.upload-form-card select {
+  min-height: 44px !important;
+  font-size: 0.88rem !important;
+}
+
+.pill span,
+.map-pill,
+.source-tab {
+  min-height: 34px;
+  padding: 7px 14px;
+  font-size: 0.8rem !important;
+}
+
+.drop-primary {
+  font-size: 0.88rem;
+}
+
+.upload-form-card .drop-zone {
+  padding: 20px 16px !important;
+}
+
+.upload-form-card .choose-btn {
+  min-height: 40px;
+  padding: 8px 18px;
+  background: var(--purple) !important;
+  color: #fff !important;
+  font-size: 0.82rem !important;
+  opacity: 1 !important;
+}
+
+.upload-form-card .submit-btn:disabled {
+  border-color: #d4cfdf !important;
+  background: #ded9e8 !important;
+  color: #6e6878 !important;
+  opacity: 1 !important;
+}
+
+.action-guidance {
+  margin: 0 0 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.advanced-options {
+  margin-top: 14px;
+  border-top: 1px solid var(--divider);
+  padding-top: 12px;
+}
+
+.advanced-options > summary {
+  color: var(--purple);
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.advanced-options-body {
+  padding: 12px 0 2px;
+}
+
+.advanced-options-body > .field-hint {
+  margin: 0 0 12px;
+}
+
+.step-shell-header .brand-logo {
+  width: 56px !important;
+  height: 56px !important;
+}
+
+.step-shell .pg-card-header,
+.collapsible-section-header {
+  padding-top: 16px !important;
+  padding-bottom: 14px !important;
+}
+
+.collapsible-section-body,
+#step-index #index-list-body,
+#leaderboard-section-body {
+  padding-top: 18px !important;
+}
+
+.worklist-row,
+.sub-row,
+.validation-card,
+.run-sub-card,
+.leaderboard-row,
+.export-file-row {
+  gap: 13px !important;
+}
+
+.worklist-title,
+.sub-row-name,
+.validation-card-title,
+.run-card-name,
+.leaderboard-submission-name,
+.export-group-title {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+}
+
+.worklist-meta,
+.sub-row-meta,
+.validation-card-meta,
+.run-card-outputs,
+.leaderboard-meta-line,
+.export-group-sub,
+.details-toggle,
+.status-chip,
+.status-pill,
+.br-badge {
+  font-size: var(--fs-meta) !important;
+  line-height: 1.5 !important;
+}
+
+.details-toggle {
+  min-height: 36px;
+  padding: 7px 13px;
+}
+
+.step-action-row {
+  gap: 18px;
+}
+
+.step-action-right {
+  max-width: 72%;
+}
+
+.step-action-guidance {
+  max-width: 310px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.step-action-row .btn {
+  min-height: 42px;
+  font-size: 0.84rem;
+}
+
+#step-score .scoring-admin-summary {
+  font-size: 0.86rem;
+}
+
+#step-score .scoring-admin-icon {
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+#step-score .scoring-admin-desc {
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+#step-export .export-main-list {
+  gap: 18px !important;
+}
+
+.export-output-group {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.export-output-heading {
+  padding: 0 2px;
+}
+
+.export-output-heading h2 {
+  margin: 0 0 3px;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.export-output-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.export-output-list {
+  gap: 9px !important;
+}
+
+.export-output-group--organiser {
+  padding-top: 14px;
+  border-top: 1px solid var(--divider);
+}
+
+@media (max-width: 720px) {
+  html,
+  body { font-size: 15px; }
+
+  .field-row-2 { grid-template-columns: minmax(0, 1fr); }
+  .field-row-2 .form-group + .form-group { margin-top: 12px; }
+
+  .step-action-row {
+    align-items: stretch;
+  }
+
+  .step-action-right {
+    flex: 1 1 auto;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .step-action-guidance {
+    flex: 1 1 100%;
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .upload-form-card .form-header,
+  .upload-form-card .form-section,
+  .upload-form-card .form-actions {
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+  }
+
+  .source-tabs { width: 100% !important; }
+  .source-tab { flex: 1 1 30%; justify-content: center; padding-left: 8px; padding-right: 8px; }
+
+  .step-action-row {
+    flex-wrap: wrap;
+  }
+
+  .step-action-left,
+  .step-action-right,
+  .step-action-row .btn {
+    width: 100%;
+  }
+}
+
 /* Issue summary in batch table Issues column */
 .brc-issue-ok   { font-size: 0.72rem; color: var(--subtle); }
 .brc-issue-warn { font-size: 0.72rem; font-weight: 700; color: var(--warn); }
@@ -2460,90 +2754,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ============================================================
-   Score placeholder (Step 5)
-   ============================================================ */
-
-.future-panel { padding-top: 20px !important; }
-
-.future-metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.future-metric-card {
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 14px 14px 12px;
-  background: var(--surface);
-  text-align: center;
-}
-
-.future-metric-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--subtle);
-  margin-bottom: 8px;
-}
-
-.future-metric-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--border);
-}
-
-.future-note {
-  font-size: 0.76rem;
-  color: var(--muted);
-  line-height: 1.5;
-  margin-bottom: 16px;
-}
-
-.future-ranking-placeholder {
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
-}
-
-.future-ranking-row {
-  display: grid;
-  grid-template-columns: 60px 1fr 80px 90px;
-  padding: 8px 14px;
-  font-size: 0.75rem;
-  gap: 8px;
-}
-
-.future-ranking-head {
-  background: var(--bg);
-  font-weight: 700;
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--subtle);
-  border-bottom: 1px solid var(--border);
-}
-
-.future-empty-row { background: #fff; }
-
-/* ── Future badge ── */
-.future-badge {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: 10px;
-  background: var(--purple-light);
-  color: var(--purple);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  vertical-align: middle;
-}
-
-/* ============================================================
-   Validate step — simplified v22 components
+   Validate step components
    ============================================================ */
 
 /* Compact summary row */
@@ -2646,7 +2857,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .batch-exec-section.exec-visible { display: block; }
 
 /* ============================================================
-   Validate step v23 — single toolbar, clean table
+   Validate step toolbar and table
    ============================================================ */
 
 /* Compact one-line toolbar */
@@ -2865,7 +3076,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .docker-err { background:#fdf0f0; color:#b91c1c; }
 
 /* ═══════════════════════════════════════════════════════════════
-   v26 — Inspired layout: page cards, source cards, progress panel
+   Page cards, source cards, and progress panel
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Content max-width wrapper ── */
@@ -3299,7 +3510,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   v28 — Score step styles
+   Analysis step styles
    ═══════════════════════════════════════════════════════════════ */
 
 /* Score table */
@@ -3469,38 +3680,68 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .score-checklist li .chk-label { color: var(--text); }
 .score-checklist li.chk-row-missing .chk-label { color: var(--muted); }
 
-/* ── v29: Provider cards grid ──────────────────────────────────────────────── */
+/* Provider cards grid */
 .score-provider-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  margin: 12px 0 0;
 }
 
 .score-provider-card {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: border-color .15s;
+  gap: 9px;
+  min-width: 0;
+  padding: 14px 16px 14px 19px;
+  overflow: hidden;
+  border: 1px solid #e4e0ee;
+  border-radius: 10px;
+  background: #fff;
 }
-.score-provider-card.spc-official  { border-left: 3px solid #48bb78; }
-.score-provider-card.spc-dev       { border-left: 3px solid #9f7aea; }
+.score-provider-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #a0aec0;
+}
+.score-provider-card.spc-official::before { background: #48bb78; }
+.score-provider-card.spc-dev::before { background: #9f7aea; }
+.score-provider-card.spc-custom::before { background: #667eea; }
 
 .spc-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
 }
+.spc-heading-copy { flex: 1 1 auto; min-width: 0; }
 .spc-title {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text);
-  line-height: 1.3;
+  line-height: 1.38;
+  overflow-wrap: anywhere;
+}
+.spc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+.spc-meta span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f5f3fb;
+  color: #625b75;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 .spc-category-badge {
   font-size: 0.64rem;
@@ -3522,6 +3763,11 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   color: #553c9a;
   border: 1px solid #d6bcfa;
 }
+.spc-badge-custom {
+  background: #eef2ff;
+  color: #4338a1;
+  border: 1px solid #c7d2fe;
+}
 
 .spc-status-row {
   display: flex;
@@ -3536,6 +3782,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .spc-dot-ready        { background: #48bb78; }
 .spc-dot-dev          { background: #9f7aea; }
+.spc-dot-custom       { background: #667eea; }
 .spc-dot-not-conf     { background: #cbd5e0; }
 
 .spc-status-label {
@@ -3550,26 +3797,67 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   color: var(--muted);
   line-height: 1.45;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .spc-warning {
   font-size: 0.71rem;
-  color: #c53030;
-  font-style: italic;
+  color: #553c9a;
+  background: #faf8ff;
+  border-radius: 7px;
+  padding: 7px 9px;
   margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
+.spc-requirements {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #fff8f8;
+  border: 1px solid #fed7d7;
+}
+.spc-requirements-title {
+  margin-bottom: 6px;
+  color: #9b2c2c;
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+.spc-requirements ul { display: flex; flex-direction: column; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.spc-requirements li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; color: #5f5667; font-size: 0.7rem; line-height: 1.4; }
+.spc-requirements li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.spc-missing-marker,
+.spc-ready-marker {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+.spc-missing-marker { background: #fff; border: 1px solid #feb2b2; color: #c53030; }
+.spc-ready-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #c6f6d5;
+  border-radius: 8px;
+  background: #f0fff4;
+  color: #3d5f49;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.spc-ready-marker { background: #fff; border: 1px solid #9ae6b4; color: #276749; }
 
-.spc-missing-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
+@media (max-width: 560px) {
+  .score-provider-details-body { padding: 4px 12px 14px; }
+  .score-provider-summary { padding: 11px 12px; }
+  .score-provider-card { padding: 13px 13px 13px 17px; }
+  .spc-header { flex-direction: column; gap: 8px; }
+  .spc-category-badge { align-self: flex-start; }
 }
-.spc-missing-list li {
-  font-size: 0.71rem;
-  color: var(--muted);
-  padding: 1px 0;
-}
-.spc-missing-list li::before { content: "· "; }
 
 .spc-metrics-row {
   display: flex;
@@ -3596,47 +3884,8 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin: 0;
 }
 
-/* ── v30: Score step placeholder ───────────────────────────────────────────── */
-.score-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 48px 24px;
-  gap: 12px;
-}
-.score-placeholder-icon {
-  width: 48px; height: 48px;
-  background: var(--purple-faint);
-  border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--purple);
-}
-.score-placeholder-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.score-placeholder-body {
-  font-size: 0.79rem;
-  color: var(--muted);
-  max-width: 480px;
-  line-height: 1.6;
-  margin: 0;
-}
-.score-placeholder-provider {
-  display: inline-block;
-  font-size: 0.71rem;
-  color: var(--purple);
-  background: var(--purple-faint);
-  border: 1px solid var(--purple-light);
-  border-radius: 20px;
-  padding: 3px 10px;
-  margin-top: 4px;
-}
-
 /* ══════════════════════════════════════════════════════════════════════════════
-   v32 — Session persistence
+   Session restore notice
    ══════════════════════════════════════════════════════════════════════════════ */
 
 /* Restore banner — kept in DOM for smoke-test compatibility; NEVER shown */
@@ -3744,6 +3993,53 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin: 0;
   line-height: 1.5;
 }
+.scoring-provider-summary-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e3dcf8;
+  border-radius: 10px;
+  background: #fff;
+}
+.scoring-provider-summary-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.scoring-provider-summary-card h3 {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.scoring-provider-summary-title {
+  color: #553c9a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.scoring-provider-summary-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.scoring-provider-summary-card .btn { flex: 0 0 auto; white-space: nowrap; }
+.scoring-provider-modal .config-manager-modal-header h4 {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+.scoring-provider-modal .config-manager-modal-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+.scoring-provider-modal-body { display: flex; flex-direction: column; gap: 14px; }
 /* Mode option rows */
 .scoring-mode-list {
   display: flex;
@@ -3763,6 +4059,14 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .scoring-mode-row:hover { border-color: var(--purple-light); background: #faf8ff; }
 .scoring-mode-row:has(input:checked) { border-color: var(--purple); background: #faf8ff; }
+.scoring-mode-row-unavailable,
+.scoring-mode-row-unavailable:hover {
+  opacity: 0.62;
+  cursor: not-allowed;
+  border-color: var(--border);
+  background: var(--surface);
+}
+.scoring-mode-row-unavailable input { cursor: not-allowed; }
 .scoring-mode-row input[type="radio"] {
   margin-top: 3px;
   accent-color: var(--purple);
@@ -3803,6 +4107,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   font-size: 0.72rem;
   color: var(--muted);
   margin-top: 4px;
+  overflow-wrap: anywhere;
 }
 .scoring-mode-status.ok  { color: #276749; }
 .scoring-mode-status.err { color: #c53030; }
@@ -3817,7 +4122,9 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   color: #78350f;
   margin-bottom: 12px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
+#scoring-custom-section { min-width: 0; }
 .scoring-security-warning code {
   background: rgba(0,0,0,0.07);
   padding: 1px 4px;
@@ -3838,6 +4145,8 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .scoring-upload-status {
   font-size: 0.75rem;
   color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .scoring-upload-status.ok  { color: #276749; }
 .scoring-upload-status.err { color: #c53030; }
@@ -3873,12 +4182,14 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   border: 1px solid var(--border);
   border-radius: 7px;
   font-size: 0.78rem;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .scoring-pkg-item.pkg-selected { border-color: var(--purple); background: #faf8ff; }
-.scoring-pkg-info { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-.scoring-pkg-name { font-weight: 600; color: var(--text); }
-.scoring-pkg-meta { font-size: 0.68rem; color: var(--muted); }
-.scoring-pkg-actions { display: flex; align-items: center; gap: 6px; }
+.scoring-pkg-info { display: flex; flex: 1 1 360px; flex-direction: column; gap: 2px; min-width: 0; }
+.scoring-pkg-name { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.scoring-pkg-meta { font-size: 0.68rem; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.scoring-pkg-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .scoring-pkg-badge {
   font-size: 0.63rem;
   font-weight: 600;
@@ -3908,13 +4219,21 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .scoring-pkg-select {
   width: 100%;
-  max-width: 380px;
+  max-width: 100%;
+  min-width: 0;
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: 7px;
   font-size: 0.8rem;
   color: var(--text);
   background: #fff;
+}
+.scoring-pkg-selection-detail {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 .scoring-admin-actions {
   display: flex;
@@ -3924,9 +4243,20 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 .scoring-setup-msg {
   font-size: 0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .scoring-setup-msg.ok  { color: #276749; }
 .scoring-setup-msg.err { color: #c53030; }
+
+@media (max-width: 560px) {
+  .scoring-provider-summary-card { flex-direction: column; }
+  .scoring-provider-summary-card .btn { width: 100%; }
+  .scoring-provider-modal .scoring-mode-row { padding: 10px; }
+  .scoring-pkg-actions { width: 100%; justify-content: space-between; }
+  .scoring-admin-actions { align-items: stretch; flex-direction: column; }
+  .scoring-admin-actions .btn { width: 100%; }
+}
 
 /* Reload challenge rules */
 .config-reload {
@@ -3953,7 +4283,12 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   border: 1px solid #ddd6fe;
   border-radius: 12px;
   background: #fbfaff;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
+.config-manager,
+.config-manager * { box-sizing: border-box; }
 .config-manager-heading,
 .config-manager-subheading {
   display: flex;
@@ -3967,6 +4302,12 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .config-manager h3 { font-size: 0.95rem; }
 .config-manager h4 { font-size: 0.82rem; }
 .config-manager p { margin: 0; color: var(--muted); font-size: 0.73rem; line-height: 1.45; }
+.config-manager h3,
+.config-manager h4,
+.config-manager p,
+.config-manager span,
+.config-manager small,
+.config-manager dd { overflow-wrap: anywhere; }
 .config-manager-challenge,
 .config-manager-field {
   display: flex;
@@ -3975,10 +4316,16 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   font-size: 0.72rem;
   font-weight: 600;
   color: #4a5568;
+  min-width: 0;
 }
+.config-manager-challenge { width: min(220px, 100%); }
 .config-manager select,
 .config-manager input[type="text"],
-.config-manager input[type="number"] {
+.config-manager input[type="number"],
+.config-manager textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 34px;
   padding: 6px 9px;
   border: 1px solid var(--border);
@@ -3987,11 +4334,112 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   color: var(--text);
   font: inherit;
 }
-.config-manager-grid {
+.config-manager textarea {
+  min-height: 58px;
+  line-height: 1.4;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.config-manager-sections {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+}
+.config-manager-section {
+  min-width: 0;
+}
+.config-manager-section + .config-manager-section {
+  padding-top: 17px;
+  border-top: 1px solid #ece8f6;
+}
+.config-manager-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.config-manager-section-heading h4 {
+  font-size: 0.79rem;
+}
+.config-manager-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+.config-manager-summary-grid-single { grid-template-columns: minmax(0, 1fr); }
+.config-manager-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-top: 14px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 11px 12px;
+  border: 1px solid #e8e3f7;
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.config-manager-summary-card:hover {
+  border-color: #d5caef;
+  box-shadow: 0 4px 14px rgba(55, 38, 95, 0.06);
+}
+.config-manager-summary-card-wide { grid-column: 1 / -1; }
+.config-manager-summary-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.config-manager-open-button {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid #d8d0ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #553c9a;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.config-manager-open-button::after {
+  content: "\2192";
+  margin-left: 5px;
+}
+.config-manager-open-button:hover { background: #f7f4ff; border-color: #b8a8df; }
+.config-manager-open-button:focus-visible { outline: 3px solid rgba(109, 74, 194, 0.25); outline-offset: 2px; }
+.config-manager-review-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 13px;
+  border: 1px solid #dcd3f2;
+  border-radius: 10px;
+  background: #f8f6fd;
+}
+.config-manager-review-copy {
+  flex: 1 1 290px;
+  min-width: 0;
+}
+.config-manager-review-copy > span {
+  display: block;
+  margin-bottom: 3px;
+  color: #6d4ac2;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.config-manager-review-copy strong {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text);
+  font-size: 0.78rem;
 }
 .config-manager-card {
   padding: 12px;
@@ -4002,22 +4450,35 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .config-manager-card-wide { grid-column: 1 / -1; }
 .config-map-row {
   display: grid;
-  grid-template-columns: minmax(100px, .65fr) 130px 90px minmax(180px, 1.4fr);
-  gap: 8px;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, .7fr) minmax(90px, .45fr) minmax(120px, .65fr);
+  grid-template-areas:
+    "name state dimensions units"
+    "aliases aliases aliases aliases";
+  gap: 9px 12px;
   align-items: end;
-  padding: 8px 0;
+  min-width: 0;
+  padding: 12px 0;
   border-bottom: 1px solid #f0edf8;
 }
 .config-map-row:last-child { border-bottom: 0; }
-.config-map-name { align-self: center; font-size: 0.76rem; font-weight: 600; }
+.config-map-name { grid-area: name; align-self: center; min-width: 0; font-size: 0.76rem; font-weight: 600; }
 .config-map-name small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
-.config-manager-check { display: flex; align-items: center; gap: 7px; margin: 8px 0; font-size: 0.76rem; }
+.config-map-state-field { grid-area: state; }
+.config-map-dimensions-field { grid-area: dimensions; }
+.config-map-unit { grid-area: units; align-self: end; min-width: 0; }
+.config-map-unit strong { display: block; min-height: 34px; padding: 8px 9px; border: 1px solid #eeeaf8; border-radius: 7px; background: #faf9fd; color: var(--text); font-size: 0.72rem; font-weight: 500; }
+.config-map-aliases-field { grid-area: aliases; }
+.config-manager-check { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 0.76rem; line-height: 1.45; }
+.config-manager-check input { flex: 0 0 auto; margin-top: 2px; }
 .config-dataset-row {
   display: grid;
-  grid-template-columns: 1fr repeat(3, minmax(62px, .65fr));
-  gap: 7px;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(90px, .7fr));
+  gap: 9px;
   align-items: end;
-  margin: 8px 0;
+  min-width: 0;
+  margin: 10px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0edf8;
 }
 .config-dataset-row label { font-size: 0.66rem; color: var(--muted); }
 .config-dataset-row strong { font-size: 0.74rem; align-self: center; }
@@ -4030,10 +4491,12 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   align-items: center;
   margin-top: 12px;
 }
+.config-manager-actions { justify-content: flex-end; margin-top: 0; }
+.config-manager-review-bar .config-manager-actions { flex: 1 1 520px; }
 .config-manager-results { margin-top: 10px; padding: 10px; border-radius: 8px; background: #f6f4fc; font-size: 0.74rem; }
 .config-manager-results.ok { background: #f0fff4; color: #276749; }
 .config-manager-results.err { background: #fff5f5; color: #c53030; }
-.config-manager-results ul { margin: 7px 0 0 18px; padding: 0; }
+.config-manager-results ul { margin: 7px 0 0 18px; padding: 0; overflow-wrap: anywhere; }
 .config-manager-history,
 .config-manager-assets { margin-top: 10px; }
 .config-version-row,
@@ -4045,26 +4508,167 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   padding: 8px 0;
   border-bottom: 1px solid #f0edf8;
   font-size: 0.74rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.config-version-row > span,
+.config-asset-row > span {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 .config-version-active { color: #276749; font-weight: 600; }
-.config-manager-table-wrap { overflow-x: auto; margin-top: 8px; }
-.config-manager-table { width: 100%; border-collapse: collapse; font-size: 0.69rem; }
-.config-manager-table th,
-.config-manager-table td { padding: 7px; text-align: left; vertical-align: top; border-bottom: 1px solid #eeeaf8; }
-.config-manager-table th { color: #553c9a; white-space: nowrap; }
+.config-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.config-capability-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e8e3f7;
+  border-radius: 9px;
+  background: #fbfaff;
+}
+.config-capability-card h5 { margin: 0 0 8px; color: #553c9a; font-size: 0.78rem; }
+.config-capability-list { display: grid; grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr); gap: 7px 12px; margin: 0; }
+.config-capability-list dt { color: var(--muted); font-size: 0.69rem; font-weight: 600; }
+.config-capability-list dd { margin: 0; color: var(--text); font-size: 0.71rem; line-height: 1.42; min-width: 0; }
+.config-manager-detail-list { display: grid; grid-template-columns: minmax(120px, .45fr) minmax(0, 1fr); gap: 10px 16px; margin: 0; }
+.config-manager-detail-list dt { color: var(--muted); font-size: 0.72rem; font-weight: 600; }
+.config-manager-detail-list dd { margin: 0; color: var(--text); font-size: 0.75rem; line-height: 1.45; min-width: 0; }
 .config-manager-note { margin-top: 8px !important; }
+.config-manager-package-block { margin-top: 12px; min-width: 0; }
+.config-manager-package-detail { margin-top: 7px !important; overflow-wrap: anywhere; }
 .config-manager-message { padding: 12px 0; color: var(--muted); font-size: 0.75rem; }
+.config-manager-asset-upload > * { min-width: 0; max-width: 100%; }
+.config-manager-asset-upload select { flex: 1 1 210px; width: auto; }
+.config-manager-selected-file {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.71rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 
-@media (max-width: 760px) {
-  .config-manager-grid { grid-template-columns: 1fr; }
-  .config-manager-card-wide { grid-column: auto; }
-  .config-map-row { grid-template-columns: 1fr 1fr; }
-  .config-map-name { grid-column: 1 / -1; }
+body.config-manager-modal-open { overflow: hidden; }
+.config-manager-modal[hidden] { display: none; }
+.config-manager-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(31, 24, 55, 0.42);
+}
+.config-manager-modal-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(40, 28, 78, 0.24);
+}
+.config-manager-modal-dialog-sm { width: min(620px, 100%); }
+.config-manager-modal-dialog-wide { width: min(1040px, 100%); }
+.config-manager-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 17px 18px;
+  border-bottom: 1px solid #eeeaf8;
+  background: #fbfaff;
+}
+.config-manager-modal-header > div { min-width: 0; }
+.config-manager-modal-close {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid #d8d0ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #553c9a;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.config-manager-modal-close:hover { background: #f5f2fc; }
+.config-manager-modal-close:focus-visible { outline: 3px solid rgba(109, 74, 194, 0.25); outline-offset: 2px; }
+.config-manager-modal-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  padding: 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.config-manager-modal-body > .config-manager-field + .config-manager-field { margin-top: 12px; }
+
+@media (max-width: 820px) {
+  .config-manager-summary-grid { grid-template-columns: 1fr; }
+  .config-manager-summary-card-wide { grid-column: auto; }
+  .config-manager-review-bar { align-items: flex-start; flex-direction: column; }
+  .config-manager-review-bar .config-manager-actions { flex-basis: auto; }
+  .config-manager-actions { justify-content: flex-start; }
+  .config-map-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "name name"
+      "state dimensions"
+      "units units"
+      "aliases aliases";
+  }
   .config-dataset-row { grid-template-columns: 1fr 1fr; }
+  .config-dataset-row strong { grid-column: 1 / -1; }
+  .config-capability-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .config-manager { padding: 12px; }
+  .config-manager-heading { gap: 10px; }
+  .config-manager-challenge { width: 100%; }
+  .config-manager-summary-card { min-height: 0; }
+  .config-manager-open-button { min-width: 68px; }
+  .config-manager-review-bar { padding: 11px; }
+  .config-manager-actions { width: 100%; }
+  .config-manager-actions .btn { flex: 1 1 100%; width: 100%; }
+  .config-manager-modal { padding: 8px; align-items: stretch; }
+  .config-manager-modal-dialog,
+  .config-manager-modal-dialog-sm,
+  .config-manager-modal-dialog-wide { width: 100%; max-height: calc(100vh - 16px); border-radius: 11px; }
+  .config-manager-modal-header { padding: 14px; gap: 10px; }
+  .config-manager-modal-body { padding: 14px; }
+  .config-map-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "name" "state" "dimensions" "units" "aliases";
+  }
+  .config-dataset-row { grid-template-columns: 1fr; }
+  .config-dataset-row strong { grid-column: auto; }
+  .config-manager-detail-list,
+  .config-capability-list { grid-template-columns: 1fr; gap: 3px; }
+  .config-manager-detail-list dd,
+  .config-capability-list dd { margin-bottom: 8px; }
+  .config-manager-inline-actions .btn { flex: 1 1 150px; text-align: center; }
+  .config-manager-asset-upload { align-items: stretch; flex-direction: column; }
+  .config-manager-asset-upload select { flex-basis: auto; width: 100%; }
+  .config-manager-selected-file { flex-basis: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   RUN STEP — Card layout  (v41)
+   Run step card layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Summary card top row */
@@ -4184,7 +4788,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SCORE STEP — "Not configured" info card  (v41)
+   Analysis not-configured card
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .score-not-configured-card {
@@ -4300,7 +4904,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   UPLOAD STEP — Old form-card layout restored  (v43)
+   Upload step form card
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Step panel context — tighter max-width for form-card feel */
@@ -4462,10 +5066,10 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TOPBAR LAYOUT — sidebar removed, full-width form layout  (v44)
+   Full-width application layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Override v26 sidebar row layout back to column */
+/* Keep the application layout in one column. */
 .app {
   display: flex !important;
   flex-direction: column !important;
@@ -4672,7 +5276,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   USABILITY PASS v45 — compact upload form, fix wizard footer, fix layout
+   Compact upload form and workflow actions
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Upload step panel — no extra bottom padding (footer hidden on upload) ── */
@@ -4787,7 +5391,7 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v46 — Remove top step nav · Fix body scroll · Fix wizard footer overlap
+   Workflow scrolling and footer layout
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* 1. Top step navigation — removed from HTML, also hidden via CSS for safety */
@@ -4855,7 +5459,7 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v47 — Score step: simplified main cards, tooltip badges
+   Analysis cards and tooltips
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Score main card (both not-configured + ready states) ── */
@@ -5010,7 +5614,7 @@ html, body {
 .score-status-badge { display: none !important; }   /* replaced by smc-badge */
 
 /* ══════════════════════════════════════════════════════════════════════════
-   v48 — OSIPI unified design system
+   OSIPI interface styles
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* 1. Lock to Inter — remove Montserrat from body */
@@ -5176,7 +5780,7 @@ html, body {
 .wf-step.wf-active .wf-step-num { background: var(--purple) !important; border-color: var(--purple) !important; }
 
 
-/* ── v49: Score & Preview Step ──────────────────────────────────────────────── */
+/* QC and Preview step */
 
 .summary-cards {
   display: grid;
@@ -5391,7 +5995,7 @@ html, body {
   margin: 0;
 }
 
-/* ── v50: Score & Preview visual cleanup ─────────────────────────────────────── */
+/* QC and Preview layout */
 
 /* Session chip — subtle, not a badge */
 .session-chip--subtle {
@@ -5538,7 +6142,7 @@ html, body {
   display: block;
 }
 
-/* ── v51: Score & Preview — advanced layout & interactivity ──────────────── */
+/* QC and Preview interactive controls */
 
 /* Force 2×2 grid; 1 column on narrow screens */
 .summary-cards {
@@ -5698,7 +6302,7 @@ html, body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v53 — Remove purple topbar; clean footer layout with Start New + restore
+   Footer, Start New, and restore controls
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Hide the purple topbar entirely */
@@ -5757,7 +6361,7 @@ html, body {
 .wf-restore-pill--warn:hover { border-color: #dc2626; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v54 — Upload-card restore notice
+   Upload-card restore notice
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Upload-card restore notice — slim inline strip */
@@ -5804,8 +6408,7 @@ html, body {
 .upload-restore-dismiss:hover { opacity: 1; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   v55 — Robust upload-step footer suppression
-   The v54 block added display:flex !important which beat JS style.display="none".
+   Upload-step footer suppression
    These rules win via specificity AND !important on the upload-specific selector.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -5825,7 +6428,7 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 }
 
 /* ==========================================================================
-   v58 — GLOBAL UI CONSISTENCY PASS
+   Shared interface consistency
    Every step now matches the Upload card: one centred 720px column, white
    cards, soft border + shadow, 12px radius, a single purple accent, the same
    font, and tooltips instead of long technical text. This block is appended
@@ -5953,7 +6556,7 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 .pg-card-header .help-tooltip { vertical-align: middle; }
 
 /* ==========================================================================
-   v59 — Guided evaluation wizard refinements
+   Guided review workflow
    ========================================================================== */
 
 .status-pill {
@@ -6178,7 +6781,7 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 }
 
 /* ==========================================================================
-   v60 - Product button system, compact progress, and footer polish
+   Button system, compact progress, and footer
    ========================================================================== */
 
 .btn,
@@ -6568,7 +7171,7 @@ body[data-step="upload"] .content.step-main {
 }
 
 /* ==========================================================================
-   v61 - Mirror Upload card shell across every workflow page
+   Shared workflow card shell
    ========================================================================== */
 
 .step-shell {
@@ -6758,7 +7361,7 @@ body[data-step="upload"] .content.step-main {
 }
 
 /* ==========================================================================
-   v62 - In-card wizard actions on every step
+   In-card workflow actions
    ========================================================================== */
 
 .content,
@@ -7635,7 +8238,7 @@ body[data-step] .wizard-footer {
 	}
 
 /* ==========================================================================
-   Score & Preview — clean final-review report (v2)
+   QC and Preview review summary
    Fewer boxes, softer separators: one hero, one slim rail, one analytics
    panel (two columns), one compact export block, one collapsed details.
    ========================================================================== */
@@ -7754,7 +8357,7 @@ body[data-step] .wizard-footer {
 }
 
 /* ==========================================================================
-   Score & Preview — final-report hierarchy (v3)
+   QC and Preview information hierarchy
    ========================================================================== */
 
 .summary-report {
@@ -8103,8 +8706,8 @@ body[data-step] .wizard-footer {
 
 .nifti-preview-modal-panel {
   position: relative;
-  width: min(940px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
+  width: min(900px, 100%);
+  max-height: min(780px, calc(100vh - 48px));
   overflow: auto;
   border-radius: 14px;
   background: #fff;
@@ -8131,7 +8734,7 @@ body[data-step] .wizard-footer {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 20px 72px 14px 20px;
+  padding: 20px 82px 16px 24px;
   border-top: 5px solid var(--purple);
   border-bottom: 1px solid var(--divider);
 }
@@ -8154,7 +8757,22 @@ body[data-step] .wizard-footer {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 14px 20px 0;
+  padding: 0;
+}
+
+.nifti-preview-view-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px 0;
+}
+
+.nifti-preview-section-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .nifti-preview-tabs button {
@@ -8177,23 +8795,26 @@ body[data-step] .wizard-footer {
 
 .nifti-preview-modal-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
-  gap: 0;
-  padding: 16px 20px 20px;
+  grid-template-columns: minmax(0, 1.55fr) minmax(245px, 0.7fr);
+  align-items: stretch;
+  gap: 18px;
+  padding: 14px 24px 0;
 }
 
 .nifti-preview-modal-image-wrap {
-  min-height: 380px;
+  height: clamp(320px, 52vh, 520px);
+  min-height: 0;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 10px;
   background: #10131a;
+  padding: 14px;
 }
 
 .nifti-preview-modal-image {
-  max-width: 100%;
-  max-height: 62vh;
+  width: 100%;
+  height: 100%;
   display: block;
   object-fit: contain;
 }
@@ -8201,8 +8822,44 @@ body[data-step] .wizard-footer {
 .nifti-preview-modal-meta {
   display: flex;
   flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  background: #faf9fc;
+}
+
+.nifti-preview-modal-meta h3 {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+
+.nifti-preview-modal-meta .summary-kv {
+  grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(124, 92, 191, 0.1);
+}
+
+.nifti-preview-modal-meta .summary-kv:last-of-type {
+  border-bottom: 0;
+}
+
+.nifti-preview-modal-meta .summary-kv-value {
+  text-align: right;
+}
+
+.nifti-preview-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
-  padding-left: 18px;
+  margin-top: 18px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--divider);
 }
 
 body.preview-modal-open {
@@ -8292,16 +8949,34 @@ body.preview-modal-open {
   }
 
   .nifti-preview-modal-header {
-    padding-right: 20px;
+    padding-right: 82px;
   }
 
   .nifti-preview-modal-meta {
-    padding-left: 0;
-    padding-top: 14px;
+    padding: 14px;
   }
 
   .nifti-preview-modal-image-wrap {
-    min-height: 260px;
+    height: min(52vh, 360px);
+  }
+
+  .nifti-preview-view-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 14px 16px 0;
+  }
+
+  .nifti-preview-modal-grid {
+    padding: 14px 16px 0;
+  }
+
+  .nifti-preview-modal-footer {
+    padding: 14px 16px 18px;
+  }
+
+  .nifti-preview-modal-footer .btn {
+    width: 100%;
   }
 
   .summary-kv {
@@ -8319,7 +8994,7 @@ body.preview-modal-open {
    Clinical workbench design system for Steps 2-6
    Consolidates the previous versioned override stack into one product UI:
    contained step shell, compact worklists, unified chips, clinical summary,
-   and export file rows. Step 1 Upload markup/layout is intentionally untouched.
+   and export file rows. Step 1 Upload markup/layout is unchanged.
    ========================================================================== */
 
 :root {
@@ -9219,6 +9894,41 @@ body[data-step] .wizard-footer,
   line-height: 1.4;
 }
 
+.review-challenge-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e6c778;
+  border-radius: 9px;
+  background: #fff9e9;
+  color: #704d09;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.review-challenge-suggestion[hidden] { display: none; }
+
+.review-challenge-use {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid #b28a2e;
+  border-radius: 7px;
+  background: #fff;
+  color: #704d09;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.review-challenge-use:hover,
+.review-challenge-use:focus-visible {
+  border-color: #704d09;
+  outline: 0;
+}
+
 /* Step 3 uses the header summary line instead of dashboard/stat tiles. */
 .validation-summary-stats {
   display: none !important;
@@ -9226,7 +9936,7 @@ body[data-step] .wizard-footer,
 
 /* Step 4 process screen. */
 #step-run .run-settings-card {
-  display: block !important;
+  display: block;
   padding: 14px 28px !important;
 }
 
@@ -10063,7 +10773,7 @@ body[data-step] .wizard-footer,
 }
 
 /* ==========================================================================
-   v75 — Step 5 Map Preview: one-at-a-time panel + modal gallery
+   Step 5 map preview panel and modal gallery
    Compact tabbed preview (one map visible at a time, ~92px thumbnail,
    tight padding) and Prev/Next gallery controls with a counter inside the
    existing preview modal. Scoped to Step 5 / the shared modal only.
@@ -10127,22 +10837,27 @@ body[data-step] .wizard-footer,
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 20px 0;
+  padding: 14px 24px 0;
 }
 .nifti-preview-modal-nav .btn {
-  min-height: 28px;
-  padding: 4px 12px;
+  min-height: 34px;
+  padding: 6px 12px;
   font-size: 0.72rem;
 }
 .nifti-preview-counter {
   color: var(--muted, #6b7280);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 
+.nifti-preview-counter strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
 /* ==========================================================================
-   v77 — Submission Structure popover (click-to-open file tree)
+   Submission structure popover
    Clinical, OSIPI-purple styled. Normal CSS (no Tailwind). Lives inside the
    shared worklist details area; does not replace worklist rows.
    ========================================================================== */
@@ -10190,6 +10905,11 @@ body[data-step] .wizard-footer,
 }
 .structure-popover[hidden] { display: none; }
 
+.structure-popover.opens-upward {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .structure-tree {
   display: flex;
   flex-direction: column;
@@ -10226,7 +10946,7 @@ body[data-step] .wizard-footer,
 }
 
 /* ==========================================================================
-   v83 — Step 2 mirrors Step 3: card header, section row, toolbar, worklist.
+   Shared Review and Validate layout
    ========================================================================== */
 
 .page-summary-line {
@@ -10316,7 +11036,7 @@ body[data-step] .wizard-footer,
 }
 
 /* ==========================================================================
-   v80 — Visible mirroring: remove old Score table/setup UI, flatten Step 3
+   Shared workflow section layout
    stats into a compact summary row. Score/Validate/Export rows now share the
    exact worklist row layout (title left, single chip + actions on the right).
    ========================================================================== */
@@ -10330,7 +11050,7 @@ body[data-step] .wizard-footer,
   display: block !important;
 }
 
-/* Step 3 validation stats/dashboard UI is intentionally removed. */
+/* Step 3 validation stats/dashboard UI was removed. */
 #step-validate .validation-summary-stats,
 #step-validate .validation-summary-stats.val-stat-tiles {
   display: none !important;
@@ -10359,7 +11079,7 @@ body[data-step] .wizard-footer,
 }
 
 /* ==========================================================================
-   v81 — One shared Details / Hide details control + trimmed collapsed rows
+   Shared details controls and compact rows
    Every row uses the same .details-toggle button (right side, after any
    primary action). Secondary info lives inside .worklist-details.
    ========================================================================== */
@@ -10408,7 +11128,7 @@ body[data-step] .wizard-footer,
 }
 
 /* ==========================================================================
-   v84 — Upload-size wizard shell + always-visible worklists.
+   Contained workflow shell and visible worklists
    Steps 2-6 match the Upload card width/header/action rhythm while keeping the
    list area open; only per-row Details panels collapse.
    ========================================================================== */
@@ -10591,7 +11311,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 
 /* ==========================================================================
-   v85 — Step 2 toolbar parity + non-overlapping filter menus.
+   Review toolbar and filter menus
    Review uses the same compact filter row as Validate; selection is a small
    inline text group, and dropdown labels/values/menu items cannot collide.
    ========================================================================== */
@@ -10762,7 +11482,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 
 /* ==========================================================================
-   v86 — Compact shared toolbars + neutral submission row icon.
+   Compact toolbars and submission icons
    Sort is no longer visible in the main worklist toolbars, Step 2 selection
    actions sit inline with filters, and submission rows use one file mark.
    ========================================================================== */
@@ -10895,7 +11615,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 
 /* ==========================================================================
-   v90 — Filter dropdown: open as a fixed overlay so it is never clipped by
+   Filter dropdown: open as a fixed overlay so it is never clipped by
    the card / step scroll container, and always stays inside the viewport.
    The higher-specificity selector beats the base .filter-menu !important rules.
    Applies to every filter dropdown (Status / Map / Sort / shared menus).
@@ -10915,7 +11635,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 
 /* ==========================================================================
-   v92 — Researcher-facing calm styling
+   Researcher-facing workflow styling
    Replace loud OK/success + yellow warning styling in the visible UI with
    neutral gray. Red is reserved for true blocking errors only.
    ========================================================================== */
@@ -11203,7 +11923,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 
 .vr-detail-nifti strong { color: var(--jr-ink); font-weight: 600; }
 
-/* ── Technical details disclosure ───────────────────────────── */
+/* ── Technical details  ───────────────────────────── */
 
 .tech-checks-toggle > summary {
   font-size: 0.66rem;
@@ -11218,3 +11938,54 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 
 .tech-checks-toggle > summary::-webkit-details-marker { display: none; }
+
+/* Keep current type tokens after the older compatibility rules. */
+:root {
+  --card-w: 840px;
+  --wizard-card-h: 820px;
+  --wl-row-pad-y: 13px;
+  --wl-row-pad-x: 15px;
+  --wl-row-gap: 10px;
+  --btn-h: 36px;
+  --fs-page-title: 1.2rem;
+  --fs-intro-title: 1rem;
+  --fs-section: 0.82rem;
+  --fs-row-title: 0.9rem;
+  --fs-meta: 0.8rem;
+}
+
+.upload-form-card .card-title,
+.step-shell-header .card-title {
+  font-size: 1.2rem !important;
+  line-height: 1.3 !important;
+}
+
+.upload-form-card .card-desc,
+.step-shell-header .card-desc {
+  max-width: 64ch;
+  font-size: 0.88rem !important;
+  line-height: 1.55 !important;
+}
+
+.upload-form-card .section-heading,
+.section-title,
+.collapsible-section-title {
+  color: var(--text) !important;
+  font-size: var(--fs-section) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.35 !important;
+  text-transform: none !important;
+}
+
+.upload-form-card .section-heading {
+  margin-bottom: 5px !important;
+  padding-bottom: 0 !important;
+  border-bottom: 0 !important;
+}
+
+.label,
+.upload-form-card .label {
+  font-size: 0.84rem !important;
+  line-height: 1.35;
+}

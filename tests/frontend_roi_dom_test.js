@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 4D: executes the ROI renderer against a minimal DOM stub.
+ * Executes the ROI renderer against a minimal DOM stub.
  *
  * The main smoke suite inspects source text. This one actually *runs*
  * renderRoiDescriptiveStatistics() and inspects the DOM it produces, so
@@ -31,17 +31,14 @@ function checkEqual(desc, actual, expected) {
   check(desc, actual === expected, `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
-// ── Extract the pieces under test ────────────────────────────────────────
+// Extract the pieces under test.
 function sliceFrom(startMarker) {
   const start = appJs.indexOf(startMarker);
   if (start < 0) throw new Error(`marker not found: ${startMarker}`);
   return appJs.slice(start);
 }
 
-/** Extract one top-level function by matching its closing brace.
- *  An end-marker search is unsafe here: the obvious sentinel
- *  (`function escapeRegExp`) appears *earlier* in the file, so the search
- *  returned -1 and the slice silently swallowed the rest of app.js. */
+/** Extract one top-level function by matching its closing brace. */
 function extractFunction(name) {
   const start = appJs.indexOf(`function ${name}(`);
   if (start < 0) throw new Error(`function not found: ${name}`);
@@ -61,7 +58,7 @@ function extractFunction(name) {
 const escapeSrc = extractFunction("escapeHtml");
 const roiSrc = sliceFrom("/* ── ROI Ktrans statistics");
 
-// ── Minimal DOM stub ─────────────────────────────────────────────────────
+// Minimal DOM stub.
 function makeElement(id) {
   return {
     id,

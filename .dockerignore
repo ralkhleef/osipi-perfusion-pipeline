@@ -1,33 +1,35 @@
 .git
 .gitignore
 .DS_Store
-.pytest_cache
 .venv
 __pycache__
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.egg-info
+.pytest_cache
 .coverage
 htmlcov
 
+# Local runtime and private data
 data/outputs
 data/reference_data
-data/sample_submissions
-/release
-scripts/dev
-submissions/incoming
-submissions/extracted
-submissions/validated
+data/configuration_manager
+data/scoring
+data/scoring_results
+private_scoring_assets
+submissions
+release
+tmp
 
+# Files not copied by the application image
 docs
+examples
+scripts
 tests
-demo_broken_submission
-demo_valid_submission
-sample_valid_submission
 *.zip
 *.nii
 *.nii.gz
 *.dcm
+*.dicom
 *.ima
 *.mha
 *.mhd

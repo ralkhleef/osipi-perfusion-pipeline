@@ -1,4 +1,4 @@
-"""Phase 4B: ROI descriptive statistics wired through the real pipeline.
+"""ROI descriptive statistics integrated with reports and exports.
 
 Integration and presentation only. The formulas are covered by
 ``test_roi_descriptive.py`` and are not re-tested here; these tests assert
@@ -176,7 +176,7 @@ def test_dynamic_report_sections_do_not_use_stale_table_numbers(monkeypatch) -> 
 
 def test_limitations_are_not_repeated_in_html(monkeypatch) -> None:
     html = _html_text([_roi_record()], monkeypatch)
-    assert html.count("Basic NIfTI QC checks readability") == 1
+    assert html.count("QC checks NIfTI readability") == 1
 
 
 def test_methodology_text_is_shared_not_duplicated(monkeypatch) -> None:
@@ -318,11 +318,7 @@ def test_roi_failure_preserves_existing_reference_metrics() -> None:
 
 
 def test_production_scoring_path_invokes_the_roi_layer(monkeypatch, tmp_path) -> None:
-    """The wiring itself: analyze_submission_niftis must call the ROI layer.
-
-    Without this, every other test still passes while nothing is ever
-    populated in production, which is exactly how Phase 4 shipped.
-    """
+    """The production analysis path calls the ROI layer."""
     import scoring
 
     calls = {"n": 0}

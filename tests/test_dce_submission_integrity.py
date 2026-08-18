@@ -1,11 +1,6 @@
-"""A DCE-2026 team submission must survive upload intact.
+"""DCE multi-dataset upload and validation integration tests.
 
-Regression tests for the four defects a manual upload exposed
-(CODE_WALKTHROUGH.md §B1, §B2, §3.7, §B6). Every one of them was invisible to
-the existing suite because no test routed a multi-dataset submission through
-the real uploader, these do.
-
-The expected end state for the fixture below, stated once:
+Expected fixture structure:
 
     1 submission
     ├── Clinical    5 participants x 2 repeats x 1 site  = 10 scans
@@ -37,7 +32,7 @@ VALUES = list(VOLUME_VALUES)
 
 
 def _write(path: Path, values=VALUES, shape=SHAPE) -> None:
-    """Thin alias so the tests below read as tests, not as plumbing."""
+    """Write a small NIfTI fixture."""
     write_nifti(path, values, shape)
 
 
@@ -60,7 +55,7 @@ def uploaded(dce_zip: Path, tmp_path: Path, monkeypatch):
     return result, extracted
 
 
-# ── B1: dataset directories stay together ─────────────────────────────────
+# Dataset directories stay together
 
 def test_dataset_directories_do_not_split_the_submission(uploaded) -> None:
     result, _ = uploaded

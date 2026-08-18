@@ -1,17 +1,4 @@
-"""Build and run ingested submissions with Docker.
-
-Execution v2 additions over v1:
-  - Per-submission ``run_config.json`` for custom run commands and timeout.
-  - Dedicated ``/output`` mount (read-write) so submitted code can write results.
-  - Resource limits: ``--memory``, ``--cpus``, ``--network none``,
-    ``--security-opt no-new-privileges``.
-  - ``timeout_seconds`` enforced via ``subprocess.run(timeout=...)``.
-  - Output file collection (all files, not just NIfTI) after the run.
-  - All artefacts for one run stored under a single run directory.
-  - Build failures return an ``ExecutionResult`` with ``build_failed=True``
-    (logs are saved); callers no longer need to catch ``DockerExecutionError``
-    for the build step.
-"""
+"""Build and run ingested submissions in restricted Docker containers."""
 
 from __future__ import annotations
 
@@ -36,7 +23,7 @@ DEFAULT_MEMORY_LIMIT        = "4g"
 DEFAULT_CPU_LIMIT           = "2.0"
 
 # ---------------------------------------------------------------------------
-# Docker-outside-of-Docker (DooD) path translation
+# Host-path translation for containers started through the Docker socket
 # ---------------------------------------------------------------------------
 # The backend runs inside a container, but volume mounts in `docker run -v`
 # are evaluated by the **host** Docker daemon, so paths must be host-visible.
@@ -75,11 +62,7 @@ def _to_host_path(container_path: Path) -> Path:
 
 
 class DockerExecutionError(RuntimeError):
-    """Raised for *pre-flight* failures: Docker not installed, bad path, etc.
-
-    Build and run failures do NOT raise this error, they are captured in the
-    returned ``ExecutionResult`` (``build_failed=True`` or ``passed=False``).
-    """
+    """Raised for pre-flight failures such as unavailable Docker or bad paths."""
 
 
 # ---------------------------------------------------------------------------

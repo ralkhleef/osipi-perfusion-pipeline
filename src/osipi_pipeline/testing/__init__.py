@@ -1,12 +1,4 @@
-"""Fixture builders shared by the test suite and the demo scripts.
-
-Deliberately part of the library rather than of ``tests/``: a demo or
-evidence script must not import from the test suite, because that drags in
-``pytest`` and makes a production-side tool fail on a machine that has only
-the runtime dependencies installed.
-
-Nothing in this package imports ``pytest``.
-"""
+"""Fixture builders shared by tests and demo scripts without importing pytest."""
 
 from osipi_pipeline.testing.synthetic import (
     CLINICAL_SCANS,

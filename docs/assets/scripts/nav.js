@@ -1,13 +1,4 @@
-/* Shared navigation for every documentation page.
- *
- * The site is static with no build step, so its pages would otherwise need
- * separate copies of the navbar and sidebar kept in sync. Defining the
- * structure once here and rendering it at load means a new page or a renamed
- * section is a one-line change in one file.
- *
- * Each page sets `document.body.dataset.page` to its own id; that drives the
- * active tab and which sidebar group is shown.
- */
+/* Shared navigation for the static documentation pages. */
 
 (() => {
   "use strict";
@@ -101,16 +92,7 @@
     },
   ];
 
-  // Hidden for now. `docs/status.html` still exists and still builds, but it
-  // is absent from PAGES, so it appears in no navbar tab and no sidebar list
-  // on any page. Restoring it means putting this entry back into PAGES above:
-  //
-  //   { id: "status", file: "status.html", tab: "Status",
-  //     links: [["#scientific-status", "Scientific status"]] }
-  //
-  // The page sets `data-page="status"`, which no longer matches an entry, so
-  // buildSidebar falls back to the Overview group. That is the intended
-  // behaviour for an unlisted page and is why the fallback exists.
+  // status.html is available by direct link but is not shown in the menu.
 
   const EXTERNAL = [
     ["https://osipi.ismrm.org/", "OSIPI"],
@@ -119,7 +101,7 @@
 
   const current = document.body.dataset.page || "index";
 
-  // ── Navbar tabs ────────────────────────────────────────────────────────
+  // Navbar
   const tabHost = document.querySelector("[data-navbar-tabs]");
   if (tabHost) {
     for (const page of PAGES) {
@@ -147,12 +129,9 @@
     }
   }
 
-  // ── Sidebar: this page's sections, then the other pages ────────────────
+  // Sidebar
   function buildSidebar(host) {
-    // An unlisted page: one deliberately kept out of PAGES, has no entry to
-    // find. Falling back to the first page would print Overview's section
-    // links under an Overview heading on a page that contains neither, so the
-    // "on this page" group is skipped entirely and only the site map is shown.
+    // Unlisted pages show only links to the other pages.
     const page = PAGES.find((p) => p.id === current);
 
     if (page) {
@@ -172,8 +151,7 @@
       host.appendChild(onThis);
     }
 
-    // Sibling pages, so the sidebar is a map of the whole site rather than a
-    // dead end at the bottom of one page.
+    // Links to the rest of the site.
     const others = PAGES.filter((p) => p.id !== current);
     if (others.length) {
       const group = document.createElement("div");

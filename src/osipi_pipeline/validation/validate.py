@@ -285,19 +285,7 @@ def duplicate_filename_groups(
     root: Path | None = None,
     challenge_type: str | None = None,
 ) -> list[tuple[str, list[Path]]]:
-    """Group files that genuinely repeat a filename *within one scan*.
-
-    A basename alone is not evidence of duplication. The DCE-2026 layout
-    requires the same standard names in every scan directory,
-    ``Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz`` and
-    ``…/Repeat2/Ktrans.nii.gz`` are two different scans, not a mistake, so
-    keying on the basename alone warns about every correct submission. See
-    CODE_WALKTHROUGH.md §B6.
-
-    Files are therefore keyed on resolved scan identity plus filename. Where
-    no identity can be resolved (a flat legacy submission) every file falls
-    into one bucket, which reproduces the original behaviour exactly.
-    """
+    """Group duplicate filenames within the same resolved scan identity."""
     challenge = (challenge_type or "").strip().lower() or None
     seen: dict[tuple, list[Path]] = {}
     for file_path in files:

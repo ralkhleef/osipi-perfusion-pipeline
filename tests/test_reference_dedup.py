@@ -1,18 +1,4 @@
-"""Reference maps and ROI masks are discovered once per physical file.
-
-Regression tests for CODE_WALKTHROUGH.md §B4. ``_reference_masks`` and
-``_reference_maps_by_type`` each search two spellings of a directory
-(``masks``/``Masks``, ``maps``/``Maps``). On a case-insensitive filesystem,
-macOS APFS by default, and Windows, those are the *same* directory, so
-deduplicating by ``Path`` admitted every file twice and doubled every ROI
-statistic in the CSV, the HTML table, the PDF, and the Results Summary.
-
-Case-insensitivity cannot be created on the Linux filesystem that CI runs on,
-so the case-folded directory is simulated with a **symlink**: two different
-paths that stat to the same inode, which is exactly the condition the bug
-turned on. Both behaviours are covered, the aliased case, and genuinely
-separate directories on a case-sensitive filesystem, which must NOT collapse.
-"""
+"""Reference maps and ROI masks are discovered once per physical file."""
 
 from __future__ import annotations
 
@@ -55,7 +41,7 @@ def _alias(root: Path, real: str, alias: str) -> bool:
         return False
 
 
-# ── The canonical key ─────────────────────────────────────────────────────
+# Canonical path identity
 
 def test_two_paths_to_one_file_share_a_key(tmp_path: Path) -> None:
     from scoring import canonical_path_key

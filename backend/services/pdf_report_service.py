@@ -477,8 +477,8 @@ def build_limitations(
     hardcoded, so a DCE-only report no longer claims something about ASL.
     """
     items = [
-        "Basic NIfTI QC checks readability and generic voxel statistics; "
-        "it is not full BIDS validation.",
+        "QC checks NIfTI readability and voxel statistics; full BIDS "
+        "validation is not implemented.",
     ]
     known = [str(c).strip() for c in challenges if str(c).strip()]
     if len(set(known)) > 1:
@@ -488,13 +488,13 @@ def build_limitations(
         )
     if reference_available:
         official_note = (
-            "Generic reference metrics are not official OSIPI scores unless "
-            "an official scoring provider is configured."
+            "Reference metrics are generic comparisons, not official OSIPI "
+            "scoring."
         )
         if known:
             official_note += (
-                f" No official overall {'/'.join(known)} score has been defined, "
-                "and no pass/fail scientific threshold is applied."
+                f" No official overall {'/'.join(known)} score, pass/fail "
+                "result, or ranking was calculated."
             )
         items.append(official_note)
         repeatability_note = UNAVAILABLE_METRICS_NOTE
@@ -509,19 +509,19 @@ def build_limitations(
     named = [str(m).strip() for m in map_types if str(m).strip()]
     if len(named) > 1:
         items.append(
-            f"{' and '.join((', '.join(named[:-1]), named[-1]))} are reported "
-            "separately and never averaged together, because their units differ. "
-            "Missing values are reported as Not available and are never converted to zero."
+            f"{' and '.join((', '.join(named[:-1]), named[-1]))} keep their "
+            "own units and are never averaged because their units differ. "
+            "Missing values remain Not available."
         )
     if known and not reference_available:
         items.append(
-            f"No official overall {'/'.join(known)} score has been defined; "
-            "no pass/fail scientific threshold is applied."
+            "No compatible reference or official scoring data were available, "
+            f"so no official {'/'.join(known)} score, pass/fail result, or "
+            "ranking was calculated."
         )
     if len(named) <= 1:
         items.append(
-            "Missing values are reported as Not available and are never "
-            "converted to zero."
+            "Missing values remain Not available; they are not converted to zero."
         )
     return items
 
@@ -701,16 +701,9 @@ def affected_display(
     *,
     blinded: bool,
 ) -> str:
-    """The value the "Affected" column may show for one issue.
+    """Return an identity-safe value for the report's Affected column.
 
-    Issue records carry an absolute filesystem path. Its basename, which both
-    renderers used, is the submission directory for submission-level issues,
-    and that directory name *is* the submission id, derived in turn from the
-    uploaded archive name. A blinded report therefore printed the team's name
-    in the issues table while blinding it everywhere else, and leaked the
-    reviewer's local directory layout besides. See CODE_WALKTHROUGH.md §B5.
-
-    Selection is structural, in order:
+    Selection order:
 
     1. no path → ``Not specified``
     2. a path *below* the submission root → that relative path, which by
@@ -760,24 +753,14 @@ def _relative_to_submission(path_text: str, summary: Mapping[str, Any]) -> str:
 
 
 def report_filename_tag(tag: str, *, blinded: bool) -> str:
-    """A download filename fragment that respects blinding.
-
-    Export filenames used to be built from the raw submission or batch id, so
-    a blinded report downloaded as ``osipi_report_team_gamma_Clinical.html``.
-    Blinded exports get a neutral fragment instead. Unblinded ones keep the id.
-    """
+    """Return a neutral filename fragment for blinded downloads."""
     if not blinded:
         return str(tag or "report")
     return "blinded"
 
 
 def export_filename(stem: str, tag: str, *, blinded: bool, extension: str) -> str:
-    """Build an export filename, without saying "blinded" twice.
-
-    Callers pair the tag from ``report_filename_tag`` with a blinded/unblinded
-    suffix. For a blinded export both are the word "blinded", which is how
-    ``osipi_combined_blinded_blinded.csv`` happened. One is enough.
-    """
+    """Build an export filename without duplicating the blinding label."""
     suffix = "blinded" if blinded else "unblinded"
     parts = [stem, tag] if tag == suffix else [stem, tag, suffix]
     return "_".join(p for p in parts if p) + f".{extension}"
@@ -864,10 +847,7 @@ def _build_report_model(
     )
     is_mixed_challenge = len(challenges) > 1
 
-    # Keep the complete challenge-scoped aggregates in the shared model so
-    # interactive/structured formats can label them explicitly.  The compact
-    # PDF deliberately renders only a pointer for mixed batches because map
-    # units must never be pooled across challenges.
+    # Keep mixed-challenge aggregates separate because map units cannot be pooled.
     reference_metrics_by_challenge: dict[str, dict[str, str]] = {}
     for challenge in challenges:
         scoped_fields = [
@@ -951,8 +931,6 @@ def _build_report_model(
     )
     if not reference_available and map_count:
         analysis_finding += " No compatible reference was provided."
-    analysis_finding += " Official OSIPI ranking is not configured."
-
     reviewer_summary = [
         ["Result", (
             "Submission cannot complete review until blocking errors are resolved."
@@ -999,12 +977,16 @@ def _build_report_model(
                 map_type,
                 str(item.get("units") or "Not provided"),
                 _pct(stats.get("finite_percent")),
+                _pct(stats.get("negative_voxel_percent")),
                 _fmt(stats.get("mean")),
-                _fmt(whole.get("rmse") if whole else None),
-                _fmt(whole.get("mae") if whole else None),
-                _fmt(whole.get("bias") if whole else None),
-                _fmt(whole.get("correlation") if whole else None),
             ])
+            if reference_available:
+                row.extend([
+                    _fmt(whole.get("rmse") if whole else None),
+                    _fmt(whole.get("mae") if whole else None),
+                    _fmt(whole.get("bias") if whole else None),
+                    _fmt(whole.get("correlation") if whole else None),
+                ])
             main_map_metric_rows.append(row)
     issues: list[list[str]] = []
     seen_issues: set[tuple[str, str, str, str, str]] = set()
@@ -1212,7 +1194,8 @@ def _build_report_model(
         },
         "main_map_metric_headers": (
             (["Submission"] if len(summaries) > 1 else [])
-            + ["Map", "Units", "Finite", "Mean", "RMSE", "MAE", "Bias", "Corr."]
+            + ["Map", "Units", "Finite", "Negative", "Mean"]
+            + (["RMSE", "MAE", "Bias", "Corr."] if reference_available else [])
         ),
         "main_map_metric_rows": main_map_metric_rows,
         "agreement_points": agreement_points(summaries, blinded=blinded),
@@ -1406,10 +1389,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     """Render the branded PDF.
 
     Layout notes:
-      * Every page is portrait letter. Two wide tables used to get landscape
-        pages of their own, which is a normal thing to do but made the
-        document rotate twice while being read, on screen and on paper. They
-        are set at the portrait measure instead.
+      * Every page uses portrait letter dimensions.
       * Page 1 uses a tall masthead (logo + gradient band); later pages use a
         slim running header. That needs two PageTemplates, hence
         BaseDocTemplate rather than SimpleDocTemplate.
@@ -1640,12 +1620,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return table
 
     def paired_kv_table(items: Mapping[str, Any], width: float = 6.4 * inch) -> Table:
-        """Compact two-pair key/value table for short availability metadata.
-
-        The earlier one-item-per-row layout stranded half a batch report on
-        its own page. Pairing related statuses keeps all values readable while
-        cutting the table height roughly in half.
-        """
+        """Build a compact two-pair table for availability metadata."""
         pairs = list(items.items())
         rows = []
         for index in range(0, len(pairs), 2):
@@ -1713,11 +1688,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         cells, cmds = [], []
         for col, (label, value) in enumerate(entries):
             text = str(value)
-            # Size to fit. A long value (a six-item map-type list, a
-            # seven-digit voxel count) has to wrap, and the label paragraph's
-            # leading is far too tight for a 14pt line, the wrapped lines
-            # used to sit on top of each other. Each figure therefore gets a
-            # value style whose leading matches its own size.
+            # Size and leading adapt to long values that need to wrap.
             size = 14.0
             if len(text) > 26:
                 size = 9.5
@@ -1927,12 +1898,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         topMargin=MARGIN, bottomMargin=FOOTER_H + 0.12 * inch,
         title=str(model["title"]), author="OSIPI Perfusion Pipeline",
         subject=f"Submission review report, {model['session_name']}",
-        # Deliberately uncompressed. Compression saves ~25% but hides page
-        # text inside Flate streams, and the blinded-report guarantee is
-        # verified by grepping the PDF bytes for team names and folder paths.
-        # With compression on that check passes vacuously even if a name
-        # leaks, so the size is worth paying for a privacy property that can
-        # actually be tested.
+        # Keep text uncompressed so blinding tests can inspect PDF bytes.
         pageCompression=0,
     )
     body_bottom = FOOTER_H + 0.12 * inch
@@ -1987,8 +1953,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     story.append(section("Key metrics"))
     story.append(paired_kv_table(model["executive_metrics"], width=CONTENT_W))
 
-    # The printable report is intentionally executive: results begin on page
-    # two, while richer figures and per-file details remain in HTML/JSON.
+    # Put printable results on page two; detailed records remain in HTML/JSON.
     story.append(PageBreak())
     story.append(section("Results"))
     map_rows = model.get("main_map_metric_rows") or []
@@ -2110,7 +2075,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ))
 
     if model["issues"]:
-        story.append(PageBreak())
         story.append(section("Issues and recommendations"))
         pdf_issues = sorted(
             model["issues"],
@@ -2162,9 +2126,7 @@ def generate_pdf_report(
     try:
         return _reportlab_pdf_bytes(model)
     except Exception:
-        # The fallback keeps report export working when ReportLab is missing,
-        # but it also used to hide genuine rendering bugs behind a plausible
-        # looking plain-text PDF. Log the traceback so those surface.
+        # Log rendering failures before using the plain-text fallback.
         logger.exception(
             "ReportLab PDF rendering failed; falling back to the plain-text PDF."
         )

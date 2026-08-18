@@ -1,9 +1,4 @@
-"""Lightweight local performance helpers.
-
-The pipeline is a local reviewer tool, so these helpers intentionally stay
-in-process and dependency-free: timing samples for measurement, bounded worker
-limits from config, and a small job registry for long synchronous operations.
-"""
+"""Local timing, worker-limit, and job-registry helpers."""
 
 from __future__ import annotations
 

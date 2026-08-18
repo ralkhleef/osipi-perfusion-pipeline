@@ -16,7 +16,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from osipi_pipeline.config.rules import map_type_specs
+from osipi_pipeline.config.rules import analysis_by_challenge, map_type_specs
 from osipi_pipeline.scoring.descriptive_statistics import (
     METHODOLOGY,
     STATUS_GEOMETRY_MISMATCH,
@@ -34,14 +34,6 @@ logger = logging.getLogger(__name__)
 #: Cache sentinel. A plain string would be compared against payloads that
 #: contain NumPy arrays, where `==` raises instead of returning False.
 _MISSING = object()
-
-# Only Ktrans is required for DCE-2026. The machinery below is map-generic,
-# so enabling another parameter is a one-line change here rather than a
-# rewrite, but this phase deliberately emits Ktrans only.
-DESCRIPTIVE_MAP_TYPES_BY_CHALLENGE: dict[str, tuple[str, ...]] = {
-    "dce": ("ktrans",),
-}
-
 
 def roi_definitions_from_masks(masks: Iterable[Mapping[str, Any]]) -> list[RoiDefinition]:
     """Adapt the existing reference-mask records into ROI definitions.
@@ -94,7 +86,12 @@ def eligible_artifacts(
     input with a number.
     """
     challenge = (challenge or "").strip().lower()
-    wanted = DESCRIPTIVE_MAP_TYPES_BY_CHALLENGE.get(challenge, ())
+    analysis = analysis_by_challenge().get(challenge, {})
+    roi_config = analysis.get("roi_descriptive") or {}
+    wanted = tuple(
+        str(value).strip().lower()
+        for value in roi_config.get("map_types") or ()
+    ) if roi_config.get("enabled", False) else ()
     if not wanted:
         return []
     specs = map_type_specs()

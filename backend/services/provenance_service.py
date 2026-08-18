@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Iterable
 
 from services.configuration_manager_service import active_configuration_version
-from services.scoring_package_service import get_active_entry
+from services.scoring_package_service import (
+    compatible_builtin_providers,
+    get_active_entry,
+)
 from osipi_pipeline.config.rules import challenge_labels, reference_dataset_versions
 
 
@@ -29,7 +32,16 @@ def _scoring_label(challenge: str) -> str:
         version = active.get("package_version")
         return f"{name} v{version}" if version else str(name)
     if mode == "builtin":
-        return "built-in legacy TF6.2 provider"
+        providers = compatible_builtin_providers(challenge)
+        if len(providers) == 1:
+            provider = providers[0]
+            return str(
+                provider.get("display_name")
+                or provider.get("provider_name")
+                or provider.get("provider_id")
+                or "built-in provider"
+            )
+        return "not configured for this challenge"
     return "not configured"
 
 
@@ -61,4 +73,3 @@ def analysis_provenance(
         "reference_dataset": joined(lambda ch: ref_versions.get(ch) or "not versioned/configured"),
         "analysis_date": generated.strftime("%Y-%m-%d"),
     }
-

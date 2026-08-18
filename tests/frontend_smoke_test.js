@@ -245,7 +245,7 @@ checkContains("Upload Zenodo source gates on input", appJs, 'source === "zenodo"
 checkContains("Upload GitHub source gates on input", appJs, 'source === "github"');
 checkContains("Upload CTA disabled until ready", appJs, "submitBtn.disabled = !canUpload");
 checkContains("Challenge type tooltip text", html, "Select a challenge defined by the active pipeline configuration.");
-checkContains("Parameter map type tooltip text", html, "auto-detect configured parameter maps");
+checkContains("Parameter map type tooltip text", html, "Use this only when automatic detection needs a hint.");
 checkNotContains("Duplicate global Start New wrapper removed", html, "global-start-new");
 checkNotContains("Global Start New styling removed", css, "global-new-btn");
 checkNotContains("Duplicate step hint cards removed", html, "step-hint-card");
@@ -268,6 +268,7 @@ checkNotContains("Step 6 no longer shows generic Finish label", footerConfigBloc
 checkContains("Blocked-step reason helper", appJs, "function _stepBlockedReason");
 checkContains("Validate Continue gates on error count (warnings don't block)", appJs, 'issueCount(r, "errors") === 0');
 checkContains("Action row disabled when blocked", appJs, "primaryBtn.disabled = !canProceed");
+checkContains("Blocked reason stays on disabled action instead of visible footer copy", appJs, "guidance.hidden = !!blockedReason");
 checkContains("Restored sessions sync in-card actions", appJs, "_syncStepActionRow(step)");
 checkContains("Progress sync helper", appJs, "function _syncCompactProgress");
 checkContains("Step shell card styling", css, ".step-shell {");
@@ -290,11 +291,12 @@ checkContains("Design system: compact export worklist", css, "#step-export .expo
 checkContains("Steps flatten inner cards into one contained card", css, ".step-shell .step-body > .pg-card,");
 checkContains("Score status card uses workbench section", css, "#step-score .score-main-card");
 checkContains("Run skipped panel is calm workbench row", css, ".run-skipped-notice {");
+checkNotContains("Result-only Processing card can be hidden", css, "#step-run .run-settings-card {\n  display: block !important;");
 checkNotContains("Run notice has no success status badge", section("step-run"), "status-badge-pass");
 checkNotContains("Run step has no Execution skipped wording", html, "Execution skipped");
 checkContains("Run notice uses researcher wording", html, "Result maps were included in these submissions. No code run was needed.");
 
-console.log("\n[ v92 researcher-facing language ]");
+console.log("\n[ Researcher-facing language ]");
 // No developer/technical wording in the visible researcher UI.
 checkNotContains("No 'Run code in Docker' button", html, "Run code in Docker");
 checkNotContains("No Docker-ready status text", appJs, "Docker ready");
@@ -322,10 +324,15 @@ checkContains("Items-to-review list is neutral gray", css, ".issue-list li.revie
 checkContains("Run notice hides success icon", css, "#step-run .run-skipped-notice .rsn-icon { display: none; }");
 checkContains("Run completion banner stays neutral", css, "#run-completion-banner.step-completion-banner");
 checkNotContains("Validate subtitle no longer repeats run readiness", section("step-validate"), "run readiness, and output-map");
-checkContains("CSS version bumped for configuration manager", html, "styles.css?v=93");
-checkContains("JS version bumped for configuration manager", html, "app.js?v=78");
+checkContains("CSS version bumped for Configuration Manager cleanup", html, "styles.css?v=102");
+checkNotContains("Step 5 capability strip removed", html, "analysis-scope-bar");
+checkNotContains("Step 5 capability strip CSS removed", css, ".analysis-scope-bar");
+checkContains("JS version bumped for preview-modal cleanup", html, "app.js?v=91");
+checkContains("Official provider status comes from API metadata", appJs, "activeOfficial = entry.official === true");
+checkContains("Official UI state uses provider metadata", appJs, "const activeIsOfficial = activeOfficial");
+checkNotContains("Built-in mode is not assumed official", appJs, 'const activeIsOfficial = activeMode === "builtin"');
 
-console.log("\n[ v90 filter dropdown never clipped ]");
+console.log("\n[ Filter dropdown never clipped ]");
 checkContains("Filter menu opens as fixed overlay", css, ".filter-menu.filter-menu--floating");
 checkContains("Floating menu uses fixed position (escapes clipping)", css, "position: fixed !important;");
 checkContains("Floating menu high z-index", css, "z-index: 1400 !important;");
@@ -355,7 +362,7 @@ if (iconUses >= 4) {
 }
 checkContains("Icon CSS sized for the row", css, ".worklist-icon.submission-file-icon");
 
-console.log("\n[ Design tokens (v78) ]");
+console.log("\n[ Design tokens ]");
 checkContains("Row padding tokens defined", css, "--wl-row-pad-y:");
 checkContains("Row radius token defined", css, "--wl-row-radius:");
 checkContains("Row icon token defined", css, "--wl-icon:");
@@ -405,7 +412,7 @@ checkContains("Structure tree item CSS", css, ".structure-tree-item {");
 checkContains("Structure file name CSS (monospace)", css, ".structure-file-name {");
 checkContains("Structure control passed into shared details slot", appJs, 'detailsClass: "sub-row-detail"');
 
-console.log("\n[ v65 contained one-screen layout (Steps 2-6) ]");
+console.log("\n[ Contained one-screen layout (Steps 2-6) ]");
 // Step 1 Upload must be untouched: no .step-body wrapper, original card intact
 checkNotContains("Upload step has no step-body wrapper", section("step-upload"), 'class="step-body"');
 checkContains("Upload card structure intact", section("step-upload"), 'class="form-card upload-form-card"');
@@ -443,7 +450,9 @@ checkContains("Review builder calls shared renderer", appJs, "const card = _work
 checkContains("Validate builder calls shared renderer", appJs, "const wrap = _worklistRowEl({");
 checkContains("Score builder calls shared renderer", appJs, "return renderWorklistRow({");
 checkContains("Preview builder calls shared file renderer", appJs, "return renderFileRow({");
-checkContains("Export builder calls shared file renderer", appJs, "host.innerHTML = rows.map((r) => renderFileRow({");
+checkContains("Export builder calls shared file renderer", appJs, "const renderRows = (items) => items.map((r) => renderFileRow({");
+checkContains("Export groups blinded reviewer outputs", appJs, "Blinded reviewer outputs");
+checkContains("Export separates organiser-only output", appJs, "Organiser-only output");
 checkContains("Renderer emits canonical row skeleton", appJs, "${checkbox}${icon}${main}${actions}${chevron}");
 // ── ONE shared Details / Hide details control everywhere ──
 checkContains("Renderer auto-appends shared Details button", appJs, 'class="details-toggle" aria-expanded="false">Details</button>');
@@ -640,6 +649,15 @@ checkContains("Resolves configured labels from real filenames", appJs, "function
 checkContains("Resolver uses existing backend file list", appJs, "/api/nifti-files/");
 checkContains("Resolved labels join dynamically", appJs, 'sub._resolvedMapTypes.join(", ")');
 checkContains("Mixed/Other kept in details, not row", appJs, "(detected as Mixed/Other)");
+checkContains("Challenge value has its own field hook", appJs, "sub-field-challenge-type");
+checkContains("Map value has its own field hook", appJs, "sub-field-map-types");
+checkContains("Review suggests challenge from configured expected maps", appJs, "function _reviewChallengeSuggestion");
+checkContains("Review challenge change requires an explicit click", appJs, "data-use-review-challenge");
+checkContains("Review refreshes after configuration is available", appJs, 'if (wf.step === "index" && batchState.submissions.length) renderBatchTable();');
+checkContains("Confirmed batch challenge is used for validation", appJs, "confirmed_challenge_type || byId[id]?.detected_challenge_type");
+checkContains("Review challenge suggestion styling", css, ".review-challenge-suggestion {");
+checkContains("Structure popover can open upward", css, ".structure-popover.opens-upward {");
+checkContains("Structure popover positioning helper", appJs, "function _positionStructurePopover");
 // CSS
 checkContains("Shared worklist row CSS", css, ".worklist-row,");
 checkContains("Selected row = purple left border, not full purple", css, ".sub-row.is-selected");
@@ -699,9 +717,64 @@ checkContains("Configuration Manager UI", html, "Challenge Configuration Manager
 checkContains("Configuration test action", html, "1. Test Configuration");
 checkContains("Configuration preview action", html, "2. Preview Changes");
 checkContains("Configuration version save action", html, "3. Save as New Version");
+checkContains("Configuration summary cards", html, "config-manager-summary-grid");
+checkContains("Configuration rules group", html, "Challenge rules");
+checkContains("Configuration analysis group", html, "Analysis and data");
+checkContains("Configuration history group", html, "Version history");
+checkContains("Configuration section actions are consistent", html, 'class="config-manager-open-button"');
+checkContains("Configuration review controls follow summaries", html, "config-manager-review-bar");
+checkContains("Configuration cards use compact height", css, "min-height: 72px;");
+checkNotContains("Oversized configuration cards removed", css, "min-height: 104px;");
+checkContains("Challenge details modal", html, 'id="config-modal-challenge"');
+checkContains("Maps edit modal", html, 'id="config-modal-maps"');
+checkContains("Dataset edit modal", html, 'id="config-modal-datasets"');
+checkContains("Artifacts edit modal", html, 'id="config-modal-artifacts"');
+checkContains("Analysis edit modal", html, 'id="config-modal-scoring"');
+checkContains("Private assets details modal", html, 'id="config-modal-assets"');
+checkContains("Capabilities details modal", html, 'id="config-modal-capabilities"');
+checkContains("Versions details modal", html, 'id="config-modal-versions"');
+checkContains("Modal open behavior", appJs, "function _openConfigurationModal");
+checkContains("Modal close behavior", appJs, "function _closeConfigurationModal");
+checkContains("Modal close does not save", html, "Saving creates an inactive version; activation remains a separate explicit action.");
+checkContains("Responsive modal width", css, ".config-manager-modal-dialog-wide { width: min(1040px, 100%); }");
+checkContains("Modal body vertical scroll", css, "overflow-y: auto;");
+checkContains("Configuration values wrap", css, ".config-manager dd { overflow-wrap: anywhere; }");
+checkContains("Map units shown in manager", appJs, "_configurationMapUnit(item.id)");
+checkContains("Long map aliases use wrapping textareas", appJs, '<textarea class="config-map-aliases"');
+checkContains("Long package names get wrapping detail text", html, 'id="config-manager-package-detail"');
 checkContains("Private assets local-only warning", html, "These files remain local and are not included in GitHub or configuration exports.");
+checkContains("Private asset file chooser is visible", html, "Choose NIfTI file");
+checkContains("Private asset filename feedback", html, 'id="config-manager-asset-file-name"');
+checkContains("Long private asset filenames wrap", css, ".config-manager-selected-file {");
 checkContains("Configuration Manager API", appJs, "/api/configuration-manager");
 checkContains("Official ranking capability disclaimer", html, "Official OSIPI challenge ranking is not currently configured.");
+checkContains("Built-in compatibility comes from provider registry", appJs, "function _builtinProviderForChallenge");
+checkContains("Configuration Manager reads compatible built-ins", appJs, "state.builtin_providers");
+checkContains("Incompatible built-in option is disabled", appJs, "builtinOption.disabled = !builtin");
+checkNotContains("Configuration Manager does not hard-code TF6.2", section("config-manager-panel"), "TF6.2");
+checkContains("Active provider summary card", html, "scoring-provider-summary-card");
+checkContains("Provider controls moved into modal", html, 'id="config-modal-provider"');
+checkContains("Provider modal trigger", html, 'data-config-modal-open="provider"');
+checkContains("No-provider option retained", html, 'id="scoring-mode-none"');
+checkContains("Built-in provider option retained", html, 'id="scoring-mode-builtin"');
+checkContains("Custom provider option retained", html, 'id="scoring-mode-custom"');
+checkContains("Package upload retained", html, 'id="scoring-pkg-input"');
+checkContains("Package selector retained", html, 'id="scoring-pkg-select"');
+checkContains("Explicit apply control retained", html, 'id="scoring-setup-save-btn"');
+checkContains("Provider summary rendering", appJs, "function _renderScoringProviderSummary");
+checkContains("Full package descriptions remain visible", appJs, 'escapeHtml(pkg.description)');
+checkNotContains("Package descriptions are not clipped in JavaScript", appJs, "pkg.description.slice(0, 80)");
+checkNotContains("Legacy default OSIPI label removed from provider code", appJs, "Default OSIPI scoring");
+checkNotContains("Provider readiness does not claim scoring", appJs, "ready to score");
+checkContains("Provider names wrap", css, ".scoring-pkg-name { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }");
+checkContains("Provider modal is responsive", css, ".scoring-provider-summary-card { flex-direction: column; }");
+checkNotContains("Legacy default OSIPI label removed from provider modal", section("config-modal-provider"), "Default OSIPI scoring");
+checkContains("Provider details use actual missing requirements", appJs, "const missing = Array.isArray(p.missing)");
+checkContains("Official provider badge is explicit", appJs, '"Official provider"');
+checkContains("Custom packages have a distinct badge", appJs, '"Custom package"');
+checkContains("Custom provider card styling", css, ".score-provider-card.spc-custom::before");
+checkContains("Provider details use one clean column", css, "grid-template-columns: minmax(0, 1fr);");
+checkNotContains("Provider details no longer fabricate generated-output readiness", appJs, '{ label: "Generated output maps"');
 checkContains("Leaderboard professional status badges", appJs, "leaderboard-status-badge");
 checkContains("Leaderboard long-name truncation", css, ".leaderboard-submission-cell span");
 checkContains("Leaderboard timestamp formatting", appJs, "function _formatLeaderboardTimestamp");
@@ -860,25 +933,32 @@ checkContains("Map preview keeps Download NIfTI", appJs, "Download NIfTI");
 checkContains("Leaderboard Preview Maps uses direct preview helper", appJs, "function _openSubmissionPreviewFromDetails");
 checkContains("Leaderboard Preview Maps opens modal directly", appJs, "_openNiftiPreview(firstPreview);");
 checkContains("Leaderboard Preview Maps handler calls helper", appJs, "_openSubmissionPreviewFromDetails(sid);");
+checkNotContains("Leaderboard preview is not gated on the session score cache", appJs, "sid && _scoreCache[sid]");
+checkContains("Preview ignores placeholder challenge labels", appJs, '"not provided", "not_provided"');
+checkContains("Preview falls back to a configured challenge", appJs, "configured.has(value)");
 checkNotContains("Leaderboard Preview Maps no longer scrolls hidden panel", appJs, "score-preview-panel\")?.scrollIntoView");
 checkContains("Preview modal exists", appJs, "nifti-preview-modal");
 checkContains("Preview modal close on Escape", appJs, 'e.key === "Escape"');
 checkContains("Preview modal shows file stats", appJs, "nifti-preview-modal-meta");
 checkContains("Preview modal uses Map Preview heading", appJs, "Map Preview</div>");
-checkContains("Open full preview link exists", appJs, "Open full preview");
-checkContains("Download for ITK-SNAP action exists", appJs, "Download NIfTI for ITK-SNAP");
+checkContains("Preview has clear new-tab action", appJs, "Open image in new tab");
+checkContains("Preview has clear original-file download", appJs, "Download original NIfTI");
+checkContains("Preview labels image information", appJs, "Image information");
+checkContains("Preview actions use a dedicated footer", appJs, "nifti-preview-modal-footer");
+checkNotContains("Ambiguous full-preview wording removed", appJs, "Open full preview");
+checkNotContains("Over-specific ITK-SNAP button wording removed", appJs, "Download NIfTI for ITK-SNAP");
 checkContains("Full viewer guidance mentions external NIfTI viewers", appJs, "ITK-SNAP, FSLeyes, or 3D Slicer");
 checkContains("Preview cards styled", css, ".nifti-preview-card");
 checkContains("Preview modal styled", css, ".nifti-preview-modal-backdrop");
 
-console.log("\n[ v75 Map Preview one-at-a-time + modal gallery ]");
+console.log("\n[ Map Preview one-at-a-time + modal gallery ]");
 checkContains("Map Preview shows one selected item at a time", appJs, "map-preview-single");
 checkContains("Map tabs rendered when multiple maps", appJs, "map-preview-tabs");
 checkContains("Map tab switch handler", appJs, "data-preview-tab");
 checkContains("Selected tab tracked in state", appJs, "_previewSelectedMapId");
 checkContains("Switching tab re-renders single preview", appJs, "section.outerHTML = _renderImagePreviewSection");
 checkContains("Modal gallery nav rendered when >1 map", appJs, "nifti-preview-modal-nav");
-checkContains("Modal gallery counter (N of M)", appJs, "${galleryPos + 1} of ${galleryIds.length}");
+checkContains("Modal gallery counter (N of M)", appJs, "${galleryPos + 1}</strong> of ${galleryIds.length} maps");
 checkContains("Modal prev/next controls", appJs, 'data-preview-nav="prev"');
 checkContains("Gallery step helper wraps around", appJs, "function _stepNiftiPreview");
 checkContains("Left arrow navigates previous map", appJs, 'e.key === "ArrowLeft"');
@@ -1217,7 +1297,7 @@ check("Restore banner",            "restore-banner");
 checkNotContains("Old sidebar collapse JS removed", appJs, "initSidebarCollapse");
 
 console.log("\n[ CSS class presence ]");
-// .app-topbar intentionally removed (topbar removed in v53)
+// The application no longer uses a topbar.
 checkCls("Upload form card",  "upload-form-card");
 checkContains("Button base class", css, ".btn,");
 checkContains("Button primary class", css, ".btn-primary");
@@ -1303,7 +1383,7 @@ checkNotContains("Score collapsed row does not show reference scored chip", lead
 checkNotContains("Score collapsed row does not show reference unavailable chip", leaderboardEntryBlock, 'statusPill("Reference unavailable", "pending")');
 checkContains("Score details use plain reference wording", leaderboardEntryBlock, "Reference maps were not available, so this is QC only.");
 
-console.log("\n[ v80 visible mirroring ]");
+console.log("\n[ Visible layout consistency ]");
 checkContains("Old Score table hidden in flow", css, "#step-score #score-table-card {\n  display: none !important;");
 checkContains("Configuration Manager admin panel visible", css, "#step-score #scoring-admin-panel {\n  display: block !important;");
 checkContains("Configuration Manager defaults to the current workflow challenge", appJs, "challengeType || _getSessionChallengeType() || select.value");
@@ -1333,7 +1413,7 @@ checkContains("Start New reset suppresses blank session save", appJs, "_suppress
 checkContains("Reset clears wizard + session state", appJs, "clearWizardState();");
 
 
-// ── Phase 4C: ROI Ktrans statistics (within-scan descriptive values) ──────
+// ROI Ktrans statistics (within-scan descriptive values)
 // Export row
 checkContains("ROI export row present", appJs, "ROI Ktrans Statistics CSV");
 checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
@@ -1389,7 +1469,7 @@ const roiCardHtml = html.slice(roiCardStart, html.indexOf("leaderboard-card", ro
 });
 
 
-// ── Phase 4D: ROI renderer wired into the Results Summary lifecycle ───────
+// ROI renderer integration with the Results Summary lifecycle
 // The call must live inside the central renderer, not merely exist somewhere.
 // Bounded by the NEXT top-level function after it. An end-marker search is
 // unsafe: the obvious sentinels appear earlier in the file, so the slice

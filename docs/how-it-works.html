@@ -56,15 +56,9 @@
 
         <section>
           <h2 id="why" data-toc-title="Background">Background</h2>
-          <p>A perfusion parameter map depends on the model, the fitting method and the arterial
-            input function used to produce it. Two implementations given the same DCE scan return
-            different Ktrans values, and the same applies to CBF and ATT derived from ASL. OSIPI runs
-            challenges to quantify those differences and to support standardisation in clinical
-            research.</p>
-          <p>A comparison of that kind is only valid if every submission is handled the same way.
-            Differences in how carefully a submission is checked, which mask it is scored against, or
-            whether the reviewer knows its origin all become part of the result. The pipeline exists
-            to remove those differences from the measurement.</p>
+          <p>Different analysis methods can produce different perfusion maps from the same MRI data.
+            OSIPI challenges compare those methods. This pipeline applies the same review steps to
+            every submission.</p>
 
           <h2 id="the-steps" data-toc-title="Pipeline overview">Pipeline overview</h2>
           <p>A submission moves through six steps in order. Each step records what it found, and its
@@ -122,57 +116,39 @@
           <h2 id="detail" data-toc-title="The steps in detail">The steps in detail</h2>
 
           <h3 id="indexing">Upload and Review</h3>
-          <p>The archive is extracted once and indexed. Each file is recorded with a role and a scan
-            identity. Roles are parameter map, fitted signal and methods document. A scan identity is
-            a dataset, participant, site and repeat.</p>
-          <p>Identity is resolved from the directory structure first. A path such as
-            <code>Synthetic/Participant1/Site1/Repeat1/Ktrans.nii.gz</code> supplies all four values.
-            Configured filename patterns fill any gaps. Where the two sources disagree, the directory
-            takes precedence and the conflict is reported rather than resolved silently. Identity is
-            never inferred from file order. Reference and mask directories are supplied by the
-            organiser, so they are excluded from the submission's own artifacts.</p>
+          <p>The import is extracted and indexed once. Each file receives a role and, where possible,
+            a dataset, participant, site, and repeat identity. Directory structure is used first;
+            configured filename patterns fill gaps. Conflicts are shown to the reviewer.</p>
 
           <h3 id="validation">Validate</h3>
-          <p>File-level checks cover NIfTI readability, dimensionality, finite values and zero-byte
-            files. Structural checks compare the submission against the rules configured for its
-            challenge. Errors block the submission; warnings do not.</p>
-          <p>Structural codes: <code>REQUIRED_MAP_MISSING</code>,
-            <code>REQUIRED_ARTIFACT_MISSING</code>, <code>MAP_DIMENSION_MISMATCH</code>,
-            <code>ARTIFACT_DIMENSION_MISMATCH</code>, <code>DUPLICATE_PARAMETER_MAP</code>,
-            <code>DUPLICATE_REQUIRED_ARTIFACT</code>, <code>DUPLICATE_METHODS_DOCUMENT</code>,
-            <code>INCOMPLETE_ARTIFACT_IDENTITY</code>, <code>DATASET_COUNT_MISMATCH</code>,
-            <code>IDENTITY_CONFLICT</code>, <code>UNKNOWN_DATASET</code>.</p>
+          <p>Checks cover NIfTI readability, dimensions, finite values, zero-byte files, required
+            content, and configured dataset structure. Errors block the submission; warnings do not.</p>
+          <details>
+            <summary>Validation issue codes</summary>
+            <p><code>REQUIRED_MAP_MISSING</code>, <code>REQUIRED_ARTIFACT_MISSING</code>,
+              <code>MAP_DIMENSION_MISMATCH</code>, <code>ARTIFACT_DIMENSION_MISMATCH</code>,
+              <code>DUPLICATE_PARAMETER_MAP</code>, <code>DUPLICATE_REQUIRED_ARTIFACT</code>,
+              <code>DUPLICATE_METHODS_DOCUMENT</code>, <code>INCOMPLETE_ARTIFACT_IDENTITY</code>,
+              <code>DATASET_COUNT_MISMATCH</code>, <code>IDENTITY_CONFLICT</code>, and
+              <code>UNKNOWN_DATASET</code>.</p>
+          </details>
 
           <h3 id="execution">Run</h3>
-          <p>A submission containing a Dockerfile is built and run in an isolated container with no
-            network access, a memory limit and a timeout. The command is read from
-            <code>run_config.json</code> in the submission. Result-only submissions skip this step.
-            A Docker Compose file by itself is not executable by the reviewer workflow; add a
-            Dockerfile, or submit readable result maps for result-only review. Where Docker is
-            unavailable the step is disabled and result-only review remains available.</p>
+          <p>Reproducible submissions run in an isolated Docker container with no network access,
+            a memory limit, and a timeout. Result-only submissions skip execution and use their
+            submitted maps.</p>
 
           <h3 id="statistics">QC and Preview</h3>
-          <p>Quality control reports the proportion of finite voxels, counts of NaN and infinity, and
-            the proportion of negative voxels for each map. Parameter types carry different units and
-            are therefore reported separately and never averaged together.</p>
-          <p>Where reference maps are available, each submitted map is compared against its reference
-            voxelwise and within each ROI mask, producing RMSE, mean absolute error, bias and
-            correlation, error standard deviation and error coefficient of variation. These are
-            generic comparisons, not automatically official OSIPI scores.</p>
-          <p>QC and previews are always available for readable maps. DCE Ktrans ROI descriptive
-            statistics can appear when compatible ROI masks are available, generic reference
-            comparisons when compatible reference maps are available, and provider-specific analysis
-            or scoring when configured with its required assets. Official OSIPI challenge ranking is
-            not currently configured.</p>
-          <p>Each ROI additionally reports the median, population standard deviation
-            (<code>ddof=0</code>) and coefficient of variation (SD ÷ |mean|) of one map within one
-            scan. These describe spatial spread within a single region. They are not repeatability,
-            reproducibility or between-participant variability, and the report states this. Values
-            that cannot be computed are reported as unavailable rather than as zero.</p>
-          <p>DCE Ktrans ROI statistics require compatible ROI masks. QC itself does not require a
-            reference map, while generic reference comparisons require compatible reference maps.
-            Provider-specific metrics additionally require an approved provider and its organiser
-            assets.</p>
+          <p>Readable maps receive QC and previews. QC reports finite, NaN/Inf, and negative-voxel
+            information for each map.</p>
+          <p>Compatible masks add DCE Ktrans ROI median, population SD, CoV, and voxel count.
+            Compatible reference maps add whole-map and ROI bias, MAE, RMSE, correlation, error
+            spread, overlap count, and difference maps. Missing values stay unavailable.</p>
+          <p>DCE Ktrans ROI statistics use population SD (<code>ddof=0</code>) and CoV = SD ÷ |mean|.
+            They describe spatial variation within one scan, not repeatability or reproducibility.</p>
+          <p>Configured providers can add their own results when their assets are present. Generic
+            reference comparison and provider results are separate. Official OSIPI challenge ranking
+            is not currently configured.</p>
 
           <h3 id="outputs">Export</h3>
           <p>The HTML and PDF reports are rendered from one report model, so their values,
@@ -181,7 +157,7 @@
             when review items exist. The HTML opens its summary and key results by default, while ROI
             results, reference comparison, additional analysis, issues and provenance stay in
             expandable sections.
-            Additional exports are blinded CSV and JSON results, an ROI statistics CSV with one row
+            Additional exports are blinded CSV and blinded JSON results, an ROI statistics CSV with one row
             per scan and region, and an explicit unblinded CSV for organiser review.</p>
           <p>A blinded export omits the team name, contact address, submission id and archive name
             from the document body, the file metadata and the download filename.</p>

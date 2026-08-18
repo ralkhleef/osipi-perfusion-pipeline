@@ -1,7 +1,6 @@
 "use strict";
 // ─────────────────────────────────────────────────────────────────────────────
-// OSIPI Perfusion Challenge: Review System
-// app.js  v28
+// OSIPI Perfusion Challenge review interface
 // ─────────────────────────────────────────────────────────────────────────────
 
 const API = window.location.origin;
@@ -287,6 +286,7 @@ async function hydrateAppConfig() {
     _applyConfigMapOptions(_appConfig);
     _renderChallengeTypeOptions();
     updateMapTypePills(getChallengeType());
+    if (wf.step === "index" && batchState.submissions.length) renderBatchTable();
   } catch (err) {
     _showConfigLoadError(err && err.message ? err.message : "");
   }
@@ -1062,6 +1062,7 @@ function _ensureStepActionRow(step) {
         <button type="button" class="btn btn-secondary step-action-back">Back</button>
       </div>
       <div class="step-action-right">
+        <p class="step-action-guidance" aria-live="polite"></p>
         <button type="button" class="btn btn-primary step-action-primary">Continue</button>
       </div>`;
   }
@@ -1140,6 +1141,7 @@ function _syncStepActionRow(step) {
 
   const backBtn = row.querySelector(".step-action-back");
   const primaryBtn = row.querySelector(".step-action-primary");
+  const guidance = row.querySelector(".step-action-guidance");
 
   if (backBtn) {
     if (cfg.back) {
@@ -1168,6 +1170,17 @@ function _syncStepActionRow(step) {
   };
 
   const blockedReason = canProceed ? "" : _stepBlockedReason(step);
+  const readyGuidance = {
+    index: "Next: validate the selected submission files.",
+    validate: "Next: confirm whether processing is required.",
+    run: "Next: review QC and available analyses.",
+    score: "Next: choose reviewer or organiser outputs.",
+    export: "This clears the current local review and returns to Upload.",
+  };
+  if (guidance) {
+    guidance.textContent = blockedReason ? "" : (readyGuidance[step] || "");
+    guidance.hidden = !!blockedReason;
+  }
   if (blockedReason) {
     primaryBtn.title = blockedReason;
     primaryBtn.dataset.disabledReason = blockedReason;
@@ -1211,6 +1224,7 @@ function _canUpload() {
 
 function _syncUploadSubmitButton() {
   const submitBtn = el("submit-btn");
+  const guidance = el("submit-guidance");
   if (!submitBtn) return;
   const label = submitLabel();
   if (!submitBtn.classList.contains("btn-loading")) {
@@ -1223,10 +1237,12 @@ function _syncUploadSubmitButton() {
     submitBtn.title = reason;
     submitBtn.dataset.disabledReason = reason;
     submitBtn.setAttribute("aria-label", `${label}. ${reason}`);
+    if (guidance) guidance.textContent = reason;
   } else {
     submitBtn.title = "";
     submitBtn.removeAttribute("aria-label");
     delete submitBtn.dataset.disabledReason;
+    if (guidance) guidance.textContent = "Ready. The pipeline will upload, detect, and organise the submission automatically.";
   }
 }
 
@@ -2010,6 +2026,13 @@ function switchSource(type) {
   document.querySelectorAll(".source-panel").forEach((p) => p.classList.remove("active"));
   const panel = el(`source-${type}`);
   if (panel) panel.classList.add("active");
+  const sourceGuidance = el("source-guidance");
+  const sourceCopy = {
+    local: "Choose a ZIP, folder, or set of files from this computer.",
+    zenodo: "Enter a public Zenodo record URL, DOI, or record ID.",
+    github: "Enter a public GitHub repository URL and an optional branch.",
+  };
+  if (sourceGuidance) sourceGuidance.textContent = sourceCopy[type] || sourceCopy.local;
   _refreshWizardFooter();   // selection requirement differs per source
   _syncUploadSubmitButton();
 }
@@ -2691,7 +2714,7 @@ function _subMapTypesLabel(sub) {
 // Uppercase challenge key for a submission ("" when unknown), used to group
 // the Review list by challenge so ASL/DCE/DSC stay visually separate.
 function _subChallengeKey(sub) {
-  const c = sub && (sub.challenge_type || sub.detected_challenge_type);
+  const c = sub && (sub.confirmed_challenge_type || sub.challenge_type || sub.detected_challenge_type);
   return c && String(c).toLowerCase() !== "unknown" ? String(c).toUpperCase() : "";
 }
 
@@ -2704,11 +2727,60 @@ function _subRowMetaLine(sub) {
   const detected = sub.detected_challenge_type && String(sub.detected_challenge_type).toLowerCase() !== "unknown"
     ? sub.detected_challenge_type : null;
   const parts = [
-    challengeLabel(sub.challenge_type || detected),
+    challengeLabel(sub.confirmed_challenge_type || sub.challenge_type || detected),
     _subMapTypesLabel(sub),
     Number.isFinite(Number(niftiCount)) ? `${niftiCount} map${Number(niftiCount) === 1 ? "" : "s"}` : null,
   ].filter(Boolean);
   return escapeHtml(parts.join(" · "));
+}
+
+function _reviewChallengeSuggestion(sub) {
+  const mapTypes = Array.isArray(sub?._resolvedMapTypes) ? sub._resolvedMapTypes : [];
+  if (!mapTypes.length) return null;
+
+  const mapIdByLabel = {};
+  (_appConfig.mapTypes || []).forEach((item) => {
+    const id = String(item?.id || "").toLowerCase();
+    if (!id) return;
+    mapIdByLabel[id] = id;
+    mapIdByLabel[String(item?.display || id).toLowerCase()] = id;
+  });
+  const foundIds = new Set(mapTypes.map((label) => mapIdByLabel[String(label).toLowerCase()]).filter(Boolean));
+  if (!foundIds.size) return null;
+
+  const scores = (_appConfig.challengeTypes || []).map((challenge) => {
+    const expected = new Set((challenge.expected_maps || []).map((id) => String(id).toLowerCase()));
+    return {
+      id: String(challenge.id || "").toLowerCase(),
+      label: challenge.label || String(challenge.id || "").toUpperCase(),
+      score: [...foundIds].filter((id) => expected.has(id)).length,
+    };
+  }).filter((item) => item.id);
+  scores.sort((a, b) => b.score - a.score);
+  const best = scores[0];
+  if (!best || best.score === 0 || scores[1]?.score === best.score) return null;
+
+  const currentId = String(
+    sub?.confirmed_challenge_type || sub?.challenge_type || sub?.detected_challenge_type || getChallengeType()
+  ).toLowerCase();
+  const currentScore = scores.find((item) => item.id === currentId)?.score || 0;
+  if (best.id === currentId || best.score <= currentScore) return null;
+  return { ...best, currentId, currentLabel: challengeLabel(currentId) };
+}
+
+function _syncReviewChallengeSuggestion(sub, rowEl) {
+  const host = rowEl?.querySelector("[data-review-challenge-suggestion]");
+  if (!host) return;
+  const suggestion = _reviewChallengeSuggestion(sub);
+  if (!suggestion) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `<div><strong>Check challenge selection.</strong> These map filenames match ${escapeHtml(suggestion.label)} more closely than ${escapeHtml(suggestion.currentLabel)}.</div>
+    <button type="button" class="review-challenge-use" data-use-review-challenge="${escapeHtml(suggestion.id)}"
+            data-review-submission-id="${escapeHtml(sub.submission_id || "")}">Use ${escapeHtml(suggestion.label)}</button>`;
 }
 
 function _displayNameEditorHtml(sub, fallback) {
@@ -2733,7 +2805,20 @@ function _displayNameEditorHtml(sub, fallback) {
 // stored on the backend and upgrade the visible label to configured map names.
 function _resolveRowMapTypes(sub, rowEl) {
   const t = sub.detected_parameter_map_type || sub.map_type;
-  if (sub._resolvedMapTypes || !(t === "Mixed/Other" || t === "Unknown" || !t)) return;
+  const syncChallengeValue = () => {
+    const value = rowEl?.querySelector(".sub-field-challenge-type .sub-field-value");
+    if (value) {
+      value.textContent = challengeLabel(
+        sub.confirmed_challenge_type || sub.challenge_type || sub.detected_challenge_type,
+      );
+    }
+  };
+  if (sub._resolvedMapTypes) {
+    syncChallengeValue();
+    _syncReviewChallengeSuggestion(sub, rowEl);
+    return;
+  }
+  if (!(t === "Mixed/Other" || t === "Unknown" || !t)) return;
   if (!sub.submission_id || !(Number(sub.nifti_count) > 0)) return;
   fetch(`${API}/api/nifti-files/${encodeURIComponent(sub.submission_id)}`)
     .then((res) => (res.ok ? res.json() : null))
@@ -2746,6 +2831,8 @@ function _resolveRowMapTypes(sub, rowEl) {
       const detailVal = rowEl?.querySelector(".sub-row-detail .sub-field-map-types .sub-field-value");
       if (detailVal) detailVal.textContent = types.join(", ")
       + (t === "Mixed/Other" ? " (detected as Mixed/Other)" : "");
+      syncChallengeValue();
+      _syncReviewChallengeSuggestion(sub, rowEl);
     })
     .catch(() => { /* display-only enhancement, ignore failures */ });
 }
@@ -2802,6 +2889,20 @@ function closeStructurePopovers(except) {
   });
 }
 
+function _positionStructurePopover(pop, trigger) {
+  if (!pop || !trigger) return;
+  pop.classList.remove("opens-upward");
+  const triggerRect = trigger.getBoundingClientRect();
+  const actionRow = trigger.closest(".step-shell")?.querySelector(".step-action-row");
+  const lowerBoundary = actionRow?.getBoundingClientRect().top || window.innerHeight;
+  const availableBelow = lowerBoundary - triggerRect.bottom - 12;
+  const availableAbove = triggerRect.top - 12;
+  const desiredHeight = Math.min(pop.scrollHeight || 260, 260);
+  if (availableBelow < Math.min(desiredHeight, 180) && availableAbove > availableBelow) {
+    pop.classList.add("opens-upward");
+  }
+}
+
 function toggleStructurePopover(sid, trigger) {
   // Look up the popover next to THIS trigger (ids can repeat across steps).
   const pop = trigger?.closest(".structure-control")?.querySelector(".structure-popover")
@@ -2816,13 +2917,18 @@ function toggleStructurePopover(sid, trigger) {
   }
   pop.hidden = false;
   trigger?.setAttribute("aria-expanded", "true");
-  if (pop.dataset.loaded === "1") return;
+  if (pop.dataset.loaded === "1") {
+    _positionStructurePopover(pop, trigger);
+    return;
+  }
   if (_structureCache[sid]) {
     pop.innerHTML = renderSubmissionStructure(_structureCache[sid]);
     pop.dataset.loaded = "1";
+    _positionStructurePopover(pop, trigger);
     return;
   }
   pop.innerHTML = `<div class="structure-loading">Loading file structure…</div>`;
+  _positionStructurePopover(pop, trigger);
   fetch(`${API}/api/nifti-files/${encodeURIComponent(sid)}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((data) => {
@@ -2830,6 +2936,7 @@ function toggleStructurePopover(sid, trigger) {
       _structureCache[sid] = files;
       pop.innerHTML = renderSubmissionStructure(files);
       pop.dataset.loaded = "1";
+      _positionStructurePopover(pop, trigger);
     })
     .catch(() => { pop.innerHTML = renderSubmissionStructure(null); });
 }
@@ -3091,7 +3198,12 @@ function renderBatchTable(submissions) {
     const safeMapLabel = escapeHtml(_subMapTypesLabel(sub));
     const safeName = escapeHtml(submissionDisplayName(sub, `Submission ${idx + 1}`));
     const safeOriginalName = escapeHtml(originalSubmissionName(sub, `Submission ${idx + 1}`));
-    const safeChallenge = escapeHtml(challengeLabel(sub.challenge_type));
+    const reviewChallenge = sub.confirmed_challenge_type
+      || sub.challenge_type
+      || sub.detected_challenge_type
+      || getChallengeType()
+      || defaultChallengeType();
+    const safeChallenge = escapeHtml(String(reviewChallenge || "Unknown").toUpperCase());
     const safeType = escapeHtml(typeInfo.label);
     const subTypeHelp = typeInfo.state === "skipped"
       ? "This means the submission already includes output maps, so Docker execution may be skipped."
@@ -3107,11 +3219,11 @@ function renderBatchTable(submissions) {
               <span class="sub-field-label">Original submission name</span>
               <span class="sub-field-value original-submission-name">${safeOriginalName}</span>
             </div>
-            <div class="sub-field sub-field-map-types">
+            <div class="sub-field sub-field-challenge-type">
               <span class="sub-field-label">Challenge type ${helpTooltip("Select the OSIPI challenge type for this submission.", "Challenge type help")}</span>
               <span class="sub-field-value">${safeChallenge}</span>
             </div>
-            <div class="sub-field">
+            <div class="sub-field sub-field-map-types">
               <span class="sub-field-label">Map types ${helpTooltip("Optional. The app can auto-detect configured parameter maps from filenames and metadata.", "Parameter map type help")}</span>
               <span class="sub-field-value">${safeMapLabel}${sub.detected_parameter_map_type === "Mixed/Other" ? ` <span class="sub-field-note">(detected as Mixed/Other)</span>` : ""}</span>
             </div>
@@ -3144,6 +3256,7 @@ function renderBatchTable(submissions) {
       title: safeName, titleClass: "sub-row-name", titleAttrs: `title="${safeName}" data-display-name-for="${safeSubId}"`,
 	      headClass: "sub-row-top",
 	      metaHtml: _subRowMetaLine(sub), metaClass: "sub-row-meta",
+	      extraMain: `<div class="review-challenge-suggestion" data-review-challenge-suggestion hidden></div>`,
 	      detailsHtml, detailsClass: "sub-row-detail",
 	    });
 
@@ -3201,6 +3314,29 @@ function renderBatchTable(submissions) {
   _syncBatchValidateBtn();
   _refreshWizardFooter();
 }
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-use-review-challenge]");
+  if (!button) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const submissionId = button.getAttribute("data-review-submission-id") || "";
+  const challenge = button.getAttribute("data-use-review-challenge") || "";
+  const submission = (batchState.uploadData?.submissions || []).find((item) => item.submission_id === submissionId);
+  if (!submission || !challenge) return;
+
+  submission.confirmed_challenge_type = challenge;
+  submission.challenge_type = challenge;
+  if (!batchState.isBatch) {
+    const radio = document.querySelector(`input[name="challenge_type"][value="${challenge}"]`);
+    if (radio) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
+  renderBatchTable(batchState.uploadData.submissions || []);
+  saveSessionState();
+});
 
 function _syncBatchHeaderCheckbox() {
   const checkAll = document.querySelector("#batch-check-all");
@@ -3261,7 +3397,7 @@ function _perSubmissionChallengeMap(submissionIds) {
   const byId = Object.fromEntries(subs.map((s) => [s.submission_id, s]));
   const map = {};
   submissionIds.forEach((id) => {
-    const c = byId[id]?.detected_challenge_type;
+    const c = byId[id]?.confirmed_challenge_type || byId[id]?.detected_challenge_type;
     if (c && String(c).toLowerCase() !== "unknown") map[id] = String(c).toLowerCase();
   });
   return Object.keys(map).length ? map : null;
@@ -3822,8 +3958,7 @@ function _applyReviewFilters() {
 // ── Row expand/collapse helpers ───────────────────────────────────────────────
 
 function _toggleRowDetail(wrap, forceOpen) {
-  // Support both v22 (.br-row-detail) and v23 (.vr-row-detail) drawer class names
-  const detail = wrap.querySelector(".vr-row-detail") || wrap.querySelector(".br-row-detail");
+  const detail = wrap.querySelector(".vr-row-detail");
   const toggleBtn = wrap.querySelector(".br-toggle-btn");
   if (!detail) return;
   const open = forceOpen !== undefined ? forceOpen : detail.style.display === "none";
@@ -3832,7 +3967,7 @@ function _toggleRowDetail(wrap, forceOpen) {
     toggleBtn.textContent = open ? "Hide details" : "Details";
     toggleBtn.setAttribute("aria-expanded", String(open));
   }
-  // Update .vr-details-btn label if present
+  // Keep the secondary details button label in sync when present.
   const detailsBtn = wrap.querySelector(".vr-details-btn");
   if (detailsBtn) {
     detailsBtn.textContent = open ? "Close" : "Details";
@@ -5194,12 +5329,7 @@ document.addEventListener("click", (e) => {
   const viewBtn = e.target.closest("[data-leaderboard-view]");
   if (viewBtn) {
     const sid = viewBtn.getAttribute("data-leaderboard-view");
-    if (sid && _scoreCache[sid]) {
-      _openSubmissionPreviewFromDetails(sid);
-    } else {
-      const detailToggle = viewBtn.closest(".leaderboard-row")?.querySelector(".details-toggle");
-      if (detailToggle && detailToggle.getAttribute("aria-expanded") !== "true") detailToggle.click();
-    }
+    if (sid) _openSubmissionPreviewFromDetails(sid);
   }
 });
 
@@ -5458,8 +5588,8 @@ function _setScoreStepCopy({ official = false, providerName = "" } = {}) {
   if (labelEl) labelEl.textContent = "Step 5 of 6: QC & Preview";
   if (titleEl) titleEl.textContent = "QC & Preview";
   if (descEl) descEl.textContent = official
-    ? `QC and previews are available for readable maps. Official scoring results from ${providerName || "the configured provider"} appear when its required reference and scoring data are available.`
-    : "QC and previews are available for readable maps. Additional ROI statistics, reference comparisons, or scoring results appear when the challenge configuration and required reference/scoring data are available.";
+    ? `QC and previews are available for readable maps. Results from ${providerName || "the configured provider"} appear when its required data are available.`
+    : "QC and previews are available for readable maps. Other analyses appear when compatible data are available.";
 }
 
 function _fmtPercentValue(v) {
@@ -5877,15 +6007,18 @@ function _previewChallengeForSubmission(submissionId) {
     .find((r) => r.submission_id === sid);
   const leaderboard = (_leaderboardFilter.entries || [])
     .find((entry) => entry.submission_id === sid);
-  return String(
-    validation?.challenge_type ||
-    leaderboard?.challenge_type ||
-    leaderboard?.challenge ||
-    leaderboard?.metrics?.challenge_type ||
-    getChallengeType() ||
-    _getSessionChallengeType() ||
-    defaultChallengeType()
-  ).toLowerCase();
+  const configured = new Set((_appConfig.challengeTypes || []).map((row) => String(row.id || "").toLowerCase()));
+  const placeholders = new Set(["unknown", "not provided", "not_provided", "none", "n/a"]);
+  const candidates = [
+    validation?.challenge_type,
+    leaderboard?.challenge_type,
+    leaderboard?.challenge,
+    leaderboard?.metrics?.challenge_type,
+    getChallengeType(),
+    _getSessionChallengeType(),
+    defaultChallengeType(),
+  ].map((value) => String(value || "").trim().toLowerCase());
+  return candidates.find((value) => value && !placeholders.has(value) && (!configured.size || configured.has(value))) || "";
 }
 
 async function _openSubmissionPreviewFromDetails(submissionId) {
@@ -5942,19 +6075,19 @@ function _renderPreviewModalContent(item, plane = "axial") {
     ? `<img class="nifti-preview-modal-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(activePlane)} preview for ${escapeHtml(item.file_name || "NIfTI map")}">`
     : `<div class="nifti-preview-modal-empty">Preview unavailable</div>`;
   const fullPreview = item.full_preview_url
-    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.full_preview_url)}" target="_blank" rel="noopener">Open full preview</a>`
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.full_preview_url)}" target="_blank" rel="noopener">Open image in new tab</a>`
     : "";
   const download = item.download_url
-    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.download_url)}">Download NIfTI for ITK-SNAP</a>`
+    ? `<a class="btn btn-secondary btn-sm" href="${escapeHtml(item.download_url)}" title="Download the original map for ITK-SNAP, FSLeyes, or 3D Slicer.">Download original NIfTI</a>`
     : "";
   // Gallery navigation: browse between maps when more than one is available.
   const galleryIds = _previewGalleryIds();
   const galleryPos = galleryIds.indexOf(item.map_id);
   const galleryNav = galleryIds.length > 1 && galleryPos >= 0
     ? `<div class="nifti-preview-modal-nav">
-        <button type="button" class="btn btn-secondary btn-sm" data-preview-nav="prev" aria-label="Previous map">‹ Prev</button>
-        <span class="nifti-preview-counter">${galleryPos + 1} of ${galleryIds.length}</span>
-        <button type="button" class="btn btn-secondary btn-sm" data-preview-nav="next" aria-label="Next map">Next ›</button>
+        <button type="button" class="btn btn-secondary btn-sm" data-preview-nav="prev" aria-label="Previous map">‹ Previous map</button>
+        <span class="nifti-preview-counter"><strong>${galleryPos + 1}</strong> of ${galleryIds.length} maps</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-preview-nav="next" aria-label="Next map">Next map ›</button>
       </div>`
     : "";
   return `<div class="nifti-preview-modal-header">
@@ -5966,10 +6099,11 @@ function _renderPreviewModalContent(item, plane = "axial") {
       ${_previewStatusBadge(item)}
     </div>
     ${galleryNav}
-    ${tabs ? `<div class="nifti-preview-tabs">${tabs}</div>` : ""}
+    ${tabs ? `<div class="nifti-preview-view-row"><span class="nifti-preview-section-label">View</span><div class="nifti-preview-tabs">${tabs}</div></div>` : ""}
     <div class="nifti-preview-modal-grid">
       <div class="nifti-preview-modal-image-wrap">${image}</div>
       <div class="nifti-preview-modal-meta">
+        <h3>Image information</h3>
         ${_summaryMetric("Map type", item.detected_map_type || "Unknown")}
         ${_summaryMetric("Shape", _previewShapeText(item.shape))}
         ${_summaryMetric("Voxel size", _previewVoxelText(item.voxel_size))}
@@ -5978,9 +6112,9 @@ function _renderPreviewModalContent(item, plane = "axial") {
         ${_summaryMetric("Finite voxels", _dashMetric(item.finite_percent, (v) => `${_fmtMetricVal(v)}%`))}
         ${_summaryMetric("Negative voxels", _dashMetric(item.negative_percent, (v) => `${_fmtMetricVal(v)}%`))}
         ${item.preview_error ? `<p class="nifti-preview-error">${escapeHtml(item.preview_error)}</p>` : ""}
-        <div class="nifti-preview-actions">${fullPreview}${download}<button type="button" class="btn btn-secondary btn-sm" data-preview-close>Close</button></div>
       </div>
-    </div>`;
+    </div>
+    ${(fullPreview || download) ? `<div class="nifti-preview-modal-footer">${fullPreview}${download}</div>` : ""}`;
 }
 
 function _openNiftiPreview(mapId, plane = "axial") {
@@ -6198,59 +6332,63 @@ function _renderReferenceTechnicalTable(analyses) {
 
 // Build HTML for a provider card inside the collapsed details section.
 function _renderProviderCard(p) {
-  const isOfficial = p.category === "official";
-  const isDev      = p.category === "development";
+  const isOfficial = p.official === true || p.category === "official";
+  const isDev      = p.category === "development" || p.not_for_scoring === true;
+  const isCustom   = !isOfficial && !isDev;
   const isReady    = p.status === "ready" || p.status === "dev_data_available";
 
-  const cardCls    = `score-provider-card ${isOfficial ? "spc-official" : "spc-dev"}`;
-  const badgeCls   = isOfficial ? "spc-badge-official" : "spc-badge-dev";
-  const badgeLabel = isDev ? "Development only" : "Official";
+  const cardCls    = `score-provider-card ${isOfficial ? "spc-official" : isDev ? "spc-dev" : "spc-custom"}`;
+  const badgeCls   = isOfficial ? "spc-badge-official" : isDev ? "spc-badge-dev" : "spc-badge-custom";
+  const badgeLabel = isOfficial ? "Official provider" : isDev ? "Development only" : "Custom package";
   const dotCls     = isReady && isOfficial ? "spc-dot-ready"
                    : isReady && isDev      ? "spc-dot-dev"
+                   : isReady               ? "spc-dot-custom"
                    : "spc-dot-not-conf";
 
-  const statusLabel = isReady ? (isDev ? "Test data available" : "Ready to score") : "Not configured";
+  const statusLabel = isReady
+    ? (isOfficial ? "Ready for official scoring" : isDev ? "Test data available" : "Ready for analysis")
+    : "Not configured";
   const labelCls    = isReady ? "spc-status-label" : "spc-status-label nc";
 
   const devNote = isDev
-    ? `<p class="spc-warning" style="margin:4px 0 0">Development only · Not official challenge scoring</p>`
+    ? `<p class="spc-warning">For development and provider testing only; not official challenge scoring.</p>`
     : "";
 
-  // Checklist: fixed required items, matched against missing list from backend
-  const checkItems = [
-    { label: "challengeScoring.py", matchKey: "script" },
-    { label: "Reference data",      matchKey: "reference" },
-    { label: "Mask files",          matchKey: "mask" },
-    { label: "Generated output maps", matchKey: "output" },
-  ];
-  const missingStr = (p.missing || []).join(" ").toLowerCase();
-  const checkHtml = `<ul class="score-checklist" style="margin-top:8px">` +
-    checkItems.map(({ label, matchKey }) => {
-      const isMissing = missingStr.includes(matchKey);
-      const iconCls   = isMissing ? "chk-icon chk-missing" : "chk-icon chk-ok";
-      const rowCls    = isMissing ? "chk-row-missing" : "";
-      return `<li class="${rowCls}"><span class="${iconCls}">${isMissing ? "Missing" : "OK"}</span>`
-           + `<span class="chk-label">${escapeHtml(label)}</span></li>`;
-    }).join("") + `</ul>`;
+  const metadata = [
+    p.challenge_type ? String(p.challenge_type).toUpperCase() : "",
+    p.map_type ? String(p.map_type).toUpperCase() : "",
+    p.source === "package" ? "Installed package" : p.source === "builtin" ? "Built in" : "",
+  ].filter(Boolean);
+  const missing = Array.isArray(p.missing) ? p.missing.filter(Boolean) : [];
+  const requirementsHtml = missing.length
+    ? `<div class="spc-requirements">
+        <div class="spc-requirements-title">Missing requirements</div>
+        <ul>${missing.map((item) => `<li><span class="spc-missing-marker">Missing</span><span>${escapeHtml(item)}</span></li>`).join("")}</ul>
+      </div>`
+    : `<div class="spc-ready-note"><span class="spc-ready-marker">Ready</span><span>No missing provider requirements reported.</span></div>`;
 
-  return `<div class="${cardCls}">
+  return `<article class="${cardCls}">
     <div class="spc-header">
-      <div class="spc-title">${escapeHtml(p.provider_name)}</div>
+      <div class="spc-heading-copy">
+        <div class="spc-title">${escapeHtml(p.provider_name)}</div>
+        ${metadata.length ? `<div class="spc-meta">${metadata.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+      </div>
       <span class="spc-category-badge ${badgeCls}">${badgeLabel}</span>
     </div>
     <div class="spc-status-row">
       <span class="spc-status-dot ${dotCls}"></span>
       <span class="${labelCls}">${statusLabel}</span>
     </div>
+    ${p.description ? `<p class="spc-desc">${escapeHtml(p.description)}</p>` : ""}
     ${devNote}
-    ${checkHtml}
-  </div>`;
+    ${requirementsHtml}
+  </article>`;
 }
 
 // Update the main user-facing status card based on provider status.
 // activeMode: "none" | "builtin" | "custom"
 // packageName: display name of active custom package, or null
-function _updateScoreStatusCard(provs, activeMode, packageName) {
+function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial = false) {
   const titleEl = el("score-status-title");
   const subEl   = el("score-status-sub");
   const badgeEl = el("score-status-badge");
@@ -6259,7 +6397,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
   const previewEl = el("score-metric-preview");
 
   const isConfigured = !!(activeMode && activeMode !== "none");
-  const isOfficial = activeMode === "builtin";
+  const isOfficial = activeOfficial === true;
   const actionText = isOfficial ? "Run Official Scoring" : "Run Analysis";
 
   if (isConfigured) {
@@ -6272,8 +6410,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
       previewEl.style.display = existingPreview ? "" : "none";
     }
 
-    const scorerName = packageName
-      || (activeMode === "builtin" ? "Default OSIPI scoring" : "Custom scoring package");
+    const scorerName = packageName || "Configured analysis provider";
     const pkgLabel = existingPreview
       ? "Metrics generated successfully."
       : isOfficial
@@ -6323,6 +6460,9 @@ function _updateScoreStatusCard(provs, activeMode, packageName) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 let _configurationManagerState = null;
+let _configurationManagerModalOpener = null;
+let _installedScoringPackages = [];
+let _compatibleBuiltinProviders = [];
 
 function _configurationManagerChallenge() {
   return String(el("config-manager-challenge")?.value || _getSessionChallengeType() || defaultChallengeType()).toLowerCase();
@@ -6334,6 +6474,104 @@ function _configurationManagerShow(message, ok = null, html = "") {
   target.className = `config-manager-results${ok === true ? " ok" : ok === false ? " err" : ""}`;
   target.innerHTML = html || escapeHtml(message || "");
   target.style.display = "";
+}
+
+function _configurationMapUnit(mapId) {
+  const item = (_appConfig.mapTypes || []).find((entry) => String(entry?.id || "").toLowerCase() === String(mapId || "").toLowerCase());
+  return String(item?.units || "Not specified");
+}
+
+function _builtinProviderForChallenge(providers, challengeType) {
+  const challenge = String(challengeType || "").toLowerCase();
+  const compatible = (providers || []).filter((provider) =>
+    provider?.source === "builtin"
+    && provider?.not_for_scoring !== true
+    && String(provider?.challenge_type || "").toLowerCase() === challenge
+  );
+  return compatible.length === 1 ? compatible[0] : null;
+}
+
+function _providerDisplayName(provider, fallback = "Built-in provider") {
+  return String(provider?.display_name || provider?.provider_name || provider?.provider_id || fallback);
+}
+
+function _pluralSummary(value, singular, plural = `${singular}s`) {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function _renderConfigurationSummaries(state = _configurationManagerState) {
+  if (!state?.editable) return;
+  const editable = state.editable;
+  const challenge = String(editable.challenge_type || _configurationManagerChallenge()).toUpperCase();
+  const challengeSummary = el("config-summary-challenge");
+  if (challengeSummary) challengeSummary.textContent = `${editable.label || challenge} · ${editable.description || "No description configured"}`;
+
+  const mapRows = Array.from(document.querySelectorAll("#config-manager-maps .config-map-row"));
+  const mapStates = mapRows.map((row) => row.querySelector(".config-map-state")?.value || "unused");
+  const requiredMaps = mapStates.filter((value) => value === "required").length;
+  const optionalMaps = mapStates.filter((value) => value === "optional").length;
+  const mapsSummary = el("config-summary-maps");
+  if (mapsSummary) mapsSummary.textContent = `${_pluralSummary(requiredMaps, "required map")} · ${_pluralSummary(optionalMaps, "optional map")} · ${_pluralSummary(mapRows.length, "map definition")}`;
+
+  const datasetRows = Array.from(document.querySelectorAll("#config-manager-datasets [data-dataset-name]"));
+  const datasetText = datasetRows.map((row) => {
+    const name = row.dataset.datasetName || "dataset";
+    const value = (field, singular) => {
+      const raw = row.querySelector(`.config-dataset-${field}`)?.value;
+      return raw ? _pluralSummary(Number(raw), singular) : `${singular} count pending`;
+    };
+    return `${name}: ${value("participants", "participant")}, ${value("repeats", "repeat")}, ${value("sites", "site")}`;
+  });
+  const datasetsSummary = el("config-summary-datasets");
+  if (datasetsSummary) datasetsSummary.textContent = datasetText.join(" · ") || "No dataset grid configured";
+
+  const artifactRows = Array.from(document.querySelectorAll("#config-manager-artifacts [data-artifact-id]"));
+  const requiredArtifacts = artifactRows.filter((row) => row.querySelector(".config-artifact-required")?.checked).length;
+  const artifactsSummary = el("config-summary-artifacts");
+  if (artifactsSummary) artifactsSummary.textContent = `${_pluralSummary(requiredArtifacts, "required artifact")} · Code execution ${el("config-manager-code-required")?.checked ? "required" : "optional"}`;
+
+  const mode = el("config-manager-scoring-mode")?.value || editable.scoring?.mode || "none";
+  const builtin = _builtinProviderForChallenge(state.builtin_providers, editable.challenge_type);
+  const modeLabels = {
+    none: "No provider",
+    builtin: builtin ? _providerDisplayName(builtin) : "No compatible built-in provider",
+    custom: "Trusted custom package",
+  };
+  let scoringText = modeLabels[mode] || mode;
+  if (mode === "custom") {
+    const packageId = el("config-manager-package")?.value || "";
+    const installed = (state.packages || []).find((item) => item.package_id === packageId);
+    scoringText += installed ? ` · ${installed.name} v${installed.version} · ${installed.ready ? "ready" : "not ready"}` : " · No compatible package selected";
+  }
+  const scoringSummary = el("config-summary-scoring");
+  if (scoringSummary) scoringSummary.textContent = `${scoringText}. Generic QC and compatible reference comparisons remain separate.`;
+
+  const counts = state.assets?.counts || {};
+  const assetsSummary = el("config-summary-assets");
+  if (assetsSummary) assetsSummary.textContent = `${_pluralSummary(Number(counts.reference || 0), "reference map")} · ${_pluralSummary(Number(counts.mask || 0), "mask")} · ${_pluralSummary(Number(counts.measured_signal || 0), "measured signal")}`;
+
+  const capability = (state.capabilities || []).find((row) => row.challenge_type === editable.challenge_type);
+  const capabilitiesSummary = el("config-summary-capabilities");
+  if (capabilitiesSummary) capabilitiesSummary.textContent = capability
+    ? `QC and previews available for readable maps · Provider analysis ${String(capability.provider_analysis || "not configured").toLowerCase()} · Official ranking not configured`
+    : "Capability details are not available.";
+
+  const versions = state.versions || [];
+  const active = versions.find((item) => item.active);
+  const versionsSummary = el("config-summary-versions");
+  if (versionsSummary) versionsSummary.textContent = `${active ? `Active: ${active.version_id}` : "Active: repository rules"} · ${_pluralSummary(versions.length, "saved version")}`;
+}
+
+function _renderConfigurationChallengeDetails(state) {
+  const target = el("config-manager-challenge-details");
+  if (!target) return;
+  const editable = state.editable || {};
+  const active = (state.versions || []).find((item) => item.active);
+  target.innerHTML = `
+    <dt>Challenge type</dt><dd>${escapeHtml(String(editable.challenge_type || "").toUpperCase())}</dd>
+    <dt>Label</dt><dd>${escapeHtml(editable.label || "Not configured")}</dd>
+    <dt>Description</dt><dd>${escapeHtml(editable.description || "Not configured")}</dd>
+    <dt>Active configuration</dt><dd>${escapeHtml(active?.version_id || "Repository validation rules")}</dd>`;
 }
 
 function _renderConfigurationManager(state) {
@@ -6348,16 +6586,19 @@ function _renderConfigurationManager(state) {
   if (maps) maps.innerHTML = (editable.maps || []).map((item) => `
     <div class="config-map-row" data-map-id="${escapeHtml(item.id)}">
       <div class="config-map-name">${escapeHtml(item.display)}<small>${escapeHtml(item.label)}</small></div>
-      <label class="config-manager-field">Requirement
+      <label class="config-manager-field config-map-state-field">Requirement
         <select class="config-map-state">
           ${["required", "optional", "unused"].map((value) => `<option value="${value}"${item.state === value ? " selected" : ""}>${value[0].toUpperCase() + value.slice(1)}</option>`).join("")}
         </select>
       </label>
-      <label class="config-manager-field">Dimensions
+      <label class="config-manager-field config-map-dimensions-field">Dimensions
         <input class="config-map-dimensions" type="number" min="2" max="7" value="${item.dimensions ?? ""}" placeholder="any">
       </label>
-      <label class="config-manager-field">Filename aliases (comma separated)
-        <input class="config-map-aliases" type="text" value="${escapeHtml((item.aliases || []).join(", "))}">
+      <div class="config-manager-field config-map-unit">Units
+        <strong>${escapeHtml(_configurationMapUnit(item.id))}</strong>
+      </div>
+      <label class="config-manager-field config-map-aliases-field">Filename aliases (comma separated)
+        <textarea class="config-map-aliases" rows="2">${escapeHtml((item.aliases || []).join(", "))}</textarea>
       </label>
     </div>`).join("");
 
@@ -6381,21 +6622,44 @@ function _renderConfigurationManager(state) {
   if (referenceVersion) referenceVersion.value = editable.reference_dataset_version || "";
 
   const scoringMode = el("config-manager-scoring-mode");
-  if (scoringMode) scoringMode.value = editable.scoring?.mode || "none";
+  if (scoringMode) {
+    const builtin = _builtinProviderForChallenge(state.builtin_providers, editable.challenge_type);
+    const builtinOption = el("config-manager-scoring-builtin-option");
+    if (builtinOption) {
+      builtinOption.textContent = builtin
+        ? _providerDisplayName(builtin)
+        : `No compatible built-in provider for ${String(editable.challenge_type || "").toUpperCase()}`;
+      builtinOption.disabled = !builtin;
+    }
+    scoringMode.value = editable.scoring?.mode || "none";
+  }
   const packageSelect = el("config-manager-package");
   const packages = (state.packages || []).filter((item) => item.challenge_type === editable.challenge_type);
   if (packageSelect) packageSelect.innerHTML = packages.map((item) =>
     `<option value="${escapeHtml(item.package_id)}"${item.package_id === editable.scoring?.package_id ? " selected" : ""}>${escapeHtml(item.name)} v${escapeHtml(item.version)}${item.ready ? "" : " (not ready)"}</option>`
   ).join("") || `<option value="">No compatible package installed</option>`;
   _syncConfigurationPackageVisibility();
+  _renderConfigurationPackageDetail();
   _renderConfigurationVersions(state.versions || []);
   _renderConfigurationAssets(state.assets || {});
   _renderConfigurationCapabilities(state.capabilities || []);
+  _renderConfigurationChallengeDetails(state);
+  _renderConfigurationSummaries(state);
 }
 
 function _syncConfigurationPackageVisibility() {
   const wrap = el("config-manager-package-wrap");
   if (wrap) wrap.style.display = el("config-manager-scoring-mode")?.value === "custom" ? "" : "none";
+}
+
+function _renderConfigurationPackageDetail() {
+  const target = el("config-manager-package-detail");
+  if (!target) return;
+  const packageId = el("config-manager-package")?.value || "";
+  const item = (_configurationManagerState?.packages || []).find((entry) => entry.package_id === packageId);
+  target.textContent = item
+    ? `${item.name} · version ${item.version} · package id ${item.package_id} · ${item.ready ? "ready" : "not ready"}`
+    : "No compatible package is selected.";
 }
 
 function _renderConfigurationVersions(versions) {
@@ -6421,8 +6685,46 @@ function _renderConfigurationAssets(assets) {
 function _renderConfigurationCapabilities(rows) {
   const target = el("config-manager-capabilities");
   if (!target) return;
-  target.innerHTML = `<table class="config-manager-table"><thead><tr><th>Challenge</th><th>QC &amp; previews</th><th>ROI statistics</th><th>Reference / difference maps</th><th>RSS</th><th>Provider analysis</th><th>ICC</th><th>Official ranking</th></tr></thead><tbody>${rows.map((row) => `
-    <tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.map_qc)}</td><td>${escapeHtml(row.roi_statistics)}</td><td>${escapeHtml(row.reference_comparison)}; ${escapeHtml(row.difference_maps)}</td><td>${escapeHtml(row.rss)}</td><td>${escapeHtml(row.provider_analysis)}</td><td>${escapeHtml(row.icc)}</td><td>${escapeHtml(row.official_ranking)}</td></tr>`).join("")}</tbody></table>`;
+  target.innerHTML = `<div class="config-capability-grid">${rows.map((row) => `
+    <article class="config-capability-card">
+      <h5>${escapeHtml(row.label)}</h5>
+      <dl class="config-capability-list">
+        <dt>QC &amp; previews</dt><dd>${escapeHtml(row.map_qc)}</dd>
+        <dt>ROI statistics</dt><dd>${escapeHtml(row.roi_statistics)}</dd>
+        <dt>Reference comparison</dt><dd>${escapeHtml(row.reference_comparison)}</dd>
+        <dt>Difference maps</dt><dd>${escapeHtml(row.difference_maps)}</dd>
+        <dt>RSS</dt><dd>${escapeHtml(row.rss)}</dd>
+        <dt>Provider analysis</dt><dd>${escapeHtml(row.provider_analysis)}</dd>
+        <dt>ICC</dt><dd>${escapeHtml(row.icc)}</dd>
+        <dt>Official ranking</dt><dd>${escapeHtml(row.official_ranking)}</dd>
+      </dl>
+    </article>`).join("")}</div>`;
+}
+
+function _openConfigurationModal(section, opener) {
+  const modal = el(`config-modal-${section}`);
+  if (!modal) return;
+  document.querySelectorAll(".config-manager-modal:not([hidden])").forEach((item) => {
+    item.hidden = true;
+    item.setAttribute("aria-hidden", "true");
+  });
+  _configurationManagerModalOpener = opener || null;
+  modal.hidden = false;
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("config-manager-modal-open");
+  modal.querySelector(".config-manager-modal-close")?.focus();
+}
+
+function _closeConfigurationModal(modal = null) {
+  const target = modal || document.querySelector(".config-manager-modal:not([hidden])");
+  if (!target) return;
+  target.hidden = true;
+  target.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("config-manager-modal-open");
+  _renderConfigurationSummaries();
+  const opener = _configurationManagerModalOpener;
+  _configurationManagerModalOpener = null;
+  if (opener?.isConnected) opener.focus();
 }
 
 function _collectConfigurationDraft() {
@@ -6519,13 +6821,43 @@ function _wireConfigurationManager() {
   panel.dataset.configurationManagerWired = "true";
   panel.addEventListener("toggle", () => { if (panel.open && !_configurationManagerState) _loadConfigurationManager(); });
   el("config-manager-challenge")?.addEventListener("change", (event) => _loadConfigurationManager(event.target.value));
-  el("config-manager-scoring-mode")?.addEventListener("change", _syncConfigurationPackageVisibility);
+  el("config-manager-scoring-mode")?.addEventListener("change", () => {
+    _syncConfigurationPackageVisibility();
+    _renderConfigurationSummaries();
+  });
+  el("config-manager-package")?.addEventListener("change", () => {
+    _renderConfigurationPackageDetail();
+    _renderConfigurationSummaries();
+  });
   el("config-manager-test")?.addEventListener("click", _testConfigurationManager);
   el("config-manager-preview")?.addEventListener("click", _previewConfigurationManager);
   el("config-manager-save")?.addEventListener("click", _saveConfigurationManager);
   document.addEventListener("click", (event) => {
+    const openButton = event.target.closest("[data-config-modal-open]");
+    if (openButton) {
+      _openConfigurationModal(openButton.dataset.configModalOpen, openButton);
+      return;
+    }
+    const closeButton = event.target.closest("[data-config-modal-close]");
+    if (closeButton) {
+      _closeConfigurationModal(closeButton.closest(".config-manager-modal"));
+      return;
+    }
+    if (event.target.classList?.contains("config-manager-modal")) {
+      _closeConfigurationModal(event.target);
+      return;
+    }
     const button = event.target.closest(".config-version-activate");
     if (button) _activateConfigurationVersion(button.dataset.versionId);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") _closeConfigurationModal();
+  });
+  el("config-manager-editor")?.addEventListener("input", () => _renderConfigurationSummaries());
+  el("config-manager-editor")?.addEventListener("change", () => _renderConfigurationSummaries());
+  el("config-manager-asset-file")?.addEventListener("change", (event) => {
+    const target = el("config-manager-asset-file-name");
+    if (target) target.textContent = event.target.files?.[0]?.name || "No file selected";
   });
   el("config-manager-export")?.addEventListener("click", () => {
     window.location.href = `${API}/api/configuration-manager/export?challenge_type=${encodeURIComponent(_configurationManagerChallenge())}`;
@@ -6555,6 +6887,8 @@ function _wireConfigurationManager() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || "Asset upload failed.");
       _configurationManagerShow(`${data.asset.name} added to local private assets.`, true);
+      el("config-manager-asset-file").value = "";
+      if (el("config-manager-asset-file-name")) el("config-manager-asset-file-name").textContent = "No file selected";
       await _loadConfigurationManager(_configurationManagerChallenge());
     } catch (error) { _configurationManagerShow(error.message, false); }
   });
@@ -6566,7 +6900,7 @@ function _getSessionChallengeType() {
     const first = batchState.validationData.results[0];
     if (first && first.challenge_type) return first.challenge_type.toLowerCase();
   }
-  // Reload restoration intentionally does not persist full validation payloads.
+  // Reload restoration does not persist full validation payloads.
   // In that state the restored challenge radio is the authoritative fallback.
   return String(getChallengeType() || defaultChallengeType()).toLowerCase();
 }
@@ -6581,6 +6915,24 @@ async function _loadScoringSetup() {
     const ct   = _getSessionChallengeType();
     const entry = (data.active_config || {})[ct] || { mode: "none" };
     const mode  = entry.mode || "none";
+    _compatibleBuiltinProviders = (data.providers || []).filter((provider) =>
+      provider?.source === "builtin"
+      && provider?.not_for_scoring !== true
+      && String(provider?.challenge_type || "").toLowerCase() === ct
+    );
+    const builtin = _builtinProviderForChallenge(data.providers, ct);
+    const builtinRadio = el("scoring-mode-builtin");
+    const builtinRow = el("scoring-mode-builtin-row");
+    const builtinTitle = el("scoring-builtin-title");
+    const builtinDescription = el("scoring-builtin-description");
+    if (builtinRadio) builtinRadio.disabled = !builtin;
+    if (builtinRow) builtinRow.classList.toggle("scoring-mode-row-unavailable", !builtin);
+    if (builtinTitle) builtinTitle.textContent = builtin
+      ? _providerDisplayName(builtin)
+      : `No compatible built-in provider for ${ct.toUpperCase()}`;
+    if (builtinDescription) builtinDescription.textContent = builtin
+      ? `${builtin.description || "Built-in provider analysis."} This does not configure an overall OSIPI challenge ranking.`
+      : "Use no provider analysis or select a compatible trusted custom package.";
 
     // Set radio
     const radio = document.querySelector(`input[name="scoring-mode"][value="${mode}"]`);
@@ -6600,8 +6952,8 @@ async function _loadScoringSetup() {
         badgeEl.textContent = "Not configured";
         badgeEl.className   = "scoring-admin-badge";
       } else if (mode === "builtin") {
-        badgeEl.textContent = "Default OSIPI";
-        badgeEl.className   = "scoring-admin-badge badge-ready";
+        badgeEl.textContent = builtin ? _providerDisplayName(builtin) : "Unavailable";
+        badgeEl.className   = builtin ? "scoring-admin-badge badge-ready" : "scoring-admin-badge";
       } else {
         const pkgs   = data.packages || [];
         const active = pkgs.find((p) => p.package_id === entry.package_id);
@@ -6610,9 +6962,35 @@ async function _loadScoringSetup() {
       }
     }
 
+    _renderScoringProviderSummary(mode, entry, data.packages || []);
+
     // Update builtin status line
-    await _updateBuiltinStatus();
+    await _updateBuiltinStatus(data.providers || []);
   } catch (_) { /* silently ignore */ }
+}
+
+function _renderScoringProviderSummary(mode, entry, packages) {
+  const title = el("scoring-provider-summary-title");
+  const detail = el("scoring-provider-summary-detail");
+  if (!title || !detail) return;
+  const challenge = _getSessionChallengeType().toUpperCase();
+  if (mode === "builtin") {
+    title.textContent = entry.provider_name || "Built-in provider unavailable";
+    detail.textContent = entry.provider_name
+      ? `${challenge} provider analysis is active. Readiness details are available under Configure provider. Official OSIPI challenge ranking is not currently configured.`
+      : `${challenge} has no compatible built-in provider. Select no provider analysis or a trusted custom package.`;
+    return;
+  }
+  if (mode === "custom") {
+    const active = (packages || []).find((item) => item.package_id === entry.package_id);
+    title.textContent = active ? `${active.name} v${active.version}` : "Custom provider package";
+    detail.textContent = active
+      ? `${challenge} · ${active.status?.ready ? "Ready" : "Needs attention"} · ${active.description || active.package_id}`
+      : `${challenge} uses a custom provider, but its installed package could not be resolved.`;
+    return;
+  }
+  title.textContent = "No provider analysis configured";
+  detail.textContent = `${challenge} still has generic QC and compatible generic reference comparisons. Official OSIPI ranking is not configured.`;
 }
 
 // Show/hide the custom package section based on selected mode.
@@ -6623,24 +7001,29 @@ function _onScoringModeChange(mode) {
 }
 
 // Check built-in TF6.2 provider readiness and update mode description.
-async function _updateBuiltinStatus() {
+async function _updateBuiltinStatus(providers = null) {
   const statusEl = el("scoring-builtin-status");
   if (!statusEl) return;
   try {
-    const r = await fetch(`${API}/api/scoring-status`);
-    const d = await r.json();
-    const prov = (d.providers || []).find(
-      (p) => p.provider_id === "osipi_tf62_dce_ktrans"
-    );
+    let rows = providers;
+    if (!Array.isArray(rows)) {
+      const r = await fetch(`${API}/api/scoring-status`);
+      const d = await r.json();
+      rows = d.providers || [];
+    }
+    const prov = _builtinProviderForChallenge(rows, _getSessionChallengeType());
     if (prov) {
       if (prov.status === "ready") {
-        statusEl.textContent  = "Reference data found; ready to score";
+        statusEl.textContent  = `${_providerDisplayName(prov)} is ready`;
         statusEl.className    = "scoring-mode-status ok";
       } else {
         const missing = (prov.missing || []).join(", ");
         statusEl.textContent  = `Missing: ${missing || "reference data not configured"}`;
         statusEl.className    = "scoring-mode-status err";
       }
+    } else {
+      statusEl.textContent = "Not available for this challenge";
+      statusEl.className = "scoring-mode-status";
     }
   } catch (_) { /* silently ignore */ }
 }
@@ -6658,14 +7041,19 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
     const d = await r.json();
     // Endpoint returns a bare array; tolerate a legacy {packages:[...]} too.
     packages = Array.isArray(d) ? d : (d.packages || []);
+    _installedScoringPackages = packages;
   } catch (_) {
+    _installedScoringPackages = [];
     listEl.innerHTML = `<p style="font-size:0.75rem;color:var(--muted)">Could not load packages.</p>`;
+    if (wrapEl) wrapEl.style.display = "none";
+    _renderScoringPackageSelectionDetail();
     return;
   }
 
   if (packages.length === 0) {
     listEl.innerHTML = `<p style="font-size:0.75rem;color:var(--muted);margin:4px 0">No packages installed yet. Upload a scoring package ZIP above.</p>`;
     if (wrapEl) wrapEl.style.display = "none";
+    _renderScoringPackageSelectionDetail();
     return;
   }
 
@@ -6682,7 +7070,7 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
         <div class="scoring-pkg-meta">
           v${escapeHtml(pkg.version)} · ${escapeHtml(pkg.challenge_type.toUpperCase())}
           ${pkg.map_type ? " · " + escapeHtml(pkg.map_type) : ""}
-          ${pkg.description ? ", " + escapeHtml(pkg.description.slice(0, 80)) : ""}
+          ${pkg.description ? " · " + escapeHtml(pkg.description) : ""}
         </div>
       </div>
       <div class="scoring-pkg-actions">
@@ -6700,7 +7088,18 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
       </option>`
     ).join("");
     if (wrapEl) wrapEl.style.display = "";
+    _renderScoringPackageSelectionDetail();
   }
+}
+
+function _renderScoringPackageSelectionDetail() {
+  const target = el("scoring-pkg-selection-detail");
+  const selected = el("scoring-pkg-select")?.value || "";
+  if (!target) return;
+  const item = _installedScoringPackages.find((pkg) => pkg.package_id === selected);
+  target.textContent = item
+    ? `${item.name} · version ${item.version} · ${String(item.challenge_type || "").toUpperCase()} · package id ${item.package_id} · ${item.status?.ready ? "ready" : "not ready"}`
+    : "No package is selected.";
 }
 
 // Save the current scoring setup selection to the backend.
@@ -6733,7 +7132,15 @@ async function _saveScoringSetup() {
     if (!r.ok) throw new Error(d.detail || "Request failed");
 
     if (msgEl) {
-      const label = mode === "none" ? "Scoring disabled" : mode === "builtin" ? "Default OSIPI scoring configured" : "Custom package configured";
+      const builtin = _builtinProviderForChallenge(
+        _compatibleBuiltinProviders,
+        ct,
+      );
+      const label = mode === "none"
+        ? "Provider analysis disabled"
+        : mode === "builtin"
+          ? `${_providerDisplayName(builtin)} configured`
+          : "Custom package configured";
       msgEl.textContent = label;
       msgEl.className   = "scoring-setup-msg ok";
       msgEl.style.display = "";
@@ -6786,6 +7193,8 @@ async function _saveScoringSetup() {
       }
     });
   }
+
+  el("scoring-pkg-select")?.addEventListener("change", _renderScoringPackageSelectionDetail);
 
   // Package remove (delegated)
   document.addEventListener("click", async (e) => {
@@ -6864,6 +7273,7 @@ async function renderScoreStep() {
   // ── 1. Determine active scoring mode + package name ──────────────────────────
   let activeMode      = "none";
   let activePackageName = null;
+  let activeOfficial = false;
   try {
     const r = await fetch(`${API}/api/scoring/active-config`);
     if (r.ok) {
@@ -6871,6 +7281,8 @@ async function renderScoreStep() {
       const ct  = _getSessionChallengeType();
       const entry = (d.active_config || {})[ct] || {};
       activeMode  = entry.mode || "none";
+      activeOfficial = entry.official === true;
+      if (entry.provider_name) activePackageName = entry.provider_name;
       // Resolve human-readable package name for custom mode
       if (activeMode === "custom" && entry.package_id) {
         const pkgs = d.packages || [];
@@ -6883,7 +7295,7 @@ async function renderScoreStep() {
   const notConfiguredCard = el("score-not-configured-card");
   const statusCard        = el("score-status-card");
   const tableCard         = el("score-table-card");
-  const activeIsOfficial = activeMode === "builtin";
+  const activeIsOfficial = activeOfficial;
   _scoreOfficialMode = activeIsOfficial;
   _setScoreStepCopy({
     official: activeIsOfficial,
@@ -6935,7 +7347,7 @@ async function renderScoreStep() {
     provs   = d.providers || [];
   } catch (_) { /* ignore */ }
 
-  _updateScoreStatusCard(provs, activeMode, activePackageName);
+  _updateScoreStatusCard(provs, activeMode, activePackageName, activeIsOfficial);
 
   if (grid) {
     grid.innerHTML = provs.length
@@ -7693,7 +8105,7 @@ function _renderExportRows() {
       meta: "CSV with team, contact, and original submission identifiers for internal review.",
       btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
   ];
-  host.innerHTML = rows.map((r) => renderFileRow({
+  const renderRows = (items) => items.map((r) => renderFileRow({
     extraClass: "export-main-row export-file-row",
     attrs: `id="${r.id}"`,
     icon: r.icon, iconClass: `export-group-icon export-file-icon ${r.iconClass}`,
@@ -7701,6 +8113,21 @@ function _renderExportRows() {
     metaHtml: r.meta, metaClass: "export-group-sub",
     actionsHtml: r.btn, actionsClass: "export-group-body export-file-actions",
   })).join("");
+  host.innerHTML = `
+    <section class="export-output-group" aria-labelledby="export-reviewer-heading">
+      <div class="export-output-heading">
+        <h2 id="export-reviewer-heading">Blinded reviewer outputs</h2>
+        <p>Team, contact, and original submission identifiers are removed.</p>
+      </div>
+      <div class="worklist export-output-list">${renderRows(rows.slice(0, 5))}</div>
+    </section>
+    <section class="export-output-group export-output-group--organiser" aria-labelledby="export-organiser-heading">
+      <div class="export-output-heading">
+        <h2 id="export-organiser-heading">Organiser-only output</h2>
+        <p>Contains identifying information and should remain internal.</p>
+      </div>
+      <div class="worklist export-output-list">${renderRows(rows.slice(5))}</div>
+    </section>`;
 }
 _renderExportRows();
 

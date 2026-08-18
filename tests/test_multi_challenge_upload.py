@@ -175,7 +175,10 @@ def test_mixed_report_grouped_by_challenge_no_cross_total(client):
     # report was restyled; assert the meaning, not the old phrasing.
     assert "spans more than one challenge" in html
     assert "reported per challenge" in html
-    assert "ASL RMSE" in html and "DCE RMSE" in html   # per-challenge rows (in QC summary)
+    # With no compatible references, do not render a table made entirely of
+    # unavailable per-challenge values. The summary above carries the scope
+    # caveat, and structured exports retain the challenge records.
+    assert "ASL RMSE" not in html and "DCE RMSE" not in html
     # No single global RMSE row that would pool challenges:
     assert "<td>RMSE</td>" not in html
 

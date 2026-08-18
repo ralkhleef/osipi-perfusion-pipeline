@@ -137,6 +137,50 @@ def test_methods_state_when_no_reference_was_available():
     assert "Bias is the mean" not in methods
 
 
+def test_map_results_hide_reference_columns_when_no_reference_exists():
+    summary = _summary(ref=False)
+    summary["nifti_analysis"]["maps"] = [{
+        "detected_map_type": "CBF",
+        "units": "ml/100g/min",
+        "metadata": {},
+        "stats": {
+            "finite_percent": 99.5,
+            "negative_voxel_percent": 0.2,
+            "mean": 58.1,
+        },
+    }]
+    model = _build_report_model([summary], tag="t", blinded=True)
+
+    assert model["main_map_metric_headers"] == [
+        "Map", "Units", "Finite", "Negative", "Mean",
+    ]
+    assert len(model["main_map_metric_rows"][0]) == 5
+    assert "Not available" not in model["main_map_metric_rows"][0]
+
+
+def test_map_results_add_reference_columns_only_when_comparisons_exist():
+    summary = _scored()
+    summary["analysis_fields"]["reference_metric_rows"] = [{
+        "detected_map_type": "CBF",
+        "scope": "Whole image",
+        "rmse": 7.2,
+        "mae": 5.0,
+        "bias": -2.0,
+        "correlation": 0.9,
+    }]
+    summary["nifti_analysis"]["maps"][0]["stats"] = {
+        "finite_percent": 99.5,
+        "negative_voxel_percent": 0.2,
+        "mean": 58.0,
+    }
+    model = _build_report_model([summary], tag="t", blinded=True)
+
+    assert model["main_map_metric_headers"][-4:] == [
+        "RMSE", "MAE", "Bias", "Corr.",
+    ]
+    assert model["main_map_metric_rows"][0][-4:] == ["7.2", "5", "-2", "0.9"]
+
+
 def test_grouping_caveat_is_prose_not_a_table_row():
     """The mixed-challenge caveat belongs in the leader, not in the metrics."""
     model = _build_report_model(

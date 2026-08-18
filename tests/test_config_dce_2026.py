@@ -1,14 +1,4 @@
-"""Phase 1 schema tests: DCE-2026 requirements expressed in configuration.
-
-This phase only *describes* the DCE-2026 submission requirements. Nothing
-here asserts enforcement, no ingestion, validation severity, or scoring
-behaviour changes in Phase 1, and the backward-compatibility tests below
-exist to prove exactly that for ASL and DSC.
-
-Reuses the temp-config helpers from ``test_config_rules`` so these tests
-exercise the same strict loader the application uses, rather than a
-parallel one.
-"""
+"""Schema tests for configured DCE, ASL, and DSC requirements."""
 
 from __future__ import annotations
 
@@ -44,6 +34,12 @@ def _dce_rules() -> dict:
             "suffixes": [".nii", ".nii.gz"],
             "patterns": ["modelled_st", "modeled_st"],
         },
+        "measured_st": {
+            "role": "measured_signal",
+            "dimensions": 4,
+            "suffixes": [".nii", ".nii.gz"],
+            "patterns": ["measured_st"],
+        },
         "methods": {
             "role": "methods",
             "suffixes": [".docx", ".txt"],
@@ -54,6 +50,17 @@ def _dce_rules() -> dict:
         "required_maps": ["ktrans"],
         "optional_maps": ["vp", "ve", "kep"],
         "required_artifacts": ["modelled_st", "methods"],
+        "analysis": {
+            "roi_descriptive": {
+                "enabled": True,
+                "map_types": ["ktrans"],
+            },
+            "signal_rss": {
+                "enabled": True,
+                "modelled_artifact": "modelled_st",
+                "measured_artifact": "measured_st",
+            },
+        },
         "datasets": {
             "synthetic": {"participants": None, "repeats": 2, "sites": 3},
             "clinical": {"participants": 5, "repeats": 2, "sites": 1},
@@ -159,16 +166,26 @@ def test_expected_maps_is_unchanged_by_the_new_fields(tmp_path: Path, monkeypatc
     assert cfg.expected_maps_by_challenge()["dce"] == ("ktrans", "kep", "vp")
 
 
+def test_dce_analysis_enablement_is_configuration_driven() -> None:
+    from osipi_pipeline.config import rules as cfg
+
+    cfg.clear_config_cache()
+    analysis = cfg.analysis_by_challenge()["dce"]
+    assert analysis["roi_descriptive"] == {
+        "enabled": True,
+        "map_types": ["ktrans"],
+    }
+    assert analysis["signal_rss"] == {
+        "enabled": True,
+        "modelled_artifact": "modelled_st",
+        "measured_artifact": "measured_st",
+    }
+    assert cfg.analysis_by_challenge()["asl"] == {}
+    assert cfg.analysis_by_challenge()["dsc"] == {}
+
+
 def test_asl_and_dsc_declare_the_maps_they_exist_to_collect() -> None:
-    """ASL and DSC are configured, not just named.
-
-    They previously declared nothing beyond `expected_maps`, so a submission
-    missing every map raised a warning and passed. CBF and ATT are the whole
-    point of an ASL submission, and CBV, CBF and MTT of a DSC one, so a
-    missing map is now an error.
-
-    Nothing scientific is decided here: no metric, threshold or cohort size.
-    """
+    """ASL and DSC declare their required parameter maps."""
     config_rules.clear_config_cache()
 
     required = config_rules.required_maps_by_challenge()
@@ -207,6 +224,44 @@ def test_unknown_key_in_dataset_definition_is_rejected(tmp_path: Path, monkeypat
     rules = _dce_rules()
     rules["challenges"]["dce"]["datasets"]["clinical"]["scanners"] = 2
     _assert_config_error(tmp_path, monkeypatch, rules, "scanners: unknown key")
+
+
+@pytest.mark.parametrize(
+    ("analysis_name", "field"),
+    [
+        ("roi_descriptive", "map_types"),
+        ("signal_rss", "modelled_artifact"),
+        ("signal_rss", "measured_artifact"),
+    ],
+)
+def test_enabled_analysis_requires_explicit_inputs(
+    tmp_path: Path,
+    monkeypatch,
+    analysis_name: str,
+    field: str,
+) -> None:
+    rules = _dce_rules()
+    del rules["challenges"]["dce"]["analysis"][analysis_name][field]
+    _assert_config_error(
+        tmp_path,
+        monkeypatch,
+        rules,
+        f"analysis.{analysis_name}.{field}: required when enabled is true",
+    )
+
+
+@pytest.mark.parametrize("analysis_name", ["roi_descriptive", "signal_rss"])
+def test_disabled_analysis_may_omit_inputs(
+    tmp_path: Path,
+    monkeypatch,
+    analysis_name: str,
+) -> None:
+    rules = _dce_rules()
+    block = rules["challenges"]["dce"]["analysis"][analysis_name]
+    block.clear()
+    block["enabled"] = False
+    loaded, _settings = _load_temp_config(tmp_path, monkeypatch, rules)
+    assert loaded["challenges"]["dce"]["analysis"][analysis_name] == {"enabled": False}
 
 
 @pytest.mark.parametrize("dims", [0, -1, 1, 8])
@@ -286,15 +341,7 @@ def test_string_dataset_counts_are_rejected(
 
 @pytest.mark.parametrize("field", ["participants", "repeats", "sites"])
 def test_any_count_may_be_left_undecided(tmp_path: Path, monkeypatch, field: str) -> None:
-    """null means "not yet decided" for every count, not only participants.
-
-    This used to be allowed for participants alone, which meant a challenge
-    could not be declared at all until its repeats and sites were settled.
-    That is why the ASL and DSC entries sat empty with no required maps: the
-    schema gave no way to say "this challenge exists, the grid is pending".
-    An invented placeholder would have been worse, because real submissions
-    would then be failed against a number nobody chose.
-    """
+    """Null marks any unresolved dataset count without inventing a value."""
     rules = _dce_rules()
     rules["challenges"]["dce"]["datasets"]["clinical"][field] = None
     loaded, _settings = _load_temp_config(tmp_path, monkeypatch, rules)
@@ -317,7 +364,7 @@ def test_dataset_missing_a_required_count_is_rejected(tmp_path: Path, monkeypatc
                          "datasets.clinical.participants: required field is missing")
 
 
-# ── Filename identity patterns (Phase 2 schema) ───────────────────────────
+# Filename identity patterns
 
 def test_identity_patterns_load_in_order(tmp_path: Path, monkeypatch) -> None:
     rules = _dce_rules()

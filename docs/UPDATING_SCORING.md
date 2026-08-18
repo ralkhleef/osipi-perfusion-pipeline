@@ -1,6 +1,6 @@
 # Updating the scoring — your options
 
-Challenge requirements and scientific analysis are deliberately separate.
+Challenge requirements and scientific analysis are separate.
 YAML describes which inputs are valid; versioned analysis/scoring code defines
 scientific formulas. Use the section that matches the kind of change you need.
 
@@ -54,7 +54,7 @@ The app matches a submitted map to the reference of the same type automatically
 each compatible mask in `masks/`. No code is required; newly added reference
 assets are used by the next compatible analysis.
 
-> These files are large and challenge-owned, so they are intentionally **not**
+> These files are large and challenge-owned, so they are **not**
 > stored in this repository. Keep source copies outside the repository or in
 > `private_scoring_assets/`; the configured `data/reference_data/` locations are
 > also ignored by git.
@@ -63,8 +63,8 @@ assets are used by the next compatible analysis.
 
 ## 3 — Add or update a trusted scoring package
 
-If your team has its own scoring program, package it as a ZIP and upload it in
-the app (Score step → **Scoring Setup**). The core app is not modified.
+If your team has its own scoring program, package it as a ZIP and upload it from
+**QC & Preview → Scoring Setup**. The core app is not modified.
 
 The ZIP looks like:
 
@@ -123,8 +123,7 @@ to YAML or hard-coded into the generic pipeline.
 
 ## What still needs the challenge team's decisions
 
-These are deliberately left as configurable placeholders until you provide the
-definitions/data — the app does not guess them:
+These items need challenge-team definitions or data. The app does not guess them:
 
 - The official ASL/DCE/DSC scoring formula, weighting, and any overall score.
 - The ICC model and confidence-interval method (repeatability CoV and ICC show

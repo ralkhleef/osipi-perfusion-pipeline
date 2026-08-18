@@ -1,238 +1,186 @@
 # OSIPI Perfusion Pipeline Code Walkthrough
 
-This walkthrough follows the current application from configuration through
-export. It is meant for maintainers who want to verify where behavior comes
-from, which parts are configurable, and which scientific decisions are still
-deliberately pending.
+This guide shows where the main behavior lives and which parts are configurable.
 
-## 1. Architecture at a glance
+## 1. Application flow
 
 ```text
 Browser UI (frontend/)
         |
         v
-FastAPI routes (backend/main.py)
+FastAPI API (backend/main.py)
         |
-        +-- ingestion and validation services
+        +-- ingestion and validation
         +-- optional Docker execution
-        +-- map QC, ROI and reference analysis
-        +-- optional provider/package analysis
-        +-- shared report model -> HTML / PDF
-        +-- CSV / JSON exports
+        +-- QC and analysis
+        +-- reports and exports
         |
         v
-Local ignored data (data/) + mounted rules (config/)
+Local data (data/) and challenge rules (config/)
 ```
 
-The application is local-first. Uploaded submissions, private references,
-masks, scoring packages, generated results, and saved configuration versions
-remain under ignored local data paths.
+The application runs locally. Submissions, private references, masks, scoring
+packages, generated results, and saved configuration versions are excluded from
+Git.
 
-## 2. Configuration sources of truth
+## 2. Configuration
 
-### `config/validation_rules.yaml`
+### Challenge rules
 
-This file owns challenge-facing structure:
+`config/validation_rules.yaml` defines:
 
-- challenge ids, names and detection keywords;
-- map labels, units, dimensions and filename aliases;
+- challenge names and detection keywords;
 - required and optional maps;
-- required non-map artifacts;
-- dataset/participant/repeat/site expectations;
-- filename identity patterns;
-- built-in analysis enablement and input mappings;
-- grouped descriptive-analysis settings; and
-- reference-dataset provenance labels.
+- map aliases, labels, units, and dimensions;
+- required non-map files;
+- dataset, participant, repeat, and site structure;
+- filename identity patterns; and
+- enabled built-in analysis and its input mappings.
 
-The loader in `src/osipi_pipeline/config/rules.py` validates the schema before
-the rules become active. Unknown fields, duplicate ids, invalid regular
-expressions, and references to unknown map/artifact ids are rejected.
+`src/osipi_pipeline/config/rules.py` checks the schema before rules are used.
+Invalid fields, duplicate ids, bad regular expressions, and unknown map or
+artifact references are rejected.
 
-The current DCE rules enable Ktrans ROI descriptive statistics and map the RSS
-analysis to `modelled_st` and `measured_st`. This removes challenge-name checks
-from the analysis services while keeping the formulas in tested Python.
-
-### `config/settings.yaml`
-
-This file owns operational settings such as upload limits, paths, reporting
-defaults, private path patterns, mask labels, and execution limits.
+`config/settings.yaml` contains operational settings such as paths, upload
+limits, reporting defaults, private path patterns, and execution limits.
 
 ### Configuration Manager
 
-The Configuration Manager calls the same validation layer as direct YAML use.
-Its guarded flow is:
+The Configuration Manager uses the same validation code as the YAML loader. Its
+safety flow is:
 
-1. Test the draft without changing active state.
-2. Preview the exact differences.
-3. Save an inactive immutable version.
-4. Activate or restore explicitly.
+1. Test the draft.
+2. Preview the changes.
+3. Save an inactive version.
+4. Activate or restore a version explicitly.
 
-Private assets and installed scoring packages are not included in a challenge
-configuration export.
+Closing an editor or saving a version does not change the active configuration.
+Private assets and scoring packages are not included in configuration exports.
 
-## 3. Upload and ingestion
+## 3. Upload and review
 
-Entry points live in `backend/main.py`; extraction and import behavior lives in
+Routes are in `backend/main.py`. Import and extraction code is in
 `backend/services/ingest_service.py`.
 
-The pipeline accepts a ZIP, local folder/files, a public GitHub repository, or
-a Zenodo record. Ingestion creates a manifest and normalized
-`SubmissionArtifact` records. Each artifact records its role, map/artifact type,
-and available dataset/participant/repeat/site identity.
+The app accepts a ZIP, folder/files, a public GitHub repository, or a Zenodo
+record. Ingestion creates a manifest and normalised `SubmissionArtifact`
+records. Challenge and map detection use labels and aliases from configuration.
 
-Challenge and map detection use configuration-derived labels and aliases. Batch
-boundaries are detected without treating configured structural dataset folders
-as separate submissions.
+Batch detection also checks the configured dataset structure so dataset folders
+are not mistaken for separate teams.
 
 ## 4. Validation
 
-`backend/services/validation_service.py` orchestrates validation; reusable
-checks live under `src/osipi_pipeline/validation/`.
+`backend/services/validation_service.py` coordinates checks implemented under
+`src/osipi_pipeline/validation/`.
 
-Validation is separated into:
+Validation covers:
 
-- file checks: readability, zero-byte files, NIfTI dimensions and finite data;
-- challenge completeness: required maps and artifacts;
-- scan identity: dataset, participant, repeat and site resolution;
-- configured grid checks; and
-- execution prerequisites for reproducible submissions.
+- file readability and zero-byte files;
+- NIfTI dimensions and finite values;
+- required maps and artifacts;
+- dataset, participant, repeat, and site identity;
+- configured dataset grids; and
+- Docker prerequisites for reproducible submissions.
 
-Required/optional status, dimensions and expected artifact roles come from
-YAML. Validation does not invent scientific pass/fail thresholds.
+Required content and dimensions come from YAML. The validator does not create
+scientific pass/fail thresholds.
 
-## 5. Run step
+## 5. Run
 
-`backend/services/execution_service.py` and `backend/docker_runner.py` handle
+`backend/services/execution_service.py` and `backend/docker_runner.py` run
 participant code.
 
-- Result-map-only submissions keep their submitted maps and skip execution.
-- Reproducible submissions require a supported Dockerfile.
-- Participant containers run with configured resource and timeout limits and
-  no network access.
-- Generated output maps return to the same validation and analysis path as
-  submitted result maps.
+- Result-only submissions keep their maps and skip execution.
+- Reproducible submissions need a supported Dockerfile.
+- Containers use configured resource and time limits and run without network
+  access.
+- Generated maps return to the same validation and analysis path as submitted
+  maps.
 
-## 6. QC and scientific analysis
+## 6. QC and analysis
 
-### Generic map QC
+### Map QC
 
-Readable NIfTI maps receive finite-voxel, NaN/Inf, negative-voxel and basic
-descriptive checks. QC does not require reference data and is not an official
+Readable NIfTI maps receive finite-voxel, NaN/Inf, negative-voxel, and basic
+descriptive checks. QC does not need reference data and is not an official
 OSIPI score.
 
 ### ROI descriptive statistics
 
 `backend/services/roi_descriptive_service.py` reads the enabled map types from
-the challenge's YAML `analysis.roi_descriptive` block. It reports per-scan,
-per-ROI median, population SD, CoV and voxel counts when masks are compatible.
+the challenge configuration. With compatible masks, it reports per-scan and
+per-ROI median, population SD, CoV, and voxel count.
 
 ### Generic reference comparison
 
-`backend/scoring.py` compares compatible submitted/reference maps for bias,
-MAE, RMSE, error SD, error CoV, Pearson correlation, valid overlap, and a
-difference NIfTI. Whole-map and compatible ROI results stay separate by map
-type and units.
+`backend/scoring.py` compares compatible submitted and reference maps. It can
+report bias, MAE, RMSE, error SD, error CoV, Pearson correlation, valid overlap,
+and a difference NIfTI for the whole map and compatible ROIs.
 
 ### DCE signal RSS
 
-The same module checks `analysis.signal_rss` to identify configured measured and
-modelled 4-D artifacts. It computes raw voxelwise Residual Sum of Squares across
-time, then produces whole-image and compatible ROI summaries. It is not called
-deviance and is not an official score.
+When configured measured and modelled 4-D signals are present, the same module
+calculates raw voxelwise Residual Sum of Squares across time and summarises it
+for the whole image and compatible ROIs. It is not labelled deviance.
 
-### Provider-specific analysis
+### Provider analysis
 
-Provider analysis is separate from generic QC/reference comparison:
+Provider analysis is separate from generic QC and reference comparison:
 
-- `none` disables provider scoring only;
-- `builtin` refers to a compatible built-in provider from the provider registry;
-- `custom` runs an installed trusted package with a validated manifest.
+- `none` disables provider analysis only;
+- `builtin` uses a compatible built-in provider; and
+- `custom` uses an installed trusted package with a valid manifest.
 
-An installed package is not automatically official. Official status comes from
-provider/package metadata, not from the UI mode name. Official OSIPI challenge
+The current built-in provider is the legacy TF6.2 DCE Ktrans adapter. A package
+is not official simply because it is installed. Official OSIPI challenge
 ranking is not currently configured.
 
 ## 7. Reports and exports
 
-`backend/services/pdf_report_service.py` builds the format-neutral report model.
-`backend/main.py` renders the self-contained HTML report from that model, while
-the PDF service renders the concise printable version.
+`backend/services/pdf_report_service.py` builds the shared report model. The
+HTML and PDF use the same results but different layouts:
 
-Both formats share:
+- PDF: short reviewer summary, main results, issues when present, and provenance.
+- HTML: summary and key results first, with detailed sections that can be opened.
 
-- review status and key values;
-- analysis availability;
-- applicable limitations;
-- provider/configuration/reference provenance; and
-- the same preformatted ROI and prototype-analysis records.
+CSV and JSON keep the machine-readable detail. Missing values stay unavailable;
+they are not changed to zero. Blinded outputs remove team, contact, submission,
+archive, and local-path identity.
 
-The presentation is intentionally different by medium:
+The Export screen provides blinded PDF, HTML, CSV Results, and JSON Results,
+the ROI Ktrans Statistics CSV, and an unblinded CSV for organisers.
 
-- PDF: an executive reviewer summary and four status fields on page one,
-  map/ROI results on page two, and an issues page only when review items exist;
-- HTML: Submission Summary and Key Results open by default, with ROI results,
-  reference comparison, additional analysis, issues/limitations and provenance
-  in collapsible sections.
+## 8. Configuration and code boundaries
 
-Long methodology explanations and full submitted-file inventories stay out of
-the reviewer reports. Structured CSV/JSON exports retain the machine-readable
-detail.
+Configuration owns challenge rules, required inputs, aliases, dimensions,
+dataset structure, enabled built-in analysis, active provider mode, and reference
+provenance labels.
 
-Unavailable values are omitted or labelled unavailable; they are not converted
-to zero. Blinded exports remove team/contact/submission identity and local paths.
+Code owns extraction safety, NIfTI arithmetic, metric formulas, Docker isolation,
+blinding, report rendering, and provider adapters. A new scientific formula still
+needs code and tests.
 
-The Export screen exposes blinded PDF, HTML, CSV Results and JSON Results, the
-ROI Ktrans Statistics CSV, and an explicit Unblinded CSV for organisers.
+The following items still need mentor decisions or private data:
 
-## 8. What is and is not hard-coded
+- final DCE accuracy and deviance definitions;
+- RSS normalisation;
+- repeatability, reproducibility, and ICC method;
+- thresholds, pass/fail, and ranking rules;
+- final private references and masks; and
+- final ASL fitted-model comparison.
 
-The audit target is not “zero constants.” Scientific software needs stable,
-reviewed formulas and schemas. The important boundary is whether organiser
-requirements can be changed without editing unrelated application logic.
-
-Configuration-owned:
-
-- challenge/map/artifact definitions and aliases;
-- required/optional inputs and dimensions;
-- dataset structure and filename identity;
-- built-in analysis enablement and input ids;
-- grouped-analysis axes and minimum size;
-- active scoring mode/package; and
-- reference provenance labels.
-
-Intentionally code-owned and tested:
-
-- extraction safety and path validation;
-- NIfTI arithmetic and metric formulas;
-- Docker isolation;
-- blinding rules;
-- report rendering; and
-- the built-in legacy TF6.2 provider adapter/registry entry.
-
-Still awaiting challenge-lead decisions or private assets:
-
-- any final definition of DCE accuracy or deviance;
-- whether RSS should be normalized;
-- formal repeatability/reproducibility and ICC model;
-- thresholds, pass/fail and participant aggregation/ranking;
-- final private reference/mask sets; and
-- final ASL fitted-model comparison requirements.
-
-## 9. Verification commands
+## 9. Verification
 
 ```bash
-PYTHONPATH=. .venv/bin/pytest -q
+OSIPI_REQUIRE_FULL_TESTS=1 PYTHONPATH=.:backend:src .venv/bin/pytest -q
 node tests/frontend_smoke_test.js
 node tests/footer_logic_test.js
-node tests/validation_card_dom_test.js
+node tests/frontend_validation_card_test.js
 node tests/frontend_roi_dom_test.js
-PYTHONPATH=. .venv/bin/pytest -q tests/test_documentation_accuracy.py
-PYTHONPATH=. .venv/bin/pytest -q tests/test_scoring_package_template.py
+PYTHONPATH=.:backend:src .venv/bin/pytest -q tests/test_documentation_accuracy.py
+PYTHONPATH=.:backend:src .venv/bin/pytest -q examples/scoring-package-template/tests/test_scorer.py
 PYTHONPATH=backend:src .venv/bin/python scripts/preview_reports.py
 docker compose config --quiet
 git diff --check
 ```
-
-For report QA, render every generated PDF page to images and inspect the clean,
-no-reference, mixed-batch and long-content stress scenarios. Automated text
-checks do not catch clipping, poor page breaks or unreadable figure labels.

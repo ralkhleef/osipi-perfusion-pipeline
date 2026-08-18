@@ -4,8 +4,6 @@ This app separates challenge structure from scientific analysis. YAML defines re
 
 Configuration is validated when first loaded and whenever **Reload rules** is used. Invalid YAML, duplicate ids, missing required fields, unsafe relative paths, bad numeric limits, unknown expected-map references, and default challenge/map mismatches are rejected with exact YAML paths such as `challenges.example.expected_maps[0]`; the previously valid rules remain active after a failed reload.
 
-> **Designed for future challenge updates.** Organisers can revise structural rules, install a new versioned analysis package, and add private assets later without changing an existing validated configuration until the replacement is ready.
-
 ## In-app Configuration Manager
 
 Routine organiser updates do not require VS Code, a terminal, or direct YAML
@@ -126,6 +124,29 @@ Each `challenges.<id>` entry supports:
 | `filename_identity_patterns` | Optional. Ordered regexes used as a fallback when the directory layout does not supply identity — see below. |
 | `code_execution_required` | Optional boolean. When true, validation requires an executor-supported Dockerfile rather than accepting a result-map-only submission. Defaults to false. |
 | `reference_dataset_version` | Optional provenance label for the organiser reference dataset; it does not expose private file paths. |
+| `analysis` | Optional enablement and input mapping for built-in analyses such as ROI descriptives and measured-versus-modelled signal RSS. |
+
+### Built-in analysis enablement
+
+YAML decides whether a compatible built-in analysis applies to a challenge and
+which configured map or artifact ids it consumes. The calculation itself stays
+in tested Python so formulas cannot be changed accidentally by editing labels.
+
+```yaml
+analysis:
+  roi_descriptive:
+    enabled: true
+    map_types: [ktrans]
+  signal_rss:
+    enabled: true
+    modelled_artifact: modelled_st
+    measured_artifact: measured_st
+```
+
+When an analysis is enabled, its map/artifact inputs are required explicitly;
+there are no hidden challenge-specific fallback ids. The schema rejects unknown analysis keys, map ids and artifact ids. Disabling
+one of these blocks prevents that analysis from running for the challenge; it
+does not disable readable-map QC, previews, or unrelated compatible analyses.
 
 ### Non-map artifacts
 
@@ -188,7 +209,7 @@ should contain. Dataset names are organiser-chosen; `synthetic` and
 | `sites` | Positive integer, or `null` while the count is awaiting confirmation. |
 
 Any `null` count means the organiser has **not decided** that part of the grid.
-It is deliberately distinct from a placeholder number, which would read as a
+It is distinct from a placeholder number, which would read as a
 decision that has not been made.
 
 ### Backward compatibility
@@ -235,7 +256,7 @@ manifest lists (which are unchanged):
 | `dimensions` | NIfTI dimensionality from the header, or `None`. |
 
 A **parameter map** is a 3-D image scored against a reference. A **fitted
-signal** is the 4-D modelled S-t; it is deliberately *not* a parameter map
+signal** is the 4-D modelled S-t; it is *not* a parameter map
 and carries `map_type: None`.
 
 #### Identity precedence
@@ -399,7 +420,7 @@ The app has three scoring modes per challenge type:
 | Mode | Behavior |
 |---|---|
 | `none` | Default. Disables provider/official scoring. Validation, generic QC, previews, exports, compatible DCE Ktrans ROI descriptive statistics, and compatible generic reference comparisons still work. |
-| `builtin` | Uses the built-in legacy OSIPI TF6.2 DCE Ktrans provider hook. It produces approved provider output only when its required organiser-owned assets are installed and configured. |
+| `builtin` | Uses the single compatible provider registered for the selected challenge. The current registry contains the legacy OSIPI TF6.2 DCE Ktrans provider only, so this option is offered for DCE and is unavailable for ASL/DSC. It produces approved provider output only when its required organiser-owned assets are installed and configured. |
 | `custom` | Runs an uploaded trusted scoring package with a `manifest.json` whose `challenge_type` matches the configured challenge id. |
 
 Generic reference comparison is independent of those provider modes. It compares submitted/generated NIfTI maps with compatible reference maps when they exist, including while mode is `none`. It searches:
@@ -414,7 +435,7 @@ Generic reference comparison is independent of those provider modes. It compares
 
 Masks are read from `masks/`, `Masks/`, or files matching `paths.mask_name_patterns`. Whole-map metrics and mask-level metrics include RMSE, MAE, bias, correlation, finite overlap, and related QC fields when the data can be compared.
 
-The built-in legacy TF6.2 provider is specific to the DCE Ktrans challenge assets listed in the README. Trusted custom scoring packages are a separate extension point. Other official scorers require approved scripts, references, masks, metric definitions, and accepted outputs.
+The built-in legacy TF6.2 provider is specific to the DCE Ktrans challenge assets listed in the README. Provider compatibility is read from the backend registry; the UI does not assume that every challenge has a built-in provider. Trusted custom scoring packages are a separate extension point. Other official scorers require approved scripts, references, masks, metric definitions, and accepted outputs.
 
 QC and previews remain available for readable maps. DCE Ktrans ROI descriptive statistics can appear when compatible ROI masks are available, generic reference comparisons when compatible reference maps are available, and provider-specific analysis or scoring when configured with its required assets. The pipeline never relabels generic comparison metrics as official scores, and official OSIPI challenge ranking is not currently configured. Generic reference metrics are not a substitute for official OSIPI accuracy, ICC, repeatability, or reproducibility definitions unless those definitions are supplied.
 
@@ -540,4 +561,4 @@ CoV, or the error SD against a reference — those remain separate fields.
 > by OSIPI. DCE currently enables provisional descriptive grouping of
 > scan-level ROI medians. This is not formal repeatability, ICC, accuracy,
 > deviance, pass/fail, or ranking. Raw RSS is conditional on a matched measured
-> and modelled 4-D signal and is intentionally not labelled deviance.
+> and modelled 4-D signal and is not labelled deviance.

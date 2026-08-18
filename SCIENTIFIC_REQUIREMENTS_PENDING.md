@@ -34,6 +34,6 @@ The following decisions still require confirmation from the challenge leads:
 - ASL CBF/Perfmap and ATT/ATTmap generic reference comparison with the same
   compatible whole-image and ROI error metrics.
 
-RSS is intentionally not called deviance. Grouped statistics are intentionally
+RSS is not called deviance. Grouped statistics are
 not called repeatability, reproducibility, or ICC. No official OSIPI challenge
 ranking is currently configured.

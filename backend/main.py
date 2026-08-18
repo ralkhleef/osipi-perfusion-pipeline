@@ -188,18 +188,7 @@ def health():
 
 @app.post("/api/config/reload")
 def reload_config():
-    """Re-read config/ from disk so a rules edit needs no restart.
-
-    Editing ``validation_rules.yaml`` used to mean restarting the container,
-    which means a terminal. The rules are read once and cached for the life of
-    the process, so this drops those caches and reads the files again.
-
-    A bad edit is reported here rather than raised: the point of the button is
-    that someone who is not a developer can fix a typo and press it again. A
-    500 would leave them reading a stack trace, and, worse, the previous
-    configuration is still the one in memory, so the pipeline keeps working
-    while they sort it out. That is worth saying out loud in the response.
-    """
+    """Validate config files and replace the cached rules without a restart."""
     try:
         rules, _settings = validate_config_files()
     except ConfigValidationError as exc:
@@ -852,10 +841,7 @@ def _find_validation_files(submission_id: Optional[str] = None):
     unique.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
     if submission_id:
-        # Exact stem match, never a substring. Batch carving produces ids where
-        # one is a prefix of another ("team_gamma" and "team_gamma_Clinical"),
-        # so substring matching returned the wrong team's results under the
-        # requested label. See CODE_WALKTHROUGH.md §B3.
+        # Use an exact stem because one batch id can be a prefix of another.
         wanted = {
             f"{submission_id}_validation",
             f"{submission_id.replace('/', '_').replace(chr(92), '_')}_validation",
@@ -2081,7 +2067,7 @@ def scoring_set_active(req: ScoringSetActiveRequest):
     """Set the active scoring mode for a challenge type.
 
     mode="none"   , scoring disabled; app shows "Scoring not configured"
-    mode="builtin", use the built-in OSIPI TF6.2 provider
+    mode="builtin", use the single compatible registered built-in provider
     mode="custom" , use an uploaded package (package_id required)
     """
     ct = req.challenge_type.strip().lower()
@@ -2312,12 +2298,7 @@ def submission_exists(submission_id: str) -> bool:
 
 
 def _collect_export_ids(batch_id: Optional[str], submission_id: Optional[str]) -> List[str]:
-    """Resolve a batch_id or submission_id to a list of submission IDs.
-
-    An unknown id is a 404. Previously any string was accepted and the export
-    rendered from empty defaults, so a typo produced a clean, plausible,
-    entirely blank report rather than an error. See CODE_WALKTHROUGH.md §B3.
-    """
+    """Resolve known batch or submission ids, returning 404 for unknown ids."""
     if batch_id:
         batch_result = find_batch_result(batch_id)
         if not batch_result:
@@ -3087,12 +3068,7 @@ def _report_status(value: object) -> str:
 
 
 def _status_chip_html(label: str, tone: str | None = None) -> str:
-    """Status as a coloured dot plus plain text.
-
-    The journal treatment deliberately avoids filled pills: the dot carries
-    the signal, the text carries the meaning, and both survive a monochrome
-    print (the inks differ enough in value to stay distinguishable in grey).
-    """
+    """Render a status as a coloured dot and plain text."""
     tone = tone or report_status_tone(label)
     return (
         f'<span class="stat stat-{_esc(tone)}">'
@@ -3173,11 +3149,7 @@ def export_report(
         else (_submission_display_name(summaries[0], 1, blinded=blinded) if len(summaries) == 1 else "Export session")
     )
 
-    # Built exactly once. This walks every submission, map, and ROI, so the
-    # HTML path used to pay for it twice: once here and once again further
-    # down purely to read the Methods paragraphs off it. Per-challenge
-    # scoping of RMSE/MAE/bias now lives in the model, which is also what
-    # the PDF uses, so the two cannot disagree.
+    # Build the shared model once so HTML and PDF use the same scoped results.
     report_model = _build_report_model(
         summaries, tag=(batch_id or submission_id or "report"), blinded=blinded
     )
@@ -3340,21 +3312,11 @@ def export_report(
         if grouped_table_html or rss_table_html else ""
     )
 
+    # The masthead carries only immediate report context. Versions, packages,
+    # and reference identifiers live once in the collapsed Provenance section.
     meta_items = [
-        ("Batch / session", session_name),
-        ("Challenge", ", ".join(challenges) if challenges else "Not available"),
-        ("Map types", ", ".join(map_types) if map_types else "Not available"),
-        ("Reference", reference_status),
         ("Report type", blind_label),
         ("Generated", generated),
-        # Spelled out rather than "Pipeline" / "Configuration": these are
-        # provenance fields, and a bare version number under an ambiguous
-        # label is the kind of thing that gets misread in a methods section.
-        ("Configuration version", report_model["analysis_provenance"]["challenge_configuration"]),
-        ("Scoring package", report_model["analysis_provenance"]["scoring_package"]),
-        ("Pipeline version", report_model["analysis_provenance"]["pipeline_version"]),
-        ("Reference dataset", report_model["analysis_provenance"]["reference_dataset"]),
-        ("Analysis date", report_model["analysis_provenance"]["analysis_date"]),
     ]
     if not blinded and len(summaries) == 1:
         # A single-submission report does not render the batch overview table,
@@ -3370,7 +3332,7 @@ def export_report(
     )
     provenance_labels = [
         ("Challenge", "challenge"),
-        ("Challenge configuration", "challenge_configuration"),
+        ("Configuration version", "challenge_configuration"),
         ("Scoring package", "scoring_package"),
         ("Pipeline version", "pipeline_version"),
         ("Reference dataset", "reference_dataset"),
@@ -3629,7 +3591,7 @@ def export_report(
     content:"+"; width:14px; font-family:var(--sans); font-size:15px;
     font-weight:400; line-height:1; color:var(--muted);
   }}
-  .report-section[open] > summary::before {{ content:"\2212"; }}
+  .report-section[open] > summary::before {{ content:"\\2212"; }}
   .report-section-body {{ padding:0 0 4px 22px; }}
   .section-count {{
     min-width:21px; padding:1px 6px; border:1px solid var(--hairline);
@@ -3727,10 +3689,10 @@ def export_report(
     <div class="report-section-body">{roi_table_html}</div>
   </details>''' if _roi_rows else ''}
 
-  <details class="report-section">
+  {f'''<details class="report-section">
     <summary>Reference Comparison</summary>
     <div class="report-section-body">{challenge_reference_summary_html}{reference_comparison_html}{figures_html}</div>
-  </details>
+  </details>''' if reference_available else ''}
 
   {f'''<details class="report-section">
     <summary>Additional Analysis</summary>
@@ -3738,7 +3700,7 @@ def export_report(
   </details>''' if prototype_analysis_html else ''}
 
   <details class="report-section">
-    <summary>Issues &amp; Limitations <span class="section-count">{len(report_model['issues'])}</span></summary>
+    <summary>Issues &amp; Limitations{f''' <span class="section-count">{len(report_model['issues'])} review item{'s' if len(report_model['issues']) != 1 else ''}</span>''' if report_model['issues'] else ''}</summary>
     <div class="report-section-body">
       {issues_html if report_model['issues'] else '<p class="report-note">No review items were recorded.</p>'}
       <ul class="limitations-list">{limitations_html}</ul>

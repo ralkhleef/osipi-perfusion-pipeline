@@ -60,14 +60,14 @@ def test_the_documentation_site_is_present() -> None:
     assert (DOCS / "index.html").exists()
 
 
-def test_configuration_page_has_the_safe_future_update_handoff() -> None:
+def test_configuration_page_has_the_safe_update_handoff() -> None:
     html = (DOCS / "configuration.html").read_text(encoding="utf-8").lower()
     for phrase in (
         "1. changing challenge requirements",
         "2. adding or updating scoring",
         "3. adding private reference data",
         "4. safe updates",
-        "designed for future challenge updates",
+        "save as new version",
         "previous active configuration unchanged",
         "official osipi challenge ranking is not currently configured",
     ):

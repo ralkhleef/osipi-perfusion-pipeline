@@ -1,10 +1,4 @@
-"""Reloading challenge rules from the interface, instead of restarting.
-
-Editing config/validation_rules.yaml used to require a container restart, so a
-mentor could not change what a challenge requires without a terminal. These
-cover the endpoint behind the Reload button, and in particular what happens
-when the edit is wrong, the case the button exists to make survivable.
-"""
+"""Challenge-rule reload endpoint tests."""
 
 from __future__ import annotations
 
@@ -28,7 +22,7 @@ def test_reload_reports_the_challenges_it_read(api) -> None:
 
 
 def test_reload_picks_up_an_edit_without_a_restart(api, tmp_path, monkeypatch) -> None:
-    """The whole point: change the file, press the button, see the change."""
+    """A valid file edit becomes active after reload."""
     from osipi_pipeline.config import rules as config_rules
 
     # Shaped like the real asl entry, so the reload succeeds or fails on

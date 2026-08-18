@@ -66,19 +66,19 @@
           </div>
 
           <h2 id="what-it-does">What the pipeline does</h2>
-          <p>The pipeline gives challenge organisers and reviewers a consistent and reproducible way
-            to process perfusion MRI submissions.</p>
+          <p>The pipeline puts perfusion MRI submission review into one local workflow.</p>
 
           <p>Submissions can be imported from a ZIP, folder/files, GitHub repository, or
             Zenodo record. The pipeline detects and organises the submitted files, validates
             them against challenge-specific requirements, and runs participant code in Docker when
             needed.</p>
 
-          <p>It then provides map QC and previews, with additional DCE Ktrans
-            ROI descriptive statistics, generic reference comparisons, and provider-specific analysis
-            or scoring results when the required masks, reference maps, or configured provider
-            assets are available. Official OSIPI challenge ranking is not currently configured.
-            Results can be exported as PDF, HTML, CSV, and JSON reports.</p>
+          <p>Readable maps receive QC and previews. DCE Ktrans ROI statistics, generic reference
+            comparisons, and provider analysis appear when their required masks, references, or
+            package assets are available. Official OSIPI challenge ranking is not currently
+            configured.</p>
+
+          <p>Results can be exported as PDF, HTML, CSV, and JSON.</p>
 
           <p>The application runs locally, so imaging data, reference maps, ROI masks, and submissions
             stay on the reviewer's machine.</p>
@@ -135,9 +135,8 @@
               <div class="docs-step-rail"><span class="docs-step-num">5</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">QC and Preview</p>
-                <p>Review map QC and visual previews. Depending on the challenge and available data,
-                  this step can also include DCE Ktrans ROI descriptive statistics, generic reference
-                  comparisons, and provider-specific analysis or scoring results. Official OSIPI
+                <p>Review map QC and previews. Compatible masks, references, or analysis packages
+                  add ROI statistics, reference comparisons, or provider results. Official OSIPI
                   challenge ranking is not currently configured.</p>
               </div>
             </div>

@@ -1172,6 +1172,22 @@ def test_scoring_set_active_builtin(client: TestClient) -> None:
     assert r.status_code == 200
 
 
+@pytest.mark.parametrize("challenge", ["asl", "dsc"])
+def test_scoring_rejects_incompatible_builtin_and_preserves_previous(
+    client: TestClient,
+    challenge: str,
+) -> None:
+    before = client.get("/api/scoring/active-config").json()["active"][challenge]
+    response = client.post("/api/scoring/set-active", json={
+        "challenge_type": challenge,
+        "mode": "builtin",
+    })
+    assert response.status_code == 400
+    assert "No compatible built-in provider" in response.text
+    after = client.get("/api/scoring/active-config").json()["active"][challenge]
+    assert after == before
+
+
 def test_scoring_set_active_custom_with_package(client: TestClient) -> None:
     """POST /api/scoring/set-active with mode='custom' and a valid package_id saves."""
     # Install a package first
@@ -2024,9 +2040,12 @@ def test_report_html_generated(client: TestClient) -> None:
     # Reviewer structure: summary and results open, detail sections collapsed.
     assert "Submission Summary" in r.text
     assert "Key Results" in r.text
-    assert "Reference Comparison" in r.text
+    # Empty analysis sections are omitted; the summary still explains why a
+    # compatible reference comparison was unavailable.
+    assert "Reference Comparison" not in r.text
     assert "Issues &amp; Limitations" in r.text
     assert r.text.count('<details class="report-section" open>') == 2
+    assert "\x91" not in r.text, "CSS minus icon escaped as a control character"
     # The submissions table was folded into the results table; its columns
     # must still be reachable somewhere in the document.
     assert "Challenge" in r.text and "Map types" in r.text
@@ -2034,8 +2053,8 @@ def test_report_html_generated(client: TestClient) -> None:
     # gallery were removed from the printable report to reduce clutter.
     assert "Scoring Summary" not in r.text
     assert "Parameter Map Previews" not in r.text
-    assert "Basic NIfTI QC" in r.text
-    assert "not full BIDS validation" in r.text
+    assert "QC checks NIfTI readability" in r.text
+    assert "full BIDS validation is not implemented" in r.text
     # Report metadata: the labels lost their trailing colons when the block
     # became a definition list, and submission/map counts moved into the
     # leader sentence and the key-figures band.
@@ -2061,16 +2080,7 @@ def test_report_html_generated(client: TestClient) -> None:
 
 
 def test_every_pdf_page_is_the_same_size_and_orientation(client: TestClient) -> None:
-    """A reader should not have to rotate the document part-way through.
-
-    Two wide tables used to be given landscape pages of their own, so a four
-    page report went portrait, landscape, landscape, portrait. Reading it on
-    screen meant rotating twice, and printing it produced a stack nobody
-    could staple. The tables are set at the portrait measure instead.
-
-    Page geometry is read out of the PDF itself rather than trusted from the
-    code, because the template and the page it emits are two different things.
-    """
+    """Every generated PDF page uses the same portrait dimensions."""
     import re
 
     data, fname = _make_result_only_zip("pdf_orientation.zip")
@@ -2133,10 +2143,7 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
         assert expected in pdf_text
     # The decorative "Small QC Charts" section was removed to reduce noise.
     assert "Small QC Charts" not in pdf_text
-    # The reference-unavailable note must appear exactly once (it used to be
-    # repeated in both the summary and the per-row notes). Matched on a short
-    # fragment because ReportLab emits each wrapped line as its own text
-    # operator, so the full sentence is never contiguous in the byte stream.
+    # ReportLab emits wrapped lines as separate text operators, so match a short fragment.
     assert pdf_text.count("No compatible reference was provided") == 1
     for forbidden in (
         "Execution summary", "Validation summary",
@@ -2425,9 +2432,7 @@ def test_pdf_report_has_versions_and_permap_sections(client, tmp_path):
     assert pdf.content[:5] == b"%PDF-" and len(pdf.content) > 3000
 
 
-# ---------------------------------------------------------------------------
-# Phase 3: completeness enforcement reaches the existing validation gate
-# ---------------------------------------------------------------------------
+# Completeness enforcement through the validation API
 
 def _make_dce_zip(filename: str, entries: dict[str, bytes]) -> tuple[bytes, str]:
     """ZIP with explicit paths, so directory identity can be expressed."""

@@ -9,22 +9,14 @@ services:
       - "8000:8000"
     environment:
       PYTHONPATH: /app/backend:/app/src
-      # Docker-outside-of-Docker (DooD) path translation.
-      # The backend runs inside a container but spawns docker run on the HOST
-      # daemon via the socket mount. Volume paths in docker run -v must be
-      # host-visible. These vars let docker_runner.py translate container paths
-      # (/app/submissions/...) to the equivalent host paths before building
-      # the -v arguments. ${PWD} is expanded by docker-compose on the host.
+      # Host paths are required when participant containers use the Docker socket.
       HOST_SUBMISSIONS_DIR: ${PWD}/submissions
       HOST_OUTPUTS_DIR: ${PWD}/data/outputs
       HOST_REFERENCE_DATA_DIR: ${PWD}/data/reference_data
     volumes:
       - ./data:/app/data
       - ./submissions:/app/submissions
-      # Challenge rules are writable so the local Configuration Manager can
-      # activate a tested version of validation_rules.yaml. The existing
-      # Reload rules action picks up direct YAML edits without rebuilding or
-      # restarting the container. Private data remains under ./data.
+      # The Configuration Manager saves and activates tested rule versions here.
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

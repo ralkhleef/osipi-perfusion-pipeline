@@ -1,17 +1,4 @@
-"""A blinded report reveals no submitter identity, anywhere.
-
-Regression tests for CODE_WALKTHROUGH.md §B5. The issues table rendered
-``Path(issue["path"]).name``; for submission-level issues that path is the
-submission directory, whose name *is* the submission id, derived from the
-uploaded archive name. Both renderers had their own copy of that line, so the
-HTML leaked while the PDF happened not to.
-
-The team name here is deliberately hostile: a single unusual token that cannot
-occur by accident, checked in every derived form the pipeline produces,
-spaced, slugged, underscored, upper, lower, and as a path component. Assertions
-are made against the *whole* output, not the visible table cell, so metadata,
-comments, embedded JSON, and download filenames are all covered.
-"""
+"""Blinded reports and filenames exclude submitter identity."""
 
 from __future__ import annotations
 
@@ -139,11 +126,7 @@ def _assert_clean(text: str, what: str) -> None:
 def client(monkeypatch):
     import main
 
-    # Capture the real shape BEFORE patching. _summary() calls _base_summary(),
-    # which calls _gather_summary() on its first use only, so if the patch
-    # lands first, that call reaches the patch and recurses. It survived only
-    # because some earlier test in the file happened to warm the cache. Running
-    # a fixture test on its own hit the recursion.
+    # Cache the production summary shape before patching the gatherer.
     _base_summary()
 
     monkeypatch.setattr(main, "_collect_export_ids", lambda b, s: [SID])

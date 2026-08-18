@@ -7,13 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/static/styles.css?v=93" />
+<link rel="stylesheet" href="/static/styles.css?v=102" />
 </head>
 <body data-step="upload">
 
 <div class="app">
 
-  <!-- ── Hidden step-state holders (used by JS for unlockStep / _syncWfNav) ── -->
+  <!-- ── step-state holders ── -->
   <div id="wf-state-holder" aria-hidden="true" style="display:none">
     <button class="wf-step wf-active" id="wf-btn-upload"   data-step="upload"   type="button">Upload</button>
     <button class="wf-step"           id="wf-btn-index"    data-step="index"    type="button" disabled>Index</button>
@@ -83,7 +83,8 @@
 
         <!-- Submission Information -->
         <div class="form-section">
-          <h2 class="section-heading">Submission Information</h2>
+          <h2 class="section-heading">Submission information</h2>
+          <p class="section-intro">Reviewer details stay on this machine and are excluded from blinded reports.</p>
           <div class="field-row-2">
             <div class="form-group">
               <label class="label" for="team-name">Team Name <span class="req">*</span></label>
@@ -100,7 +101,8 @@
 
         <!-- Challenge Details -->
         <div class="form-section">
-          <h2 class="section-heading">Challenge Details</h2>
+          <h2 class="section-heading">Challenge details</h2>
+          <p class="section-intro">The selected challenge controls required maps, validation rules, and available analyses.</p>
 
           <div class="form-group">
             <div class="field-label-row">
@@ -114,28 +116,33 @@
             </div>
             <div id="challenge-type-error" class="field-error"></div>
           </div>
-
-
-          <div class="form-group" style="margin-bottom:0">
-            <div class="field-label-row">
-              <label class="label" style="margin-bottom:0">Parameter Map Type</label>
-              <span class="optional-tag">Optional, auto-detected</span>
-              <button type="button" class="help-tooltip" aria-label="Parameter map type help">?
-                <span class="tooltip-text">Optional. The app can auto-detect configured parameter maps from filenames and metadata.</span>
-              </button>
+          <details class="advanced-options">
+            <summary>Advanced: provide a parameter-map hint</summary>
+            <div class="advanced-options-body">
+              <p class="field-hint">Optional. Leave this unset to let the pipeline detect map types from filenames and metadata.</p>
+              <div class="form-group" style="margin-bottom:0">
+                <div class="field-label-row">
+                  <label class="label" style="margin-bottom:0">Parameter map type</label>
+                  <span class="optional-tag">Optional</span>
+                  <button type="button" class="help-tooltip" aria-label="Parameter map type help">?
+                    <span class="tooltip-text">Use this only when automatic detection needs a hint.</span>
+                  </button>
+                </div>
+                <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type" style="margin-top:8px">
+                  <!-- populated by JS -->
+                </div>
+                <div id="map-type-other-wrap" style="display:none; margin-top:8px;">
+                  <input type="text" id="map-type-other" placeholder="Specify map type" />
+                </div>
+              </div>
             </div>
-            <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type" style="margin-top:8px">
-              <!-- populated by JS -->
-            </div>
-            <div id="map-type-other-wrap" style="display:none; margin-top:8px;">
-              <input type="text" id="map-type-other" placeholder="Specify map type" />
-            </div>
-          </div>
+          </details>
         </div>
 
         <!-- Upload Submission -->
         <div class="form-section">
-          <h2 class="section-heading">Upload Submission</h2>
+          <h2 class="section-heading">Upload submission</h2>
+          <p class="section-intro" id="source-guidance">Choose a ZIP, folder, or set of files from this computer.</p>
 
           <div class="source-tabs" role="radiogroup" aria-label="Submission source">
             <label class="source-tab active" id="tab-local">
@@ -203,6 +210,7 @@
         <!-- Submit -->
         <div class="form-actions">
           <div id="submit-status" class="submit-status" style="display:none"></div>
+          <p id="submit-guidance" class="action-guidance" aria-live="polite">Choose a submission source to continue.</p>
           <button type="button" id="submit-btn" class="btn btn-primary btn-full submit-btn">Upload and Detect</button>
         </div>
 
@@ -220,7 +228,7 @@
         <div class="heading-text">
           <span class="step-label">Step 2 of 6: Review</span>
           <h1 class="card-title">Review detected submission</h1>
-          <p class="card-desc">Confirm the detected submissions, then validate.</p>
+          <p class="card-desc">Confirm the detected challenge, maps, and submission type before validation.</p>
         </div>
       </header>
 
@@ -274,7 +282,7 @@
         <div class="heading-text">
           <span class="step-label">Step 3 of 6: Validate</span>
           <h1 class="card-title">Validate submission files</h1>
-          <p class="card-desc">Review errors, warnings, and output-map checks before execution.</p>
+          <p class="card-desc">Check required maps, readable files, dimensions, and challenge-specific rules.</p>
         </div>
       </header>
 
@@ -344,7 +352,7 @@
         <div class="heading-text">
           <span class="step-label">Step 4 of 6: Run</span>
           <h1 class="card-title">Prepare submission maps</h1>
-          <p class="card-desc">Included result maps are used directly; processing runs only when needed.</p>
+          <p class="card-desc">Existing result maps go directly to review; participant code runs only when needed.</p>
         </div>
       </header>
 
@@ -451,7 +459,7 @@
         <div class="heading-text">
           <span class="step-label" id="score-step-label">Step 5 of 6: QC &amp; Preview</span>
           <h1 class="card-title" id="score-step-title">QC &amp; Preview</h1>
-          <p class="card-desc" id="score-step-desc">QC and previews are available for readable maps. Additional configured analyses appear when their required data are available.</p>
+          <p class="card-desc" id="score-step-desc">QC and previews are available for readable maps. ROI, reference, and provider analyses appear when compatible data are available.</p>
         </div>
       </header>
 
@@ -486,13 +494,13 @@
       <!-- ── Reviewer / Admin: Scoring Setup (collapsed by default) ── -->
       <details class="scoring-admin-panel" id="scoring-admin-panel">
         <summary class="scoring-admin-summary">
-          <span class="scoring-admin-icon">Admin</span>
-          Reviewer / Admin: Scoring Setup
+          <span class="scoring-admin-icon">Settings</span>
+          Reviewer settings
           <span class="scoring-admin-badge" id="scoring-admin-badge">Not configured</span>
         </summary>
         <div class="scoring-admin-body">
           <p class="scoring-admin-desc">
-            Configure scoring. Reviewer/admin use only.
+            Manage challenge rules, private assets, and optional analysis providers. Nothing is activated automatically.
             <button type="button" class="help-tooltip" aria-label="Scoring package help">?
               <span class="tooltip-text">A trusted ZIP containing scoring code and optional reference data.</span>
             </button>
@@ -512,161 +520,333 @@
 
             <div id="config-manager-loading" class="config-manager-message">Open this panel to load the active configuration.</div>
             <div id="config-manager-editor" style="display:none">
-              <div class="config-manager-grid">
-                <div class="config-manager-card config-manager-card-wide">
-                  <h4>Maps and filename aliases</h4>
-                  <p>Choose whether each map is required, optional, or unused. Dimensions and aliases are validated before saving.</p>
-                  <div id="config-manager-maps"></div>
-                </div>
-                <div class="config-manager-card">
-                  <h4>Required documents and outputs</h4>
-                  <div id="config-manager-artifacts"></div>
-                  <label class="config-manager-check">
-                    <input type="checkbox" id="config-manager-code-required">
-                    Participant code execution is required
-                  </label>
-                </div>
-                <div class="config-manager-card">
-                  <h4>Dataset structure</h4>
-                  <div id="config-manager-datasets"></div>
-                  <label class="config-manager-field">
-                    Reference dataset version
-                    <input type="text" id="config-manager-reference-version" placeholder="e.g. synthetic-reference-v1">
-                  </label>
-                </div>
-                <div class="config-manager-card">
-                  <h4>Provider-specific analysis</h4>
-                  <label class="config-manager-field">Mode
-                    <select id="config-manager-scoring-mode">
-                      <option value="none">None</option>
-                      <option value="builtin">Built-in legacy TF6.2 provider</option>
-                      <option value="custom">Trusted custom package</option>
-                    </select>
-                  </label>
-                  <label class="config-manager-field" id="config-manager-package-wrap">Package
-                    <select id="config-manager-package"></select>
-                  </label>
-                  <p class="config-manager-note">Provider scoring is separate from generic QC and compatible generic reference comparisons.</p>
-                </div>
+              <div class="config-manager-sections">
+                <section class="config-manager-section" aria-labelledby="config-manager-rules-title">
+                  <div class="config-manager-section-heading">
+                    <div>
+                      <h4 id="config-manager-rules-title">Challenge rules</h4>
+                      <p>What a valid submission must contain.</p>
+                    </div>
+                  </div>
+                  <div class="config-manager-summary-grid" aria-label="Challenge rule sections">
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Challenge setup</h4>
+                        <p id="config-summary-challenge">Challenge name, type, and basic settings.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="challenge">Open</button>
+                    </article>
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Maps</h4>
+                        <p id="config-summary-maps">Required and optional maps, aliases, dimensions, and units.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="maps">Open</button>
+                    </article>
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Dataset structure</h4>
+                        <p id="config-summary-datasets">Synthetic and clinical participants, repeats, and sites.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="datasets">Open</button>
+                    </article>
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Required artifacts</h4>
+                        <p id="config-summary-artifacts">Modelled signal, methods document, and other required files.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="artifacts">Open</button>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="config-manager-section" aria-labelledby="config-manager-analysis-title">
+                  <div class="config-manager-section-heading">
+                    <div>
+                      <h4 id="config-manager-analysis-title">Analysis and data</h4>
+                      <p>Optional providers, private inputs, and the analyses currently available.</p>
+                    </div>
+                  </div>
+                  <div class="config-manager-summary-grid" aria-label="Analysis and data sections">
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Analysis provider</h4>
+                        <p id="config-summary-scoring">Provider mode, active package, and package status.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="scoring">Open</button>
+                    </article>
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Private reference assets</h4>
+                        <p id="config-summary-assets">Local references, masks, measured signals, and upload status.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="assets">Open</button>
+                    </article>
+                    <article class="config-manager-summary-card config-manager-summary-card-wide">
+                      <div class="config-manager-summary-copy">
+                        <h4>Available analyses</h4>
+                        <p id="config-summary-capabilities">QC, ROI statistics, reference comparison, and provider analysis status.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="capabilities">Open</button>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="config-manager-section" aria-labelledby="config-manager-history-title">
+                  <div class="config-manager-section-heading">
+                    <div>
+                      <h4 id="config-manager-history-title">Version history</h4>
+                      <p>Review, activate, restore, export, or import saved configurations.</p>
+                    </div>
+                  </div>
+                  <div class="config-manager-summary-grid config-manager-summary-grid-single" aria-label="Configuration history">
+                    <article class="config-manager-summary-card">
+                      <div class="config-manager-summary-copy">
+                        <h4>Saved versions</h4>
+                        <p id="config-summary-versions">Active and saved versions, restore, export, and import.</p>
+                      </div>
+                      <button type="button" class="config-manager-open-button" data-config-modal-open="versions">Open</button>
+                    </article>
+                  </div>
+                </section>
               </div>
 
-              <div class="config-manager-actions" aria-label="Configuration workflow">
-                <button type="button" id="config-manager-test" class="btn btn-secondary btn-sm">1. Test Configuration</button>
-                <button type="button" id="config-manager-preview" class="btn btn-secondary btn-sm">2. Preview Changes</button>
-                <button type="button" id="config-manager-save" class="btn btn-primary btn-sm">3. Save as New Version</button>
+              <div class="config-manager-review-bar">
+                <div class="config-manager-review-copy">
+                  <span>Review this draft</span>
+                  <strong>Test, preview, then save an inactive version.</strong>
+                  <p>Closing a section keeps its draft values. Saving creates an inactive version; activation remains a separate explicit action.</p>
+                </div>
+                <div class="config-manager-actions" aria-label="Configuration workflow">
+                  <button type="button" id="config-manager-test" class="btn btn-secondary btn-sm">1. Test Configuration</button>
+                  <button type="button" id="config-manager-preview" class="btn btn-secondary btn-sm">2. Preview Changes</button>
+                  <button type="button" id="config-manager-save" class="btn btn-primary btn-sm">3. Save as New Version</button>
+                </div>
               </div>
-              <div id="config-manager-results" class="config-manager-results" style="display:none"></div>
+              <div id="config-manager-results" class="config-manager-results" style="display:none" aria-live="polite"></div>
 
-              <div class="config-manager-card config-manager-history">
-                <div class="config-manager-subheading">
-                  <div><h4>Version history</h4><p>Activation and restore both re-test the saved version first.</p></div>
-                  <div class="config-manager-inline-actions">
-                    <button type="button" id="config-manager-export" class="btn btn-secondary btn-sm">Export ZIP</button>
-                    <label class="btn btn-secondary btn-sm" for="config-manager-import">Import ZIP</label>
-                    <input type="file" id="config-manager-import" accept=".zip" style="display:none">
+              <div class="config-manager-modal" id="config-modal-challenge" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog config-manager-modal-dialog-sm" role="dialog" aria-modal="true" aria-labelledby="config-modal-challenge-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-challenge-title">Challenge Setup</h4><p>Current challenge identity and basic settings.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Challenge Setup">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <dl class="config-manager-detail-list" id="config-manager-challenge-details"></dl>
                   </div>
                 </div>
-                <div id="config-manager-versions"></div>
               </div>
 
-              <div class="config-manager-card config-manager-assets">
-                <div class="config-manager-subheading">
-                  <div>
-                    <h4>Reference Data &amp; Masks</h4>
-                    <p>Private organiser data. These files remain local and are not included in GitHub or configuration exports.</p>
+              <div class="config-manager-modal" id="config-modal-maps" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-maps-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-maps-title">Maps</h4><p>Choose requirements and review each map's dimensions, units, and filename aliases.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Maps">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body"><div id="config-manager-maps"></div></div>
+                </div>
+              </div>
+
+              <div class="config-manager-modal" id="config-modal-datasets" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="config-modal-datasets-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-datasets-title">Dataset Structure</h4><p>Set participant, repeat, and site counts for each configured dataset.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Dataset Structure">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <div id="config-manager-datasets"></div>
+                    <label class="config-manager-field">Reference dataset version
+                      <input type="text" id="config-manager-reference-version" placeholder="e.g. synthetic-reference-v1">
+                    </label>
                   </div>
                 </div>
-                <div id="config-manager-assets-status"></div>
-                <div class="config-manager-asset-upload">
-                  <select id="config-manager-asset-kind" aria-label="Private asset type">
-                    <option value="reference">Reference map</option>
-                    <option value="mask">ROI mask</option>
-                    <option value="measured_signal">Measured signal-time curve</option>
-                  </select>
-                  <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
-                  <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+              </div>
+
+              <div class="config-manager-modal" id="config-modal-artifacts" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="config-modal-artifacts-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-artifacts-title">Required Artifacts</h4><p>Select required documents, fitted signals, and code-execution requirements.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Required Artifacts">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <div id="config-manager-artifacts"></div>
+                    <label class="config-manager-check">
+                      <input type="checkbox" id="config-manager-code-required">
+                      Participant code execution is required
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              <div class="config-manager-card config-manager-card-wide">
-                <h4>Current analysis capabilities</h4>
-                <div id="config-manager-capabilities" class="config-manager-table-wrap"></div>
-                <p class="config-manager-note"><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
+              <div class="config-manager-modal" id="config-modal-scoring" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="config-modal-scoring-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-scoring-title">Analysis / Scoring</h4><p>Configure provider-specific analysis separately from general pipeline analysis.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Analysis and Scoring">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <label class="config-manager-field">Mode
+                      <select id="config-manager-scoring-mode">
+                        <option value="none">None</option>
+                        <option value="builtin" id="config-manager-scoring-builtin-option">Built-in provider</option>
+                        <option value="custom">Trusted custom package</option>
+                      </select>
+                    </label>
+                    <div class="config-manager-package-block" id="config-manager-package-wrap">
+                      <label class="config-manager-field">Package
+                        <select id="config-manager-package"></select>
+                      </label>
+                      <p class="config-manager-package-detail" id="config-manager-package-detail"></p>
+                    </div>
+                    <p class="config-manager-note">Provider scoring is separate from generic QC and compatible generic reference comparisons.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-manager-modal" id="config-modal-assets" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-assets-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-assets-title">Private Reference Assets</h4><p>Private organiser data. These files remain local and are not included in GitHub or configuration exports.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Private Reference Assets">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <div id="config-manager-assets-status"></div>
+                    <div class="config-manager-asset-upload">
+                      <select id="config-manager-asset-kind" aria-label="Private asset type">
+                        <option value="reference">Reference map</option>
+                        <option value="mask">ROI mask</option>
+                        <option value="measured_signal">Measured signal-time curve</option>
+                      </select>
+                      <label class="btn btn-secondary btn-sm" for="config-manager-asset-file">Choose NIfTI file</label>
+                      <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
+                      <span class="config-manager-selected-file" id="config-manager-asset-file-name">No file selected</span>
+                      <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-manager-modal" id="config-modal-capabilities" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-capabilities-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-capabilities-title">Capabilities</h4><p>Availability depends on readable maps, compatible assets, and configured providers.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Capabilities">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <div id="config-manager-capabilities"></div>
+                    <p class="config-manager-note"><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="config-manager-modal" id="config-modal-versions" hidden aria-hidden="true">
+                <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-versions-title">
+                  <div class="config-manager-modal-header">
+                    <div><h4 id="config-modal-versions-title">Configuration Versions</h4><p>Activation and restore both re-test the saved version first.</p></div>
+                    <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Configuration Versions">Close</button>
+                  </div>
+                  <div class="config-manager-modal-body">
+                    <div class="config-manager-inline-actions">
+                      <button type="button" id="config-manager-export" class="btn btn-secondary btn-sm">Export ZIP</button>
+                      <label class="btn btn-secondary btn-sm" for="config-manager-import">Import ZIP</label>
+                      <input type="file" id="config-manager-import" accept=".zip" style="display:none">
+                    </div>
+                    <div id="config-manager-versions"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
 
-          <!-- Mode selector -->
-          <div class="scoring-mode-list" id="scoring-mode-list">
+          <section class="scoring-provider-summary-card" aria-labelledby="scoring-provider-summary-heading">
+            <div class="scoring-provider-summary-copy">
+              <h3 id="scoring-provider-summary-heading">Active Analysis Provider</h3>
+              <div class="scoring-provider-summary-title" id="scoring-provider-summary-title">Loading provider configuration…</div>
+              <p id="scoring-provider-summary-detail">Provider-specific analysis is configured separately for each challenge.</p>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" data-config-modal-open="provider">Configure provider</button>
+          </section>
 
-            <label class="scoring-mode-row" id="scoring-mode-none-row">
-              <input type="radio" name="scoring-mode" id="scoring-mode-none" value="none" checked>
-              <div class="scoring-mode-content">
-                <div class="scoring-mode-title">No scoring</div>
-                <div class="scoring-mode-desc">Skip the scoring step. Validation and export still work.</div>
-              </div>
-            </label>
-
-            <label class="scoring-mode-row" id="scoring-mode-builtin-row">
-              <input type="radio" name="scoring-mode" id="scoring-mode-builtin" value="builtin">
-              <div class="scoring-mode-content">
-                <div class="scoring-mode-title">
-                  Default OSIPI scoring
-                  <span class="scoring-mode-chip">Scoring provider</span>
+          <div class="config-manager-modal scoring-provider-modal" id="config-modal-provider" hidden aria-hidden="true">
+            <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-provider-title">
+              <div class="config-manager-modal-header">
+                <div>
+                  <h4 id="config-modal-provider-title">Active Analysis Provider</h4>
+                  <p>Select the provider used for the current challenge. Changes take effect only after Apply Configuration.</p>
                 </div>
-                <div class="scoring-mode-desc">Requires installed reference data and masks.</div>
-                <div class="scoring-mode-status" id="scoring-builtin-status"></div>
+                <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Active Analysis Provider">Close</button>
               </div>
-            </label>
+              <div class="config-manager-modal-body scoring-provider-modal-body">
+                <div class="scoring-mode-list" id="scoring-mode-list">
 
-            <label class="scoring-mode-row" id="scoring-mode-custom-row">
-              <input type="radio" name="scoring-mode" id="scoring-mode-custom" value="custom">
-              <div class="scoring-mode-content">
-                <div class="scoring-mode-title">
-                  Custom scoring package
-                  <button type="button" class="help-tooltip" aria-label="Custom package help" style="margin-left:4px">?
-                    <span class="tooltip-text">Use a reviewed package for the selected configured challenge.</span>
+                  <label class="scoring-mode-row" id="scoring-mode-none-row">
+                    <input type="radio" name="scoring-mode" id="scoring-mode-none" value="none" checked>
+                    <div class="scoring-mode-content">
+                      <div class="scoring-mode-title">No provider analysis</div>
+                      <div class="scoring-mode-desc">Generic QC and compatible generic reference comparisons remain available.</div>
+                    </div>
+                  </label>
+
+                  <label class="scoring-mode-row" id="scoring-mode-builtin-row">
+                    <input type="radio" name="scoring-mode" id="scoring-mode-builtin" value="builtin">
+                    <div class="scoring-mode-content">
+                      <div class="scoring-mode-title">
+                        <span id="scoring-builtin-title">Built-in provider</span>
+                        <span class="scoring-mode-chip">Provider analysis</span>
+                      </div>
+                      <div class="scoring-mode-desc" id="scoring-builtin-description">Availability depends on the selected challenge and installed provider requirements.</div>
+                      <div class="scoring-mode-status" id="scoring-builtin-status"></div>
+                    </div>
+                  </label>
+
+                  <label class="scoring-mode-row" id="scoring-mode-custom-row">
+                    <input type="radio" name="scoring-mode" id="scoring-mode-custom" value="custom">
+                    <div class="scoring-mode-content">
+                      <div class="scoring-mode-title">
+                        Trusted custom package
+                        <button type="button" class="help-tooltip" aria-label="Custom package help" style="margin-left:4px">?
+                          <span class="tooltip-text">Use a reviewed package for provider-specific analysis in the selected challenge.</span>
+                        </button>
+                      </div>
+                      <div class="scoring-mode-desc">Select or upload a reviewed package ZIP.</div>
+                    </div>
+                  </label>
+
+                </div>
+
+                <div id="scoring-custom-section" style="display:none">
+                  <div class="scoring-security-warning">
+                    <strong>Trusted reviewers/admins only.</strong>
+                    A scoring package runs code on the server. Only upload packages that have been reviewed by a trusted team member.
+                    Never upload packages from unknown sources.
+                  </div>
+                  <div class="scoring-upload-row">
+                    <label class="btn btn-secondary btn-sm scoring-upload-label" for="scoring-pkg-input">
+                      Upload Package ZIP
+                    </label>
+                    <input type="file" id="scoring-pkg-input" accept=".zip" style="display:none">
+                    <span id="scoring-pkg-upload-status" class="scoring-upload-status"></span>
+                  </div>
+
+                  <div id="scoring-pkg-list" class="scoring-pkg-list"></div>
+
+                  <div id="scoring-pkg-select-wrap" style="display:none">
+                    <label class="scoring-pkg-select-label" for="scoring-pkg-select">
+                      Package to activate for this challenge:
+                    </label>
+                    <select id="scoring-pkg-select" class="scoring-pkg-select"></select>
+                    <p class="scoring-pkg-selection-detail" id="scoring-pkg-selection-detail"></p>
+                  </div>
+                </div>
+
+                <div class="scoring-admin-actions">
+                  <button type="button" id="scoring-setup-save-btn" class="btn btn-primary btn-sm">
+                    Apply Configuration
                   </button>
+                  <span id="scoring-setup-msg" class="scoring-setup-msg" style="display:none"></span>
                 </div>
-                <div class="scoring-mode-desc">Upload a reviewed package ZIP.</div>
               </div>
-            </label>
-
-          </div>
-
-          <!-- Custom package section (shown only when custom radio is selected) -->
-          <div id="scoring-custom-section" style="display:none">
-            <div class="scoring-security-warning">
-              <strong>Trusted reviewers/admins only.</strong>
-              A scoring package runs code on the server. Only upload packages that have been reviewed by a trusted team member.
-              Never upload packages from unknown sources.
             </div>
-            <div class="scoring-upload-row">
-              <label class="btn btn-secondary btn-sm scoring-upload-label" for="scoring-pkg-input">
-                Upload Package ZIP
-              </label>
-              <input type="file" id="scoring-pkg-input" accept=".zip" style="display:none">
-              <span id="scoring-pkg-upload-status" class="scoring-upload-status"></span>
-            </div>
-
-            <!-- Installed packages list -->
-            <div id="scoring-pkg-list" class="scoring-pkg-list"></div>
-
-            <!-- Package selector (shown when packages exist) -->
-            <div id="scoring-pkg-select-wrap" style="display:none">
-              <label class="scoring-pkg-select-label" for="scoring-pkg-select">
-                Active package for this challenge type:
-              </label>
-              <select id="scoring-pkg-select" class="scoring-pkg-select"></select>
-            </div>
-          </div>
-
-          <!-- Apply button + status -->
-          <div class="scoring-admin-actions">
-            <button type="button" id="scoring-setup-save-btn" class="btn btn-primary btn-sm">
-              Apply Configuration
-            </button>
-            <span id="scoring-setup-msg" class="scoring-setup-msg" style="display:none"></span>
           </div>
 
           <!-- Advanced provider details (technical, inside admin, collapsed) -->
@@ -796,7 +976,7 @@
         <div class="heading-text">
           <span class="step-label">Step 6 of 6: Export</span>
           <h1 class="card-title">Export review package</h1>
-          <p class="card-desc">Download reports and machine-readable summaries for the current review.</p>
+          <p class="card-desc">Choose blinded reviewer outputs or the organiser-only CSV for the current review.</p>
         </div>
       </header>
 
@@ -832,6 +1012,6 @@
 
 </div><!-- .app -->
 
-<script src="/static/app.js?v=78" defer></script>
+<script src="/static/app.js?v=91" defer></script>
 </body>
 </html>
