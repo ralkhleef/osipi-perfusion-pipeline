@@ -193,6 +193,14 @@ challenges:
         enabled: true
         map_types:
           - ktrans
+        # Reorder or remove entries to change the descriptive columns shown
+        # in generated HTML/PDF reports without changing the calculations.
+        report_metrics:
+          - mean
+          - median
+          - standard_deviation
+          - range
+          - coefficient_of_variation
       signal_rss:
         enabled: true
         modelled_artifact: modelled_st
@@ -244,6 +252,20 @@ challenges:
     required_maps:
       - cbf
       - att
+    analysis:
+      # Apply every organiser-provided ROI (GM, WM, lesion, or any other mask)
+      # to both submitted ASL parameter maps.
+      roi_descriptive:
+        enabled: true
+        map_types:
+          - cbf
+          - att
+        report_metrics:
+          - mean
+          - median
+          - standard_deviation
+          - range
+          - coefficient_of_variation
     # No required_artifacts key: nothing beyond the maps is required yet. A
     # methods document is required for DCE, but that call for ASL is theirs.
     # No `datasets` block. Whether ASL has one cohort or several, and what

@@ -221,18 +221,36 @@ def _strip_nifti_suffix(name: str) -> str:
     return Path(lower).stem
 
 
+def _is_organiser_asset(path: Path) -> bool:
+    """Whether a file belongs to the organiser rather than to the submitter.
+
+    A submission may carry its own ``reference/`` directory, and the pipeline
+    reads it as a reference root. Those files are ground truth and ROI masks:
+    they are not the team's answer and must never be scored as one.
+
+    Without this check a ground-truth map is picked up as a submitted map and
+    compared against itself, producing a row with bias 0, RMSE 0 and
+    correlation 1. Lena's ASL data reported four maps for two submitted
+    files, two of them perfect, which is what made it unclear what the
+    numbers were computed from.
+    """
+    return bool({part.lower() for part in path.parts} & _PRIVATE_PATH_PARTS)
+
+
 def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
     """Return NIfTI files that represent the output maps for this submission.
 
     Priority order:
     1. Docker execution output dir  (OUTPUTS_DIR/execution/{key}/outputs/)
     2. Configured submitted-map subdirectories from config/settings.yaml
+
+    Organiser assets are excluded from both, see ``_is_organiser_asset``.
     """
     exec_dir = _exec_output_dir(submission_id, challenge_type)
     if exec_dir.exists():
         niftis = [
             f for f in manifest_files(exec_dir, refresh_if_stale=True, submission_id=exec_dir.name)
-            if _is_nifti_path(f)
+            if _is_nifti_path(f) and not _is_organiser_asset(f)
         ]
         if niftis:
             return niftis
@@ -244,7 +262,9 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
         if candidate.exists():
             niftis = [
                 f for f in extracted_files
-                if _is_nifti_path(f) and _path_is_relative_to(f, candidate)
+                if _is_nifti_path(f)
+                and _path_is_relative_to(f, candidate)
+                and not _is_organiser_asset(f)
             ]
             if niftis:
                 return niftis
@@ -683,6 +703,11 @@ def _load_nifti_values(path: Path) -> dict:
             "values": data.reshape(-1),
             "affine": affine,
             "voxel_size": zooms,
+            # Header facts a reviewer needs to see rather than infer. The
+            # values are read as loaded, before any conversion, so the dtype
+            # is the submitter's, not float64 from the line above.
+            "axis_codes": [str(code) for code in nib.aff2axcodes(img.affine)],
+            "dtype": str(img.header.get_data_dtype()),
             "reader": "nibabel",
         }
     except Exception:
@@ -748,13 +773,89 @@ def _load_nifti_values(path: Path) -> dict:
             voxel_size = [abs(float(v)) for v in pixdim[1 : 1 + len(shape)]]
         except Exception:
             voxel_size = None
+        # Orientation needs an affine to derive, and the datatype code has
+        # already been resolved to a name above. Both stay None when the
+        # header does not carry them, so a check can report "unknown" rather
+        # than claim a match it never verified.
+        axis_codes = None
+        if affine is not None:
+            try:
+                import nibabel as nib  # type: ignore
+                import numpy as np  # type: ignore
+
+                axis_codes = [str(c) for c in nib.aff2axcodes(np.asarray(affine, dtype=float))]
+            except Exception:
+                axis_codes = None
+        dtype_name, _fmt, _size = _FALLBACK_DTYPE_MAP.get(int(datatype), (None, "", 0))
+
         return {
             "shape": shape,
             "values": values,
             "affine": affine,
             "voxel_size": voxel_size,
+            "axis_codes": axis_codes,
+            "dtype": dtype_name,
             "reader": "nifti_header_fallback",
         }
+
+
+#: Rounding for the voxel size comparison, in millimetres. Two headers
+#: written by different tools disagree in the sixth decimal place routinely,
+#: and reporting that as a mismatch would train reviewers to ignore the check.
+_VOXEL_SIZE_TOLERANCE_MM = 1e-3
+
+
+def _header_check(submitted: dict, reference: dict) -> dict:
+    """Compare a submitted map's header against the ground truth's.
+
+    Requested by both challenge leads. A submission can be the right shape,
+    score plausibly, and still be flipped or at the wrong voxel size, in which
+    case every number computed from it is wrong in a way no metric reveals.
+    Orientation is the case that matters most: a left-right flip leaves the
+    shape identical and the statistics believable.
+
+    Each field is reported with both values and a verdict, rather than a
+    single pass/fail, so a reviewer can see *what* differs. A field neither
+    file declares is ``None``, meaning not verified, which is deliberately not
+    the same as ``True``.
+    """
+    def compare(key, normalise=lambda v: v):
+        mine, theirs = submitted.get(key), reference.get(key)
+        if mine is None or theirs is None:
+            return {"submitted": mine, "reference": theirs, "matches": None}
+        return {
+            "submitted": mine,
+            "reference": theirs,
+            "matches": normalise(mine) == normalise(theirs),
+        }
+
+    def rounded(sizes):
+        digits = max(0, -int(math.floor(math.log10(_VOXEL_SIZE_TOLERANCE_MM))))
+        return [round(float(v), digits) for v in sizes]
+
+    fields = {
+        "shape": compare("shape", lambda v: [int(x) for x in v]),
+        "voxel_size": compare("voxel_size", rounded),
+        "orientation": compare("axis_codes", lambda v: [str(x).upper() for x in v]),
+        "dtype": compare("dtype", lambda v: str(v)),
+    }
+
+    checked = [f["matches"] for f in fields.values() if f["matches"] is not None]
+    mismatched = sorted(name for name, f in fields.items() if f["matches"] is False)
+
+    # dtype differing is normal and harmless: a team may submit float64 where
+    # the ground truth is float32. Geometry differing is not.
+    geometry = [name for name in mismatched if name != "dtype"]
+    if not checked:
+        status = "not_verified"
+    elif geometry:
+        status = "geometry_mismatch"
+    elif mismatched:
+        status = "dtype_differs"
+    else:
+        status = "matches"
+
+    return {"status": status, "mismatched_fields": mismatched, "fields": fields}
 
 
 def _grids_compatible(a: dict, b: dict, *, vox_tol: float = 1e-3, aff_tol: float = 1e-2) -> Optional[bool]:
@@ -826,15 +927,33 @@ def _write_float32_nifti(
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import numpy as np  # type: ignore
-        arr = np.asarray(values, dtype=np.float32).reshape(-1)
-        arr = np.where(np.isfinite(arr), arr, np.float32("nan")).astype("<f4")
+        # ``values`` comes from NumPy's default C-order flattening, while the
+        # NIfTI on-disk convention stores the first spatial axis fastest
+        # (Fortran order). Reorder explicitly so the difference image retains
+        # the voxel layout of the submitted/reference maps.
+        arr = np.asarray(values, dtype=np.float32).reshape(tuple(shape), order="C")
+        arr = np.where(np.isfinite(arr), arr, np.float32("nan"))
+        arr = np.asarray(arr, dtype="<f4").ravel(order="F")
         payload = arr.tobytes()
     except Exception:
         safe_values = [
             float(v) if isinstance(v, (int, float)) and math.isfinite(float(v)) else float("nan")
             for v in values
         ]
-        payload = struct.pack(f"<{len(safe_values)}f", *safe_values)
+        # Pure-Python equivalent of C-shaped input -> Fortran-order NIfTI
+        # payload, used only when NumPy is unavailable.
+        reordered = []
+        for flat_index in range(len(safe_values)):
+            remainder = flat_index
+            coordinates = []
+            for size in shape:
+                coordinates.append(remainder % int(size))
+                remainder //= int(size)
+            c_index = 0
+            for coordinate, size in zip(coordinates, shape):
+                c_index = c_index * int(size) + coordinate
+            reordered.append(safe_values[c_index])
+        payload = struct.pack(f"<{len(reordered)}f", *reordered)
     path.write_bytes(bytes(header) + b"\x00\x00\x00\x00" + payload)
 
 
@@ -1531,6 +1650,10 @@ def _score_reference_maps(
 ) -> dict:
     roots = _reference_roots(submission_id, challenge_type)
     submitted_maps = [m for m in maps if m.get("detected_map_type") and m.get("detected_map_type") != "Unknown"]
+    roi_analysis = (
+        analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
+        .get("roi_descriptive") or {}
+    )
     result = {
         "status": "reference_not_available",
         "available": False,
@@ -1542,6 +1665,12 @@ def _score_reference_maps(
         # ROI descriptive statistics are separate from reference-error metrics.
         "roi_descriptive_statistics": [],
         "roi_descriptive_methodology": _roi_methodology(),
+        "roi_descriptive_report_metrics": list(
+            roi_analysis.get("report_metrics") or (
+                "mean", "median", "standard_deviation", "range",
+                "coefficient_of_variation",
+            )
+        ),
         "roi_descriptive_status": "not_calculated",
         "summary": {
             "reference_map_count": 0,
@@ -1612,6 +1741,11 @@ def _score_reference_maps(
             row["error"] = str(exc)
             result["maps"].append(row)
             continue
+
+        # Recorded before any dimensionality or shape check rejects the map,
+        # because a header mismatch is the most likely reason it was rejected
+        # and the reviewer needs to see the numbers either way.
+        row["header_check"] = _header_check(sub_data, ref_data)
 
         # Parameter maps (CBF/ATT) must be exactly the configured dimensionality
         # (3-D). A 4-D file with a parameter-map name is a fitted model / time
@@ -1715,6 +1849,17 @@ def _score_reference_maps(
                 mask_row["error"] = f"Mask shape {mask_data['shape']} does not match submitted/reference shape {sub_data['shape']}."
                 row["masks"].append(mask_row)
                 continue
+            mask_grid_ok = _grids_compatible(mask_data, sub_data)
+            if mask_grid_ok is False:
+                mask_row["status"] = "spatial_grid_mismatch"
+                mask_row["error"] = (
+                    "Mask and submitted/reference maps have different physical grids "
+                    "(affine/orientation or voxel size); the mask was not applied."
+                )
+                row["masks"].append(mask_row)
+                continue
+            if mask_grid_ok is None:
+                mask_row["grid_check"] = "unverified_no_affine"
             selector = _mask_selector(mask_data["values"])
             mask_row["metrics"] = _comparison_metrics(sub_values, ref_values, selector)
             mask_row["status"] = mask_row["metrics"].get("status", "compared")

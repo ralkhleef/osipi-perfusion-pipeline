@@ -79,6 +79,19 @@ def test_model_carries_rows_headers_and_summary() -> None:
     assert model["roi_descriptive_summary"]["available_rows"] == 1
 
 
+def test_report_metrics_configuration_selects_descriptive_columns() -> None:
+    summary = _summary([_roi_record()])
+    summary["nifti_analysis"]["reference_scoring"][
+        "roi_descriptive_report_metrics"
+    ] = ["mean", "range"]
+    model = _build_report_model([summary], tag="t", blinded=True)
+
+    assert "Mean" in model["roi_descriptive_headers"]
+    assert "Range" in model["roi_descriptive_headers"]
+    assert "Median" not in model["roi_descriptive_headers"]
+    assert "CoV" not in model["roi_descriptive_headers"]
+
+
 def test_cov_is_a_ratio_in_records_and_a_percentage_in_rows() -> None:
     model = _model([_roi_record()])
     assert model["roi_descriptive_records"][0]["roi_within_scan_cov"] == 0.2295

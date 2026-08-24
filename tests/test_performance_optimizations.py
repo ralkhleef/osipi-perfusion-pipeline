@@ -167,9 +167,10 @@ def test_preview_cache_reuses_unchanged_item(tmp_path: Path, monkeypatch: pytest
             "source_path": str(path),
             "source_mtime": stat.st_mtime,
             "source_size": stat.st_size,
-            "preview_available": False,
-            "preview_config_fingerprint": ps.config_fingerprint(),
-        }
+                "preview_available": False,
+                "preview_config_fingerprint": ps.config_fingerprint(),
+                "preview_schema_version": ps.PREVIEW_SCHEMA_VERSION,
+            }
 
     monkeypatch.setattr(ps, "_generate_preview_item", fake_generate)
 

@@ -184,3 +184,18 @@ def test_difference_map_preserves_submitted_affine(workspace, tmp_path):
     assert img.affine[0][3] == pytest.approx(7.0)
     assert img.affine[1][3] == pytest.approx(8.0)
     assert img.affine[2][3] == pytest.approx(9.0)
+
+
+def test_difference_map_preserves_asymmetric_voxel_layout(tmp_path):
+    np = pytest.importorskip("numpy")
+    nib = pytest.importorskip("nibabel")
+    shape = (2, 3, 4)
+    expected = np.arange(math.prod(shape), dtype=np.float32).reshape(shape)
+    target = tmp_path / "asymmetric_difference.nii"
+
+    scoring._write_float32_nifti(
+        target, list(shape), expected.reshape(-1), affine=np.eye(4).tolist()
+    )
+
+    actual = np.asarray(nib.load(str(target)).dataobj)
+    assert np.array_equal(actual, expected)

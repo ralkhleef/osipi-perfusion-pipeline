@@ -1,4 +1,4 @@
-"""Read NIfTI dimensionality from the header alone.
+"""Read NIfTI dimensionality from a NIfTI-1 or NIfTI-2 header alone.
 
 A DCE-2026 synthetic submission may hold thousands of volumes, so the
 manifest must not load voxel data to learn that a file is 3-D. This reads
@@ -21,7 +21,8 @@ import struct
 from pathlib import Path
 
 _HEADER_BYTES = 348
-_SIZEOF_HDR = 348
+_NIFTI1_SIZEOF_HDR = 348
+_NIFTI2_SIZEOF_HDR = 540
 
 
 def read_ndim(path: Path) -> int | None:
@@ -42,15 +43,21 @@ def read_ndim(path: Path) -> int | None:
     if raw is None or len(raw) < _HEADER_BYTES:
         return None
 
-    # sizeof_hdr identifies byte order; anything else is not NIfTI-1.
+    # sizeof_hdr identifies both the format and byte order. NIfTI-1 stores
+    # dim[0] as int16 at byte 40; NIfTI-2 stores it as int64 at byte 16.
     try:
-        if struct.unpack("<i", raw[0:4])[0] == _SIZEOF_HDR:
-            endian = "<"
-        elif struct.unpack(">i", raw[0:4])[0] == _SIZEOF_HDR:
-            endian = ">"
+        little_size = struct.unpack("<i", raw[0:4])[0]
+        big_size = struct.unpack(">i", raw[0:4])[0]
+        if little_size in {_NIFTI1_SIZEOF_HDR, _NIFTI2_SIZEOF_HDR}:
+            endian, header_size = "<", little_size
+        elif big_size in {_NIFTI1_SIZEOF_HDR, _NIFTI2_SIZEOF_HDR}:
+            endian, header_size = ">", big_size
         else:
             return None
-        ndim = int(struct.unpack(endian + "h", raw[40:42])[0])
+        if header_size == _NIFTI1_SIZEOF_HDR:
+            ndim = int(struct.unpack(endian + "h", raw[40:42])[0])
+        else:
+            ndim = int(struct.unpack(endian + "q", raw[16:24])[0])
     except struct.error:
         return None
 

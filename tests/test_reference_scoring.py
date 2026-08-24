@@ -190,6 +190,26 @@ def test_mask_based_scoring_uses_only_mask_voxels(scoring_workspace: Path) -> No
     assert mask["metrics"]["rmse"] == pytest.approx(math.sqrt(10.0))
 
 
+def test_same_shape_misoriented_mask_is_not_applied(scoring_workspace: Path) -> None:
+    nib = pytest.importorskip("nibabel")
+    np = pytest.importorskip("numpy")
+    submitted = _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    mask_path = _write_mask(scoring_workspace, [1, 1, 0, 0])
+    affine = nib.load(str(submitted)).affine.copy()
+    affine[0, 3] += 20.0
+    nib.save(
+        nib.Nifti1Image(np.asarray([1, 1, 0, 0], dtype=np.float32).reshape(2, 2, 1), affine),
+        str(mask_path),
+    )
+
+    row = _cbf_row(_reference_result())
+    mask = next(item for item in row["masks"] if item["mask_name"] == "brain_mask.nii.gz")
+
+    assert mask["status"] == "spatial_grid_mismatch"
+    assert mask["metrics"] is None
+
+
 def test_configured_known_mask_alias_is_used(scoring_workspace: Path) -> None:
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
@@ -203,15 +223,38 @@ def test_configured_known_mask_alias_is_used(scoring_workspace: Path) -> None:
 
 
 def test_arbitrary_custom_roi_mask_is_accepted(scoring_workspace: Path) -> None:
+    """A mask the label rules do not recognise still gets scored.
+
+    Named to match no rule but the generic `roi` one, so this stays a test of
+    "any mask an organiser supplies is accepted" rather than a test of a
+    particular label.
+    """
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
-    _write_mask(scoring_workspace, [1, 0, 0, 1], name="tumor_roi.nii.gz")
+    _write_mask(scoring_workspace, [1, 0, 0, 1], name="custom_roi.nii.gz")
 
     row = _cbf_row(_reference_result())
-    mask = next(item for item in row["masks"] if item["mask_name"] == "tumor_roi.nii.gz")
+    mask = next(item for item in row["masks"] if item["mask_name"] == "custom_roi.nii.gz")
 
     assert mask["mask_label"] == "ROI"
     assert mask["metrics"]["voxel_count"] == 2
+
+
+def test_a_lesion_mask_is_labelled_lesion_not_roi(scoring_workspace: Path) -> None:
+    """`lesion_roi_mask.nii.gz` used to report as "ROI".
+
+    The rules are ordered and the first match wins, so the generic `roi`
+    pattern claimed it before anything more specific could. A reviewer with
+    several ROIs then could not tell which row was the lesion.
+    """
+    _write_submitted(scoring_workspace, [12, 14, 100, 100])
+    _write_reference(scoring_workspace, [10, 10, 10, 10])
+    _write_mask(scoring_workspace, [1, 0, 0, 0], name="lesion_roi_mask.nii.gz")
+
+    row = _cbf_row(_reference_result())
+    mask = next(item for item in row["masks"] if item["mask_name"] == "lesion_roi_mask.nii.gz")
+
+    assert mask["mask_label"] == "lesion"
 
 
 def test_multiple_masks_are_all_reported(scoring_workspace: Path) -> None:
@@ -240,13 +283,17 @@ def test_unknown_mask_filename_gets_clean_label(scoring_workspace: Path) -> None
 def test_duplicate_mask_display_labels_do_not_drop_masks(scoring_workspace: Path) -> None:
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
-    _write_mask(scoring_workspace, [1, 0, 0, 0], name="tumor_roi.nii.gz")
-    _write_mask(scoring_workspace, [0, 1, 0, 0], name="organ_roi.nii.gz")
+    # Both must still resolve to the *same* display label, or this stops
+    # testing anything: "tumor_roi" now labels as lesion, which would have
+    # left one ROI row and a passing test that had lost its own premise.
+    _write_mask(scoring_workspace, [1, 0, 0, 0], name="left_roi.nii.gz")
+    _write_mask(scoring_workspace, [0, 1, 0, 0], name="right_roi.nii.gz")
 
     row = _cbf_row(_reference_result())
     roi_masks = [item for item in row["masks"] if item["mask_label"] == "ROI"]
 
-    assert {item["mask_name"] for item in roi_masks} == {"tumor_roi.nii.gz", "organ_roi.nii.gz"}
+    assert len(roi_masks) == 2, "two masks sharing a label were collapsed into one"
+    assert {item["mask_name"] for item in roi_masks} == {"left_roi.nii.gz", "right_roi.nii.gz"}
 
 
 def test_negative_voxel_percent_uses_scored_finite_overlap_denominator(scoring_workspace: Path) -> None:

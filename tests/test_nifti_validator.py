@@ -134,3 +134,47 @@ def test_zero_byte_file_reports_error_in_summary(tmp_path: Path) -> None:
 
     assert r["valid"] is False
     assert len(r["errors"]) > 0
+
+
+def test_truncated_voxel_payload_is_invalid_not_a_warning(tmp_path: Path) -> None:
+    """A readable header is not enough when deep validation cannot read voxels."""
+
+    path = _save_nifti(
+        tmp_path / "truncated.nii",
+        np.arange(64, dtype=np.float32).reshape(4, 4, 4),
+    )
+    path.write_bytes(path.read_bytes()[:-32])
+
+    result = validate_nifti_files([path], force_refresh=True)[0]
+
+    assert result["valid"] is False
+    assert any("voxel" in message.lower() or "data" in message.lower() for message in result["errors"])
+
+
+@pytest.mark.parametrize("dtype", [np.uint8, np.int16, np.float32, np.float64])
+def test_common_scalar_dtypes_are_read_and_reported(tmp_path: Path, dtype) -> None:
+    data = np.arange(27, dtype=dtype).reshape(3, 3, 3)
+    path = _save_nifti(tmp_path / f"map_{np.dtype(dtype).name}.nii.gz", data)
+
+    result = validate_nifti_files([path], force_refresh=True)[0]
+
+    assert result["valid"] is True
+    assert result["dtype"] == np.dtype(dtype).name
+    assert result["mean"] == pytest.approx(13.0)
+
+
+@pytest.mark.parametrize("filename", ["nifti2_map.nii", "nifti2_map.nii.gz"])
+def test_real_nifti2_images_pass_deep_validation(tmp_path: Path, filename: str) -> None:
+    path = tmp_path / filename
+    image = nib.Nifti2Image(
+        np.arange(60, dtype=np.float32).reshape(3, 4, 5),
+        affine=np.diag([2.0, 2.0, 3.0, 1.0]),
+    )
+    nib.save(image, str(path))
+
+    result = validate_nifti_files([path], force_refresh=True)[0]
+
+    assert result["valid"] is True
+    assert result["shape"] == [3, 4, 5]
+    assert result["dtype"] == "float32"
+    assert result["mean"] == pytest.approx(29.5)

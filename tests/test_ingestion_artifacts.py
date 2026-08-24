@@ -158,10 +158,12 @@ def test_first_matching_pattern_wins() -> None:
     assert parsed.get("site") == "3"
 
 
-def test_filename_patterns_do_not_apply_to_other_challenges() -> None:
-    """ASL declares no identity patterns, so nothing is parsed for it."""
-    assert parse_filename_identity("Synthetic_P001_Visit1.nii.gz",
-                                   challenge="asl") == {}
+def test_challenge_pattern_does_not_leak_but_generic_tokens_still_parse() -> None:
+    """DCE's dataset pattern must not leak into ASL; explicit ids remain useful."""
+    assert parse_filename_identity("Synthetic_P001_Visit1.nii.gz", challenge="asl") == {
+        "participant": "1",
+        "repeat": "1",
+    }
 
 
 def test_filename_fills_only_gaps_left_by_directories() -> None:
@@ -309,6 +311,28 @@ def test_asl_and_dsc_map_types_still_classify(name, expected) -> None:
 def test_header_dimensions_are_read(tmp_path: Path, filename: str, ndim: int) -> None:
     path = _write_nifti(tmp_path / filename, ndim)
     assert read_ndim(path) == ndim
+
+
+@pytest.mark.parametrize("filename", ["Ktrans.nii", "Ktrans.nii.gz"])
+def test_nifti2_header_dimensions_are_read(tmp_path: Path, filename: str) -> None:
+    """The fast manifest probe must support both NIfTI-1 and NIfTI-2."""
+
+    header = bytearray(544)
+    struct.pack_into("<i", header, 0, 540)
+    struct.pack_into("<q", header, 16, 3)
+    header[4:12] = b"n+2\x00\r\n\x1a\n"
+    path = tmp_path / filename
+    path.write_bytes(gzip.compress(bytes(header)) if filename.endswith(".gz") else bytes(header))
+
+    assert read_ndim(path) == 3
+
+
+def test_bids_style_filename_identity_is_resolved_without_challenge_pattern() -> None:
+    identity = parse_filename_identity(
+        "sub-001_acq-002_Perfmap_32float.nii.gz", challenge="asl"
+    )
+
+    assert identity == {"participant": "1", "repeat": "2"}
 
 
 def test_broken_nifti_returns_none_and_does_not_raise(tmp_path: Path) -> None:

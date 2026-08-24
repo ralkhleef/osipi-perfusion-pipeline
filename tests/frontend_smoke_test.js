@@ -943,6 +943,10 @@ checkContains("Preview modal shows file stats", appJs, "nifti-preview-modal-meta
 checkContains("Preview modal uses Map Preview heading", appJs, "Map Preview</div>");
 checkContains("Preview has clear new-tab action", appJs, "Open image in new tab");
 checkContains("Preview has clear original-file download", appJs, "Download original NIfTI");
+checkContains("Preview reads all available mask overlays", appJs, "item?.mask_overlays || []");
+checkContains("Preview creates one tab per mask overlay", appJs, "...overlayPlanes");
+checkContains("Preview labels each mask-specific overlay", appJs, "`${label} overlay`");
+checkContains("Preview image information lists all overlay masks", appJs, 'map((overlay) => overlay.label).join(", ")');
 checkContains("Preview labels image information", appJs, "Image information");
 checkContains("Preview actions use a dedicated footer", appJs, "nifti-preview-modal-footer");
 checkNotContains("Ambiguous full-preview wording removed", appJs, "Open full preview");
@@ -1101,6 +1105,9 @@ checkContains("canRestoreStep helper", appJs, "function canRestoreStep");
 checkContains("restoreWizardState helper", appJs, "function restoreWizardState");
 checkContains("Wizard state uses sessionStorage", appJs, "sessionStorage.setItem(WIZARD_KEY");
 checkContains("Wizard storage key", appJs, "osipi_wizard_state_v1");
+checkContains("Session keeps detected challenge per submission", appJs, "detected_challenge_type:     s.detected_challenge_type || null");
+checkContains("Session keeps confirmed challenge per submission", appJs, "confirmed_challenge_type:    s.confirmed_challenge_type || null");
+checkContains("Single upload keeps reviewer-selected challenge", appJs, "confirmed_challenge_type: getChallengeType()");
 // Step is saved on every navigation and lifecycle save point
 checkContains("Every session save refreshes wizard state", appJs, "saveWizardState();");
 checkContains("Step change syncs URL hash", appJs, "const hash = STEP_TO_HASH[step];");
@@ -1356,7 +1363,7 @@ checkContains("Shared card width variable drives every shell", css, "max-width: 
 
 // Export exposes ONLY the four consolidated worklist rows
 const exportSec = mainExportOptions;
-["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Ktrans Statistics CSV", "Unblinded CSV"].forEach((label) => {
+["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Parameter-map Statistics CSV", "Unblinded CSV"].forEach((label) => {
   checkContains(`Export shows ${label} row`, exportSec, `title: "${label}"`);
 });
 checkNotContains("Export hides raw Validation CSV", exportSec, "Validation CSV");
@@ -1413,9 +1420,9 @@ checkContains("Start New reset suppresses blank session save", appJs, "_suppress
 checkContains("Reset clears wizard + session state", appJs, "clearWizardState();");
 
 
-// ROI Ktrans statistics (within-scan descriptive values)
+// ROI parameter-map statistics (within-scan descriptive values)
 // Export row
-checkContains("ROI export row present", appJs, "ROI Ktrans Statistics CSV");
+checkContains("ROI export row present", appJs, "ROI Parameter-map Statistics CSV");
 checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
 checkContains("ROI export reuses the session query helper", appJs, "export-roi-descriptive?${q}");
 checkContains("ROI export handles a missing filename header", appJs, '"roi_descriptive_statistics.csv"');
@@ -1429,8 +1436,11 @@ check("ROI card present", "roi-descriptive-card");
 check("ROI table present", "roi-descriptive-table");
 check("ROI table body present", "roi-descriptive-body");
 check("ROI empty-state element present", "roi-descriptive-empty");
-checkContains("ROI section titled correctly", html, "ROI Ktrans Statistics");
+checkContains("ROI section titled correctly", html, "ROI Parameter-map Statistics");
+checkContains("ROI table has a Map column", html, "<th>Map</th>");
+checkContains("ROI table has a Mean column", html, "<th>Mean</th>");
 checkContains("ROI table has a Median column", html, "<th>Median</th>");
+checkContains("ROI table has a Range column", html, "<th>Range</th>");
 checkContains("ROI table has a CoV column", html, "<th>CoV</th>");
 checkContains("ROI renderer exists", appJs, "function renderRoiDescriptiveStatistics(");
 
@@ -1442,9 +1452,9 @@ checkNotContains("Unavailable numeric never becomes a zero string", appJs,
   'if (value === null || value === undefined) return "0";');
 checkContains("Implicit clinical site renders as a dash", appJs, 'value === "" ? "—"');
 checkContains("Empty-state message for missing masks", appJs, "no ROI masks were configured");
-checkContains("Empty-state message for no eligible maps", appJs, "No valid Ktrans scans were available");
+checkContains("Empty-state message for no eligible maps", appJs, "No valid configured parameter maps were available");
 checkContains("Empty-state message for calculation failure", appJs, "could not be calculated");
-checkContains("Neutral fallback when status is unknown", appJs, "No ROI Ktrans statistics are available.");
+checkContains("Neutral fallback when status is unknown", appJs, "No ROI parameter-map statistics are available.");
 checkContains("Empty-state text is actually looked up by status", appJs,
   "ROI_UNAVAILABLE_MESSAGES[status]");
 checkContains("Methodology text present", appJs, "SD uses the population definition");

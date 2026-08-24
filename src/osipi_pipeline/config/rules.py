@@ -58,7 +58,10 @@ _CHALLENGE_KEYS = {
 # Optional aggregation of per-scan ROI statistics.
 _GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size"}
 _ANALYSIS_KEYS = {"roi_descriptive", "signal_rss"}
-_ROI_DESCRIPTIVE_KEYS = {"enabled", "map_types"}
+_ROI_DESCRIPTIVE_KEYS = {"enabled", "map_types", "report_metrics"}
+_ROI_REPORT_METRICS = {
+    "mean", "median", "standard_deviation", "range", "coefficient_of_variation"
+}
 _SIGNAL_RSS_KEYS = {
     "enabled",
     "modelled_artifact",
@@ -529,6 +532,18 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                                         f"{roi_path}.map_types[{index}]: "
                                         f"unknown map id {map_id!r}"
                                     )
+                            if "report_metrics" in roi_map:
+                                report_metrics = _require_string_list(
+                                    roi_map.get("report_metrics"),
+                                    f"{roi_path}.report_metrics", errors,
+                                    allow_empty=False,
+                                )
+                                for index, metric in enumerate(report_metrics):
+                                    if metric not in _ROI_REPORT_METRICS:
+                                        errors.append(
+                                            f"{roi_path}.report_metrics[{index}]: "
+                                            f"unknown ROI report metric {metric!r}"
+                                        )
                     rss = analysis.get("signal_rss")
                     if rss is not None:
                         rss_path = f"{analysis_path}.signal_rss"

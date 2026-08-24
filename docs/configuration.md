@@ -137,12 +137,15 @@ analysis:
   roi_descriptive:
     enabled: true
     map_types: [ktrans]
+    report_metrics: [mean, median, standard_deviation, range, coefficient_of_variation]
   signal_rss:
     enabled: true
     modelled_artifact: modelled_st
     measured_artifact: measured_st
 ```
 
+`report_metrics` controls which descriptive columns appear in generated HTML
+and PDF reports. The canonical JSON/CSV records retain all computed values.
 When an analysis is enabled, its map/artifact inputs are required explicitly;
 there are no hidden challenge-specific fallback ids. The schema rejects unknown analysis keys, map ids and artifact ids. Disabling
 one of these blocks prevents that analysis from running for the challenge; it

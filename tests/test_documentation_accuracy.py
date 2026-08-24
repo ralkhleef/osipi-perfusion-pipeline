@@ -103,9 +103,10 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
                             segment):
                 candidates.add(segment)
         known = (
-            rules._CHALLENGE_KEYS
-            | rules._ARTIFACT_TYPE_KEYS
-            | rules._DATASET_KEYS
+                rules._CHALLENGE_KEYS
+                | rules._ARTIFACT_TYPE_KEYS
+                | rules._DATASET_KEYS
+                | rules._ROI_DESCRIPTIVE_KEYS
             | set(rules.validation_rules().get("artifact_types", {}))
             | set(rules.validation_rules().get("map_types", {}))
             | set(rules.validation_rules().get("challenges", {}))
@@ -353,7 +354,11 @@ def test_the_example_report_is_a_real_one_the_code_produced() -> None:
     # read back like this. If that ever changes, this check would pass
     # vacuously, so the marker assertions have to fail first and loudly.
     text = pdf.decode("latin-1", errors="ignore")
-    for marker in ("Submission 1", "Team and contact details were withheld"):
+    # Structure the generator emits, plus the blinding label. The report used
+    # to carry the sentence "Team and contact details were withheld"; the
+    # redesign replaced it with the "Blinded report" header, so the label is
+    # what to pin now.
+    for marker in ("Submission review report", "Submission 1", "Blinded report"):
         assert marker in text, (
             f"the example report lacks {marker!r}; is pageCompression enabled?")
     for leaked in ("Team Gamma", "gamma@example.org", "DCE_Test_Clean"):
@@ -479,6 +484,50 @@ def test_no_unreferenced_file_is_deployed() -> None:
     assert not orphans, f"deployed but referenced by no page: {orphans}"
 
 
+def test_public_docs_images_require_explicit_release_review() -> None:
+    """Do not publish derived submission/reference images by copying them into docs.
+
+    GitHub Pages deploys the entire ``docs`` directory. Local submissions,
+    reference maps, masks, and generated previews are intentionally ignored by
+    Git, but copying one of their rendered PNGs into ``docs/assets/images``
+    bypasses those protections. Keep the small public-image allowlist explicit
+    so adding any new raster asset requires a deliberate review here.
+    """
+    approved = {
+        "favicon.ico",
+        "osipi-logo.png",
+        "osipi-mark.png",
+        "screens/workflow-export.png",
+        "screens/workflow-qc-preview.png",
+        "screens/workflow-review.png",
+        "screens/workflow-run.png",
+        "screens/workflow-upload.png",
+        "screens/workflow-validate.png",
+    }
+    image_root = DOCS / "assets" / "images"
+    published = {
+        path.relative_to(image_root).as_posix()
+        for path in image_root.rglob("*")
+        if path.is_file()
+    }
+    assert published == approved, (
+        "docs/assets/images changed without public-release review: "
+        f"added={sorted(published - approved)}, removed={sorted(approved - published)}"
+    )
+
+
+def test_public_docs_contain_no_raw_medical_or_submission_archives() -> None:
+    forbidden = {".nii", ".dcm", ".dicom", ".zip", ".tar", ".tgz"}
+    leaked = []
+    for path in DOCS.rglob("*"):
+        if not path.is_file():
+            continue
+        lower = path.name.lower()
+        if lower.endswith(".nii.gz") or path.suffix.lower() in forbidden:
+            leaked.append(path.relative_to(DOCS).as_posix())
+    assert not leaked, f"private/raw assets must not be published by GitHub Pages: {leaked}"
+
+
 @pytest.mark.parametrize("phrase", [
     "Suggested file:",
     "Planned recordings",
@@ -522,6 +571,55 @@ def test_the_scope_limit_is_stated() -> None:
 
 
 # ── Structural integrity of the site ──────────────────────────────────────
+
+def _nav_pages() -> dict[str, list[tuple[str, str]]]:
+    """The PAGES table from nav.js, as {page file: [(anchor, label)]}.
+
+    Parsed rather than executed: the sidebar is the one part of the site
+    whose links live in JavaScript, so nothing else here can see them.
+    """
+    source = (DOCS / "assets" / "scripts" / "nav.js").read_text()
+    pages: dict[str, list[tuple[str, str]]] = {}
+    for block in re.findall(r"\{\s*id:.*?\n    \}", source, re.S):
+        file_match = re.search(r'file:\s*"([^"]+)"', block)
+        if not file_match:
+            continue
+        pages[file_match.group(1)] = re.findall(r'\["#([\w-]+)",\s*"([^"]+)"\]', block)
+    return pages
+
+
+def test_every_sidebar_link_points_at_a_heading_that_exists() -> None:
+    """The sidebar is generated, so a renamed heading breaks it silently.
+
+    Three links on the Configuration page pointed at sections that had been
+    renamed. Clicking them did nothing, which is the kind of thing that makes
+    a documentation site feel broken before a reader has read a word of it.
+
+    The dangling-anchor check below cannot catch this: it reads hrefs written
+    into the HTML, and these are written by nav.js at load.
+    """
+    pages = _nav_pages()
+    assert pages, "no PAGES table found in nav.js"
+
+    for filename, links in pages.items():
+        page = DOCS / filename
+        assert page.exists(), f"nav.js lists {filename}, which does not exist"
+        ids = set(re.findall(r'\bid="([\w-]+)"', page.read_text()))
+        dead = [anchor for anchor, _ in links if anchor not in ids]
+        assert not dead, f"{filename}: sidebar links to missing sections {dead}"
+
+
+def test_every_sidebar_label_matches_the_heading_it_points_at() -> None:
+    """A sidebar reading one thing and the heading another is its own confusion."""
+    for filename, links in _nav_pages().items():
+        html = (DOCS / filename).read_text()
+        titles = dict(re.findall(r'<h2 id="([\w-]+)"[^>]*data-toc-title="([^"]+)"', html))
+        for anchor, label in links:
+            if anchor in titles:
+                assert titles[anchor] == label, (
+                    f"{filename}#{anchor}: sidebar says {label!r}, "
+                    f"the heading says {titles[anchor]!r}")
+
 
 def test_no_page_has_a_dangling_internal_anchor() -> None:
     for page in PAGES:

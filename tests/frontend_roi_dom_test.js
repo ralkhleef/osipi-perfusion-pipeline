@@ -94,7 +94,8 @@ function rowCount(nodes) {
 // ── Fixtures matching the real canonical record shape ────────────────────
 const AVAILABLE = {
   dataset: "synthetic", participant: "1", repeat: "1", site: "1",
-  roi_id: "tumour", roi_label: "Tumour",
+  map_type: "ktrans", roi_id: "tumour", roi_label: "Tumour",
+  roi_mean: 0.3, roi_minimum: 0.1, roi_maximum: 0.5, roi_range: 0.4,
   roi_median: 0.25, roi_within_scan_sd: 0.111803, roi_within_scan_cov: 0.447214,
   voxel_count: 4, mask_voxel_count: 4, units: "min^-1",
   status: "available", unavailable_reason: null,
@@ -123,6 +124,9 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   const html = nodes["roi-descriptive-body"].innerHTML;
   check("CoV displayed as 44.72%", html.includes("44.72%"), html);
   check("median displayed", html.includes("0.2500"));
+  check("mean displayed", html.includes("0.3000"));
+  check("range displayed", html.includes("0.1000 to 0.5000"));
+  check("map type displayed", html.includes("KTRANS"));
   check("ROI label displayed", html.includes("Tumour"));
   check("dataset title-cased for display", html.includes("Synthetic"));
   checkEqual("card visible", nodes["roi-descriptive-card"].style.display, "");
@@ -174,14 +178,14 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   check("previous ROI label gone", !nodes["roi-descriptive-body"].innerHTML.includes("Tumour"));
   checkEqual("table hidden when empty", nodes["roi-descriptive-table"].style.display, "none");
   check("empty message explains why",
-        nodes["roi-descriptive-empty"].textContent.includes("No valid Ktrans scans"));
+        nodes["roi-descriptive-empty"].textContent.includes("No valid configured parameter maps"));
 }
 
 // ── Every canonical status maps to a message ─────────────────────────────
 {
   const cases = {
     no_roi_configured: "no ROI masks were configured",
-    no_eligible_maps: "No valid Ktrans scans",
+    no_eligible_maps: "No valid configured parameter maps",
     calculation_error: "could not be calculated",
   };
   for (const [status, fragment] of Object.entries(cases)) {
@@ -196,17 +200,17 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   try { nodes = run([], "something_new", makeDom()); } catch (e) { threw = true; }
   check("unknown status does not crash", !threw);
   check("unknown status uses the neutral fallback",
-        !threw && nodes["roi-descriptive-empty"].textContent.includes("No ROI Ktrans statistics are available"));
+        !threw && nodes["roi-descriptive-empty"].textContent.includes("No ROI parameter-map statistics are available"));
 }
 
-// ── ASL / DSC: no payload, no section ────────────────────────────────────
+// ── A challenge with no configured ROI payload: no section ───────────────
 {
   const nodes = run([], null, makeDom());
   checkEqual("section hidden with no records and no status",
              nodes["roi-descriptive-card"].style.display, "none");
 }
 {
-  // Populated DCE, then an ASL result carrying nothing.
+  // Populated challenge, then another result carrying nothing.
   const nodes = makeDom();
   run([AVAILABLE], "available", nodes);
   run([], null, nodes);

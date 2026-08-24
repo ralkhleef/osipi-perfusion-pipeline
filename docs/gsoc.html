@@ -55,83 +55,147 @@
       <div class="docs-content">
 
         <section>
-          <p class="docs-breadcrumb">OSIPI / GSoC 2026</p>
-          <h2 id="project" data-toc-title="The project">The project</h2>
-          <p class="docs-lead"><strong>Python Pipeline for Evaluating OSIPI Perfusion Imaging
-            Challenge Submissions</strong></p>
+          <p class="docs-breadcrumb">OSIPI / Google Summer of Code 2026</p>
+          <h2 id="summary" data-toc-title="Summary">Summary</h2>
+          <p class="docs-lead">A Python pipeline for evaluating OSIPI perfusion imaging challenge
+            submissions.</p>
 
-          <p>By Ranya Al-khleef, mentored by Lena Václavů and Olivia Jones for
-            <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the ISMRM
-            Perfusion Study Group.</p>
+          <p>Ranya Al-khleef, mentored by Lena Václavů and Olivia Jones, for
+            <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the
+            ISMRM Perfusion Study Group. 16 May to 18 August 2026.</p>
 
-          <p>I built a local web application for reviewing OSIPI perfusion MRI challenge submissions.</p>
+          <p>A local web application that takes a challenge submission from an archive to a blinded
+            report: it checks the files against the rules for its challenge, runs the team's code in
+            Docker if they supplied any, computes quality control and comparison against ground
+            truth, and exports results with the team's identity removed. It supports DCE, ASL and
+            DSC, and the challenge rules are configuration rather than code.</p>
 
-          <p>OSIPI works on improving and standardising perfusion imaging methods. Different analysis
-            methods can produce different results from the same MRI data, so challenges are used to
-            compare those methods fairly.</p>
-
-          <p>The pipeline supports DCE, ASL, and DSC submissions and guides reviewers through six steps:</p>
-
-          <p><strong>Upload → Review → Validate → Run → QC &amp; Preview → Export</strong></p>
-
-          <p>It accepts completed result maps or submissions containing code. It checks the files,
-            runs code in Docker when needed, creates QC and previews, and adds ROI statistics or
-            reference comparison when compatible data are available. Results can be exported as
-            blinded reports and structured files.</p>
-
-          <p>The goal is to reduce manual review and apply the same checks to every submission.</p>
-
-          <p>See <a href="how-it-works.html">How it works</a> for the full workflow and
-            <a href="examples.html">Examples</a> for screenshots and example outputs.</p>
+          <div class="docs-downloads">
+            <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">
+              <span class="docs-download-kind">CODE</span>
+              <span class="docs-download-name">The repository</span>
+              <span class="docs-download-note">The full project, on main</span>
+            </a>
+            <a class="docs-download" href="downloads/example-report-blinded.pdf">
+              <span class="docs-download-kind">PDF</span>
+              <span class="docs-download-name">Example report</span>
+              <span class="docs-download-note">A blinded review report</span>
+            </a>
+            <a class="docs-download" href="downloads/example-roi-statistics.csv">
+              <span class="docs-download-kind">CSV</span>
+              <span class="docs-download-name">Example statistics</span>
+              <span class="docs-download-note">One row per scan and region</span>
+            </a>
+          </div>
         </section>
 
         <section>
-          <h2 id="challenge-review" data-toc-title="What I built">What I built</h2>
-          <p>Challenge rules such as required maps, file names, dimensions, and dataset structure are
-            configurable. The Configuration Manager tests drafts and saves inactive versions before
-            an organiser activates them.</p>
-
-          <p>Reference maps, ROI masks, and trusted analysis packages can be added when available.
-            QC and previews do not require them.</p>
-
-          <p>See <a href="configuration.html">Configuration</a> for more detail.</p>
-        </section>
-
-        <section>
-          <h2 id="how-built" data-toc-title="How it was built">How it was built</h2>
-          <p>The backend uses Python and FastAPI. The interface uses HTML, CSS, and JavaScript.</p>
-
-          <p>Docker runs reproducible submissions. YAML stores challenge rules, and the reporting
-            system creates HTML, PDF, CSV, and JSON outputs.</p>
-
-          <p>The entire application runs locally so challenge data, reference images, masks, and
-            participant submissions can stay on the reviewer's machine.</p>
-        </section>
-
-        <section>
-          <h2 id="testing" data-toc-title="Testing and reliability">Testing and reliability</h2>
-          <p>Automated backend and frontend tests cover upload, validation, execution, configuration,
-            analysis, reports, exports, and blinding. I also tested real DCE and ASL submissions
-            through the rebuilt Docker application.</p>
-
-        </section>
-
-        <section>
-          <h2 id="result" data-toc-title="Project result">Project result</h2>
-          <p>The result is a working local workflow from submission files to review and export.</p>
-
-          <p>QC and previews are available for readable maps. DCE Ktrans ROI statistics, generic
-            reference comparison, and provider analysis appear when their required inputs are present.</p>
-
-          <p><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
-
-          <p>For a closer look:</p>
+          <h2 id="goals" data-toc-title="Goals">Goals</h2>
+          <p>Two labs given the same perfusion scan produce different parameter maps, because the
+            model, the fitting and the arterial input function all differ. OSIPI runs challenges to
+            measure how far apart those answers are, and that measurement only means something if
+            every submission is handled identically by a reviewer who cannot see whose it is.</p>
+          <p>The project set out to build the software that makes that possible:</p>
           <ul>
-            <li><a href="how-it-works.html">How it works</a> — full pipeline workflow</li>
-            <li><a href="examples.html">Examples</a> — real interface screenshots and outputs</li>
-            <li><a href="configuration.html">Configuration</a> — how challenge rules can be changed</li>
-            <li><a href="pending-requirements.html">Pending scientific requirements</a> — decisions for challenge leads</li>
-            <li><a href="install.html">Install</a> — how to run the pipeline locally</li>
+            <li>Accept a submission, whether it contains finished maps or the code that produced them.</li>
+            <li>Check it against the rules for its challenge, and say precisely what is wrong when it fails.</li>
+            <li>Run submitted code in a controlled environment.</li>
+            <li>Compute quality control, and comparison against ground truth where it exists.</li>
+            <li>Produce reports that carry no trace of who submitted.</li>
+            <li>Let the challenge leads change the rules without editing Python.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 id="what-i-did" data-toc-title="What I did">What I did</h2>
+          <p>The interface takes a submission through six steps: Upload, Review, Validate, Run,
+            QC and Preview, Export.</p>
+          <ul>
+            <li><strong>Ingestion.</strong> Import from a ZIP, folder, GitHub repository or Zenodo
+              record. Archives holding several teams are separated automatically.</li>
+            <li><strong>Identity.</strong> Every file is given a role and a scan identity of dataset,
+              participant, site and repeat, read from the directory structure. Conflicts are
+              reported rather than guessed at.</li>
+            <li><strong>Validation.</strong> NIfTI readability, dimensionality and values, plus
+              structural completeness against the challenge rules, with eleven issue codes.</li>
+            <li><strong>Execution.</strong> Submitted code runs in Docker with no network, a memory
+              cap and a timeout.</li>
+            <li><strong>Analysis.</strong> Quality control per map. Against ground truth: RMSE, mean
+              absolute error, bias and correlation, both voxelwise and within each ROI mask. Per
+              region: median, mean, standard deviation, range and coefficient of variation.</li>
+            <li><strong>Header checks.</strong> Shape, voxel size, orientation and data type compared
+              against the ground truth, so a left-right flipped submission is caught rather than
+              scored as if it were correct.</li>
+            <li><strong>Reporting.</strong> HTML and PDF generated from one result model, so the two
+              cannot disagree, plus CSV and JSON.</li>
+            <li><strong>Blinding.</strong> Team name, contact, submission id and archive name absent
+              from the document, its metadata and its download filename.</li>
+            <li><strong>Configuration.</strong> Challenge rules in YAML, validated on load, editable
+              in the app or the file, applied by a button without restarting anything.</li>
+          </ul>
+          <p>See <a href="examples.html#interface">Examples</a> for the interface and
+            <a href="how-it-works.html">How it works</a> for the workflow in detail.</p>
+        </section>
+
+        <section>
+          <h2 id="state" data-toc-title="Current state">Current state</h2>
+          <p>The pipeline runs end to end. I have taken real DCE and ASL data from both mentors
+            from archive to blinded report without leaving the interface.</p>
+          <p>All of the work is on <code>main</code>. The project is a new tool rather than a
+            contribution to an existing OSIPI repository, so there is no upstream to merge into.</p>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Area</th><th>State</th></tr></thead>
+              <tbody>
+                <tr><td>DCE</td><td>Fully configured and tested against real submissions.</td></tr>
+                <tr><td>ASL</td><td>CBF and ATT required. Comparison and ROI statistics verified on the challenge lead's own data.</td></tr>
+                <tr><td>DSC</td><td>CBV, CBF and MTT required. No reference data supplied yet, so comparison is untested for DSC.</td></tr>
+                <tr><td>Testing</td><td>Automated tests cover upload, validation, execution, analysis, reporting, exports and blinding. Real DCE and ASL submissions were run through the application end to end.</td></tr>
+                <tr><td>Official ranking</td><td>Not configured. Comparison against reference data is a general capability and does not constitute official OSIPI scoring.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section>
+          <h2 id="left" data-toc-title="What is left">What is left</h2>
+          <p>Each item below needs a decision from the challenge leads rather than development time.
+            The pipeline reports a value it cannot compute as unavailable, and does not present
+            anything as an official result before its definition exists.</p>
+          <ul>
+            <li><strong>Metric definitions.</strong> Accuracy and deviance need formulas; accuracy
+              could mean signed bias, RMSE, or absolute or percentage error. Whether the
+              signal-time residual sum of squares stays raw or is normalised is open, as is whether
+              a formal ICC is required and which model.</li>
+            <li><strong>Variability across repeats, sites and participants.</strong> Implemented and
+              switched off, pending two conventions: aggregate ROI medians or pooled voxels, and
+              whether repeats and sites are paired within a participant first.</li>
+            <li><strong>Dataset grids for ASL and DSC.</strong> Whether either has one cohort or
+              several, and the counts. The required maps are configured; the grid is not.</li>
+            <li><strong>Thresholds and ranking.</strong> Pass and fail rules, the final ROI and mask
+              sets, ranking aggregation, the required sections of a methods document, and which
+              scoring package is designated official.</li>
+            <li><strong>BIDS validation.</strong> Not implemented. The NIfTI checks cover
+              readability, dimensionality, orientation and value sanity, which is not the same.</li>
+          </ul>
+          <p>Everything except the metric formulas is configuration. See
+            <a href="configuration.html">Configuration</a>.</p>
+        </section>
+
+        <section>
+          <h2 id="learned" data-toc-title="What I learned">What I learned</h2>
+          <ul>
+            <li><strong>Perfusion imaging.</strong> I started with very little background in brain
+              anatomy or perfusion MRI. Learning how CBF, ATT and Ktrans are measured, and why two
+              groups analysing the same scan can arrive at different answers, is what made the rest
+              of the work make sense.</li>
+            <li><strong>Designing for people who do not write code.</strong> The people running
+              these challenges are researchers, not developers. Keeping the challenge rules in
+              configuration, and the controls in the interface rather than in a terminal, did more
+              for how usable the tool is than anything else I built.</li>
+            <li><strong>Testing against real data.</strong> Running real submissions through the
+              application found problems the automated tests had not, and changed how I write tests.</li>
           </ul>
         </section>
 
@@ -141,7 +205,17 @@
             <a class="docs-download" href="downloads/gsoc-proposal.pdf">
               <span class="docs-download-kind">PDF</span>
               <span class="docs-download-name">Original proposal</span>
-              <span class="docs-download-note">Six pages, submitted before any code was written</span>
+              <span class="docs-download-note">Submitted before any code was written</span>
+            </a>
+            <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/CODE_WALKTHROUGH.md" target="_blank" rel="noopener">
+              <span class="docs-download-kind">MD</span>
+              <span class="docs-download-name">Code walkthrough</span>
+              <span class="docs-download-note">The seven defects, with reproduction</span>
+            </a>
+            <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/SCIENTIFIC_REQUIREMENTS_PENDING.md" target="_blank" rel="noopener">
+              <span class="docs-download-kind">MD</span>
+              <span class="docs-download-name">Pending requirements</span>
+              <span class="docs-download-note">The open decisions, per challenge</span>
             </a>
           </div>
         </section>

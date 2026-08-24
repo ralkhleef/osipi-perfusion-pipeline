@@ -8,7 +8,9 @@ never be confused in code or in an export.
 
 Conventions, all centralised here so nothing drifts:
 
+* **mean**, arithmetic mean of the finite voxels in the ROI.
 * **median**, median of the finite voxels in the ROI.
+* **range**, minimum and maximum finite values, plus their difference.
 * **standard deviation**, *population* SD, ``sqrt(Σ(x-mean)²/N)``
   (``np.std(..., ddof=0)``), matching what the rest of the pipeline already
   uses for whole-image statistics. Mixing population and sample SD across
@@ -47,7 +49,9 @@ REASON_MEAN_NEAR_ZERO = "mean_near_zero"
 
 #: Emitted once per export rather than repeated on every row.
 METHODOLOGY: dict[str, str] = {
+    "mean": "arithmetic mean of finite voxels within the ROI",
     "median": "median of finite voxels within the ROI",
+    "range": "finite maximum minus finite minimum within the ROI",
     "standard_deviation": "population SD, ddof=0",
     "coefficient_of_variation": "SD / absolute arithmetic mean",
     "cov_near_zero_behavior": f"unavailable when abs(mean) <= {COV_MEAN_TOLERANCE}",
@@ -68,6 +72,9 @@ class DescriptiveStatistics:
     negative_count: int = 0
     zero_count: int = 0
     median: float | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+    value_range: float | None = None
     standard_deviation: float | None = None
     coefficient_of_variation: float | None = None
     mean: float | None = None
@@ -106,7 +113,11 @@ class RoiDescriptiveResult:
     units: str | None = None
     path: str | None = None
     # Named `within_scan` so this is never mistaken for a grouped statistic.
+    roi_mean: float | None = None
     roi_median: float | None = None
+    roi_minimum: float | None = None
+    roi_maximum: float | None = None
+    roi_range: float | None = None
     roi_within_scan_sd: float | None = None
     roi_within_scan_cov: float | None = None
     voxel_count: int = 0
@@ -192,6 +203,9 @@ def describe_values(
         negative_count=sum(1 for v in finite if v < 0),
         zero_count=sum(1 for v in finite if v == 0),
         median=median,
+        minimum=min(finite),
+        maximum=max(finite),
+        value_range=max(finite) - min(finite),
         standard_deviation=sd,
         coefficient_of_variation=cov,
         mean=mean,
@@ -219,7 +233,11 @@ def result_from_statistics(
         roi_label=roi.label,
         units=units,
         path=getattr(artifact, "path", None),
+        roi_mean=stats.mean,
         roi_median=stats.median,
+        roi_minimum=stats.minimum,
+        roi_maximum=stats.maximum,
+        roi_range=stats.value_range,
         roi_within_scan_sd=stats.standard_deviation,
         roi_within_scan_cov=stats.coefficient_of_variation,
         voxel_count=stats.voxel_count,
@@ -261,7 +279,8 @@ def unavailable_result(
 CSV_COLUMNS: tuple[str, ...] = (
     "challenge", "dataset", "participant", "repeat", "site",
     "map_type", "roi_id", "roi_label", "voxel_count",
-    "roi_median", "roi_within_scan_sd", "roi_within_scan_cov",
+    "roi_mean", "roi_median", "roi_within_scan_sd", "roi_minimum",
+    "roi_maximum", "roi_range", "roi_within_scan_cov",
     "units", "status", "unavailable_reason",
 )
 

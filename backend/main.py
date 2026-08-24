@@ -94,10 +94,8 @@ from services.pdf_report_service import (
     report_filename_tag,
 )
 from services.report_branding import (
-    MONO_STACK,
     BRAND,
     SANS_STACK,
-    SERIF_STACK,
     lockup_data_uri,
     logo_data_uri,
     status_tone as report_status_tone,
@@ -117,8 +115,10 @@ from osipi_pipeline.config.rules import (
     default_challenge_type,
     default_scoring_map_type,
     expected_maps_by_challenge,
+    mask_name_patterns,
     map_type_patterns,
     map_type_specs,
+    private_path_parts,
     tuple_setting,
     validate_config_files,
 )
@@ -1307,6 +1307,20 @@ def _blind_batch(batch: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
+PRIVATE_NIFTI_PATH_PARTS = private_path_parts()
+PRIVATE_NIFTI_NAME_PATTERNS = mask_name_patterns()
+
+
+def _is_private_nifti(path: Path, folder: Path) -> bool:
+    """Reject reference assets and masks at every browser-facing NIfTI route."""
+    try:
+        relative = path.relative_to(folder)
+    except ValueError:
+        return True
+    if {part.lower() for part in relative.parts}.intersection(PRIVATE_NIFTI_PATH_PARTS):
+        return True
+    name = path.name.lower()
+    return any(pattern in name for pattern in PRIVATE_NIFTI_NAME_PATTERNS)
 
 
 @app.get("/api/nifti-files/{submission_id}")
@@ -1319,7 +1333,9 @@ def list_nifti_files(submission_id: str):
     files = [
         str(p.relative_to(folder))
         for p in sorted(folder.rglob("*"))
-        if p.is_file() and p.name.lower().endswith(NIFTI_SUFFIXES)
+        if p.is_file()
+        and p.name.lower().endswith(NIFTI_SUFFIXES)
+        and not _is_private_nifti(p, folder)
     ]
     return {"files": files, "submission_id": safe_id}
 
@@ -1336,12 +1352,16 @@ def serve_nifti(submission_id: str, filepath: str):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid file path.")
 
-    if not str(target).startswith(str(folder.resolve())):
+    try:
+        target.relative_to(folder.resolve())
+    except ValueError:
         raise HTTPException(status_code=403, detail="Access denied.")
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found.")
     if not target.name.lower().endswith(NIFTI_SUFFIXES):
         raise HTTPException(status_code=400, detail="Only NIfTI files can be served.")
+    if _is_private_nifti(target, folder.resolve()):
+        raise HTTPException(status_code=403, detail="Private reference or mask files cannot be served.")
 
     media_type = "application/gzip" if target.name.lower().endswith(".gz") else "application/octet-stream"
     return FileResponse(
@@ -1805,6 +1825,26 @@ class ScoreBatchRequest(BaseModel):
     batch_id:       Optional[str] = None
 
 
+_PRIVATE_SCORING_FIELDS = {
+    "path", "reference_root", "reference_path", "mask_path", "submitted_path", "source_path",
+}
+
+
+def _public_scoring_result(value):
+    """Recursively remove server filesystem paths from public API payloads."""
+    if isinstance(value, dict):
+        return {
+            key: _public_scoring_result(item)
+            for key, item in value.items()
+            if key not in _PRIVATE_SCORING_FIELDS
+        }
+    if isinstance(value, list):
+        return [_public_scoring_result(item) for item in value]
+    if isinstance(value, tuple):
+        return [_public_scoring_result(item) for item in value]
+    return value
+
+
 @app.get("/api/scoring-status")
 def get_scoring_status(
     submission_id:  Optional[str] = Query(None),
@@ -1831,18 +1871,20 @@ def get_scoring_status(
         if not batch_result:
             raise HTTPException(status_code=404, detail=f"Batch {batch_id!r} not found.")
         submission_ids = [r["submission_id"] for r in (batch_result.get("results") or [])]
-        return batch_scoring_status(submission_ids, challenge_type, map_type, provider_id=provider_id)
+        return _public_scoring_result(
+            batch_scoring_status(submission_ids, challenge_type, map_type, provider_id=provider_id)
+        )
 
     if not submission_id:
         # Providers-only request: no submission needed
         return {"providers": all_providers_status()}
 
-    return scoring_status(
+    return _public_scoring_result(scoring_status(
         submission_id.strip(),
         challenge_type.strip(),
         map_type.strip(),
         provider_id=provider_id,
-    )
+    ))
 
 
 class ScoringStatusRequest(BaseModel):
@@ -1884,7 +1926,7 @@ def score_single(req: ScoreRequest):
             req.map_type.strip() or DEFAULT_SCORING_MAP_TYPE,
             provider_id=req.provider_id,
         )
-    return result
+    return _public_scoring_result(result)
 
 
 @app.post("/api/score-single")
@@ -1908,12 +1950,12 @@ def score_batch_endpoint(req: ScoreBatchRequest):
         raise HTTPException(status_code=400, detail="submission_ids is required.")
     results = score_batch(req.submission_ids, req.challenge_type, req.map_type, provider_id=req.provider_id)
     scored  = sum(1 for r in results if r.get("status") == "scored")
-    return {
+    return _public_scoring_result({
         "batch_id":   req.batch_id,
         "total":      len(results),
         "scored":     scored,
         "results":    results,
-    }
+    })
 
 
 @app.get("/api/leaderboard")
@@ -2090,7 +2132,7 @@ def export_roi_descriptive(
     batch_id:      Optional[str] = Query(None),
     blinded:       bool          = Query(False, description="True to use a neutral download filename"),
 ):
-    """Export within-ROI Ktrans descriptive statistics as CSV.
+    """Export within-ROI parameter-map descriptive statistics as CSV.
 
     One row per scan and ROI. Values are the canonical records computed once
     during scoring, this endpoint reads them, it does not recompute.
@@ -3254,11 +3296,11 @@ def export_report(
     _roi_headers = report_model.get("roi_descriptive_headers") or []
     _roi_summary = report_model.get("roi_descriptive_summary") or {}
     _roi_caption = (
-        f"Within-ROI Ktrans statistics: "
+        f"Within-ROI parameter-map statistics: "
         f"{_roi_summary.get('available_rows', 0)} of "
         f"{_roi_summary.get('total_rows', 0)} scan-ROI combinations available. "
         if _roi_rows else
-        "Within-ROI Ktrans statistics. None were available for this "
+        "Within-ROI parameter-map statistics. None were available for this "
         "submission. "
     ) + ROI_METHOD_TEXT
     _roi_numeric = {5, 6, 7, 8}
@@ -3342,11 +3384,6 @@ def export_report(
         f"<dt>{_esc(label)}</dt><dd>{_esc(report_model['analysis_provenance'].get(key, 'not available'))}</dd>"
         for label, key in provenance_labels
     )
-    reviewer_summary_html = "".join(
-        f"<div class=\"reviewer-line\"><strong>{_esc(label)}:</strong> "
-        f"<span>{_esc(value)}</span></div>"
-        for label, value in report_model.get("reviewer_summary", [])
-    )
     review_status_html = "".join(
         f"<div class=\"review-item\"><span>{_esc(label)}</span>"
         f"<strong>{_esc(value)}</strong></div>"
@@ -3355,6 +3392,11 @@ def export_report(
     executive_metrics_html = "".join(
         f"<tr><td>{_esc(label)}</td><td>{_esc(value)}</td></tr>"
         for label, value in report_model.get("executive_metrics", {}).items()
+    )
+    reference_note_html = (
+        "" if reference_available else
+        '<p class="report-note">No compatible reference was provided. '
+        "Reference comparison is not available for this report.</p>"
     )
 
     # ── Figures ───────────────────────────────────────────────────────────
@@ -3405,9 +3447,9 @@ def export_report(
     --faint:{BRAND['faint']};
     --ok:{BRAND['ok']}; --warn:{BRAND['warn']}; --bad:{BRAND['bad']};
     --neutral:{BRAND['neutral']};
-    --serif:{SERIF_STACK};
-    --sans:{SANS_STACK};
-    --mono:{MONO_STACK};
+    --sans:"Inter", "Montserrat", {SANS_STACK};
+    --serif:var(--sans);
+    --mono:var(--sans);
   }}
   *, *::before, *::after {{ box-sizing:border-box; }}
   body {{
@@ -3427,25 +3469,25 @@ def export_report(
   .lockup {{ display:block; width:340px; max-width:60%; height:auto; flex:none; }}
   .mark {{ display:block; width:78px; height:78px; object-fit:contain; flex:none; }}
   .wordmark {{
-    font-family:var(--mono); font-size:15px; letter-spacing:.26em; text-transform:uppercase;
+    font-family:var(--sans); font-size:15px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
     color:var(--ink); line-height:1.45;
   }}
-  .wordmark span {{ display:block; letter-spacing:.15em; color:var(--muted); font-size:11.5px; }}
+  .wordmark span {{ display:block; letter-spacing:.04em; color:var(--muted); font-size:11.5px; font-weight:500; }}
   .runhead .issue {{
     margin-left:auto; text-align:right; font-size:11px; color:var(--muted);
     font-variant-numeric:tabular-nums; letter-spacing:.03em; line-height:1.5;
   }}
   .titleblock {{ padding-top:22px; }}
   h1 {{
-    font-family:var(--serif); font-size:35px; font-weight:400;
-    letter-spacing:-.014em; line-height:1.14; margin:0;
+    font-family:var(--sans); font-size:32px; font-weight:700;
+    letter-spacing:-.02em; line-height:1.18; margin:0;
   }}
   .deck {{
-    font-family:var(--serif); font-style:italic; font-size:15px;
+    font-family:var(--sans); font-size:14px;
     color:var(--muted); margin:7px 0 0;
   }}
   .lead {{
-    font-family:var(--serif); font-size:15.5px; line-height:1.62;
+    font-family:var(--sans); font-size:15px; line-height:1.55;
     color:var(--ink-soft); margin:17px 0 0; max-width:62ch;
   }}
 
@@ -3457,7 +3499,7 @@ def export_report(
   }}
   .stat-item {{ display:inline-flex; align-items:baseline; gap:7px; font-size:13px; }}
   .stat-key {{
-    font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--subtle);
+    font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.02em; color:var(--subtle);
   }}
   .stat {{ display:inline-flex; align-items:baseline; gap:5px; color:var(--ink); }}
   .stat .dot {{
@@ -3477,7 +3519,7 @@ def export_report(
     margin:16px 0 0; font-size:12.5px;
   }}
   .meta dt {{
-    font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.01em;
     color:var(--subtle); white-space:nowrap; padding-top:1px;
   }}
   .meta dd {{ margin:0; color:var(--ink); word-break:break-word; }}
@@ -3490,7 +3532,7 @@ def export_report(
   .fig {{ flex:1 1 110px; padding:11px 16px 11px 0; }}
   .fig + .fig {{ padding-left:16px; border-left:1px solid var(--faint); }}
   .fig-label {{
-    display:block; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    display:block; font-family:var(--sans); font-size:11px; font-weight:600; letter-spacing:.01em;
     color:var(--subtle);
   }}
   .fig-value {{
@@ -3500,21 +3542,22 @@ def export_report(
   .fig-note {{ display:block; font-size:11px; color:var(--muted); margin-top:1px; }}
   .review-grid {{
     display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:1px; margin:20px 0 0; background:var(--hairline);
-    border:1px solid var(--hairline); border-radius:8px; overflow:hidden;
+    margin:2px 0 18px; border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--hairline); overflow:hidden;
   }}
-  .review-item {{ background:#fff; padding:13px 14px; min-width:0; }}
-  .review-item strong {{ display:block; font-size:16px; font-weight:600; margin-top:2px; overflow-wrap:anywhere; }}
-  .review-item span {{ font-family:var(--mono); font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:var(--subtle); }}
+  .review-item {{ padding:11px 14px 11px 0; min-width:0; }}
+  .review-item + .review-item {{ padding-left:14px; border-left:1px solid var(--faint); }}
+  .review-item strong {{ display:block; font-size:14px; font-weight:600; margin-top:2px; overflow-wrap:anywhere; }}
+  .review-item span {{ font-family:var(--sans); font-size:10.5px; font-weight:600; letter-spacing:.01em; color:var(--subtle); }}
 
   /* ── Section headings: small caps over a hairline ─────────────────── */
   h2 {{
-    font-family:var(--mono); font-size:11px; font-weight:700;
-    letter-spacing:.17em; text-transform:uppercase; color:var(--subtle);
+    font-family:var(--sans); font-size:13px; font-weight:700;
+    letter-spacing:0; color:var(--ink);
     margin:36px 0 0; padding-bottom:5px; border-bottom:1px solid var(--hairline);
   }}
   h3 {{
-    font-family:var(--serif); font-size:15px; font-weight:400;
+    font-family:var(--sans); font-size:15px; font-weight:600;
     margin:22px 0 2px; color:var(--ink);
   }}
   h3 .report-muted {{ font-style:italic; font-size:13px; color:var(--muted); }}
@@ -3527,7 +3570,7 @@ def export_report(
   .fig-block {{ margin:0; min-width:0; }}
   .fig-svg {{ display:block; overflow:visible; }}
   .fig-block figcaption {{
-    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    font-family:var(--sans); font-size:12px;
     color:var(--muted); line-height:1.5; margin-top:9px;
   }}
 
@@ -3554,8 +3597,8 @@ def export_report(
   /* Numerals right-align so magnitudes compare down the column. */
   td.num, th.num {{ text-align:right; }}
   caption {{
-    caption-side:bottom; text-align:left; font-family:var(--serif);
-    font-style:italic; font-size:12.5px; color:var(--muted);
+    caption-side:bottom; text-align:left; font-family:var(--sans);
+    font-size:12px; color:var(--muted);
     padding-top:8px; line-height:1.5;
   }}
   table.kv thead th {{ border-top:1px solid var(--rule); }}
@@ -3565,7 +3608,7 @@ def export_report(
   /* ── Per-submission detail ────────────────────────────────────────── */
   .report-details {{ margin:18px 0 0; }}
   .report-details > summary {{
-    cursor:pointer; font-family:var(--serif); font-size:14.5px; color:var(--ink);
+    cursor:pointer; font-family:var(--sans); font-size:14px; font-weight:600; color:var(--ink);
     padding:7px 0; border-bottom:1px solid var(--hairline); list-style:none;
   }}
   .report-details > summary::-webkit-details-marker {{ display:none; }}
@@ -3579,11 +3622,11 @@ def export_report(
   .data-details > summary {{ font-family:var(--sans); font-weight:600; font-size:13px; }}
 
   /* ── Reviewer-oriented disclosure sections ───────────────────────── */
-  .report-section {{ margin:24px 0 0; border-top:1px solid var(--rule); }}
+  .report-section {{ margin:20px 0 0; border-top:1px solid var(--rule); }}
   .report-section > summary {{
-    cursor:pointer; list-style:none; padding:12px 0 10px;
-    font-family:var(--mono); font-size:11px; font-weight:700;
-    letter-spacing:.14em; text-transform:uppercase; color:var(--subtle);
+    cursor:pointer; list-style:none; padding:12px 0;
+    font-family:var(--sans); font-size:13px; font-weight:700;
+    letter-spacing:0; color:var(--ink);
     display:flex; align-items:center; gap:8px;
   }}
   .report-section > summary::-webkit-details-marker {{ display:none; }}
@@ -3592,26 +3635,19 @@ def export_report(
     font-weight:400; line-height:1; color:var(--muted);
   }}
   .report-section[open] > summary::before {{ content:"\\2212"; }}
-  .report-section-body {{ padding:0 0 4px 22px; }}
+  .report-section-body {{ padding:2px 0 14px; overflow:hidden; }}
   .section-count {{
     min-width:21px; padding:1px 6px; border:1px solid var(--hairline);
     border-radius:999px; text-align:center; letter-spacing:0;
     font-family:var(--sans); font-size:10px; color:var(--muted);
   }}
-  .reviewer-summary {{
-    border-left:3px solid #7a4fc2; padding:9px 0 9px 16px;
-    font-family:var(--serif); font-size:14.5px; line-height:1.55;
-  }}
-  .reviewer-line + .reviewer-line {{ margin-top:4px; }}
-  .reviewer-line strong {{ color:var(--ink); }}
-  .reviewer-line span {{ color:var(--ink-soft); }}
   .compact-kv {{ max-width:520px; margin-bottom:20px; }}
 
   /* ── Notes ────────────────────────────────────────────────────────── */
   .notes {{ font-size:13.5px; color:var(--ink-soft); margin-top:12px; }}
   .notes p {{ margin:0 0 6px; }}
   .report-note {{
-    font-family:var(--serif); font-style:italic; font-size:12.5px;
+    font-family:var(--sans); font-size:12px;
     color:var(--muted); margin:8px 0 0;
   }}
   .report-muted {{ color:var(--muted); }}
@@ -3669,16 +3705,10 @@ def export_report(
   </header>
 
   <details class="report-section" open>
-    <summary>Submission Summary</summary>
-    <div class="report-section-body">
-      <div class="reviewer-summary">{reviewer_summary_html}</div>
-      <div class="review-grid">{review_status_html}</div>
-    </div>
-  </details>
-
-  <details class="report-section" open>
     <summary>Key Results</summary>
     <div class="report-section-body">
+      <div class="review-grid">{review_status_html}</div>
+      {reference_note_html}
       <div class="table-wrap compact-kv"><table class="kv"><tbody>{executive_metrics_html}</tbody></table></div>
       {main_map_results_html}
     </div>

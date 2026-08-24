@@ -365,6 +365,37 @@ h3:hover .docs-anchor,
 .docs-card dt:first-child { margin-top: 0; }
 .docs-card dd { font-size: .8125rem; color: #495057; margin: .15rem 0 0; line-height: 1.55; }
 
+/* Collapsible questions. Native details elements, so they work with no JS. */
+
+.docs-faq {
+  border: 1px solid var(--docs-border);
+  border-radius: .375rem;
+  overflow: hidden;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.docs-faq details + details { border-top: 1px solid var(--docs-border); }
+
+.docs-faq summary {
+  padding: .8rem 1rem;
+  cursor: pointer;
+  font-size: .9375rem;
+  font-weight: 500;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  /* Both are needed: the standard property and the WebKit pseudo-element,
+     or the default triangle sits beside the custom marker. */
+  list-style: none;
+}
+
+.docs-faq summary::-webkit-details-marker { display: none; }
+.docs-faq summary::after { content: "+"; color: var(--docs-muted); font-weight: 400; }
+.docs-faq details[open] summary::after { content: "\2212"; }
+.docs-faq summary:hover { background: #f8f9fa; }
+.docs-faq p { margin: 0; padding: 0 1rem 1rem; font-size: .9375rem; color: #495057; }
+
 /* Screenshots */
 
 .docs-screen { margin: 1.5rem 0 2rem; }

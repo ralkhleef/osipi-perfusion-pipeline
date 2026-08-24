@@ -306,6 +306,18 @@ def test_shape_mismatch_is_unavailable_and_not_resampled() -> None:
     assert result.roi_median is None
 
 
+def test_same_shape_but_different_affine_is_geometry_mismatch() -> None:
+    identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    shifted = [[1, 0, 0, 20], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    table = {
+        "Ktrans.nii.gz": {**_vol([1.0, 2.0, 3.0, 4.0]), "affine": identity, "voxel_size": [1, 1, 1]},
+        "tumour.nii.gz": {**_vol([1, 1, 0, 0]), "affine": shifted, "voxel_size": [1, 1, 1]},
+    }
+    (result,) = _compute([_artifact()], [_roi()], table)
+    assert result.status == STATUS_GEOMETRY_MISMATCH
+    assert result.roi_mean is None
+
+
 def test_one_bad_roi_does_not_block_the_others() -> None:
     table = {
         "Ktrans.nii.gz": _vol([1.0, 2.0, 3.0, 4.0], (2, 2)),
@@ -352,16 +364,24 @@ def test_wrong_dimensional_ktrans_is_not_calculated() -> None:
     assert eligible_artifacts([_artifact(dims=4)], challenge="dce") == []
 
 
-def test_missing_identity_is_not_calculated() -> None:
-    assert eligible_artifacts([_artifact(participant=None)], challenge="dce") == []
+def test_missing_identity_still_allows_within_image_statistics() -> None:
+    selected = eligible_artifacts([_artifact(participant=None)], challenge="dce")
+    assert len(selected) == 1
+    assert selected[0].participant is None
 
 
-@pytest.mark.parametrize("challenge", ["asl", "dsc"])
-def test_other_challenges_produce_no_roi_output(challenge: str) -> None:
+def test_asl_cbf_is_selected_for_roi_output() -> None:
     cbf = SubmissionArtifact(path="cbf.nii.gz", role="parameter_map",
-                             challenge=challenge, map_type="cbf",
+                             challenge="asl", map_type="cbf",
                              participant="1", dimensions=3)
-    assert eligible_artifacts([cbf], challenge=challenge) == []
+    assert eligible_artifacts([cbf], challenge="asl") == [cbf]
+
+
+def test_dsc_produces_no_roi_output_without_configuration() -> None:
+    cbf = SubmissionArtifact(path="cbf.nii.gz", role="parameter_map",
+                             challenge="dsc", map_type="cbf",
+                             participant="1", dimensions=3)
+    assert eligible_artifacts([cbf], challenge="dsc") == []
 
 
 def test_no_roi_configuration_yields_no_rows_not_whole_image() -> None:
@@ -382,6 +402,10 @@ def test_results_are_json_safe_with_raw_numbers() -> None:
     # A ratio, never a formatted percentage string.
     assert not isinstance(payload["roi_within_scan_cov"], str)
     assert payload["roi_within_scan_cov"] < 1.0
+    assert payload["roi_mean"] == pytest.approx(2.5)
+    assert payload["roi_minimum"] == pytest.approx(1.0)
+    assert payload["roi_maximum"] == pytest.approx(4.0)
+    assert payload["roi_range"] == pytest.approx(3.0)
 
 
 def test_units_come_from_configuration() -> None:

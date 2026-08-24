@@ -52,10 +52,73 @@ def test_preview_generated_for_simple_3d_nifti(preview_workspace: Path) -> None:
     assert item["preview_available"] is True
     assert item["preview_status"] == "preview_available"
     assert item["detected_map_type"] == "CBF"
+    assert item["orientation"] == "RAS"
     for plane in previews.PREVIEW_PLANES:
         png = previews.get_preview_png_path("sub-001", item["map_id"], plane)
         assert png.exists()
         assert png.read_bytes().startswith(b"\x89PNG")
+
+
+def test_compatible_mask_generates_private_safe_overlay(preview_workspace: Path) -> None:
+    _write_nifti(_result_path(preview_workspace), np.arange(27).reshape(3, 3, 3))
+    mask = preview_workspace / "extracted" / "sub-001" / "reference" / "masks" / "gm_mask.nii.gz"
+    _write_nifti(mask, np.ones((3, 3, 3)))
+
+    item = _manifest(preview_workspace)["maps"][0]
+
+    assert item["mask_overlay_status"] == "available"
+    # The label the scoring tables use, so an overlay can be matched to a row.
+    # It used to be derived from the filename, which both read badly and put
+    # an organiser asset name on screen.
+    assert item["mask_overlay_label"] == "gray matter"
+    assert len(item["mask_overlays"]) == 1
+
+    public = str(previews.public_preview_item(item))
+    assert str(mask) not in public
+    # The filename must not survive slugified into the overlay id either.
+    assert "gm_mask" not in public and "gm-mask" not in public
+    overlay = previews.get_preview_png_path("sub-001", item["map_id"], "mask-overlay")
+    assert overlay.read_bytes().startswith(b"\x89PNG")
+
+
+def test_all_compatible_masks_get_distinct_selectable_overlays(preview_workspace: Path) -> None:
+    _write_nifti(_result_path(preview_workspace), np.arange(27).reshape(3, 3, 3))
+    mask_root = preview_workspace / "extracted" / "sub-001" / "reference" / "masks"
+    for index, name in enumerate(("gm_mask.nii.gz", "wm_mask.nii.gz", "lesion_roi_mask.nii.gz"), 1):
+        data = np.zeros((3, 3, 3), dtype=np.float32)
+        data[index - 1, :, :] = 1
+        _write_nifti(mask_root / name, data)
+
+    item = _manifest(preview_workspace)["maps"][0]
+
+    assert [overlay["label"] for overlay in item["mask_overlays"]] == [
+        "gray matter", "lesion", "white matter",
+    ]
+    assert len({overlay["plane"] for overlay in item["mask_overlays"]}) == 3
+    # Distinct ids must come from the digest, not from the filenames, or
+    # distinctness would be bought by leaking three mask names.
+    for overlay in item["mask_overlays"]:
+        for fragment in ("gm", "wm", "lesion", "mask"):
+            assert fragment not in overlay["plane"].removeprefix("mask-overlay-"), \
+                f"the overlay id carries {fragment!r} from the filename"
+    for overlay in item["mask_overlays"]:
+        png = previews.get_preview_png_path("sub-001", item["map_id"], overlay["plane"])
+        assert png.read_bytes().startswith(b"\x89PNG")
+    assert "source_path" not in previews.public_preview_item(item)
+
+
+def test_misoriented_mask_is_not_overlaid(preview_workspace: Path) -> None:
+    _write_nifti(_result_path(preview_workspace), np.arange(27).reshape(3, 3, 3))
+    mask = preview_workspace / "extracted" / "sub-001" / "reference" / "masks" / "gm_mask.nii.gz"
+    mask.parent.mkdir(parents=True, exist_ok=True)
+    affine = np.eye(4)
+    affine[0, 0] = -1
+    nib.save(nib.Nifti1Image(np.ones((3, 3, 3), dtype=np.float32), affine), str(mask))
+
+    item = _manifest(preview_workspace)["maps"][0]
+
+    assert item["mask_overlay_status"] == "no_compatible_mask"
+    assert item["mask_overlay_url"] is None
 
 
 def test_preview_generated_for_4d_nifti_uses_middle_volume(preview_workspace: Path) -> None:

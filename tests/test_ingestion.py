@@ -42,6 +42,40 @@ def test_detects_asl_from_submission_names(tmp_path: Path) -> None:
     assert detect_challenge_type(submission) == "asl"
 
 
+def test_detects_asl_from_common_perfmap_and_attmap_filenames(tmp_path: Path) -> None:
+    """Neutral folders should still resolve from the submitted map set."""
+
+    submission = tmp_path / "team_alpha"
+    submission.mkdir()
+    (submission / "sub-001_acq-002_Perfmap_32float.nii.gz").write_text(
+        "fake nifti", encoding="utf-8"
+    )
+    (submission / "sub-001_acq-002_ATTmap_32float.nii.gz").write_text(
+        "fake nifti", encoding="utf-8"
+    )
+
+    assert detect_challenge_type(submission) == "asl"
+
+
+def test_detects_dsc_from_complete_map_set_in_neutral_folder(tmp_path: Path) -> None:
+    submission = tmp_path / "team_beta"
+    submission.mkdir()
+    for map_name in ("CBV", "CBF", "MTT"):
+        (submission / f"sub-001_{map_name}.nii").write_text("fake nifti", encoding="utf-8")
+
+    assert detect_challenge_type(submission) == "dsc"
+
+
+def test_shared_cbf_map_alone_does_not_guess_asl_or_dsc(tmp_path: Path) -> None:
+    """CBF belongs to ASL and DSC, so one neutral filename is ambiguous."""
+
+    submission = tmp_path / "team_gamma"
+    submission.mkdir()
+    (submission / "sub-001_CBF.nii.gz").write_text("fake nifti", encoding="utf-8")
+
+    assert detect_challenge_type(submission) == "unknown"
+
+
 def test_ingests_folder_and_writes_manifest_outputs(tmp_path: Path) -> None:
     """Folder ingestion should copy files and write both manifest formats."""
 

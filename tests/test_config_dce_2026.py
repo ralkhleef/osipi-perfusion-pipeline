@@ -174,13 +174,26 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
     assert analysis["roi_descriptive"] == {
         "enabled": True,
         "map_types": ["ktrans"],
+        "report_metrics": [
+            "mean", "median", "standard_deviation", "range",
+            "coefficient_of_variation",
+        ],
     }
     assert analysis["signal_rss"] == {
         "enabled": True,
         "modelled_artifact": "modelled_st",
         "measured_artifact": "measured_st",
     }
-    assert cfg.analysis_by_challenge()["asl"] == {}
+    assert cfg.analysis_by_challenge()["asl"] == {
+        "roi_descriptive": {
+            "enabled": True,
+            "map_types": ["cbf", "att"],
+            "report_metrics": [
+                "mean", "median", "standard_deviation", "range",
+                "coefficient_of_variation",
+            ],
+        },
+    }
     assert cfg.analysis_by_challenge()["dsc"] == {}
 
 
@@ -262,6 +275,17 @@ def test_disabled_analysis_may_omit_inputs(
     block["enabled"] = False
     loaded, _settings = _load_temp_config(tmp_path, monkeypatch, rules)
     assert loaded["challenges"]["dce"]["analysis"][analysis_name] == {"enabled": False}
+
+
+def test_unknown_roi_report_metric_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    rules = _dce_rules()
+    rules["challenges"]["dce"]["analysis"]["roi_descriptive"][
+        "report_metrics"
+    ] = ["mean", "invented_metric"]
+    _assert_config_error(
+        tmp_path, monkeypatch, rules,
+        "report_metrics[1]: unknown ROI report metric 'invented_metric'",
+    )
 
 
 @pytest.mark.parametrize("dims", [0, -1, 1, 8])

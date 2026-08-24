@@ -80,10 +80,9 @@ def eligible_artifacts(
     """Artifacts this phase computes statistics for.
 
     Only parameter maps of the configured type, only with a readable
-    dimensionality matching the configuration, and only with a resolvable
-    scan identity. A wrong-dimensional or unidentified file is a validation
-    problem already reported; computing statistics from it would dignify bad
-    input with a number.
+    dimensionality matching the configuration. Missing scan identity does
+    not prevent a valid within-image calculation; the corresponding identity
+    columns remain explicitly blank in the result.
     """
     challenge = (challenge or "").strip().lower()
     analysis = analysis_by_challenge().get(challenge, {})
@@ -105,8 +104,6 @@ def eligible_artifacts(
         expected = (specs.get(map_type) or {}).get("dimensions")
         dims = getattr(artifact, "dimensions", None)
         if expected is not None and dims is not None and int(dims) != int(expected):
-            continue
-        if getattr(artifact, "participant", None) in (None, ""):
             continue
         out.append(artifact)
     return out
@@ -171,12 +168,17 @@ def compute_roi_descriptive_statistics(
                     status=STATUS_MASK_UNREADABLE, units=units))
                 continue
 
-            # Geometry: same policy as reference scoring, matching shape is
-            # required and nothing is resampled. One bad ROI must not stop
-            # the others.
+            # Geometry: matching shape and physical grid are required and
+            # nothing is silently resampled. One bad ROI must not stop the
+            # others.
             mask_shape = mask_data.get("shape")
             map_shape = map_data.get("shape")
             if list(mask_shape or []) != list(map_shape or []):
+                results.append(unavailable_result(
+                    artifact=artifact, roi=roi,
+                    status=STATUS_GEOMETRY_MISMATCH, units=units))
+                continue
+            if not _physical_grids_compatible(map_data, mask_data):
                 results.append(unavailable_result(
                     artifact=artifact, roi=roi,
                     status=STATUS_GEOMETRY_MISMATCH, units=units))
@@ -196,6 +198,23 @@ def compute_roi_descriptive_statistics(
                 stats, artifact=artifact, roi=roi, units=units))
 
     return tuple(results)
+
+
+def _physical_grids_compatible(
+    map_data: Mapping[str, Any], mask_data: Mapping[str, Any]
+) -> bool:
+    """Reject a known affine/voxel-size mismatch; allow missing metadata.
+
+    Production NIfTI payloads include affine and voxel size. Array-only test
+    fixtures and legacy providers may omit them, in which case shape remains
+    the strongest available check.
+    """
+    try:
+        from scoring import _grids_compatible
+
+        return _grids_compatible(dict(map_data), dict(mask_data)) is not False
+    except Exception:
+        return True
 
 
 def _apply_mask(values: Sequence[Any], mask: Sequence[Any]) -> tuple[list[Any], int]:

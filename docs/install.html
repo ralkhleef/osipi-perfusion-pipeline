@@ -108,11 +108,90 @@ cd osipi-perfusion-pipeline</code></pre>
             </table>
           </div>
 
-          <h2 id="installation" data-toc-title="Running the application">Running the application</h2>
-          <p>There is no dependency install step: the image builds them from
-            <code>requirements.txt</code> and <code>backend/requirements.txt</code>. Docker Desktop
-            must be running. Build once from the repository root, then run. The application serves on
-            <code>http://localhost:8000</code>.</p>
+          <h2 id="installation" data-toc-title="Start it">Start it</h2>
+          <p>One command. It builds the image the first time, which takes a few minutes, then
+            starts the application. There is no separate install step: the image brings its own
+            Python and dependencies.</p>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Start</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>docker compose up --build</code></pre>
+          </div>
+
+          <p>Leave it running. When you see <code>Uvicorn running on http://0.0.0.0:8000</code> the
+            application is up. To stop it, press Ctrl-C in that terminal.</p>
+
+          <div class="docs-callout">
+            <p>That is the whole installation. The commands further down this page are optional:
+              one alternative way to start it, and the test suites, which only a developer changing
+              the code needs to run.</p>
+          </div>
+
+          <h2 id="verify" data-toc-title="Open it">Open it</h2>
+          <p>Go to <a href="http://localhost:8000">http://localhost:8000</a> in a browser. The
+            interface opens on step 1 of 6, Upload.</p>
+
+          <p>To check it end to end, upload a submission and walk the six steps. Nothing is sent
+            anywhere: the application runs on your machine and the files stay there.</p>
+
+          <div class="docs-steps">
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">1</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Enter a team name and pick the challenge</p>
+                <p>Anything will do for a first run. The challenge decides which rules apply.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">2</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Drop in a ZIP of parameter maps</p>
+                <p>Then work down the steps on the left. Each one unlocks when the last finishes.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">3</span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Export the report</p>
+                <p>If a report comes out at the end, the installation is working.</p>
+              </div>
+            </div>
+          </div>
+
+          <p>Reference maps and ROI masks are organiser data and are not in the repository. Without
+            them you get validation and quality control; the comparison against ground truth needs
+            them. See <a href="configuration.html#reference-data">Reference data and masks</a>.</p>
+
+          <h2 id="troubleshooting" data-toc-title="If it does not start">If it does not start</h2>
+          <div class="docs-faq">
+            <details>
+              <summary>Cannot connect to the Docker daemon</summary>
+              <p>Docker Desktop is not running. Start it, wait for the whale icon to settle, then
+                run the command again.</p>
+            </details>
+            <details>
+              <summary>Port 8000 already allocated</summary>
+              <p>Something else is using the port. Edit the <code>ports</code> line in
+                <code>docker-compose.yml</code> to <code>"8080:8000"</code> and open
+                <code>http://localhost:8080</code> instead.</p>
+            </details>
+            <details>
+              <summary>It starts, but the Run step says Docker is unavailable</summary>
+              <p>Only affects running a participant's code. Upload, validation, quality control,
+                previews and export all still work. It means the Docker socket mount or the
+                <code>HOST_*</code> variables in <code>docker-compose.yml</code> did not reach the
+                container.</p>
+            </details>
+            <details>
+              <summary>I edited the challenge rules and nothing changed</summary>
+              <p>Press <strong>Reload rules</strong> in Scoring Setup. See
+                <a href="configuration.html#apply-a-change">Apply a change</a>.</p>
+            </details>
+          </div>
+
+          <h2 id="without-compose" data-toc-title="Starting it another way">Starting it another way</h2>
+          <p>You do not need this if <code>docker compose up --build</code> worked. It is here for
+            anyone without Docker Compose. It does exactly the same thing.</p>
 
           <div class="docs-code">
             <div class="docs-code-header"><span>Build</span><button class="docs-copy" type="button">Copy</button></div>
@@ -133,56 +212,23 @@ cd osipi-perfusion-pipeline</code></pre>
   osipi-pipeline</code></pre>
           </div>
 
-          <p>Stop it with Ctrl-C. On Windows PowerShell, replace <code>$PWD</code> with
-            <code>${PWD}</code> and the line continuations with backticks.</p>
-
-          <p>The <code>config</code> mount is read-only and optional, since the image already
-            contains a copy. With it, an edit to the challenge rules reaches the running application
-            after you press <strong>Reload rules</strong>, without rebuilding the image. See
-            <a href="configuration.html#apply-a-change">Apply a change</a>.</p>
+          <p>On Windows PowerShell, replace <code>$PWD</code> with <code>${PWD}</code> and the
+            trailing backslashes with backticks.</p>
 
           <div class="docs-callout">
             <p>The three <code>HOST_*</code> variables and the Docker socket mount are what let the
               container start a second container for a participant's code. The backend runs inside
-              Docker but calls the host daemon, so the volume paths it passes to
-              <code>docker run</code> must be host paths, not container paths. Without these,
-              upload, validation, QC, previews, compatible configured analyses and export still work;
-              participant-code execution in the Run step does not.</p>
-          </div>
-
-          <p>The same configuration is in <code>docker-compose.yml</code>, which expands
-            <code>$PWD</code> for you:</p>
-
-          <div class="docs-code">
-            <div class="docs-code-header"><span>Compose</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>docker compose up --build     # add -d to run in the background
-docker compose down</code></pre>
-          </div>
-
-          <h2 id="verify" data-toc-title="Verifying the install">Verifying the install</h2>
-          <p>The container reports its own health, so a first check needs no browser and no data:</p>
-          <div class="docs-code">
-            <div class="docs-code-header"><span>Health</span><button class="docs-copy" type="button">Copy</button></div>
-            <pre><code>curl http://localhost:8000/api/health</code></pre>
-          </div>
-          <p>Then open <code>http://localhost:8000</code>. The interface loads on the Upload step.</p>
-
-          <div class="docs-table-wrap">
-            <table>
-              <thead><tr><th>Symptom</th><th>Usual cause</th></tr></thead>
-              <tbody>
-                <tr><td><code>Cannot connect to the Docker daemon</code> during build</td><td>Docker Desktop is not running.</td></tr>
-                <tr><td>Port 8000 already allocated</td><td>Something else holds the port. Publish another one: <code>-p 8080:8000</code>.</td></tr>
-                <tr><td>The page loads but the Run step reports Docker unavailable</td><td>The socket mount or the <code>HOST_*</code> variables are missing. Everything except Run still works.</td></tr>
-                <tr><td>A rules change has no effect</td><td>The image holds the old copy. See <a href="configuration.html#apply-a-change">Apply a change</a>.</td></tr>
-              </tbody>
-            </table>
+              Docker but calls the host daemon, so the paths it passes to <code>docker run</code>
+              have to be host paths, not container paths. The <code>config</code> mount is what
+              makes <strong>Reload rules</strong> able to see an edit.</p>
           </div>
 
           <h2 id="tests" data-toc-title="Running the tests">Running the tests</h2>
+          <p><strong>Only needed if you are changing the code.</strong> You do not have to run any
+            of this to use the application.</p>
           <p>The suites run outside the container, against the source in the working tree, so they
-            need their own dependencies installed on your machine. This is the only step that
-            installs anything with <code>pip</code>.</p>
+            need their own dependencies on your machine. This is the only place anything is
+            installed with <code>pip</code>.</p>
           <div class="docs-code">
             <div class="docs-code-header"><span>Python tests</span><button class="docs-copy" type="button">Copy</button></div>
             <pre><code>pip install -r requirements.txt -r backend/requirements.txt -r requirements-test.txt

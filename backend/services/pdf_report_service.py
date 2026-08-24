@@ -14,9 +14,7 @@ from services.ingest_service import make_safe_id
 from services.path_config import OUTPUTS_DIR
 from services.report_branding import (
     BRAND,
-    PDF_MONO,
     PDF_SANS,
-    PDF_MONO_BOLD,
     lockup_aspect,
     lockup_reportlab_path,
     logo_reportlab_path,
@@ -183,16 +181,24 @@ def _per_map_sections(summaries: Sequence[Mapping[str, Any]], *, blinded: bool) 
     return sections
 
 
+ROI_METRIC_COLUMNS = (
+    ("mean", "Mean"),
+    ("median", "Median"),
+    ("standard_deviation", "SD"),
+    ("range", "Range"),
+    ("coefficient_of_variation", "CoV"),
+)
 ROI_TABLE_HEADERS = (
-    "Dataset", "Participant", "Repeat", "Site", "ROI",
-    "Median", "SD", "CoV", "Voxels", "Units", "Status",
+    "Dataset", "Participant", "Repeat", "Site", "Map", "ROI",
+    *(label for _, label in ROI_METRIC_COLUMNS),
+    "Voxels", "Units", "Status",
 )
 
 _UNAVAILABLE = "Unavailable"
 
 #: Shared by both formats so the wording cannot drift.
 ROI_METHOD_TEXT = (
-    "ROI statistics were calculated from finite Ktrans voxels within each "
+    "ROI statistics were calculated from finite parameter-map voxels within each "
     "configured ROI. Standard deviation uses the population definition "
     "(ddof=0). CoV is standard deviation divided by the absolute arithmetic "
     "mean and is unavailable when the mean is near zero. These conventions "
@@ -217,6 +223,15 @@ def _roi_percent(value: Any) -> str:
         return _UNAVAILABLE
 
 
+def _roi_range(record: Mapping[str, Any]) -> str:
+    """Display the observed minimum-to-maximum interval for an ROI."""
+    low = record.get("roi_minimum")
+    high = record.get("roi_maximum")
+    if low is None or high is None:
+        return _UNAVAILABLE
+    return f"{_fmt(low, 4)} to {_fmt(high, 4)}"
+
+
 def _roi_descriptive_model(
     summaries: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:
@@ -226,11 +241,16 @@ def _roi_descriptive_model(
     computed during scoring. Nothing here recalculates a statistic.
     """
     records: list[dict] = []
+    configured_metrics: list[str] = []
     for summary in summaries:
         analysis = summary.get("nifti_analysis")
         analysis = analysis if isinstance(analysis, Mapping) else {}
         scoring = analysis.get("reference_scoring")
         scoring = scoring if isinstance(scoring, Mapping) else {}
+        for metric in scoring.get("roi_descriptive_report_metrics") or ():
+            metric = str(metric)
+            if metric not in configured_metrics:
+                configured_metrics.append(metric)
         for record in scoring.get("roi_descriptive_statistics") or ():
             if isinstance(record, Mapping):
                 records.append(dict(record))
@@ -241,25 +261,47 @@ def _roi_descriptive_model(
         ("dataset", "participant", "repeat", "site", "roi_id")
     ))
 
-    rows = [[
-        str(r.get("dataset") or "Not available"),
-        str(r.get("participant") or "Not available"),
-        str(r.get("repeat") or "Not available"),
-        # Clinical datasets leave the site implicit; shown as a dash, not "0".
-        str(r.get("site") or "Not available"),
-        str(r.get("roi_label") or r.get("roi_id") or "Not available"),
-        _roi_number(r.get("roi_median")),
-        _roi_number(r.get("roi_within_scan_sd")),
-        _roi_percent(r.get("roi_within_scan_cov")),
-        _fmt(r.get("voxel_count") or 0, 0),
-        str(r.get("units") or "Not available"),
-        str(r.get("unavailable_reason") or r.get("status") or "Not available").replace("_", " "),
-    ] for r in records]
+    known_metrics = {metric for metric, _ in ROI_METRIC_COLUMNS}
+    selected_metrics = [m for m in configured_metrics if m in known_metrics]
+    if not selected_metrics:
+        selected_metrics = [metric for metric, _ in ROI_METRIC_COLUMNS]
+    metric_labels = dict(ROI_METRIC_COLUMNS)
+
+    def metric_cells(record: Mapping[str, Any]) -> list[str]:
+        values = {
+            "mean": _roi_number(record.get("roi_mean")),
+            "median": _roi_number(record.get("roi_median")),
+            "standard_deviation": _roi_number(record.get("roi_within_scan_sd")),
+            "range": _roi_range(record),
+            "coefficient_of_variation": _roi_percent(record.get("roi_within_scan_cov")),
+        }
+        return [values[metric] for metric in selected_metrics]
+
+    rows = []
+    for record in records:
+        rows.append([
+            str(record.get("dataset") or "Not available"),
+            str(record.get("participant") or "Not available"),
+            str(record.get("repeat") or "Not available"),
+            # Clinical datasets leave the site implicit; shown as a dash, not "0".
+            str(record.get("site") or "Not available"),
+            str(record.get("map_type") or "Not available").upper(),
+            str(record.get("roi_label") or record.get("roi_id") or "Not available"),
+            *metric_cells(record),
+            _fmt(record.get("voxel_count") or 0, 0),
+            str(record.get("units") or "Not available"),
+            str(record.get("unavailable_reason") or record.get("status") or "Not available").replace("_", " "),
+        ])
 
     available = sum(1 for r in records if r.get("status") == "available")
     return {
         "roi_descriptive_rows": rows,
-        "roi_descriptive_headers": list(ROI_TABLE_HEADERS),
+        "roi_descriptive_headers": [
+            "Dataset", "Participant", "Repeat", "Site", "Map", "ROI",
+            *(metric_labels[metric] for metric in selected_metrics),
+            "Voxels", "Units", "Status",
+        ],
+        "roi_descriptive_report_metrics": selected_metrics,
         "roi_descriptive_records": records,
         "roi_descriptive_methodology": dict(DESCRIPTIVE_METHODOLOGY),
         "roi_descriptive_summary": {
@@ -1422,9 +1464,9 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     logo_path = logo_reportlab_path()
 
     # ── Styles ────────────────────────────────────────────────────────────
-    # Times carries display type (the journal signal); Helvetica carries data,
-    # where tabular figures matter more than voice. Both are base-14 fonts, so
-    # no font embedding or external files are required.
+    # Use one clean sans-serif family throughout so the PDF matches the app and
+    # the self-contained HTML report. Helvetica is a base-14 PDF font, so the
+    # report remains portable without loading an external webfont.
     styles = getSampleStyleSheet()
     body_style = ParagraphStyle(
         "OsipiBody", parent=styles["BodyText"],
@@ -1434,12 +1476,12 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     # drawn by the wrapper table in section(), not by the paragraph.
     heading_style = ParagraphStyle(
         "OsipiHeading", parent=body_style,
-        fontName=PDF_MONO_BOLD, fontSize=7.5, leading=9.5,
-        textColor=C["subtle"], charSpace=1.1,
+        fontName="Helvetica-Bold", fontSize=9, leading=11,
+        textColor=C["ink"], charSpace=0,
     )
     caption_style = ParagraphStyle(
         "OsipiCaption", parent=body_style,
-        fontName="Times-Italic", fontSize=8, leading=10.5,
+        fontName="Helvetica-Oblique", fontSize=7.5, leading=10,
         textColor=C["muted"], spaceBefore=5, spaceAfter=11,
     )
     bullet_style = ParagraphStyle(
@@ -1449,13 +1491,13 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     )
     label_style = ParagraphStyle(
         "OsipiLabel", parent=body_style,
-        fontName=PDF_MONO, fontSize=6.2, leading=8,
-        textColor=C["subtle"], charSpace=0.5,
+        fontName="Helvetica-Bold", fontSize=6.5, leading=8,
+        textColor=C["subtle"], charSpace=0,
     )
     table_header_style = ParagraphStyle(
         "OsipiTableHeader", parent=body_style,
-        fontName="Helvetica", fontSize=6.3, leading=8, textColor=C["subtle"],
-        charSpace=0.35,
+        fontName="Helvetica-Bold", fontSize=6.3, leading=8, textColor=C["subtle"],
+        charSpace=0,
     )
     table_header_right = ParagraphStyle(
         "OsipiTableHeaderR", parent=table_header_style, alignment=2,
@@ -1469,7 +1511,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     )
     note_style = ParagraphStyle(
         "OsipiNote", parent=body_style,
-        fontName="Times-Italic", fontSize=8, leading=10.5, textColor=C["muted"],
+        fontName="Helvetica-Oblique", fontSize=8, leading=10.5, textColor=C["muted"],
     )
 
     def esc(text: Any) -> str:
@@ -1484,16 +1526,16 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ``width`` defaults to the content measure; callers pass their own
         when the rule must span something narrower.
         """
-        table = Table([[Paragraph(esc(str(title).upper()), heading_style)]],
+        table = Table([[Paragraph(esc(str(title)), heading_style)]],
                       colWidths=[width or CONTENT_W], hAlign="LEFT")
         table.setStyle(TableStyle([
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
             ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 16),
+            ("TOPPADDING", (0, 0), (-1, -1), 11),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ("LINEBELOW", (0, 0), (-1, -1), 0.5, C["hairline"]),
         ]))
-        return KeepTogether([table, Spacer(1, 5)])
+        return KeepTogether([table, Spacer(1, 4)])
 
     def status_para(value: Any, style=table_cell_style) -> Paragraph:
         """Coloured dot plus plain text, never a filled pill.
@@ -1567,7 +1609,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         widths = col_widths or fitted_widths(headers, rows, CONTENT_W)
         numeric = set(num_cols)
         cells = [[
-            Paragraph(esc(str(h).upper()),
+                Paragraph(esc(str(h)),
                       table_header_right if c in numeric else table_header_style)
             for c, h in enumerate(headers)
         ]]
@@ -1700,7 +1742,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 textColor=C["ink"], spaceBefore=2,
             )
             cells.append([
-                Paragraph(esc(str(label).upper()), label_style),
+                Paragraph(esc(str(label)), label_style),
                 Paragraph(esc(text), value_style),
             ])
             if col:
@@ -1777,7 +1819,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             _draw_logo(canvas, MARGIN, logo_bottom, lockup_h)
             canvas.setFillColor(C["ink"])
             _spaced(canvas, MARGIN + lockup_h + 0.16 * inch,
-                    logo_bottom + lockup_h / 2, "OSIPI", PDF_MONO_BOLD, 13, 2.4)
+                    logo_bottom + lockup_h / 2, "OSIPI", "Helvetica-Bold", 13, 1.2)
 
         centre = logo_bottom + lockup_h / 2
         canvas.setFillColor(C["muted"])
@@ -1797,10 +1839,10 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
 
         # Title block hangs below the rule pair.
         canvas.setFillColor(C["ink"])
-        canvas.setFont("Times-Roman", 26)
+        canvas.setFont("Helvetica-Bold", 23)
         canvas.drawString(MARGIN, rule_y - 0.40 * inch, "Submission review report")
         canvas.setFillColor(C["muted"])
-        canvas.setFont("Times-Italic", 10)
+        canvas.setFont("Helvetica", 9.5)
         deck = str(model["session_name"])
         if model.get("challenge_type"):
             deck += f"  ·  {model['challenge_type']}"
@@ -1816,9 +1858,9 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         if _draw_logo(canvas, x, y + 0.01 * inch, 0.34 * inch):
             x += 0.44 * inch
         canvas.setFillColor(C["ink"])
-        end = _spaced(canvas, x, y + 0.12 * inch, "OSIPI", PDF_MONO_BOLD, 8.5, 1.8)
+        end = _spaced(canvas, x, y + 0.12 * inch, "OSIPI", "Helvetica-Bold", 8.5, 1.0)
         canvas.setFillColor(C["muted"])
-        canvas.setFont("Times-Italic", 8)
+        canvas.setFont("Helvetica", 8)
         canvas.drawString(end + 0.10 * inch, y + 0.12 * inch, "Submission review report")
         canvas.setFont("Helvetica", 7.5)
         canvas.drawRightString(page_w - MARGIN, y + 0.10 * inch,
@@ -1932,29 +1974,16 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     # ── Story ─────────────────────────────────────────────────────────────
     story: list = [NextPageTemplate("later")]
 
-    story.append(section("Reviewer summary"))
-    story.append(kv_table(
-        {
-            "Submission": model["session_name"],
-            "Challenge": model["challenge_type"],
-            "Submission type": model["submission_type"],
-        },
-        width=CONTENT_W,
-    ))
-    story.append(Spacer(1, 0.10 * inch))
-    story.append(kv_table(
-        {label: value for label, value in model["reviewer_summary"]},
-        width=CONTENT_W,
-    ))
-
-    story.append(section("Status"))
+    story.append(section("Key results"))
     story.append(figures(model["review_statuses"]))
-
-    story.append(section("Key metrics"))
+    if str(model.get("reference_status") or "").lower() == "not available":
+        story.append(Paragraph(
+            "No compatible reference was provided. Reference comparison is "
+            "not available for this report.",
+            note_style,
+        ))
     story.append(paired_kv_table(model["executive_metrics"], width=CONTENT_W))
 
-    # Put printable results on page two; detailed records remain in HTML/JSON.
-    story.append(PageBreak())
     story.append(section("Results"))
     map_rows = model.get("main_map_metric_rows") or []
     if map_rows:
@@ -1971,12 +2000,37 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     roi_rows = model.get("roi_descriptive_rows") or []
     if roi_rows:
         # The HTML/CSV retain every identifier and status column. The PDF
-        # keeps the reviewer-facing subset that fits comfortably on a page.
-        compact_roi_headers = ["Dataset", "Participant", "ROI", "Median", "SD", "CoV", "Voxels"]
-        compact_roi_rows = [[row[i] for i in (0, 1, 4, 5, 6, 7, 8)] for row in roi_rows]
+        # keeps the reviewer-facing identity plus exactly the descriptive
+        # metrics selected by configuration. Resolve columns by name, never
+        # by fixed offsets: configurable metrics change both count and order.
+        roi_headers = list(model.get("roi_descriptive_headers") or [])
+        configured_labels = [
+            dict(ROI_METRIC_COLUMNS)[metric]
+            for metric in model.get("roi_descriptive_report_metrics") or ()
+            if metric in dict(ROI_METRIC_COLUMNS)
+        ]
+        compact_roi_headers = [
+            header for header in (
+                "Dataset", "Participant", "Map", "ROI",
+                *configured_labels, "Voxels",
+            ) if header in roi_headers
+        ]
+        column_indexes = [roi_headers.index(header) for header in compact_roi_headers]
+        compact_roi_rows = [
+            [row[index] for index in column_indexes] for row in roi_rows
+        ]
+        compact_display_headers = [
+            {"Map": "Parameter", "ROI": "Region"}.get(header, header)
+            for header in compact_roi_headers
+        ]
+        numeric_headers = set(configured_labels) | {"Voxels"}
         story.append(section("ROI results"))
         story.append(data_table(
-            compact_roi_headers, compact_roi_rows, num_cols=[3, 4, 5, 6]
+            compact_display_headers, compact_roi_rows,
+            num_cols=[
+                index for index, header in enumerate(compact_roi_headers)
+                if header in numeric_headers
+            ],
         ))
 
     # ── Submitted outputs & reference comparison, per submission and per map ──

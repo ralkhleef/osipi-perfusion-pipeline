@@ -10,7 +10,9 @@ Precedence is deliberate and fixed:
    ``.nii``/``.nii.gz`` removed) only for fields the directory did not
    supply. Patterns come from ``challenges.<id>.filename_identity_patterns``;
    none are hardcoded here.
-3. **Unresolved.** Fields stay ``None``. Identity is never inferred from
+3. **Prefixed filename tokens.** Common explicit tokens such as ``sub-001``,
+   ``acq-002`` and ``site-3`` fill fields not supplied by a configured pattern.
+4. **Unresolved.** Fields stay ``None``. Identity is never inferred from
    file ordering, sibling files, or position in a listing.
 
 Where both sources supply a field and disagree, the directory wins and the
@@ -153,7 +155,7 @@ def parse_directory_identity(
 def parse_filename_identity(
     filename: str, *, challenge: str | None = None
 ) -> dict[str, str]:
-    """Identity from the configured filename patterns; first match wins."""
+    """Identity from configured patterns, then explicit prefixed tokens."""
     stem = strip_nifti_suffix(filename)
     for pattern in _compiled_patterns(challenge):
         match = pattern.match(stem)
@@ -168,7 +170,24 @@ def parse_filename_identity(
                 value.lower() if key == "dataset" else _normalize_number(value)
             )
         return result
-    return {}
+
+    # BIDS-style and similar files often carry identity as independent tokens
+    # rather than one challenge-specific full-name pattern. Only explicit
+    # prefixes are accepted; file order or arbitrary numbers are never used.
+    result: dict[str, str] = {}
+    for token in re.split(r"[_\s]+", stem.lower()):
+        for field, prefixes in (
+            ("participant", _PARTICIPANT_PREFIXES),
+            ("repeat", _REPEAT_PREFIXES),
+            ("site", _SITE_PREFIXES),
+        ):
+            if field in result:
+                continue
+            value = _match_prefixed(token, prefixes)
+            if value is not None:
+                result[field] = value
+                break
+    return result
 
 
 def resolve_identity(

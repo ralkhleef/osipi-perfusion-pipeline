@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from services.ingest_service import make_safe_id
-from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
+from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR, REFERENCE_DATA_DIR
 from scoring import _detect_map_type, _safe_name
 from osipi_pipeline.ingestion.manifest import config_fingerprint, manifest_files
 from osipi_pipeline.config.rules import (
@@ -26,11 +26,33 @@ from osipi_pipeline.config.rules import (
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 PREVIEW_PLANES = ("axial", "coronal", "sagittal")
+MASK_OVERLAY_PLANE = "mask-overlay"
 PREVIEW_ROOT = OUTPUTS_DIR / "previews"
 MANIFEST_NAME = "preview_manifest.json"
+PREVIEW_SCHEMA_VERSION = 2
 
 _PRIVATE_PATH_PARTS = private_path_parts()
 _MASK_NAME_PATTERNS = mask_name_patterns()
+
+
+def _mask_display_label(mask_filename: str) -> str:
+    """The label the scoring tables give this mask.
+
+    Imported lazily: this module is imported by ``backend.scoring`` in some
+    paths, and a module-level import back the other way would be circular.
+
+    Falls back to a tidied filename only if scoring cannot be reached, and
+    even then the fallback is a name, never a path.
+    """
+    try:
+        from scoring import _mask_label_for_name  # noqa: PLC0415
+
+        label = _mask_label_for_name(mask_filename)
+        if label:
+            return str(label)
+    except Exception:
+        pass
+    return _strip_nifti_suffix(mask_filename).replace("_", " ")
 
 
 def _is_nifti(path: Path) -> bool:
@@ -185,6 +207,26 @@ def _write_png_gray(path: Path, image) -> None:
     path.write_bytes(payload)
 
 
+def _write_png_rgb(path: Path, image) -> None:
+    """Write an 8-bit RGB PNG without adding an image-library dependency."""
+    import numpy as np  # type: ignore
+
+    arr = np.asarray(image, dtype=np.uint8)
+    if arr.ndim != 3 or arr.shape[2] != 3:
+        raise ValueError("RGB preview image must have shape (height, width, 3)")
+    channels = [_upscale_nearest(arr[:, :, index]) for index in range(3)]
+    arr = np.stack(channels, axis=2)
+    height, width, _ = arr.shape
+    raw = b"".join(b"\x00" + arr[row].tobytes() for row in range(height))
+    payload = (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", struct.pack("!IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + _png_chunk(b"IDAT", zlib.compress(raw, 9))
+        + _png_chunk(b"IEND", b"")
+    )
+    path.write_bytes(payload)
+
+
 def _slice_for_plane(data, plane: str):
     import numpy as np  # type: ignore
 
@@ -275,6 +317,8 @@ def _cached_item_is_valid(item: dict) -> bool:
         return False
     if item.get("preview_config_fingerprint") != config_fingerprint():
         return False
+    if item.get("preview_schema_version") != PREVIEW_SCHEMA_VERSION:
+        return False
     if item.get("preview_available"):
         paths = _preview_png_paths(item.get("submission_id") or "", item.get("map_id") or "")
         return all(path.exists() for path in paths.values())
@@ -304,6 +348,7 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
     shape = []
     dtype = None
     voxel_size = []
+    orientation = None
     try:
         import nibabel as nib  # type: ignore
 
@@ -311,6 +356,7 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         shape = list(img.shape or [])
         dtype = str(img.get_data_dtype())
         voxel_size = [float(v) for v in img.header.get_zooms()[: min(3, len(img.shape or []))]]
+        orientation = "".join(code or "?" for code in nib.aff2axcodes(img.affine))
     except Exception:
         pass
     try:
@@ -330,6 +376,7 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         "units": map_info.get("units"),
         "shape": shape,
         "voxel_size": voxel_size,
+        "orientation": orientation,
         "dtype": dtype,
         "finite_percent": None,
         "negative_percent": None,
@@ -338,8 +385,127 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         "source_mtime": source_mtime,
         "source_size": source_size,
         "preview_config_fingerprint": config_fingerprint(),
+        "preview_schema_version": PREVIEW_SCHEMA_VERSION,
     }
     item.update(_urls(submission_id, map_id, False))
+    item.update({
+        "mask_overlay_url": None,
+        "mask_overlay_label": None,
+        "mask_overlay_status": "mask_not_available",
+    })
+    return item
+
+
+def _mask_candidates(submission_id: str, challenge_type: Optional[str]) -> list[Path]:
+    roots = [
+        EXTRACTED_DIR / make_safe_id(submission_id) / "reference" / "masks",
+        REFERENCE_DATA_DIR / str(challenge_type or "").lower() / "masks",
+        REFERENCE_DATA_DIR / "masks",
+    ]
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if _is_nifti(path) and path.resolve() not in seen:
+                seen.add(path.resolve())
+                candidates.append(path)
+    return candidates
+
+
+def _mask_overlay_plane(mask_path: Path) -> str:
+    """A stable id for one mask's overlay, carrying no part of its name.
+
+    The id used to include the filename stem, so the overlay URL read
+    ``mask-overlay-gm-mask-2bb5715a`` and the mask filename reached the
+    browser, the address bar and every access log. A mask filename is
+    organiser information: it says which regions exist and what they are
+    called, which is part of what the challenge holds back.
+
+    The digest alone distinguishes one mask from another, which is all the
+    id has to do. It is longer than it needs to be for the handful of masks
+    a challenge defines, because a collision would silently show the wrong
+    region.
+    """
+    digest = hashlib.sha256(str(mask_path.resolve()).encode("utf-8")).hexdigest()[:16]
+    return f"{MASK_OVERLAY_PLANE}-{digest}"
+
+
+def _mask_overlay_path(submission_id: str, map_id: str, plane: str = MASK_OVERLAY_PLANE) -> Path:
+    if plane != MASK_OVERLAY_PLANE and not plane.startswith(f"{MASK_OVERLAY_PLANE}-"):
+        raise ValueError("Unknown mask overlay plane.")
+    return _preview_dir(submission_id) / f"{map_id}_{plane}.png"
+
+
+def _attach_mask_overlay(
+    item: dict, submission_id: str, mask_paths: list[Path]
+) -> dict:
+    """Create private-safe middle axial slices for every compatible mask.
+
+    A mask is compatible only when shape, affine/orientation, and voxel sizes
+    agree within the same tolerances used for scoring. No mask path or raw mask
+    data is returned to the browser.
+    """
+    # A cached map item must not retain an overlay after masks are removed or
+    # replaced with incompatible geometry.
+    item["mask_overlay_url"] = None
+    item["mask_overlay_label"] = None
+    item["mask_overlays"] = []
+    item["mask_overlay_status"] = "mask_not_available"
+    item.pop("mask_overlay_error", None)
+    if not item.get("is_parameter_map") or not mask_paths:
+        return item
+    try:
+        import nibabel as nib  # type: ignore
+        import numpy as np  # type: ignore
+
+        map_img = nib.load(str(item.get("source_path") or ""))
+        map_data = np.asarray(map_img.dataobj, dtype=np.float32)
+        if map_data.ndim != 3:
+            return item
+        for mask_path in mask_paths:
+            mask_img = nib.load(str(mask_path))
+            mask_data = np.asarray(mask_img.dataobj, dtype=np.float32)
+            if mask_data.shape != map_data.shape:
+                continue
+            if not np.allclose(mask_img.affine, map_img.affine, rtol=0, atol=1e-2):
+                continue
+            map_slice = _slice_for_plane(map_data, "axial")
+            mask_slice = _slice_for_plane(mask_data, "axial")
+            finite = map_data[np.isfinite(map_data)]
+            gray = _normalize_slice(map_slice, finite)
+            rgb = np.stack([gray, gray, gray], axis=2).astype(np.float32)
+            inside = np.isfinite(mask_slice) & (mask_slice != 0)
+            # Magenta tint keeps anatomy visible while making alignment clear.
+            rgb[inside, 0] = 0.75 * 255 + 0.25 * rgb[inside, 0]
+            rgb[inside, 1] = 0.25 * rgb[inside, 1]
+            rgb[inside, 2] = 0.75 * 255 + 0.25 * rgb[inside, 2]
+            plane = _mask_overlay_plane(mask_path)
+            _write_png_rgb(
+                _mask_overlay_path(submission_id, item["map_id"], plane), rgb.astype(np.uint8)
+            )
+            url = (
+                f"/api/submissions/{make_safe_id(submission_id)}/previews/"
+                f"{item['map_id']}/{plane}.png"
+            )
+            # The same label the scoring tables use, so a reviewer can match
+            # an overlay to its row. Deriving it from the filename instead
+            # gave "gm mask" beside a table row reading "gray matter", and
+            # the filename is an organiser asset name that should not be on
+            # screen at all.
+            label = _mask_display_label(mask_path.name)
+            item["mask_overlays"].append({"plane": plane, "label": label, "url": url})
+        if item["mask_overlays"]:
+            first = item["mask_overlays"][0]
+            item["mask_overlay_url"] = first["url"]
+            item["mask_overlay_label"] = first["label"]
+            item["mask_overlay_status"] = "available"
+        else:
+            item["mask_overlay_status"] = "no_compatible_mask"
+    except Exception as exc:
+        item["mask_overlay_status"] = "unavailable"
+        item["mask_overlay_error"] = str(exc)
     return item
 
 
@@ -436,6 +602,8 @@ def list_submission_previews(submission_id: str, challenge_type: Optional[str] =
     }
     paths = _candidate_nifti_paths(safe_id, challenge_type)
     maps = [_classify_preview_role(_reuse_or_generate(safe_id, path, cached_by_source)) for path in paths]
+    mask_paths = _mask_candidates(safe_id, challenge_type)
+    maps = [_attach_mask_overlay(item, safe_id, mask_paths) for item in maps]
     manifest = {
         "submission_id": safe_id,
         "challenge_type": challenge_type,
@@ -459,6 +627,19 @@ def get_preview_item(submission_id: str, map_id: str) -> Optional[dict]:
 
 
 def get_preview_png_path(submission_id: str, map_id: str, plane: str) -> Path:
+    if plane == MASK_OVERLAY_PLANE or plane.startswith(f"{MASK_OVERLAY_PLANE}-"):
+        item = get_preview_item(submission_id, map_id)
+        if not item or not item.get("mask_overlay_url"):
+            raise FileNotFoundError("Mask overlay is not available.")
+        if plane == MASK_OVERLAY_PLANE:
+            overlays = item.get("mask_overlays") or []
+            plane = overlays[0].get("plane") if overlays else MASK_OVERLAY_PLANE
+        elif plane not in {overlay.get("plane") for overlay in item.get("mask_overlays", [])}:
+            raise FileNotFoundError("Mask overlay is not available.")
+        path = _mask_overlay_path(submission_id, map_id, plane)
+        if not path.exists():
+            raise FileNotFoundError("Mask overlay image is missing.")
+        return path
     if plane not in PREVIEW_PLANES:
         raise ValueError("Unknown preview plane.")
     item = get_preview_item(submission_id, map_id)
@@ -498,7 +679,10 @@ def get_preview_download_path(submission_id: str, map_id: str) -> Path:
 
 def public_preview_item(item: dict) -> dict:
     """Return preview metadata without internal filesystem paths."""
-    hidden = {"source_path", "source_mtime", "source_size", "submission_id"}
+    hidden = {
+        "source_path", "source_mtime", "source_size", "submission_id",
+        "mask_overlay_error",
+    }
     return {key: value for key, value in item.items() if key not in hidden}
 
 

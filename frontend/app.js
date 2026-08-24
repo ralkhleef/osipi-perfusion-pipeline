@@ -1500,6 +1500,9 @@ function saveSessionState() {
       has_run_instructions:        s.has_run_instructions,
       source_folder:               s.source_folder,
       detection_warning:           s.detection_warning,
+      detected_challenge_type:     s.detected_challenge_type || null,
+      challenge_type:              s.challenge_type || null,
+      confirmed_challenge_type:    s.confirmed_challenge_type || null,
       status:                      s.status,
     }));
 
@@ -2532,6 +2535,9 @@ async function handleSubmit() {
           has_result_maps: importData.has_result_maps ?? (Number(importData.nifti_count || 0) > 0),
           source_folder: importData.source_folder || null,
           detection_warning: importData.detection_warning || null,
+          detected_challenge_type: importData.detected_challenge_type || null,
+          challenge_type: getChallengeType(),
+          confirmed_challenge_type: getChallengeType(),
           status: "ready",
         }],
       };
@@ -5630,7 +5636,7 @@ function _cacheScoreStatus(sid, data, row) {
 
    Returns [rows, status] for the existing renderer. Both are empty when no
    submission carries ROI data, which is what clears stale rows when a new
-   submission is opened or an ASL/DSC result is loaded. */
+   submission or a challenge without configured ROI analysis is loaded. */
 function _roiDescriptivePayload() {
   const rows = [];
   let status = null;
@@ -6060,16 +6066,31 @@ function _ensurePreviewModal() {
 }
 
 function _previewPlaneUrl(item, plane) {
+  if (plane === "mask-overlay") return item?.mask_overlay_url || "";
+  if (plane?.startsWith("mask-overlay-")) {
+    return (item?.mask_overlays || []).find((overlay) => overlay.plane === plane)?.url || "";
+  }
   return item?.[`${plane}_url`] || "";
 }
 
+function _previewPlaneLabel(item, plane) {
+  if (plane?.startsWith("mask-overlay-")) {
+    const label = (item?.mask_overlays || []).find((overlay) => overlay.plane === plane)?.label;
+    return label ? `${label} overlay` : "Mask overlay";
+  }
+  if (plane === "mask-overlay") return "Mask overlay";
+  return plane[0].toUpperCase() + plane.slice(1);
+}
+
 function _renderPreviewModalContent(item, plane = "axial") {
-  const availablePlanes = ["axial", "coronal", "sagittal"].filter((p) => _previewPlaneUrl(item, p));
+  const overlayPlanes = (item?.mask_overlays || []).map((overlay) => overlay.plane);
+  const legacyOverlayPlanes = overlayPlanes.length ? [] : ["mask-overlay"];
+  const availablePlanes = ["axial", "coronal", "sagittal", ...overlayPlanes, ...legacyOverlayPlanes].filter((p) => _previewPlaneUrl(item, p));
   const activePlane = availablePlanes.includes(plane) ? plane : (availablePlanes[0] || "axial");
   _activePreviewPlane = activePlane;
   const imageUrl = _previewPlaneUrl(item, activePlane);
   const tabs = availablePlanes.map((p) =>
-    `<button type="button" class="${p === activePlane ? "is-active" : ""}" data-preview-plane="${escapeHtml(p)}">${escapeHtml(p[0].toUpperCase() + p.slice(1))}</button>`
+    `<button type="button" class="${p === activePlane ? "is-active" : ""}" data-preview-plane="${escapeHtml(p)}">${escapeHtml(_previewPlaneLabel(item, p))}</button>`
   ).join("");
   const image = imageUrl
     ? `<img class="nifti-preview-modal-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(activePlane)} preview for ${escapeHtml(item.file_name || "NIfTI map")}">`
@@ -6107,6 +6128,10 @@ function _renderPreviewModalContent(item, plane = "axial") {
         ${_summaryMetric("Map type", item.detected_map_type || "Unknown")}
         ${_summaryMetric("Shape", _previewShapeText(item.shape))}
         ${_summaryMetric("Voxel size", _previewVoxelText(item.voxel_size))}
+        ${_summaryMetric("Orientation", item.orientation || "not available")}
+        ${(item.mask_overlays || []).length
+          ? _summaryMetric("Overlay masks", item.mask_overlays.map((overlay) => overlay.label).join(", "))
+          : (item.mask_overlay_label ? _summaryMetric("Overlay mask", item.mask_overlay_label) : "")}
         ${_summaryMetric("Mean", _dashMetric(item.mean))}
         ${_summaryMetric("Std. deviation", _dashMetric(item.std))}
         ${_summaryMetric("Finite voxels", _dashMetric(item.finite_percent, (v) => `${_fmtMetricVal(v)}%`))}
@@ -7721,7 +7746,7 @@ function renderScorePreviewPanel() {
   // Keep the action row in sync so Continue to Export is enabled on Step 5.
   if (typeof _refreshWizardFooter === "function") _refreshWizardFooter();
 
-  // ROI Ktrans statistics come from the canonical scoring result already in
+  // ROI parameter-map statistics come from the canonical scoring result already in
   // the cache. Rendered here because this is the one function every entry
   // point funnels through, initial render, each async status resolution,
   // step navigation, and session restore, so the section updates without a
@@ -8098,9 +8123,9 @@ function _renderExportRows() {
     { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON Results",
       meta: "Machine-readable validation, execution, QC, reference, and limitation summary.",
       btn: `<button type="button" id="export-combined-json-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download JSON results" title="Downloads the blinded combined JSON summary.">Download JSON</button>` },
-    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Ktrans Statistics CSV",
-      meta: "Scan-level median, SD, and CoV for Ktrans within each configured ROI. Descriptive within-scan values, not accuracy or repeatability.",
-      btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI Ktrans statistics CSV" title="Downloads within-ROI Ktrans median, SD, and CoV per scan.">Download CSV</button>` },
+    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Parameter-map Statistics CSV",
+      meta: "Scan-level mean, median, SD, range, and CoV for configured parameter maps within each compatible ROI. Descriptive within-scan values, not accuracy or repeatability.",
+      btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI parameter-map statistics CSV" title="Downloads within-ROI descriptive statistics per map and scan.">Download CSV</button>` },
     { id: "export-combined-unblinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Unblinded CSV",
       meta: "CSV with team, contact, and original submission identifiers for internal review.",
       btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
@@ -8303,7 +8328,7 @@ window.addEventListener("hashchange", () => {
   });
 })();
 
-/* ── ROI Ktrans statistics ────────────────────────────────────────────────
+/* ── ROI Ktrans statistics / configured parameter maps ───────────────────
    Renders the canonical records computed once during scoring. Nothing here
    recalculates a statistic: CoV arrives as a ratio and is only formatted
    for display, and unavailable values are never shown as zero.
@@ -8311,9 +8336,9 @@ window.addEventListener("hashchange", () => {
    reproducibility, or accuracy.                                          */
 
 const ROI_UNAVAILABLE_MESSAGES = {
-  no_roi_configured: "ROI Ktrans statistics are unavailable because no ROI masks were configured.",
-  no_eligible_maps: "No valid Ktrans scans were available for ROI statistics.",
-  calculation_error: "ROI Ktrans statistics could not be calculated. Existing validation and scoring results are still available.",
+  no_roi_configured: "ROI parameter-map statistics are unavailable because no ROI masks were configured.",
+  no_eligible_maps: "No valid configured parameter maps were available for ROI statistics.",
+  calculation_error: "ROI parameter-map statistics could not be calculated. Existing validation and scoring results are still available.",
 };
 
 const ROI_REASON_LABELS = {
@@ -8351,6 +8376,11 @@ function _roiDatasetLabel(value) {
   return text === "—" ? text : text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+function _roiRange(record) {
+  if (record.roi_minimum == null || record.roi_maximum == null) return "Unavailable";
+  return `${_roiNumber(record.roi_minimum)} to ${_roiNumber(record.roi_maximum)}`;
+}
+
 function renderRoiDescriptiveStatistics(records, status) {
   const card = el("roi-descriptive-card");
   if (!card) return;
@@ -8362,7 +8392,7 @@ function renderRoiDescriptiveStatistics(records, status) {
   const rows = Array.isArray(records) ? records : [];
 
   // Only shown when the canonical result actually carries ROI data or an
-  // explicit status, ASL and DSC never reach this branch.
+  // explicit status.
   if (!rows.length && !status) {
     card.style.display = "none";
     return;
@@ -8372,14 +8402,14 @@ function renderRoiDescriptiveStatistics(records, status) {
 
   if (!rows.length) {
     // Clear, don't just hide. Hiding leaves the previous submission's rows in
-    // the DOM, so opening a new submission or an ASL/DSC result would carry
+    // the DOM, so opening a new submission or a result without ROI data would carry
     // stale values forward the moment the table was shown again.
     if (body) body.innerHTML = "";
     if (table) table.style.display = "none";
     if (empty) {
       empty.style.display = "";
       empty.textContent = ROI_UNAVAILABLE_MESSAGES[status]
-        || "No ROI Ktrans statistics are available.";
+        || "No ROI parameter-map statistics are available.";
     }
     if (method) method.textContent = "";
     return;
@@ -8402,9 +8432,12 @@ function renderRoiDescriptiveStatistics(records, status) {
         <td>${escapeHtml(_roiIdentity(r.participant))}</td>
         <td>${escapeHtml(_roiIdentity(r.repeat))}</td>
         <td>${escapeHtml(_roiIdentity(r.site))}</td>
+        <td>${escapeHtml(_roiIdentity(r.map_type).toUpperCase())}</td>
         <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
+        <td>${escapeHtml(_roiNumber(r.roi_mean))}</td>
         <td>${escapeHtml(_roiNumber(r.roi_median))}</td>
         <td>${escapeHtml(_roiNumber(r.roi_within_scan_sd))}</td>
+        <td>${escapeHtml(_roiRange(r))}</td>
         <td>${escapeHtml(_roiPercent(r.roi_within_scan_cov))}</td>
         <td>${escapeHtml(voxels)}</td>
         <td>${escapeHtml(reason)}</td>
@@ -8414,7 +8447,7 @@ function renderRoiDescriptiveStatistics(records, status) {
 
   if (method) {
     method.textContent =
-      "Statistics are calculated from finite Ktrans voxels within each configured ROI. "
+      "Statistics are calculated from finite parameter-map voxels within each configured ROI. "
       + "SD uses the population definition. CoV is SD divided by the absolute arithmetic mean. "
       + "CoV is shown as a percentage in this table but stored as a ratio in exports.";
   }

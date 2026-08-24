@@ -54,6 +54,14 @@ paths:
     - label: brain mask
       patterns:
         - brain
+    # Before the generic `roi` rule: the first match wins, so a file named
+    # lesion_roi_mask.nii.gz would otherwise be labelled "ROI" and a reader
+    # could not tell which region a row referred to.
+    - label: lesion
+      patterns:
+        - lesion
+        - tumour
+        - tumor
     - label: ROI
       patterns:
         - roi

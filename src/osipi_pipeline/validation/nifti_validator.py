@@ -153,7 +153,8 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
         result["errors"].append(f"Affine matrix has shape {affine.shape}; expected (4, 4).")
         return result
 
-    result["dtype"] = str(img.get_data_dtype())
+    source_dtype = str(img.get_data_dtype())
+    result["dtype"] = source_dtype
     if quick:
         result["valid"] = True
         return result
@@ -162,11 +163,13 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
         with timed("validation.nifti.voxels", path=str(path)):
             data = np.asarray(img.dataobj, dtype=np.float32)
     except Exception as exc:
-        result["warnings"].append(f"Could not read image data array: {exc}")
-        result["valid"] = True
+        result["errors"].append(f"Could not read NIfTI voxel data: {exc}")
         return result
 
-    result["dtype"] = str(data.dtype)
+    # Keep the on-disk dtype in the report. Data are converted internally for
+    # stable statistics, but showing every map as float32 hides useful header
+    # information from reviewers.
+    result["dtype"] = source_dtype
     try:
         finite_mask = np.isfinite(data)
         nan_count = int(np.sum(np.isnan(data)))

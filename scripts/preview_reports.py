@@ -84,6 +84,23 @@ def make_summary(idx, challenge, *, ref=True, warns=0, errs=0):
                     "coefficient_of_variation": 0.18, "correlation": 0.912,
                     "voxel_count": 41233, "excluded_voxel_count": 812,
                 })
+    roi_records = []
+    for mt, unit, values in (
+        ("cbf", "ml/100g/min", (58.4, 54.1, 7.2, 31.0, 86.0)),
+        ("att", "s", (1.32, 1.27, 0.21, 0.61, 2.43)),
+    ):
+        mean, median, sd, minimum, maximum = values
+        roi_records.append({
+            "challenge": challenge, "dataset": "synthetic",
+            "participant": str(idx), "repeat": "1", "site": "1",
+            "map_type": mt, "roi_id": "gray_matter", "roi_label": "Gray matter",
+            "units": unit, "roi_mean": mean, "roi_median": median,
+            "roi_within_scan_sd": sd, "roi_minimum": minimum,
+            "roi_maximum": maximum, "roi_range": maximum - minimum,
+            "roi_within_scan_cov": sd / abs(mean), "voxel_count": 41233,
+            "mask_voxel_count": 42045, "status": "available",
+            "unavailable_reason": None,
+        })
     return {
         "submission_id": f"sub-{idx:02d}", "source_folder": f"team_alpha_{idx}",
         "challenge_type": challenge, "team_name": f"Team {idx}",
@@ -106,7 +123,13 @@ def make_summary(idx, challenge, *, ref=True, warns=0, errs=0):
                 _ref_map("ATT", idx, ref_mean=1.30, sub_mean=1.30 + 0.05 * idx - 0.08,
                          sd=0.21 + 0.02 * idx, rmse=0.28 + 0.02 * idx,
                          mae=0.19 + 0.02 * idx),
-            ] if ref else []},
+            ] if ref else [],
+                "roi_descriptive_statistics": roi_records,
+                "roi_descriptive_report_metrics": [
+                    "mean", "median", "standard_deviation", "range",
+                    "coefficient_of_variation",
+                ],
+            },
         },
         "analysis_fields": {
             "parameter_maps_detected": "CBF, ATT", "map_count": 2,

@@ -30,7 +30,8 @@ submission data, private reference maps, and masks on the reviewer's machine.
 - Validate NIfTI files, required maps, artifacts, dimensions, and dataset structure.
 - Run participant code in Docker when needed. Result-only submissions skip execution.
 - Create map QC and previews for readable maps.
-- Calculate DCE Ktrans ROI descriptive statistics when compatible masks are present.
+- Calculate configurable ASL CBF/ATT and DCE Ktrans ROI descriptive statistics
+  when compatible masks are present.
 - Compare submitted maps with compatible reference maps using bias, MAE, RMSE,
   correlation, error spread, overlap count, and difference NIfTI files.
 - Calculate raw DCE signal RSS and summaries when measured and modelled 4-D

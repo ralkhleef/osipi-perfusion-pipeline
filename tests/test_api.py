@@ -892,6 +892,32 @@ def test_nifti_files_unknown_submission(client: TestClient) -> None:
     assert r.json()["files"] == []
 
 
+def test_private_reference_and_mask_niftis_are_never_listed_or_served(
+    client: TestClient, tmp_path: Path
+) -> None:
+    data, fname = _make_result_only_zip()
+    sid = _upload_and_get_id(client, data, fname)
+    folder = tmp_path / "extracted" / sid
+    private_files = [
+        folder / "reference" / "maps" / "GT_Perf.nii.gz",
+        folder / "reference" / "masks" / "gm_mask.nii.gz",
+        folder / "results" / "maps" / "lesion_roi_mask.nii.gz",
+    ]
+    for path in private_files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(_nifti_bytes_from_values([1, 1, 1, 1]))
+
+    body = client.get(f"/api/nifti-files/{sid}").json()
+    serialized = json.dumps(body)
+    assert "GT_Perf" not in serialized
+    assert "gm_mask" not in serialized
+    assert "lesion_roi_mask" not in serialized
+    for path in private_files:
+        relative = path.relative_to(folder).as_posix()
+        response = client.get(f"/api/nifti/{sid}/{relative}")
+        assert response.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # Helpers: build scoring package ZIPs
 # ---------------------------------------------------------------------------
@@ -1704,6 +1730,25 @@ def test_reference_scoring_constant_offset_expected_bias_rmse(client: TestClient
     assert row["whole_map"]["correlation"] == pytest.approx(1.0)
 
 
+def test_reference_scoring_api_never_exposes_server_paths(client: TestClient, tmp_path: Path) -> None:
+    data, fname = _make_asl_result_maps_zip("private_paths.zip", [3, 4, 5, 6])
+    sid = _upload_and_get_id(client, data, fname)
+    _write_reference_map(tmp_path, "sub-001_cbf.nii.gz", [1, 2, 3, 4])
+    _write_reference_mask(tmp_path, "gm_mask.nii.gz", [1, 1, 0, 0])
+
+    response = client.get(
+        f"/api/scoring-status?submission_id={sid}&challenge_type=asl&map_type=cbf"
+    )
+    assert response.status_code == 200
+    body = response.json()
+    serialized = json.dumps(body)
+    assert str(tmp_path) not in serialized
+    for private_field in (
+        '"path"', "reference_root", "reference_path", "mask_path", "submitted_path", "source_path",
+    ):
+        assert private_field not in serialized
+
+
 def test_reference_scoring_missing_reference_keeps_qc_only(client: TestClient) -> None:
     data, fname = _make_asl_result_maps_zip("missing_ref.zip", [1, 2, 3, 4])
     sid = _upload_and_get_id(client, data, fname)
@@ -1747,6 +1792,29 @@ def test_reference_scoring_mask_uses_only_mask_voxels(client: TestClient, tmp_pa
     assert brain["metrics"]["bias"] == pytest.approx(3.0)
     assert brain["metrics"]["mae"] == pytest.approx(3.0)
     assert brain["metrics"]["rmse"] == pytest.approx(math.sqrt(10.0))
+
+
+def test_asl_roi_descriptives_include_cbf_att_mean_and_range(
+    client: TestClient, tmp_path: Path
+) -> None:
+    data, fname = _make_asl_result_maps_zip(
+        "asl_roi_descriptives.zip", [1, 2, 3, 4], att_values=[10, 20, 30, 40]
+    )
+    sid = _upload_and_get_id(client, data, fname)
+    _write_reference_map(tmp_path, "sub-001_cbf.nii.gz", [1, 2, 3, 4])
+    _write_reference_map(tmp_path, "sub-001_att.nii.gz", [10, 20, 30, 40])
+    _write_reference_mask(tmp_path, "gm_mask.nii.gz", [1, 1, 0, 0])
+
+    reference = _reference_scoring_status(client, sid)
+    records = reference["roi_descriptive_statistics"]
+    by_type = {record["map_type"]: record for record in records}
+
+    assert set(by_type) == {"cbf", "att"}
+    assert by_type["cbf"]["roi_mean"] == pytest.approx(1.5)
+    assert by_type["cbf"]["roi_minimum"] == pytest.approx(1.0)
+    assert by_type["cbf"]["roi_maximum"] == pytest.approx(2.0)
+    assert by_type["cbf"]["roi_range"] == pytest.approx(1.0)
+    assert by_type["att"]["roi_mean"] == pytest.approx(15.0)
 
 
 def test_reference_scoring_score_endpoint_writes_artifacts(client: TestClient, tmp_path: Path) -> None:
@@ -2037,14 +2105,15 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Submission review report" in r.text
     # Generic QC bar charts were removed to keep the report table-focused.
     assert "Visual Summary" not in r.text
-    # Reviewer structure: summary and results open, detail sections collapsed.
-    assert "Submission Summary" in r.text
+    # Reviewer structure: key results open, detail sections collapsed. The old
+    # narrative Submission Summary duplicated the same status and map data.
+    assert "Submission Summary" not in r.text
     assert "Key Results" in r.text
     # Empty analysis sections are omitted; the summary still explains why a
     # compatible reference comparison was unavailable.
     assert "Reference Comparison" not in r.text
     assert "Issues &amp; Limitations" in r.text
-    assert r.text.count('<details class="report-section" open>') == 2
+    assert r.text.count('<details class="report-section" open>') == 1
     assert "\x91" not in r.text, "CSS minus icon escaped as a control character"
     # The submissions table was folded into the results table; its columns
     # must still be reachable somewhere in the document.
@@ -2094,7 +2163,7 @@ def test_every_pdf_page_is_the_same_size_and_orientation(client: TestClient) -> 
 
     raw = response.content.decode("latin-1", errors="ignore")
     boxes = re.findall(r"/MediaBox\s*\[\s*([\d.\s-]+?)\]", raw)
-    assert len(boxes) >= 2, f"expected several pages, found {len(boxes)} MediaBox entries"
+    assert boxes, "expected at least one PDF page"
 
     sizes = set()
     for box in boxes:
@@ -2119,28 +2188,19 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     assert ".pdf" in content_disposition
     assert r.content.startswith(b"%PDF")
     assert len(r.content) > 500
+    # Page compression is disabled so key report text remains inspectable in
+    # the raw PDF stream without adding a PDF parser to the test dependencies.
     pdf_text = r.content.decode("latin-1", errors="ignore")
-    # These assertions only work while the PDF is written uncompressed (see
-    # pageCompression in pdf_report_service); compression would move page text
-    # into Flate streams. "Notes and limitations" appears only in page
-    # content, never in the document metadata, so it fails loudly if that
-    # ever changes, rather than every check below passing vacuously.
-    # Section headings are set as uppercase small caps, so match them that
-    # way. "NOTES AND LIMITATIONS" appears only in page content, never in the
-    # document metadata, so it fails loudly if page text ever stops being
-    # extractable rather than letting every check below pass vacuously.
-    assert "LIMITATIONS" in pdf_text, (
-        "PDF page text is not extractable; is pageCompression enabled?"
-    )
+    assert "Notes and limitations" in pdf_text
     for expected in (
         "Submission review report",
-        "REVIEWER SUMMARY", "STATUS", "KEY METRICS", "RESULTS",
-        "NOTES AND LIMITATIONS", "ANALYSIS PROVENANCE",
+        "Key results", "Results", "Notes and limitations", "ANALYSIS PROVENANCE",
         "Pipeline version", "Configuration version",
         "Scoring package", "Reference dataset", "Analysis date",
         "Finite voxels", "Reference",
     ):
         assert expected in pdf_text
+    assert "Reviewer summary" not in pdf_text
     # The decorative "Small QC Charts" section was removed to reduce noise.
     assert "Small QC Charts" not in pdf_text
     # ReportLab emits wrapped lines as separate text operators, so match a short fragment.

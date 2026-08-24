@@ -205,7 +205,8 @@ def test_report_model_and_both_formats_carry_the_same_rows(dce_submission) -> No
     # The label comes from the discovered mask filename, so assert against
     # the canonical value rather than a guessed capitalisation.
     roi_label = _records(analysis)[0]["roi_label"]
-    assert row[4] == roi_label
+    assert row[5] == roi_label
+    assert row[4] == "KTRANS"
     assert "44.72%" in row      # CoV displayed as a percentage
 
     # PDF: single-token label only. ReportLab emits each wrapped line as its
