@@ -291,6 +291,26 @@ challenges:
       - cbv
       - cbf
       - mtt
+    # Descriptive statistics inside whatever masks the organiser supplies.
+    # These involve no scientific decision: the median CBV inside a grey
+    # matter mask means the same thing whoever computes it, unlike accuracy,
+    # deviance or a pass threshold, which still need definitions from the
+    # challenge leads. Set provisionally so DSC behaves like ASL and DCE
+    # rather than silently reporting nothing, and untested against real DSC
+    # reference data because none has been supplied yet.
+    analysis:
+      roi_descriptive:
+        enabled: true
+        map_types:
+          - cbv
+          - cbf
+          - mtt
+        report_metrics:
+          - mean
+          - median
+          - standard_deviation
+          - range
+          - coefficient_of_variation
     # No `datasets` block, for the same reason as ASL above.
     keywords:
       - cbv

@@ -377,11 +377,26 @@ def test_asl_cbf_is_selected_for_roi_output() -> None:
     assert eligible_artifacts([cbf], challenge="asl") == [cbf]
 
 
-def test_dsc_produces_no_roi_output_without_configuration() -> None:
+def test_an_unconfigured_challenge_produces_no_roi_output() -> None:
+    """Eligibility comes from configuration, never from a built-in default.
+
+    This used to use DSC, which was the unconfigured challenge at the time.
+    DSC now has descriptive statistics configured, so the example moved to a
+    challenge that does not exist. The rule under test is unchanged: a
+    challenge nobody configured yields nothing rather than guessing.
+    """
     cbf = SubmissionArtifact(path="cbf.nii.gz", role="parameter_map",
-                             challenge="dsc", map_type="cbf",
+                             challenge="not_a_configured_challenge",
+                             map_type="cbf", participant="1", dimensions=3)
+    assert eligible_artifacts([cbf], challenge="not_a_configured_challenge") == []
+
+
+def test_dsc_maps_are_eligible_now_that_dsc_is_configured() -> None:
+    """The counterpart: configuration is what turns the analysis on."""
+    cbv = SubmissionArtifact(path="cbv.nii.gz", role="parameter_map",
+                             challenge="dsc", map_type="cbv",
                              participant="1", dimensions=3)
-    assert eligible_artifacts([cbf], challenge="dsc") == []
+    assert eligible_artifacts([cbv], challenge="dsc") == [cbv]
 
 
 def test_no_roi_configuration_yields_no_rows_not_whole_image() -> None:
