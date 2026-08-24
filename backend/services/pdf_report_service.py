@@ -828,6 +828,94 @@ def _row_notes(summary: Mapping[str, Any], *, include_reference_note: bool = Fal
     return " ".join(notes)
 
 
+#: How each header check verdict reads to a reviewer. Keyed by the status
+#: ``scoring._header_check`` returns, so a new status shows up as itself
+#: rather than being silently reported as a pass.
+_HEADER_CHECK_VERDICTS = {
+    "matches": "Matches",
+    "dtype_differs": "Data type differs",
+    "geometry_mismatch": "Geometry differs",
+    "not_verified": "Not verified",
+}
+
+
+def _header_field_text(field: Any, *, joiner: str = " x ") -> str:
+    """One header field rendered for a reviewer.
+
+    A field that matches shows its value once. A field that differs shows both
+    values, because "differs" on its own does not tell a reviewer whether the
+    submission is flipped or merely at a different voxel size. A field neither
+    file declares reads as not verified, which is not the same as a pass.
+
+    ``joiner`` exists because axis codes are conventionally written joined,
+    as LAS, while shapes and voxel sizes are written separated.
+    """
+    if not isinstance(field, Mapping):
+        return "Not verified"
+    submitted, reference = field.get("submitted"), field.get("reference")
+    matches = field.get("matches")
+
+    def text(value: Any) -> str:
+        if value is None:
+            return "not declared"
+        if isinstance(value, (list, tuple)):
+            return joiner.join(str(part) for part in value)
+        return str(value)
+
+    if matches is None:
+        return "Not verified"
+    if matches:
+        return text(submitted)
+    return f"{text(submitted)} vs {text(reference)}"
+
+
+def _header_check_model(
+    summaries: Sequence[Mapping[str, Any]], *, blinded: bool,
+) -> dict[str, Any]:
+    """Rows for the header and orientation check, one per compared map.
+
+    Both challenge leads asked for this. The check itself has been computed
+    since the scorer gained ``_header_check``, but it was stored on the row
+    and never rendered, so a flipped submission was caught internally and
+    then not mentioned to the person reviewing it.
+
+    Only maps that were actually compared against a reference appear here,
+    because there is nothing to compare a header against otherwise.
+    """
+    rows: list[list[str]] = []
+    for index, summary in enumerate(summaries, start=1):
+        label = _submission_label(summary, index, blinded=blinded)
+        analysis = summary.get("nifti_analysis")
+        analysis = analysis if isinstance(analysis, Mapping) else {}
+        scoring = analysis.get("reference_scoring")
+        scoring = scoring if isinstance(scoring, Mapping) else {}
+        for row in scoring.get("maps") or []:
+            if not isinstance(row, Mapping):
+                continue
+            check = row.get("header_check")
+            if not isinstance(check, Mapping):
+                continue
+            fields = check.get("fields")
+            fields = fields if isinstance(fields, Mapping) else {}
+            status = str(check.get("status") or "not_verified")
+            rows.append([
+                label,
+                str(row.get("detected_map_type") or "Unknown").upper(),
+                _header_field_text(fields.get("shape")),
+                _header_field_text(fields.get("voxel_size")),
+                _header_field_text(fields.get("orientation"), joiner=""),
+                _header_field_text(fields.get("dtype")),
+                _HEADER_CHECK_VERDICTS.get(status, status),
+            ])
+    return {
+        "header_check_headers": [
+            "Submission", "Map", "Shape", "Voxel size",
+            "Orientation", "Data type", "Verdict",
+        ],
+        "header_check_rows": rows,
+    }
+
+
 def _build_report_model(
     summaries: Sequence[Mapping[str, Any]],
     *,
@@ -873,6 +961,7 @@ def _build_report_model(
     bias = _mean(af.get("reference_mean_bias") for af in fields if _reference_available(af))
     roi_model = _roi_descriptive_model(summaries)
     prototype_model = _prototype_analysis_model(summaries)
+    header_check_model = _header_check_model(summaries, blinded=blinded)
     roi_available = bool(roi_model.get("roi_descriptive_rows"))
     grouped_available = bool(prototype_model.get("grouped_roi_rows"))
     rss_available = bool(prototype_model.get("dce_rss_rows"))
@@ -1206,6 +1295,7 @@ def _build_report_model(
         # or recomputes, which is what kept the two formats in step before.
         **roi_model,
         **prototype_model,
+        **header_check_model,
         "analysis_availability": {
             "qc_and_previews": bool(map_count),
             "roi_statistics": roi_available,
@@ -1996,6 +2086,23 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ))
     else:
         story.append(Paragraph("No readable map metrics were available.", note_style))
+
+    # Placed ahead of the results because it qualifies them: a map whose
+    # geometry disagrees with the reference produces numbers that look
+    # ordinary and mean nothing, so a reviewer needs this before the metrics
+    # rather than after them.
+    header_rows = model.get("header_check_rows") or []
+    if header_rows:
+        header_headers = list(model.get("header_check_headers") or [])
+        story.append(section("Header and orientation check"))
+        story.append(data_table(header_headers, header_rows))
+        if any(row and row[-1] == "Geometry differs" for row in header_rows):
+            story.append(Paragraph(
+                "One or more maps differ from the reference in shape, voxel size "
+                "or orientation. Comparison metrics for those maps are not "
+                "reliable until the difference is explained.",
+                note_style,
+            ))
 
     roi_rows = model.get("roi_descriptive_rows") or []
     if roi_rows:

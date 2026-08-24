@@ -69,6 +69,7 @@ node tests/frontend_smoke_test.js
 node tests/footer_logic_test.js
 node tests/frontend_validation_card_test.js
 node tests/frontend_roi_dom_test.js
+node tests/frontend_header_check_test.js
 ```
 
 The trusted scoring-package example is in `data/sample_submissions/`; test inputs

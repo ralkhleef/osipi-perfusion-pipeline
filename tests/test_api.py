@@ -2470,7 +2470,12 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     assert "Pipeline version" in html and "Configuration version" in html
     # concise per-map results (full file geometry remains in JSON/CSV)
     assert "Key Results" in html and ">Units<" in html and ">Finite<" in html
-    assert "Voxel size" not in html
+    # Geometry stays out of Key Results, which is a summary. It is reported in
+    # its own section instead, so scope the check to Key Results rather than
+    # to the whole document.
+    _key_results = html[html.index("Key Results"):]
+    _key_results = _key_results[:_key_results.index("</details>")]
+    assert "Voxel size" not in _key_results
     # reference comparison per map/ROI with the useful overlap count
     assert "Reference Comparison" in html
     assert "Valid voxels" in html
@@ -2482,6 +2487,25 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     assert "<script src=\"http" not in html and "/sessions/" not in html
     assert "submissions/extracted" not in html
     assert "Map mean summary" not in html
+
+
+def test_html_report_shows_the_header_and_orientation_check(client, tmp_path):
+    """Both challenge leads asked to see this, so it must reach the report.
+
+    The check was computed and stored on the row for a while before anything
+    rendered it, which meant a flipped submission was caught internally and
+    then never mentioned to the reviewer.
+    """
+    sid = _asl_with_ref(client, tmp_path)
+    client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
+                                       "force_validation_refresh": True})
+    html = client.get(f"/api/report?submission_id={sid}").text
+    assert "Header and Orientation Check" in html
+    # The four fields Olivia asked for, each reported by name.
+    for field in ("Shape", "Voxel size", "Orientation", "Data type"):
+        assert f"<th>{field}</th>" in html or f">{field}<" in html
+    # These maps share a grid with the reference, so the verdict is a pass.
+    assert "Matches" in html
 
 
 def test_pdf_report_has_versions_and_permap_sections(client, tmp_path):

@@ -6205,6 +6205,68 @@ function _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount) {
   return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
 }
 
+/* How a header check verdict reads in the interface, keyed by the status the
+   scorer returns. An unrecognised status falls through to itself rather than
+   being shown as a pass. */
+const HEADER_CHECK_VERDICTS = {
+  matches: "Matches reference",
+  dtype_differs: "Data type differs",
+  geometry_mismatch: "Geometry differs",
+  not_verified: "Not verified",
+};
+
+/* One header field for display. A field that differs shows both values,
+   because "differs" alone does not say whether a map is flipped or simply at
+   a different voxel size. Axis codes join without a separator, as LAS. */
+function _headerFieldText(field, joiner = " x ") {
+  if (!field || typeof field !== "object") return "Not verified";
+  if (field.matches === null || field.matches === undefined) return "Not verified";
+  const text = (value) => {
+    if (value === null || value === undefined) return "not declared";
+    return Array.isArray(value) ? value.join(joiner) : String(value);
+  };
+  return field.matches
+    ? text(field.submitted)
+    : `${text(field.submitted)} vs ${text(field.reference)}`;
+}
+
+/* The header and orientation check for one map, as a small table.
+
+   Both challenge leads asked for this. A submission can be the right shape,
+   score plausibly, and still be flipped, in which case every number computed
+   from it is wrong in a way no comparison metric reveals. */
+function _renderHeaderCheck(check) {
+  if (!check || typeof check !== "object") return "";
+  const fields = check.fields && typeof check.fields === "object" ? check.fields : {};
+  const status = String(check.status || "not_verified");
+  const verdict = HEADER_CHECK_VERDICTS[status] || status;
+  const rows = [
+    ["Shape", _headerFieldText(fields.shape)],
+    ["Voxel size", _headerFieldText(fields.voxel_size)],
+    ["Orientation", _headerFieldText(fields.orientation, "")],
+    ["Data type", _headerFieldText(fields.dtype)],
+  ];
+  const tone = status === "geometry_mismatch"
+    ? "warning"
+    : (status === "matches" ? "complete" : "pending");
+  return `<details class="summary-mask-details summary-header-check"${
+    status === "geometry_mismatch" ? " open" : ""}>
+    <summary>Header and orientation ${statusPill(verdict, tone)}</summary>
+    <div class="summary-mask-table-wrap">
+      <table class="summary-mask-table">
+        <thead><tr><th>Field</th><th>Submitted vs reference</th></tr></thead>
+        <tbody>${rows.map(([label, value]) => `<tr>
+          <td>${escapeHtml(label)}</td>
+          <td>${escapeHtml(value)}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+      ${status === "geometry_mismatch" ? `<p class="sdc-reason">This map differs
+        from the reference in shape, voxel size or orientation. Its comparison
+        metrics are not reliable until the difference is explained.</p>` : ""}
+    </div>
+  </details>`;
+}
+
 function _renderReferenceReportSection(mapSummary) {
   const wholeRows = mapSummary.referenceRows.filter((row) => row.scope === "whole map" || !row.scope);
   if (!wholeRows.length && !mapSummary.referenceMapStatuses.length) return "";
@@ -6255,6 +6317,7 @@ function _renderReferenceReportSection(mapSummary) {
             ${_summaryMetric("CoV", _metricOrUnavailable(row.coefficient_of_variation))}
             ${_summaryMetric("Correlation", _metricOrUnavailable(row.correlation))}
           </div>
+          ${_renderHeaderCheck(row.header_check)}
           ${masks.length ? `<details class="summary-mask-details">
             <summary>Mask / ROI metrics</summary>
             <div class="summary-mask-table-wrap">

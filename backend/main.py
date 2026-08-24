@@ -3354,6 +3354,24 @@ def export_report(
         if grouped_table_html or rss_table_html else ""
     )
 
+    # Same rows the PDF renders, from the same model key, so the two formats
+    # cannot drift apart.
+    _header_check_rows = report_model.get("header_check_rows") or []
+    header_check_html = _prototype_table(
+        report_model.get("header_check_headers") or [],
+        _header_check_rows,
+        "Submitted map headers compared against the reference: shape, voxel "
+        "size, orientation and data type. A map can be the right shape and "
+        "score plausibly while being flipped, which no comparison metric "
+        "reveals. Fields that neither file declares read as not verified.",
+    )
+    if any(row and row[-1] == "Geometry differs" for row in _header_check_rows):
+        header_check_html += (
+            '<p class="report-note">One or more maps differ from the reference '
+            "in shape, voxel size or orientation. Comparison metrics for those "
+            "maps are not reliable until the difference is explained.</p>"
+        )
+
     # The masthead carries only immediate report context. Versions, packages,
     # and reference identifiers live once in the collapsed Provenance section.
     meta_items = [
@@ -3713,6 +3731,11 @@ def export_report(
       {main_map_results_html}
     </div>
   </details>
+
+  {f'''<details class="report-section" open>
+    <summary>Header and Orientation Check <span class="section-count">{len(_header_check_rows)}</span></summary>
+    <div class="report-section-body">{header_check_html}</div>
+  </details>''' if _header_check_rows else ''}
 
   {f'''<details class="report-section">
     <summary>ROI Results <span class="section-count">{len(_roi_rows)}</span></summary>
