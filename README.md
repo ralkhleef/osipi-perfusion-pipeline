@@ -41,15 +41,15 @@ Windows launchers for reviewers who prefer not to type Docker commands.
 | Add or update tests | `tests/` |
 | Change the GitHub Pages site | `docs/` |
 | Work with a custom scoring package | `examples/scoring-package-template/` |
-| Review pending scientific decisions | `SCIENTIFIC_REQUIREMENTS_PENDING.md` |
+| Review pending scientific decisions | `notes/SCIENTIFIC_REQUIREMENTS_PENDING.md` |
 
-The [code walkthrough](CODE_WALKTHROUGH.md) explains how these areas connect.
+The [code walkthrough](notes/CODE_WALKTHROUGH.md) explains how these areas connect.
 More focused maintainer notes are available for
-[configuration](docs/configuration.md),
-[ingestion](docs/ingestion_notes.md),
-[Docker execution](docs/execution_notes.md),
-[updating scoring](docs/UPDATING_SCORING.md), and
-[adding a metric](docs/ADDING_SCORING_METRICS.md).
+[configuration](notes/configuration.md),
+[ingestion](notes/ingestion_notes.md),
+[Docker execution](notes/execution_notes.md),
+[updating scoring](notes/UPDATING_SCORING.md), and
+[adding a metric](notes/ADDING_SCORING_METRICS.md).
 
 ## Run tests
 
@@ -81,4 +81,4 @@ reference assets, and installed scoring packages are ignored by Git.
 - [Documentation](https://ralkhleef.github.io/osipi-perfusion-pipeline/)
 - [Installation](https://ralkhleef.github.io/osipi-perfusion-pipeline/install.html)
 - [Configuration](https://ralkhleef.github.io/osipi-perfusion-pipeline/configuration.html)
-- [GSoC work product](GSoC_WORK_PRODUCT.md)
+- [GSoC work product](notes/GSoC_WORK_PRODUCT.md)

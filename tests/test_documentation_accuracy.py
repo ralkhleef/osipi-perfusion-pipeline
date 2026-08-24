@@ -886,3 +886,81 @@ def test_the_documented_config_check_actually_runs() -> None:
     )
     assert result.returncode == 0, f"the documented check fails:\n{result.stderr}"
     assert "ktrans" in result.stdout
+
+
+# ── Repository layout ─────────────────────────────────────────────────────
+#
+# docs/ is deployed by GitHub Pages and nothing else is. It used to hold both
+# the published site and five maintainer notes, which meant prose written for
+# maintainers was quietly being served to the public, and a relative link from
+# a published page to one of those notes only worked by accident of them
+# sharing a directory. The notes now live in notes/. These two tests keep the
+# split honest and keep every link resolving.
+
+def _tracked() -> list[str]:
+    import subprocess
+    out = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True,
+    )
+    return out.stdout.split()
+
+
+def test_docs_holds_the_published_site_and_nothing_else() -> None:
+    """Maintainer prose belongs in notes/, not in the deployed folder."""
+    stray = sorted(p.relative_to(ROOT).as_posix() for p in DOCS.rglob("*.md"))
+    assert not stray, (
+        f"markdown in the deployed site folder: {stray}. "
+        "Maintainer notes belong in notes/, which Pages does not serve."
+    )
+
+
+def test_every_relative_link_resolves() -> None:
+    """A moved file with a stale link is worse than no link at all.
+
+    Covers both directions that broke when the notes were moved: markdown
+    links between documents, and hrefs from a published page. A published
+    page cannot reach notes/ with a relative link, because Pages serves only
+    docs/, so those have to be absolute repository URLs and are checked
+    separately by ``test_every_repository_link_points_at_a_real_file``.
+    """
+    tracked = set(_tracked())
+    broken: list[str] = []
+
+    def check(source: Path, target: str) -> None:
+        if target.startswith(("http://", "https://", "mailto:", "#")):
+            return
+        resolved = (source.parent / target.split("#")[0]).resolve()
+        try:
+            relative = resolved.relative_to(ROOT).as_posix()
+        except ValueError:
+            broken.append(f"{source.relative_to(ROOT)} -> {target} (escapes the repository)")
+            return
+        # A link may legitimately point at a directory. git ls-files lists
+        # files only, so a directory has to be matched by prefix.
+        if relative in tracked:
+            return
+        if any(entry.startswith(f"{relative}/") for entry in tracked):
+            return
+        broken.append(f"{source.relative_to(ROOT)} -> {target}")
+
+    for name in tracked:
+        path = ROOT / name
+        if name.endswith(".md"):
+            for target in re.findall(r"\]\(([^)\s]+)\)", path.read_text(encoding="utf-8")):
+                check(path, target)
+        elif name.startswith("docs/") and name.endswith(".html"):
+            for target in re.findall(r'href="([^"]+)"', without_comments(path.read_text())):
+                check(path, target)
+
+    assert not broken, "links pointing at files that do not exist:\n  " + "\n  ".join(broken)
+
+
+def test_every_repository_link_points_at_a_real_file() -> None:
+    """Absolute blob links break silently: the page renders, the link 404s."""
+    tracked = set(_tracked())
+    missing = sorted({
+        target for page in PAGES
+        for target in re.findall(r"blob/main/([A-Za-z0-9_./-]+)", page.read_text())
+        if target not in tracked
+    })
+    assert not missing, f"pages link to repository files that do not exist: {missing}"
