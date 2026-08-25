@@ -7382,11 +7382,77 @@ async function _testConfigurationManager() {
   } catch (error) { _configurationManagerShow(error.message, false); }
 }
 
+/* Field paths from the server read as code. These are what a reviewer calls
+   the same things. Anything unmatched falls through to a tidied path rather
+   than being hidden, so a new setting is still reported. */
+const PREVIEW_FIELD_LABELS = {
+  "code_execution_required": "Participant code must run",
+  "scoring.mode": "Analysis provider",
+  "scoring.package_id": "Scoring package",
+  "label": "Challenge name",
+  "description": "Challenge description",
+  "reference_dataset_version": "Reference dataset version",
+};
+
+const PREVIEW_LEAF_LABELS = {
+  state: "requirement",
+  dimensions: "dimensions",
+  aliases: "recognised filenames",
+  required: "required",
+  participants: "participants",
+  repeats: "repeats",
+  sites: "sites",
+};
+
+function _previewFieldLabel(field) {
+  const path = String(field || "");
+  if (PREVIEW_FIELD_LABELS[path]) return PREVIEW_FIELD_LABELS[path];
+  const parts = path.split(".");
+  // maps.cbf.state -> CBF requirement; datasets.clinical.repeats -> clinical repeats
+  if (parts.length === 3) {
+    const [group, id, leaf] = parts;
+    const name = group === "maps" ? id.toUpperCase() : id;
+    return `${name} ${PREVIEW_LEAF_LABELS[leaf] || leaf.replace(/_/g, " ")}`;
+  }
+  return path.replace(/\./g, " ").replace(/_/g, " ");
+}
+
+/* A value as a reader would say it, not as JSON. */
+function _previewValue(value) {
+  if (value === null || value === undefined || value === "") return "none";
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "none";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 async function _previewConfigurationManager() {
   try {
     const data = await _configurationManagerPost("/api/configuration-manager/preview", _collectConfigurationDraft());
-    const rows = (data.changes || []).map((item) => `<li><strong>${escapeHtml(item.field)}</strong>: ${escapeHtml(JSON.stringify(item.before))} → ${escapeHtml(JSON.stringify(item.after))}</li>`).join("");
-    _configurationManagerShow("Preview ready", true, data.change_count ? `<strong>${data.change_count} change(s)</strong><ul>${rows}</ul>` : `<strong>No changes from the active configuration.</strong>`);
+    const changes = data.changes || [];
+    if (!changes.length) {
+      _configurationManagerShow("No changes", true,
+        "<p>This draft matches the configuration currently in force.</p>");
+      return;
+    }
+    // Long value lists, filename aliases in particular, are put on their own
+    // line rather than run into the sentence.
+    const rows = changes.map((item) => {
+      const before = _previewValue(item.before);
+      const after = _previewValue(item.after);
+      const long = before.length + after.length > 60;
+      return `<li class="cfg-preview-row${long ? " cfg-preview-row-long" : ""}">
+        <span class="cfg-preview-field">${escapeHtml(_previewFieldLabel(item.field))}</span>
+        <span class="cfg-preview-was">${escapeHtml(before)}</span>
+        <span class="cfg-preview-arrow" aria-hidden="true">→</span>
+        <span class="cfg-preview-now">${escapeHtml(after)}</span>
+      </li>`;
+    }).join("");
+    const count = changes.length === 1 ? "1 change" : `${changes.length} changes`;
+    _configurationManagerShow("Preview ready", true,
+      `<p class="cfg-preview-count">${count} against the configuration currently in force</p>
+       <ul class="cfg-preview-list">${rows}</ul>`);
   } catch (error) { _configurationManagerShow(error.message, false); }
 }
 
@@ -7860,6 +7926,16 @@ async function renderScoreStep() {
   unlockStep("score");
   loadLeaderboard();
 
+  // Hidden up front, revealed only once it has been given something to show.
+  // Doing it the other way round left an expander whose entire contents were
+  // the words "No providers found" on the path where scoring is not
+  // configured, because that path returns before the populating code runs.
+  const providerDetails = el("score-provider-details");
+  if (providerDetails) {
+    providerDetails.hidden = true;
+    providerDetails.open = false;
+  }
+
   // Load admin scoring setup first (determines active mode)
   await _loadScoringSetup();
 
@@ -7945,13 +8021,8 @@ async function renderScoreStep() {
   if (grid) {
     grid.innerHTML = provs.map(_renderProviderCard).join("");
   }
-  // An expander that opens onto "No providers found." is worse than no
-  // expander: it invites a click and answers with nothing.
-  const providerDetails = el("score-provider-details");
-  if (providerDetails) {
-    providerDetails.hidden = provs.length === 0;
-    if (!provs.length) providerDetails.open = false;
-  }
+  // Revealed only now, and only if there is something inside it.
+  if (providerDetails) providerDetails.hidden = provs.length === 0;
 
   saveSessionState();
   _syncCompactProgress();

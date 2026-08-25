@@ -17,7 +17,7 @@ import tempfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -240,12 +240,39 @@ def candidate_rules(payload: dict[str, Any]) -> tuple[str, dict[str, Any], dict[
     return challenge, candidate, copy.deepcopy(scoring)
 
 
+def _identified(items: Any) -> Optional[dict[str, dict]]:
+    """A list of objects keyed by ``id``, or None if it is not one.
+
+    ``maps`` and ``required_artifacts`` are lists whose order carries no
+    meaning; identity lives in the ``id`` field. Treating them as opaque made
+    the preview report a single change containing both entire lists, which is
+    how a reviewer ends up reading serialized JSON to find out that one map
+    changed state.
+    """
+    if not isinstance(items, list) or not items:
+        return None
+    if not all(isinstance(item, dict) and "id" in item for item in items):
+        return None
+    keyed = {str(item["id"]): item for item in items}
+    # Duplicate ids would silently drop entries from the comparison.
+    return keyed if len(keyed) == len(items) else None
+
+
 def _change_rows(before: Any, after: Any, path: str = "") -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     if isinstance(before, dict) and isinstance(after, dict):
         for key in sorted(set(before) | set(after)):
             rows.extend(_change_rows(before.get(key), after.get(key), f"{path}.{key}".strip(".")))
         return rows
+
+    before_by_id, after_by_id = _identified(before), _identified(after)
+    if before_by_id is not None and after_by_id is not None:
+        for key in sorted(set(before_by_id) | set(after_by_id)):
+            rows.extend(_change_rows(
+                before_by_id.get(key), after_by_id.get(key), f"{path}.{key}".strip("."),
+            ))
+        return rows
+
     if before != after:
         rows.append({"field": path, "before": before, "after": after})
     return rows

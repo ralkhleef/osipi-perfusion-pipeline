@@ -12189,3 +12189,35 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .roi-table th.num, .roi-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .roi-table td.roi-range { white-space: nowrap; }
 .roi-table th[hidden], .roi-table td[hidden] { display: none; }
+
+/* ── Configuration preview ────────────────────────────────────────────────
+   This printed the whole maps array as JSON on both sides of an arrow: a
+   reviewer had to read a serialized object to learn that one map changed
+   state. The server now diffs lists by id, so each row is one setting, and
+   the row says which setting in the words the interface uses for it. */
+.cfg-preview-count { margin: 0 0 9px; font-size: 0.78rem; color: var(--muted); }
+.cfg-preview-list { margin: 0; padding: 0; list-style: none; }
+.cfg-preview-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 13rem) 1fr auto 1fr;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-top: 1px solid #f0edf8;
+  font-size: 0.76rem;
+}
+.cfg-preview-row:first-child { border-top: 0; }
+.cfg-preview-field { font-weight: 600; color: var(--text); }
+.cfg-preview-was { color: var(--muted); text-decoration: line-through; }
+.cfg-preview-arrow { color: #9a8fc0; }
+.cfg-preview-now { color: #4b3a86; font-weight: 500; }
+/* A long list of filename aliases does not belong on one line with an arrow. */
+.cfg-preview-row-long { grid-template-columns: minmax(9rem, 13rem) 1fr; }
+.cfg-preview-row-long .cfg-preview-arrow { display: none; }
+.cfg-preview-row-long .cfg-preview-was,
+.cfg-preview-row-long .cfg-preview-now { grid-column: 2; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .cfg-preview-row, .cfg-preview-row-long { grid-template-columns: 1fr; }
+  .cfg-preview-row .cfg-preview-arrow { display: none; }
+}
