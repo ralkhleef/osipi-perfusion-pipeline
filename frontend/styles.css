@@ -12099,3 +12099,21 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   font-size: 0.84rem !important;
   line-height: 1.35;
 }
+
+/* Outcome of a scoring or analysis run.
+
+   Previously a run ended in silence: the button returned to its idle label
+   and nothing said whether anything had worked. Colour alone does not carry
+   the message here, the wording does, so this still reads correctly to
+   someone who cannot distinguish the three tints. */
+.score-run-outcome {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.score-run-outcome--ok   { border-color: #9ae6b4; background: #f0fff4; color: #276749; }
+.score-run-outcome--warn { border-color: #fac775; background: #fffaf0; color: #854f0b; }
+.score-run-outcome--err  { border-color: #f7c1c1; background: #fff5f5; color: #c53030; }

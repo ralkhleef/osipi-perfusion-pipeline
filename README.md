@@ -71,6 +71,7 @@ node tests/frontend_validation_card_test.js
 node tests/frontend_roi_dom_test.js
 node tests/frontend_header_check_test.js
 node tests/frontend_config_maps_test.js
+node tests/frontend_run_outcome_test.js
 ```
 
 The trusted scoring-package example is in `examples/demo-scoring-package/`; test inputs

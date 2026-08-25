@@ -6475,6 +6475,73 @@ function _renderProviderCard(p) {
 
 // Update the main user-facing status card based on provider status.
 // activeMode: "none" | "builtin" | "custom"
+/* ── Saying whether a run actually worked ─────────────────────────────────
+
+   Running analysis used to end in silence. The button went back to reading
+   "Run Analysis", which is exactly what it read before, and the only evidence
+   anything had happened was a table further down the page that a reviewer had
+   to know to look at. A run that failed on every submission looked the same as
+   a run that succeeded, and both looked the same as never having pressed the
+   button.
+
+   The banner below states the outcome in one line, is announced to screen
+   readers, and is cleared at the start of the next run so a stale result is
+   never mistaken for a fresh one. */
+
+function _runOutcomeHost() {
+  let host = el("score-run-outcome");
+  if (host) return host;
+  const anchor = el("score-status-hint") || el("btn-score-all");
+  if (!anchor || !anchor.parentNode) return null;
+  host = document.createElement("p");
+  host.id = "score-run-outcome";
+  host.className = "score-run-outcome";
+  host.setAttribute("role", "status");
+  host.setAttribute("aria-live", "polite");
+  host.style.display = "none";
+  anchor.parentNode.insertBefore(host, anchor.nextSibling);
+  return host;
+}
+
+function _clearRunOutcome() {
+  const host = el("score-run-outcome");
+  if (!host) return;
+  host.textContent = "";
+  host.style.display = "none";
+  host.className = "score-run-outcome";
+}
+
+/* One sentence describing what a run did. Counts are spelled out rather than
+   reduced to "done", because "analysed 3 of 5" and "analysed 5 of 5" are very
+   different results and a reviewer needs to notice the difference. */
+function _runOutcomeText(tally, isOfficial) {
+  const noun = isOfficial ? "Scoring" : "Analysis";
+  if (!tally.total) return { tone: "warn", text: "There are no submissions to analyse yet. Upload one first." };
+  const parts = [];
+  if (tally.scored) parts.push(`${tally.scored} of ${tally.total} analysed`);
+  if (tally.skipped) parts.push(`${tally.skipped} skipped, nothing configured to run`);
+  if (tally.failed) parts.push(`${tally.failed} failed`);
+  if (tally.failed) {
+    return { tone: "err", text: `${noun} finished with problems: ${parts.join(", ")}. Open the table below for the reason.` };
+  }
+  if (!tally.scored) {
+    return { tone: "warn", text: `${noun} did not run: ${parts.join(", ")}.` };
+  }
+  if (tally.skipped) {
+    return { tone: "warn", text: `${noun} complete: ${parts.join(", ")}.` };
+  }
+  return { tone: "ok", text: `${noun} complete. All ${tally.total} submission${tally.total === 1 ? "" : "s"} analysed. Results are in the table below.` };
+}
+
+function _showRunOutcome(tally, isOfficial) {
+  const host = _runOutcomeHost();
+  if (!host) return;
+  const { tone, text } = _runOutcomeText(tally, isOfficial);
+  host.textContent = text;
+  host.className = `score-run-outcome score-run-outcome--${tone}`;
+  host.style.display = "";
+}
+
 // packageName: display name of active custom package, or null
 function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial = false) {
   const titleEl = el("score-status-title");
@@ -6525,19 +6592,30 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
       // Ensure table is visible
       const tc = el("score-table-card");
       if (tc) tc.style.display = "";
-      if (!subs.length) return;
+      if (!subs.length) {
+        _showRunOutcome({ scored: 0, skipped: 0, failed: 0, total: 0 }, isOfficial);
+        return;
+      }
       setLoading(fresh, true, isOfficial ? "Scoring" : "Checking");
+      _clearRunOutcome();
       _initScoreProgress(subs.length);
+      const tally = { scored: 0, skipped: 0, failed: 0, total: subs.length };
       try {
         for (const sub of subs) {
           const sid       = sub.submission_id || sub;
           const challenge = sub.challenge_type || _getSessionChallengeType() || defaultChallengeType();
           const mapType   = defaultScoringMapType();
-          await _runSingleScore(null, sid, challenge, mapType);
+          const status    = await _runSingleScore(null, sid, challenge, mapType);
+          if (status === "scored") tally.scored += 1;
+          else if (status === "not_configured") tally.skipped += 1;
+          else tally.failed += 1;
         }
       } finally {
         setLoading(fresh, false, actionText);
         _syncCompactProgress();
+        // Always report, including after a throw: a run that died halfway
+        // must not look the same as one that never started.
+        _showRunOutcome(tally, isOfficial);
       }
     });
   }
@@ -7672,9 +7750,14 @@ async function renderScoreStep() {
   _updateScoreStatusCard(provs, activeMode, activePackageName, activeIsOfficial);
 
   if (grid) {
-    grid.innerHTML = provs.length
-      ? provs.map(_renderProviderCard).join("")
-      : `<p style="font-size:0.78rem;color:var(--muted);margin:0">No providers found.</p>`;
+    grid.innerHTML = provs.map(_renderProviderCard).join("");
+  }
+  // An expander that opens onto "No providers found." is worse than no
+  // expander: it invites a click and answers with nothing.
+  const providerDetails = el("score-provider-details");
+  if (providerDetails) {
+    providerDetails.hidden = provs.length === 0;
+    if (!provs.length) providerDetails.open = false;
   }
 
   saveSessionState();
@@ -7927,9 +8010,14 @@ async function _runSingleScore(btn, subId, challenge, mapType) {
     const data = await resp.json();
     _updateScoreRow(subId, data);
     _tickScoreProgress(data.status === "scored", data.status === "not_configured");
+    // Returned so a caller running several submissions can say what happened.
+    // Without this the loop finished silently and the button simply went back
+    // to reading "Run Analysis", which looks identical to never having run.
+    return String(data.status || "failed");
   } catch (err) {
     _updateScoreRow(subId, { status: "failed", message: "Network error: " + err.message, metrics: {} });
     _tickScoreProgress(false, false);
+    return "failed";
   } finally {
     if (btn) setLoading(btn, false, idleLabel || "Score");
     _syncCompactProgress();
