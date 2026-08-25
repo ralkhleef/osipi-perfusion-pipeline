@@ -7021,6 +7021,14 @@ function _renderConfigurationManager(state) {
   const referenceVersion = el("config-manager-reference-version");
   if (referenceVersion) referenceVersion.value = editable.reference_dataset_version || "";
 
+  // Take the baseline after every control has been rendered, so the very
+  // first comparison is against what is actually on screen. Taking it earlier
+  // would report the initial render as a change.
+  setTimeout(() => {
+    _watchConfigurationChanges();
+    _setConfigurationBaseline();
+  }, 0);
+
   const scoringMode = el("config-manager-scoring-mode");
   if (scoringMode) {
     const builtin = _builtinProviderForChallenge(state.builtin_providers, editable.challenge_type);
@@ -7125,6 +7133,191 @@ function _closeConfigurationModal(modal = null) {
   const opener = _configurationManagerModalOpener;
   _configurationManagerModalOpener = null;
   if (opener?.isConnected) opener.focus();
+}
+
+/* ── Telling an organiser what they just changed ──────────────────────────
+
+   Nothing in this panel used to acknowledge an edit. You could switch a map
+   from required to unused, close the section, and the page looked exactly as
+   it had before. The only way to find out whether a change had registered was
+   to save a version and read it back, which is a poor thing to have to do to
+   answer "did that click work".
+
+   So the loaded configuration is kept as a baseline and the draft is compared
+   against it after every interaction. The comparison produces sentences naming
+   the old and new value, not a count and not a bare "modified" flag: "CBF:
+   Not used to Required" tells an organiser whether they clicked the thing they
+   meant to. A count would not.
+*/
+
+let _configurationBaseline = null;
+
+/* Which modal owns each section, so a change can point at where to fix it. */
+const CONFIG_SECTIONS = [
+  ["challenge", "Challenge setup"],
+  ["maps", "Maps"],
+  ["datasets", "Dataset structure"],
+  ["artifacts", "Required artifacts"],
+  ["scoring", "Analysis provider"],
+];
+
+function _configurationSnapshot() {
+  try {
+    return JSON.parse(JSON.stringify(_collectConfigurationDraft().configuration));
+  } catch (_) {
+    return null;
+  }
+}
+
+function _setConfigurationBaseline() {
+  _configurationBaseline = _configurationSnapshot();
+  _refreshConfigurationChanges();
+}
+
+const _mapStateWord = (value) =>
+  (MAP_STATES.find(([state]) => state === value) || [null, value])[1] || value;
+
+function _listDiff(before, after) {
+  const had = new Set((before || []).map((item) => String(item)));
+  const has = new Set((after || []).map((item) => String(item)));
+  return {
+    added: [...has].filter((item) => !had.has(item)),
+    removed: [...had].filter((item) => !has.has(item)),
+  };
+}
+
+/* Every difference between the saved configuration and the draft on screen. */
+function _configurationChanges() {
+  const before = _configurationBaseline;
+  const after = _configurationSnapshot();
+  if (!before || !after) return [];
+  const changes = [];
+  const add = (section, text) => changes.push({ section, text });
+
+  const beforeMaps = new Map((before.maps || []).map((item) => [item.id, item]));
+  (after.maps || []).forEach((now) => {
+    const was = beforeMaps.get(now.id);
+    if (!was) return;
+    const name = String(now.id || "").toUpperCase();
+    if (was.state !== now.state) {
+      add("maps", `${name}: ${_mapStateWord(was.state)} to ${_mapStateWord(now.state)}`);
+    }
+    if (String(was.dimensions ?? "") !== String(now.dimensions ?? "")) {
+      add("maps", `${name} dimensions: ${was.dimensions || "any"} to ${now.dimensions || "any"}`);
+    }
+    const { added, removed } = _listDiff(was.aliases, now.aliases);
+    if (added.length) add("maps", `${name} filenames: added ${added.join(", ")}`);
+    if (removed.length) add("maps", `${name} filenames: removed ${removed.join(", ")}`);
+  });
+
+  const beforeArtifacts = new Map((before.required_artifacts || []).map((item) => [item.id, item]));
+  (after.required_artifacts || []).forEach((now) => {
+    const was = beforeArtifacts.get(now.id);
+    if (was && !!was.required !== !!now.required) {
+      add("artifacts", `${now.id}: ${now.required ? "now required" : "no longer required"}`);
+    }
+  });
+  if (!!before.code_execution_required !== !!after.code_execution_required) {
+    add("artifacts", after.code_execution_required
+      ? "participant code must now run"
+      : "participant code no longer has to run");
+  }
+
+  const datasetNames = new Set([
+    ...Object.keys(before.datasets || {}), ...Object.keys(after.datasets || {}),
+  ]);
+  datasetNames.forEach((name) => {
+    const was = (before.datasets || {})[name] || {};
+    const now = (after.datasets || {})[name] || {};
+    ["participants", "repeats", "sites"].forEach((field) => {
+      const oldValue = was[field] ?? null;
+      const newValue = now[field] ?? null;
+      if (String(oldValue ?? "") !== String(newValue ?? "")) {
+        add("datasets", `${name} ${field}: ${oldValue ?? "pending"} to ${newValue ?? "pending"}`);
+      }
+    });
+  });
+
+  if ((before.scoring?.mode || "none") !== (after.scoring?.mode || "none")) {
+    add("scoring", `analysis provider: ${before.scoring?.mode || "none"} to ${after.scoring?.mode || "none"}`);
+  }
+  if ((before.scoring?.package_id || "") !== (after.scoring?.package_id || "")) {
+    add("scoring", `scoring package: ${before.scoring?.package_id || "none"} to ${after.scoring?.package_id || "none"}`);
+  }
+  if ((before.reference_dataset_version || "") !== (after.reference_dataset_version || "")) {
+    add("datasets", `reference dataset version: ${before.reference_dataset_version || "empty"} to ${after.reference_dataset_version || "empty"}`);
+  }
+  return changes;
+}
+
+/* Mark the summary cards, and list the changes above the save actions. */
+function _refreshConfigurationChanges() {
+  const changes = _configurationChanges();
+  const bySection = new Map();
+  changes.forEach((change) => {
+    if (!bySection.has(change.section)) bySection.set(change.section, []);
+    bySection.get(change.section).push(change.text);
+  });
+
+  CONFIG_SECTIONS.forEach(([id]) => {
+    const button = document.querySelector(`[data-config-modal-open="${id}"]`);
+    const card = button?.closest(".config-manager-summary-card");
+    if (!card) return;
+    const count = (bySection.get(id) || []).length;
+    card.classList.toggle("config-card-changed", count > 0);
+    let badge = card.querySelector(".config-changed-badge");
+    if (count) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "config-changed-badge";
+        card.querySelector(".config-manager-summary-copy")?.appendChild(badge);
+      }
+      badge.textContent = count === 1 ? "1 change" : `${count} changes`;
+    } else if (badge) {
+      badge.remove();
+    }
+  });
+
+  const host = el("config-manager-changes");
+  if (!host) return;
+  if (!changes.length) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  const items = CONFIG_SECTIONS
+    .filter(([id]) => bySection.has(id))
+    .map(([id, label]) => `<li><strong>${escapeHtml(label)}</strong>
+      <ul>${bySection.get(id).map((text) => `<li>${escapeHtml(text)}</li>`).join("")}</ul></li>`)
+    .join("");
+  host.innerHTML = `
+    <div class="config-changes-head">
+      <span class="config-changes-count">${changes.length === 1 ? "1 unsaved change" : `${changes.length} unsaved changes`}</span>
+      <button type="button" class="btn btn-secondary btn-sm" id="config-manager-discard">Discard changes</button>
+    </div>
+    <ul class="config-changes-list">${items}</ul>
+    <p class="config-changes-note">Nothing is applied until you save a version and activate it.</p>`;
+  host.hidden = false;
+}
+
+let _configurationChangeWatchBound = false;
+
+function _watchConfigurationChanges() {
+  const panel = el("config-manager-editor");
+  if (!panel || _configurationChangeWatchBound) return;
+  _configurationChangeWatchBound = true;
+  // Covers typing, dropdowns, checkboxes and the segmented map controls alike,
+  // rather than each panel having to remember to report itself.
+  ["input", "change", "click"].forEach((type) => {
+    panel.addEventListener(type, (event) => {
+      if (event.target.closest("#config-manager-discard")) return;
+      setTimeout(_refreshConfigurationChanges, 0);
+    });
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("#config-manager-discard")) return;
+    if (_configurationManagerState) _renderConfigurationManager(_configurationManagerState);
+  });
 }
 
 function _collectConfigurationDraft() {

@@ -1,0 +1,81 @@
+name: Tests
+
+# The proposal lists GitHub Actions for testing support, and until now the only
+# workflow deployed the documentation. A suite this size with nothing running it
+# on push means a broken main goes unnoticed until somebody happens to run it
+# locally.
+#
+# Every frontend suite is discovered rather than listed, so a new one is picked
+# up without editing this file. That matters because the list in the README has
+# already drifted once.
+
+"on":
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in pyproject.toml and a current release, so a
+        # syntax feature newer than the floor cannot slip in unnoticed.
+        python-version: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r backend/requirements.txt -r requirements-test.txt
+
+      - name: Run the test suite
+        env:
+          # Without this the suite silently skips the tests that need the full
+          # dependency set, which would make a green tick mean very little.
+          OSIPI_REQUIRE_FULL_TESTS: "1"
+          PYTHONPATH: ".:backend:src"
+        run: pytest -q
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run every frontend suite
+        run: |
+          shopt -s nullglob
+          suites=(tests/*_test.js)
+          if [ ${#suites[@]} -eq 0 ]; then
+            echo "No frontend suites found, which is itself wrong."
+            exit 1
+          fi
+          failed=0
+          for suite in "${suites[@]}"; do
+            echo "── $suite"
+            # Keep going after a failure so one broken suite does not hide the
+            # state of the others.
+            node "$suite" || failed=1
+          done
+          exit $failed
