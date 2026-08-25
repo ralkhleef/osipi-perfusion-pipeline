@@ -580,3 +580,12 @@ h3:hover .docs-anchor,
   font-size: .95em;
   white-space: nowrap;
 }
+
+/* Marks a directory the application creates rather than one you clone. */
+.docs-runtime {
+  display: inline-block;
+  margin-left: .35rem;
+  font-size: .6875rem;
+  color: var(--docs-muted);
+  white-space: nowrap;
+}

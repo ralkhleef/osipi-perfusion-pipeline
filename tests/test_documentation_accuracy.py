@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -723,11 +724,41 @@ def test_the_documented_frontend_suites_are_all_of_them() -> None:
         f"frontend suites the docs never mention: {sorted(on_disk - documented)}"
 
 
+def _layout_rows() -> list[tuple[str, bool]]:
+    """Directories the layout table names, and whether it calls them runtime."""
+    pattern = r"<td><code>([\w/]+)/</code>(.*?)</td>"
+    return [(name, "docs-runtime" in note)
+            for name, note in re.findall(pattern, TEXT, re.S)]
+
+
 def test_the_documented_project_layout_is_real() -> None:
-    """Every directory the layout table names must exist in a fresh clone."""
-    for directory in re.findall(r"<td><code>([\w/]+)/</code></td>", TEXT):
-        assert (ROOT / directory).is_dir(), \
-            f"the layout table names {directory}/, which does not exist"
+    """Every directory the table names must exist in a fresh clone.
+
+    Except the ones it says are created on first run. ``data/`` and
+    ``submissions/`` are entirely gitignored, so a clone does not contain them
+    and the table used to claim otherwise. Checking only that they exist on
+    disk was also order dependent: earlier tests create ``data/`` as a side
+    effect, which is why only ``submissions/`` was ever reported.
+    """
+    rows = _layout_rows()
+    assert rows, "the layout table has no rows, so this check is vacuous"
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True,
+    ).stdout.split()
+
+    for directory, runtime in rows:
+        in_clone = any(path.startswith(f"{directory}/") for path in tracked)
+        if runtime:
+            assert not in_clone, (
+                f"the table says {directory}/ is created on first run, but it is "
+                f"in version control, so the note is wrong"
+            )
+        else:
+            assert in_clone, (
+                f"the layout table names {directory}/, which is not in a fresh "
+                f"clone. Either the row is wrong or it needs the runtime note."
+            )
 
 
 def test_the_documented_health_check_hits_a_real_endpoint() -> None:
