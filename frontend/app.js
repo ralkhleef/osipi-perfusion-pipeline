@@ -6475,6 +6475,73 @@ function _renderProviderCard(p) {
 
 // Update the main user-facing status card based on provider status.
 // activeMode: "none" | "builtin" | "custom"
+/* ── Saying whether a run actually worked ─────────────────────────────────
+
+   Running analysis used to end in silence. The button went back to reading
+   "Run Analysis", which is exactly what it read before, and the only evidence
+   anything had happened was a table further down the page that a reviewer had
+   to know to look at. A run that failed on every submission looked the same as
+   a run that succeeded, and both looked the same as never having pressed the
+   button.
+
+   The banner below states the outcome in one line, is announced to screen
+   readers, and is cleared at the start of the next run so a stale result is
+   never mistaken for a fresh one. */
+
+function _runOutcomeHost() {
+  let host = el("score-run-outcome");
+  if (host) return host;
+  const anchor = el("score-status-hint") || el("btn-score-all");
+  if (!anchor || !anchor.parentNode) return null;
+  host = document.createElement("p");
+  host.id = "score-run-outcome";
+  host.className = "score-run-outcome";
+  host.setAttribute("role", "status");
+  host.setAttribute("aria-live", "polite");
+  host.style.display = "none";
+  anchor.parentNode.insertBefore(host, anchor.nextSibling);
+  return host;
+}
+
+function _clearRunOutcome() {
+  const host = el("score-run-outcome");
+  if (!host) return;
+  host.textContent = "";
+  host.style.display = "none";
+  host.className = "score-run-outcome";
+}
+
+/* One sentence describing what a run did. Counts are spelled out rather than
+   reduced to "done", because "analysed 3 of 5" and "analysed 5 of 5" are very
+   different results and a reviewer needs to notice the difference. */
+function _runOutcomeText(tally, isOfficial) {
+  const noun = isOfficial ? "Scoring" : "Analysis";
+  if (!tally.total) return { tone: "warn", text: "There are no submissions to analyse yet. Upload one first." };
+  const parts = [];
+  if (tally.scored) parts.push(`${tally.scored} of ${tally.total} analysed`);
+  if (tally.skipped) parts.push(`${tally.skipped} skipped, nothing configured to run`);
+  if (tally.failed) parts.push(`${tally.failed} failed`);
+  if (tally.failed) {
+    return { tone: "err", text: `${noun} finished with problems: ${parts.join(", ")}. Open the table below for the reason.` };
+  }
+  if (!tally.scored) {
+    return { tone: "warn", text: `${noun} did not run: ${parts.join(", ")}.` };
+  }
+  if (tally.skipped) {
+    return { tone: "warn", text: `${noun} complete: ${parts.join(", ")}.` };
+  }
+  return { tone: "ok", text: `${noun} complete. All ${tally.total} submission${tally.total === 1 ? "" : "s"} analysed. Results are in the table below.` };
+}
+
+function _showRunOutcome(tally, isOfficial) {
+  const host = _runOutcomeHost();
+  if (!host) return;
+  const { tone, text } = _runOutcomeText(tally, isOfficial);
+  host.textContent = text;
+  host.className = `score-run-outcome score-run-outcome--${tone}`;
+  host.style.display = "";
+}
+
 // packageName: display name of active custom package, or null
 function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial = false) {
   const titleEl = el("score-status-title");
@@ -6525,19 +6592,30 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
       // Ensure table is visible
       const tc = el("score-table-card");
       if (tc) tc.style.display = "";
-      if (!subs.length) return;
+      if (!subs.length) {
+        _showRunOutcome({ scored: 0, skipped: 0, failed: 0, total: 0 }, isOfficial);
+        return;
+      }
       setLoading(fresh, true, isOfficial ? "Scoring" : "Checking");
+      _clearRunOutcome();
       _initScoreProgress(subs.length);
+      const tally = { scored: 0, skipped: 0, failed: 0, total: subs.length };
       try {
         for (const sub of subs) {
           const sid       = sub.submission_id || sub;
           const challenge = sub.challenge_type || _getSessionChallengeType() || defaultChallengeType();
           const mapType   = defaultScoringMapType();
-          await _runSingleScore(null, sid, challenge, mapType);
+          const status    = await _runSingleScore(null, sid, challenge, mapType);
+          if (status === "scored") tally.scored += 1;
+          else if (status === "not_configured") tally.skipped += 1;
+          else tally.failed += 1;
         }
       } finally {
         setLoading(fresh, false, actionText);
         _syncCompactProgress();
+        // Always report, including after a throw: a run that died halfway
+        // must not look the same as one that never started.
+        _showRunOutcome(tally, isOfficial);
       }
     });
   }
@@ -6662,6 +6740,256 @@ function _renderConfigurationChallengeDetails(state) {
     <dt>Active configuration</dt><dd>${escapeHtml(active?.version_id || "Repository validation rules")}</dd>`;
 }
 
+/* ── Configuration Manager: maps and artifacts ──────────────────────────────
+
+   These panels are edited by challenge organisers, who are researchers rather
+   than developers. The earlier version asked them to keep filename aliases in
+   a comma separated textarea and gave every map an equally tall block, so the
+   one decision that actually matters, whether a map is required, was the same
+   size as reference information they rarely change.
+
+   The rewrite makes the requirement a visible three way choice, turns aliases
+   into chips so nobody has to punctuate a list correctly, and hides the rest
+   behind a disclosure. The hidden inputs are deliberate: ``config-map-state``
+   and ``config-map-aliases`` stay in the DOM with the same class names and the
+   same value format, so the code that reads a draft is untouched by any of
+   this.
+*/
+
+const MAP_STATES = [
+  ["required", "Required", "A submission without this map is rejected."],
+  ["optional", "Optional", "Accepted and analysed when present."],
+  ["unused", "Not used", "Ignored entirely for this challenge."],
+];
+
+/* Plain descriptions of what requiring each artifact actually does. A bare
+   checkbox labelled "Modelled signal-time curve" tells an organiser nothing
+   about the consequence of ticking it. */
+const ARTIFACT_NOTES = {
+  modelled_st: "The fitted curve the model produced. Needed to compare the model against the measurement.",
+  measured_st: "The measured curve from the scan. Needed for the residual sum of squares comparison.",
+  methods: "A short write up of the method used, read alongside the results.",
+};
+
+function _aliasChip(alias) {
+  const safe = escapeHtml(alias);
+  return `<span class="cfg-chip">${safe}<button type="button" class="cfg-chip-x"
+    data-alias="${safe}" aria-label="Remove ${safe}">&times;</button></span>`;
+}
+
+function _configurationMapRow(item) {
+  const id = escapeHtml(item.id);
+  const state = MAP_STATES.some(([value]) => value === item.state) ? item.state : "unused";
+  const aliases = (item.aliases || []).filter(Boolean);
+  const units = _configurationMapUnit(item.id);
+  const segments = MAP_STATES.map(([value, label, note]) => `
+    <button type="button" class="cfg-seg-btn" role="radio" data-state="${value}"
+            aria-checked="${state === value}" title="${escapeHtml(note)}">${label}</button>`).join("");
+
+  return `
+  <div class="config-map-row cfg-map" data-map-id="${id}" data-state="${state}"
+       data-search="${escapeHtml(`${item.display} ${item.label} ${aliases.join(" ")}`.toLowerCase())}">
+    <div class="cfg-map-head">
+      <button type="button" class="cfg-map-toggle" aria-expanded="false">
+        <span class="cfg-caret" aria-hidden="true"></span>
+        <span class="cfg-map-name">
+          <strong>${escapeHtml(item.display)}</strong>
+          <small>${escapeHtml(item.label)}</small>
+        </span>
+      </button>
+      <div class="cfg-seg" role="radiogroup"
+           aria-label="${escapeHtml(item.display)} requirement">${segments}</div>
+      <input type="hidden" class="config-map-state" value="${escapeHtml(state)}">
+    </div>
+
+    <div class="cfg-map-detail" hidden>
+      <div class="cfg-detail-block">
+        <p class="cfg-label">Recognised filenames</p>
+        <p class="cfg-hint">A file is treated as ${escapeHtml(item.display)} when its name
+          contains one of these. Add the spellings your participants actually use.</p>
+        <div class="cfg-chips" data-chips>
+          ${aliases.map(_aliasChip).join("")}
+          <input type="text" class="cfg-chip-input" placeholder="Add a name"
+                 aria-label="Add a recognised filename for ${escapeHtml(item.display)}">
+        </div>
+        <input type="hidden" class="config-map-aliases" value="${escapeHtml(aliases.join(", "))}">
+      </div>
+      <div class="cfg-detail-grid">
+        <label class="cfg-field">Dimensions
+          <input class="config-map-dimensions" type="number" min="2" max="7"
+                 value="${item.dimensions ?? ""}" placeholder="Any">
+          <span class="cfg-hint">3 for a single map, 4 if it varies over time.</span>
+        </label>
+        <div class="cfg-field">Units
+          <strong class="cfg-units">${escapeHtml(units)}</strong>
+          <span class="cfg-hint">Read from the challenge definition.</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _configurationMapsMarkup(items) {
+  if (!items.length) return `<p class="cfg-empty">No maps are defined for this challenge.</p>`;
+  const count = (state) => items.filter((item) => item.state === state).length;
+  return `
+    <div class="cfg-toolbar">
+      <div class="cfg-counts">
+        <span class="cfg-count cfg-count-required"><b data-count="required">${count("required")}</b> required</span>
+        <span class="cfg-count cfg-count-optional"><b data-count="optional">${count("optional")}</b> optional</span>
+        <span class="cfg-count cfg-count-unused"><b data-count="unused">${count("unused")}</b> not used</span>
+      </div>
+      <input type="search" class="cfg-search" id="cfg-map-search"
+             placeholder="Search maps" aria-label="Search maps">
+    </div>
+    <div class="cfg-map-list">${items.map(_configurationMapRow).join("")}</div>
+    <p class="cfg-empty" data-no-results hidden>No maps match that search.</p>`;
+}
+
+function _configurationArtifactsMarkup(items) {
+  if (!items.length) return `<p class="cfg-empty">No artifact types are configured.</p>`;
+  return `<div class="cfg-check-list">${items.map((item) => {
+    const note = ARTIFACT_NOTES[item.id] || "";
+    return `
+    <label class="config-manager-check cfg-check" data-artifact-id="${escapeHtml(item.id)}">
+      <input type="checkbox" class="config-artifact-required"${item.required ? " checked" : ""}>
+      <span class="cfg-check-body">
+        <span class="cfg-check-label">${escapeHtml(item.label)}</span>
+        ${note ? `<span class="cfg-hint">${escapeHtml(note)}</span>` : ""}
+      </span>
+    </label>`;
+  }).join("")}</div>
+  <p class="cfg-hint cfg-check-footnote">Ticked items must be present or the submission
+    is rejected at validation.</p>`;
+}
+
+/* Recount the summary chips after any requirement change. */
+function _refreshConfigurationMapCounts() {
+  const host = el("config-manager-maps");
+  if (!host) return;
+  const rows = Array.from(host.querySelectorAll(".config-map-row"));
+  MAP_STATES.forEach(([value]) => {
+    const badge = host.querySelector(`[data-count="${value}"]`);
+    if (badge) badge.textContent = String(rows.filter((r) => r.dataset.state === value).length);
+  });
+}
+
+function _writeAliases(row) {
+  const chips = Array.from(row.querySelectorAll(".cfg-chip"))
+    .map((chip) => chip.firstChild?.textContent?.trim())
+    .filter(Boolean);
+  const hidden = row.querySelector(".config-map-aliases");
+  if (hidden) hidden.value = chips.join(", ");
+}
+
+/* Which names a typed entry actually adds, given what is already there.
+
+   Kept free of the DOM so it can be tested directly: this is where the fiddly
+   rules live. Someone pasting "cbf, perfusion" means two names rather than
+   one, a repeat of something already listed adds nothing, and case is not a
+   distinction worth keeping since the matching that uses these is itself
+   case insensitive. */
+function _newAliases(existing, raw) {
+  const seen = new Set((existing || []).map((alias) => String(alias).trim().toLowerCase()));
+  const additions = [];
+  String(raw).split(",").forEach((part) => {
+    const alias = part.trim();
+    if (!alias || seen.has(alias.toLowerCase())) return;
+    seen.add(alias.toLowerCase());
+    additions.push(alias);
+  });
+  return additions;
+}
+
+function _addAlias(row, raw) {
+  const input = row.querySelector(".cfg-chip-input");
+  const existing = Array.from(row.querySelectorAll(".cfg-chip"))
+    .map((chip) => (chip.firstChild?.textContent || "").trim());
+  _newAliases(existing, raw).forEach((alias) => {
+    input.insertAdjacentHTML("beforebegin", _aliasChip(alias));
+  });
+  _writeAliases(row);
+}
+
+let _configurationMapsBound = false;
+
+function _bindConfigurationMapsInteractions() {
+  const host = el("config-manager-maps");
+  if (!host || _configurationMapsBound) return;
+  _configurationMapsBound = true;
+
+  host.addEventListener("click", (event) => {
+    const segment = event.target.closest(".cfg-seg-btn");
+    if (segment) {
+      const row = segment.closest(".config-map-row");
+      const value = segment.dataset.state;
+      row.dataset.state = value;
+      row.querySelector(".config-map-state").value = value;
+      row.querySelectorAll(".cfg-seg-btn").forEach((button) => {
+        button.setAttribute("aria-checked", String(button === segment));
+      });
+      _refreshConfigurationMapCounts();
+      return;
+    }
+    const toggle = event.target.closest(".cfg-map-toggle");
+    if (toggle) {
+      const row = toggle.closest(".config-map-row");
+      const detail = row.querySelector(".cfg-map-detail");
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      detail.hidden = open;
+      return;
+    }
+    const remove = event.target.closest(".cfg-chip-x");
+    if (remove) {
+      const row = remove.closest(".config-map-row");
+      remove.closest(".cfg-chip").remove();
+      _writeAliases(row);
+    }
+  });
+
+  // Enter and comma commit a chip; backspace on an empty box removes the last.
+  host.addEventListener("keydown", (event) => {
+    const input = event.target.closest(".cfg-chip-input");
+    if (!input) return;
+    const row = input.closest(".config-map-row");
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      _addAlias(row, input.value);
+      input.value = "";
+    } else if (event.key === "Backspace" && !input.value) {
+      const chips = row.querySelectorAll(".cfg-chip");
+      if (chips.length) {
+        chips[chips.length - 1].remove();
+        _writeAliases(row);
+      }
+    }
+  });
+
+  // Clicking away must not silently discard what was typed.
+  host.addEventListener("focusout", (event) => {
+    const input = event.target.closest(".cfg-chip-input");
+    if (!input || !input.value.trim()) return;
+    const row = input.closest(".config-map-row");
+    _addAlias(row, input.value);
+    input.value = "";
+  });
+
+  host.addEventListener("input", (event) => {
+    if (!event.target.closest(".cfg-search")) return;
+    const term = event.target.value.trim().toLowerCase();
+    const rows = Array.from(host.querySelectorAll(".config-map-row"));
+    let shown = 0;
+    rows.forEach((row) => {
+      const match = !term || (row.dataset.search || "").includes(term);
+      row.hidden = !match;
+      if (match) shown += 1;
+    });
+    const empty = host.querySelector("[data-no-results]");
+    if (empty) empty.hidden = shown !== 0;
+  });
+}
+
 function _renderConfigurationManager(state) {
   _configurationManagerState = state;
   const editable = state.editable || {};
@@ -6671,31 +6999,15 @@ function _renderConfigurationManager(state) {
   if (editor) editor.style.display = "";
 
   const maps = el("config-manager-maps");
-  if (maps) maps.innerHTML = (editable.maps || []).map((item) => `
-    <div class="config-map-row" data-map-id="${escapeHtml(item.id)}">
-      <div class="config-map-name">${escapeHtml(item.display)}<small>${escapeHtml(item.label)}</small></div>
-      <label class="config-manager-field config-map-state-field">Requirement
-        <select class="config-map-state">
-          ${["required", "optional", "unused"].map((value) => `<option value="${value}"${item.state === value ? " selected" : ""}>${value[0].toUpperCase() + value.slice(1)}</option>`).join("")}
-        </select>
-      </label>
-      <label class="config-manager-field config-map-dimensions-field">Dimensions
-        <input class="config-map-dimensions" type="number" min="2" max="7" value="${item.dimensions ?? ""}" placeholder="any">
-      </label>
-      <div class="config-manager-field config-map-unit">Units
-        <strong>${escapeHtml(_configurationMapUnit(item.id))}</strong>
-      </div>
-      <label class="config-manager-field config-map-aliases-field">Filename aliases (comma separated)
-        <textarea class="config-map-aliases" rows="2">${escapeHtml((item.aliases || []).join(", "))}</textarea>
-      </label>
-    </div>`).join("");
+  if (maps) {
+    maps.innerHTML = _configurationMapsMarkup(editable.maps || []);
+    _bindConfigurationMapsInteractions();
+  }
 
   const artifacts = el("config-manager-artifacts");
-  if (artifacts) artifacts.innerHTML = (editable.required_artifacts || []).map((item) => `
-    <label class="config-manager-check" data-artifact-id="${escapeHtml(item.id)}">
-      <input type="checkbox" class="config-artifact-required"${item.required ? " checked" : ""}>
-      ${escapeHtml(item.label)}
-    </label>`).join("") || `<p>No artifact types are configured.</p>`;
+  if (artifacts) {
+    artifacts.innerHTML = _configurationArtifactsMarkup(editable.required_artifacts || []);
+  }
 
   const datasets = el("config-manager-datasets");
   if (datasets) datasets.innerHTML = Object.entries(editable.datasets || {}).map(([name, counts]) => `
@@ -7438,9 +7750,14 @@ async function renderScoreStep() {
   _updateScoreStatusCard(provs, activeMode, activePackageName, activeIsOfficial);
 
   if (grid) {
-    grid.innerHTML = provs.length
-      ? provs.map(_renderProviderCard).join("")
-      : `<p style="font-size:0.78rem;color:var(--muted);margin:0">No providers found.</p>`;
+    grid.innerHTML = provs.map(_renderProviderCard).join("");
+  }
+  // An expander that opens onto "No providers found." is worse than no
+  // expander: it invites a click and answers with nothing.
+  const providerDetails = el("score-provider-details");
+  if (providerDetails) {
+    providerDetails.hidden = provs.length === 0;
+    if (!provs.length) providerDetails.open = false;
   }
 
   saveSessionState();
@@ -7693,9 +8010,14 @@ async function _runSingleScore(btn, subId, challenge, mapType) {
     const data = await resp.json();
     _updateScoreRow(subId, data);
     _tickScoreProgress(data.status === "scored", data.status === "not_configured");
+    // Returned so a caller running several submissions can say what happened.
+    // Without this the loop finished silently and the button simply went back
+    // to reading "Run Analysis", which looks identical to never having run.
+    return String(data.status || "failed");
   } catch (err) {
     _updateScoreRow(subId, { status: "failed", message: "Network error: " + err.message, metrics: {} });
     _tickScoreProgress(false, false);
+    return "failed";
   } finally {
     if (btn) setLoading(btn, false, idleLabel || "Score");
     _syncCompactProgress();

@@ -4448,28 +4448,142 @@ body {
   background: #fff;
 }
 .config-manager-card-wide { grid-column: 1 / -1; }
+/* ── Configuration Manager: maps ──────────────────────────────────────────
+   One row per map. The requirement is the decision organisers actually make,
+   so it is a visible three way control rather than a dropdown; everything
+   else is reference detail and collapses. */
+
+.cfg-toolbar {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  justify-content: space-between;
+  padding-bottom: 11px; margin-bottom: 4px;
+  border-bottom: 1px solid #f0edf8;
+}
+.cfg-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cfg-count {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 500; color: var(--muted);
+  background: #f4f2fa;
+}
+.cfg-count b { font-weight: 700; color: var(--text); }
+.cfg-count-required { background: #f0ebff; color: #4b3a86; }
+.cfg-count-required b { color: #4b3a86; }
+.cfg-search {
+  flex: 0 1 210px; min-width: 140px;
+  padding: 7px 10px; border: 1px solid #e8e3f7; border-radius: 7px;
+  background: #fff; font-size: 0.76rem; color: var(--text);
+}
+.cfg-search:focus-visible { outline: 3px solid rgba(109, 74, 194, 0.22); outline-offset: 1px; }
+
 .config-map-row {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(130px, .7fr) minmax(90px, .45fr) minmax(120px, .65fr);
-  grid-template-areas:
-    "name state dimensions units"
-    "aliases aliases aliases aliases";
-  gap: 9px 12px;
-  align-items: end;
   min-width: 0;
-  padding: 12px 0;
   border-bottom: 1px solid #f0edf8;
 }
 .config-map-row:last-child { border-bottom: 0; }
-.config-map-name { grid-area: name; align-self: center; min-width: 0; font-size: 0.76rem; font-weight: 600; }
-.config-map-name small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
-.config-map-state-field { grid-area: state; }
-.config-map-dimensions-field { grid-area: dimensions; }
-.config-map-unit { grid-area: units; align-self: end; min-width: 0; }
-.config-map-unit strong { display: block; min-height: 34px; padding: 8px 9px; border: 1px solid #eeeaf8; border-radius: 7px; background: #faf9fd; color: var(--text); font-size: 0.72rem; font-weight: 500; }
-.config-map-aliases-field { grid-area: aliases; }
+
+.cfg-map-head {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; justify-content: space-between;
+  padding: 10px 0;
+}
+.cfg-map-toggle {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1 1 190px; min-width: 0;
+  padding: 4px 2px; border: 0; background: none;
+  font: inherit; text-align: left; cursor: pointer; color: inherit;
+}
+.cfg-map-toggle:focus-visible { outline: 3px solid rgba(109, 74, 194, 0.25); outline-offset: 2px; border-radius: 6px; }
+.cfg-caret {
+  flex: 0 0 auto; width: 0; height: 0;
+  border-left: 5px solid #9a8fc0; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s ease;
+}
+.cfg-map-toggle[aria-expanded="true"] .cfg-caret { transform: rotate(90deg) translateX(1px); }
+.cfg-map-name { min-width: 0; font-size: 0.78rem; font-weight: 600; }
+.cfg-map-name small { display: block; margin-top: 1px; color: var(--muted); font-weight: 400; font-size: 0.72rem; }
+
+/* Segmented requirement control. */
+.cfg-seg {
+  display: inline-flex; flex: 0 0 auto;
+  padding: 2px; border: 1px solid #e8e3f7; border-radius: 8px; background: #faf9fd;
+}
+.cfg-seg-btn {
+  padding: 5px 11px; border: 0; border-radius: 6px;
+  background: none; color: var(--muted);
+  font: inherit; font-size: 0.72rem; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.cfg-seg-btn:hover { color: var(--text); }
+.cfg-seg-btn[aria-checked="true"] {
+  background: #fff; color: #4b3a86; font-weight: 600;
+  box-shadow: 0 1px 2px rgba(38, 26, 74, .12);
+}
+.cfg-seg-btn:focus-visible { outline: 3px solid rgba(109, 74, 194, 0.25); outline-offset: 1px; }
+/* Not-used rows recede so the eye lands on what is switched on. */
+.config-map-row[data-state="unused"] .cfg-map-name { color: var(--muted); }
+.config-map-row[data-state="unused"] .cfg-map-name strong { font-weight: 500; }
+
+.cfg-map-detail { padding: 2px 0 14px 13px; }
+.cfg-detail-block { margin-bottom: 12px; }
+.cfg-label { margin: 0 0 2px; font-size: 0.74rem; font-weight: 600; color: var(--text); }
+.cfg-hint { display: block; margin: 2px 0 0; color: var(--muted); font-size: 0.71rem; line-height: 1.45; }
+
+/* Filename aliases as chips: nobody has to punctuate a list correctly. */
+.cfg-chips {
+  display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+  margin-top: 7px; padding: 6px;
+  border: 1px solid #e8e3f7; border-radius: 8px; background: #fff;
+}
+.cfg-chips:focus-within { border-color: #b8a8df; box-shadow: 0 0 0 3px rgba(109, 74, 194, 0.14); }
+.cfg-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 4px 3px 9px; border-radius: 999px;
+  background: #f0ebff; color: #4b3a86;
+  font-size: 0.72rem; font-weight: 500;
+}
+.cfg-chip-x {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; padding: 0;
+  border: 0; border-radius: 50%; background: none;
+  color: #7a68ad; font-size: 0.85rem; line-height: 1; cursor: pointer;
+}
+.cfg-chip-x:hover { background: #ddd2f7; color: #3c2d6f; }
+.cfg-chip-x:focus-visible { outline: 2px solid rgba(109, 74, 194, 0.45); outline-offset: 1px; }
+.cfg-chip-input {
+  flex: 1 1 110px; min-width: 90px;
+  padding: 3px 4px; border: 0; background: none;
+  font: inherit; font-size: 0.73rem; color: var(--text);
+}
+.cfg-chip-input:focus { outline: none; }
+
+.cfg-detail-grid { display: flex; flex-wrap: wrap; gap: 16px; }
+.cfg-field { flex: 0 1 190px; font-size: 0.74rem; font-weight: 600; color: var(--text); }
+.cfg-field input {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 7px 9px; border: 1px solid #e8e3f7; border-radius: 7px;
+  font: inherit; font-size: 0.75rem; font-weight: 400; color: var(--text);
+}
+.cfg-units {
+  display: block; margin-top: 4px; padding: 7px 9px;
+  border: 1px solid #eeeaf8; border-radius: 7px; background: #faf9fd;
+  font-size: 0.75rem; font-weight: 500;
+}
+.cfg-empty { margin: 14px 0; color: var(--muted); font-size: 0.76rem; }
+
+/* Required artifacts: a consequence under every choice. */
+.cfg-check-list { display: grid; gap: 2px; }
 .config-manager-check { display: flex; align-items: flex-start; gap: 7px; margin: 9px 0; font-size: 0.76rem; line-height: 1.45; }
 .config-manager-check input { flex: 0 0 auto; margin-top: 2px; }
+.cfg-check {
+  align-items: flex-start; gap: 10px; margin: 0;
+  padding: 11px 12px; border-radius: 9px; cursor: pointer;
+}
+.cfg-check:hover { background: #faf9fd; }
+.cfg-check input { margin-top: 3px; }
+.cfg-check-body { display: block; min-width: 0; }
+.cfg-check-label { display: block; font-weight: 600; font-size: 0.77rem; }
+.cfg-check-footnote { margin-top: 12px; padding-top: 11px; border-top: 1px solid #f0edf8; }
 .config-dataset-row {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(90px, .7fr));
@@ -4623,14 +4737,8 @@ body.config-manager-modal-open { overflow: hidden; }
   .config-manager-review-bar { align-items: flex-start; flex-direction: column; }
   .config-manager-review-bar .config-manager-actions { flex-basis: auto; }
   .config-manager-actions { justify-content: flex-start; }
-  .config-map-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "name name"
-      "state dimensions"
-      "units units"
-      "aliases aliases";
-  }
+  .cfg-toolbar { align-items: stretch; flex-direction: column; }
+  .cfg-search { flex-basis: auto; }
   .config-dataset-row { grid-template-columns: 1fr 1fr; }
   .config-dataset-row strong { grid-column: 1 / -1; }
   .config-capability-grid { grid-template-columns: 1fr; }
@@ -4651,10 +4759,12 @@ body.config-manager-modal-open { overflow: hidden; }
   .config-manager-modal-dialog-wide { width: 100%; max-height: calc(100vh - 16px); border-radius: 11px; }
   .config-manager-modal-header { padding: 14px; gap: 10px; }
   .config-manager-modal-body { padding: 14px; }
-  .config-map-row {
-    grid-template-columns: 1fr;
-    grid-template-areas: "name" "state" "dimensions" "units" "aliases";
-  }
+  /* The segmented control needs the full width once the name wraps. */
+  .cfg-map-head { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .cfg-seg { width: 100%; }
+  .cfg-seg-btn { flex: 1 1 0; text-align: center; }
+  .cfg-map-detail { padding-left: 0; }
+  .cfg-field { flex-basis: 100%; }
   .config-dataset-row { grid-template-columns: 1fr; }
   .config-dataset-row strong { grid-column: auto; }
   .config-manager-detail-list,
@@ -11989,3 +12099,21 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   font-size: 0.84rem !important;
   line-height: 1.35;
 }
+
+/* Outcome of a scoring or analysis run.
+
+   Previously a run ended in silence: the button returned to its idle label
+   and nothing said whether anything had worked. Colour alone does not carry
+   the message here, the wording does, so this still reads correctly to
+   someone who cannot distinguish the three tints. */
+.score-run-outcome {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.score-run-outcome--ok   { border-color: #9ae6b4; background: #f0fff4; color: #276749; }
+.score-run-outcome--warn { border-color: #fac775; background: #fffaf0; color: #854f0b; }
+.score-run-outcome--err  { border-color: #f7c1c1; background: #fff5f5; color: #c53030; }
