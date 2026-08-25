@@ -56,33 +56,64 @@
 
         <section>
           <h2 id="configuration-manager" data-toc-title="In-app manager">In-app Configuration Manager</h2>
-          <p>Open <strong>QC &amp; Preview → Reviewer settings → Challenge Configuration Manager</strong>
-            to manage DCE, ASL, or DSC without editing YAML. Each card opens a focused editor for maps,
-            dataset structure, required files, analysis providers, private assets, capabilities, or
-            saved versions.</p>
+          <p class="docs-lead">Challenge rules are configuration, not code. Almost everything on this
+            page can be changed from inside the application, by someone who does not write Python.</p>
 
-          <h3>Safe workflow</h3>
-          <ol>
-            <li><strong>Test Configuration</strong> checks the draft without changing the active rules.</li>
-            <li><strong>Preview Changes</strong> shows what is different.</li>
-            <li><strong>Save as New Version</strong> stores an inactive version.</li>
-            <li><strong>Activate</strong> applies that saved version only after it passes another test.</li>
-          </ol>
+          <p>Open <span class="docs-ui">QC &amp; Preview</span> →
+            <span class="docs-ui">Reviewer settings</span> →
+            <span class="docs-ui">Challenge Configuration Manager</span> to manage DCE, ASL or DSC
+            without editing YAML. Each card opens one editor: maps, dataset structure, required
+            files, analysis providers, private assets, capabilities, or saved versions.</p>
 
-          <div class="docs-callout">
-            <p>Nothing is activated automatically. If a test or activation fails, the previous active
-              configuration remains unchanged.</p>
+          <h3>Saving a change</h3>
+          <p>Four steps, and nothing takes effect until the last one.</p>
+
+          <div class="docs-steps">
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">1</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Test Configuration</p>
+                <p>Checks the draft. The active rules are not touched.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">2</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Preview Changes</p>
+                <p>Shows what differs from the rules currently in force.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">3</span><span class="docs-step-line"></span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Save as New Version</p>
+                <p>Stores the draft as an inactive version. Still nothing has changed.</p>
+              </div>
+            </div>
+            <div class="docs-step">
+              <div class="docs-step-rail"><span class="docs-step-num">4</span></div>
+              <div class="docs-step-body">
+                <p class="docs-step-title">Activate</p>
+                <p>Applies the saved version, and only after it passes a second test.</p>
+              </div>
+            </div>
           </div>
 
-          <p>The manager can also show private reference files and export or import configuration ZIPs.
-            Private images, masks, measured signals, and scoring code are excluded from those exports.
-            Reports record the active configuration and analysis versions for reproducibility.</p>
+          <div class="docs-callout">
+            <p>Nothing activates on its own. If a test or an activation fails, the configuration
+              already in force is left exactly as it was.</p>
+          </div>
+
+          <p>The manager also lists private reference files and exports or imports configuration as a
+            ZIP. Private images, masks, measured signals and scoring code are left out of those
+            exports. Every report records which configuration and analysis versions produced it.</p>
         </section>
 
         <section>
-          <h2 id="validation-rules" data-toc-title="Challenge rules">1. Changing challenge requirements</h2>
-          <p>Most routine changes can be made in the Configuration Manager. Developers can edit
-            <code>config/validation_rules.yaml</code> directly when needed.</p>
+          <h2 id="validation-rules" data-toc-title="Challenge rules">Changing what a submission must contain</h2>
+          <p>Routine changes belong in the Configuration Manager. Editing
+            <code>config/validation_rules.yaml</code> directly is for settings the manager does not
+            expose.</p>
 
           <div class="docs-table-wrap">
             <table>
@@ -100,10 +131,13 @@
           <p>A missing required map is a blocking error; a missing optional map is not. The current ASL
             rules require CBF and ATT. DSC requires CBV, CBF, and MTT.</p>
 
-          <p>ASL can produce CBF and ATT ROI descriptive statistics, and DCE can produce Ktrans ROI descriptive statistics, when compatible masks are available. The
-            <code>report_metrics</code> analysis setting selects the mean, median, SD, range, and CoV columns shown in generated reports. DCE
-            can also calculate Residual Sum of Squares (RSS) when matching measured and modelled 4-D
-            signals are present. RSS is descriptive and is not labelled deviance.</p>
+          <p>Where compatible masks exist, ASL produces ROI statistics for CBF and ATT, DCE for
+            Ktrans, and DSC for CBV, CBF and MTT. Which columns appear in a report is set by
+            <code>report_metrics</code>: mean, median, SD, range and CoV.</p>
+
+          <p>DCE can also compute a residual sum of squares when matching measured and modelled
+            4-D signals are present. That figure is descriptive and is deliberately not labelled
+            deviance, which has no agreed definition yet.</p>
 
           <div class="docs-callout">
             <p>YAML controls requirements and enables analyses. Scientific formulas stay in tested code
@@ -124,8 +158,9 @@
         </section>
 
         <section>
-          <h2 id="scoring-providers" data-toc-title="Analysis and scoring">2. Adding or updating scoring</h2>
-          <p>The pipeline keeps general analysis separate from provider-specific scoring.</p>
+          <h2 id="scoring-providers" data-toc-title="Analysis and scoring">Analysis and scoring</h2>
+          <p>General analysis and provider-specific scoring are kept apart, so turning one off does
+            not silently turn off the other.</p>
 
           <div class="docs-table-wrap">
             <table>
@@ -155,27 +190,31 @@
         </section>
 
         <section>
-          <h2 id="reference-data" data-toc-title="Private reference data">3. Adding private reference data</h2>
-          <p>Reference maps, ROI masks, and measured signals are organiser-owned inputs. Add them from
-            <strong>Private Reference Assets</strong> in the Configuration Manager, or place them in the
-            documented local <code>data/reference_data/</code> structure.</p>
-          <p>These files remain local. Do not commit private masks, reference maps, answer keys, or
-            unreleased challenge data to GitHub.</p>
-          <p>Adding a file does not turn a generic comparison into official scoring. The available
-            result depends on the challenge configuration and any selected provider.</p>
+          <h2 id="reference-data" data-toc-title="Private reference data">Private reference data</h2>
+          <p>Reference maps, ROI masks and measured signals belong to the organiser, not the
+            submitter. Add them through <span class="docs-ui">Private Reference Assets</span> in the
+            Configuration Manager, or put them in <code>data/reference_data/</code>. Subfolders are
+            optional; the pipeline finds them either way.</p>
+
+          <div class="docs-callout">
+            <p>These files stay on the machine running the pipeline. Never commit private masks,
+              reference maps, answer keys or unreleased challenge data to GitHub.</p>
+          </div>
+
+          <p>Adding a file does not make a comparison official. What gets produced still depends on
+            the challenge configuration and on which provider, if any, is selected.</p>
         </section>
 
         <section>
-          <h2 id="apply-a-change" data-toc-title="Safe updates">4. Safe updates</h2>
-          <p>Use the Configuration Manager for routine updates. Use the file-based route only when a
-            setting is not exposed in the manager or when developing the application.</p>
+          <h2 id="apply-a-change" data-toc-title="Safe updates">Applying a change</h2>
+          <p>How a change takes effect depends on what you changed.</p>
 
           <div class="docs-table-wrap">
             <table>
               <thead><tr><th>What changed</th><th>How to apply it</th></tr></thead>
               <tbody>
                 <tr><td>A Configuration Manager draft</td><td>Test → Preview → Save as New Version → Activate</td></tr>
-                <tr><td>Mounted YAML in <code>config/</code></td><td>Press <strong>Reload rules</strong> in Reviewer settings</td></tr>
+                <tr><td>Mounted YAML in <code>config/</code></td><td>Press <span class="docs-ui">Reload rules</span> in Reviewer settings</td></tr>
                 <tr><td>A scoring package</td><td>Upload a new version, review its status, then select and activate it</td></tr>
                 <tr><td>Private references or masks</td><td>Add them through Private Reference Assets or the local reference-data directory</td></tr>
                 <tr><td>Application code under <code>backend/</code>, <code>frontend/</code>, or <code>src/</code></td><td>Run <code>docker compose up --build</code></td></tr>
@@ -197,7 +236,7 @@
             <div class="pt-3">
               <p>Direct YAML editing supports <code>required_maps</code>, <code>optional_maps</code>,
                 <code>required_artifacts</code>, <code>datasets</code>, and
-                <code>filename_identity_patterns</code>. Use <strong>Scoring Setup</strong> for the
+                <code>filename_identity_patterns</code>. Use <span class="docs-ui">Scoring Setup</span> for the
                 legacy Reload rules route.</p>
 
               <h3>Minimal custom-package manifest</h3>

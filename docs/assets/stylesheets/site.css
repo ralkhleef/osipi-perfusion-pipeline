@@ -538,3 +538,45 @@ h3:hover .docs-anchor,
   .docs-navbar .navbar-nav { flex-wrap: wrap; row-gap: .25rem; }
   .docs-navbar .nav-link { font-size: .85rem; }
 }
+
+/* ── Term and description pairs ───────────────────────────────────────────
+   For lists where each item is a named thing plus an explanation. Written as
+   a bulleted list with a bold lead-in and a full stop, nine of them read as a
+   glossary and the bold does the work a column position should: the eye has
+   to re-find where each description starts. The term sits in its own column
+   instead, so nothing needs emphasising. */
+.docs-defs { margin: 0 0 1.1rem; }
+.docs-defs > div {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 10.5rem) 1fr;
+  gap: 0 1.25rem;
+  padding: .55rem 0;
+  border-top: 1px solid var(--docs-border);
+}
+.docs-defs > div:first-child { border-top: 0; padding-top: 0; }
+.docs-defs dt {
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.docs-defs dd {
+  margin: 0;
+  font-size: .8125rem;
+  line-height: 1.6;
+  color: var(--docs-muted);
+}
+
+@media (max-width: 640px) {
+  .docs-defs > div { grid-template-columns: 1fr; gap: .15rem; }
+}
+
+/* A control or menu item named in prose. Bold was doing this job and reads as
+   emphasis, which these are not: the name is a label, not a stressed word. */
+.docs-ui {
+  padding: .05rem .3rem;
+  border: 1px solid var(--docs-border);
+  border-radius: .2rem;
+  background: var(--docs-code-bg);
+  font-size: .95em;
+  white-space: nowrap;
+}

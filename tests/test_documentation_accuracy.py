@@ -61,17 +61,36 @@ def test_the_documentation_site_is_present() -> None:
 
 
 def test_configuration_page_has_the_safe_update_handoff() -> None:
-    html = (DOCS / "configuration.html").read_text(encoding="utf-8").lower()
+    """The page must still cover each topic, and keep the safety statements.
+
+    This used to look for headings numbered "1." to "4.". The numbering was
+    dropped because these are independent topics rather than a sequence, and
+    pinning a test to it meant the wording could not be improved without the
+    test failing for the wrong reason. Sections are identified by their
+    anchors, which the sidebar already depends on and which therefore cannot
+    change silently.
+    """
+    html = (DOCS / "configuration.html").read_text(encoding="utf-8")
+    for anchor in (
+        "configuration-manager",
+        "validation-rules",
+        "scoring-providers",
+        "reference-data",
+        "apply-a-change",
+    ):
+        assert f'id="{anchor}"' in html, f"configuration section is missing: {anchor}"
+
+    lowered = html.lower()
     for phrase in (
-        "1. changing challenge requirements",
-        "2. adding or updating scoring",
-        "3. adding private reference data",
-        "4. safe updates",
         "save as new version",
-        "previous active configuration unchanged",
         "official osipi challenge ranking is not currently configured",
     ):
-        assert phrase in html, f"configuration handoff is missing: {phrase!r}"
+        assert phrase in lowered, f"configuration handoff is missing: {phrase!r}"
+
+    # The reassurance that a failed change is not a broken challenge. Worded
+    # freely, so the check is on the claim rather than on one phrasing.
+    assert re.search(r"already in force is left|previous active configuration unchanged",
+                     lowered), "the page no longer says a failed change leaves the active rules alone"
 
 
 # ── Configuration keys ────────────────────────────────────────────────────

@@ -110,29 +110,56 @@
           <h2 id="what-i-did" data-toc-title="What I did">What I did</h2>
           <p>The interface takes a submission through six steps: Upload, Review, Validate, Run,
             QC and Preview, Export.</p>
-          <ul>
-            <li><strong>Ingestion.</strong> Import from a ZIP, folder, GitHub repository or Zenodo
-              record. Archives holding several teams are separated automatically.</li>
-            <li><strong>Identity.</strong> Every file is given a role and a scan identity of dataset,
-              participant, site and repeat, read from the directory structure. Conflicts are
-              reported rather than guessed at.</li>
-            <li><strong>Validation.</strong> NIfTI readability, dimensionality and values, plus
-              structural completeness against the challenge rules, with eleven issue codes.</li>
-            <li><strong>Execution.</strong> Submitted code runs in Docker with no network, a memory
-              cap and a timeout.</li>
-            <li><strong>Analysis.</strong> Quality control per map. Against ground truth: RMSE, mean
-              absolute error, bias and correlation, both voxelwise and within each ROI mask. Per
-              region: median, mean, standard deviation, range and coefficient of variation.</li>
-            <li><strong>Header checks.</strong> Shape, voxel size, orientation and data type compared
-              against the ground truth, so a left-right flipped submission is caught rather than
-              scored as if it were correct.</li>
-            <li><strong>Reporting.</strong> HTML and PDF generated from one result model, so the two
-              cannot disagree, plus CSV and JSON.</li>
-            <li><strong>Blinding.</strong> Team name, contact, submission id and archive name absent
-              from the document, its metadata and its download filename.</li>
-            <li><strong>Configuration.</strong> Challenge rules in YAML, validated on load, editable
-              in the app or the file, applied by a button without restarting anything.</li>
-          </ul>
+          <dl class="docs-defs">
+            <div>
+              <dt>Ingestion</dt>
+              <dd>Import from a ZIP, folder, GitHub repository or Zenodo record. Archives
+                holding several teams are separated automatically.</dd>
+            </div>
+            <div>
+              <dt>Identity</dt>
+              <dd>Every file is given a role and a scan identity of dataset, participant,
+                site and repeat, read from the directory structure. Conflicts are reported
+                rather than guessed at.</dd>
+            </div>
+            <div>
+              <dt>Validation</dt>
+              <dd>NIfTI readability, dimensionality and values, plus structural completeness
+                against the challenge rules, with eleven issue codes.</dd>
+            </div>
+            <div>
+              <dt>Execution</dt>
+              <dd>Submitted code runs in Docker with no network, a memory cap and a
+                timeout.</dd>
+            </div>
+            <div>
+              <dt>Analysis</dt>
+              <dd>Quality control per map. Against ground truth: RMSE, mean absolute error,
+                bias and correlation, both voxelwise and within each ROI mask. Per region:
+                median, mean, standard deviation, range and coefficient of variation.</dd>
+            </div>
+            <div>
+              <dt>Header checks</dt>
+              <dd>Shape, voxel size, orientation and data type compared against the ground
+                truth, so a flipped submission is caught rather than scored as if it were
+                correct.</dd>
+            </div>
+            <div>
+              <dt>Reporting</dt>
+              <dd>HTML and PDF generated from one result model, so the two cannot disagree,
+                plus CSV and JSON.</dd>
+            </div>
+            <div>
+              <dt>Blinding</dt>
+              <dd>Team name, contact, submission id and archive name absent from the
+                document, its metadata and its download filename.</dd>
+            </div>
+            <div>
+              <dt>Configuration</dt>
+              <dd>Challenge rules in YAML, validated on load, editable in the app or the
+                file, applied by a button without restarting anything.</dd>
+            </div>
+          </dl>
           <p>See <a href="examples.html#interface">Examples</a> for the interface and
             <a href="how-it-works.html">How it works</a> for the workflow in detail.</p>
         </section>
