@@ -194,7 +194,6 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
     # Override every directory constant used by the backend.
     monkeypatch.setattr(pc, "INCOMING_DIR",          tmp_path / "incoming",        raising=False)
     monkeypatch.setattr(pc, "EXTRACTED_DIR",          tmp_path / "extracted",       raising=False)
-    monkeypatch.setattr(pc, "VALIDATED_DIR",          tmp_path / "validated",       raising=False)
     monkeypatch.setattr(pc, "OUTPUTS_DIR",            tmp_path / "outputs",         raising=False)
     monkeypatch.setattr(pc, "REFERENCE_DATA_DIR",     tmp_path / "ref",             raising=False)
     monkeypatch.setattr(pc, "SCORING_DIR",            tmp_path / "scoring",         raising=False)
@@ -214,7 +213,6 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
         for attr, val in [
             ("INCOMING_DIR",         tmp_path / "incoming"),
             ("EXTRACTED_DIR",        tmp_path / "extracted"),
-            ("VALIDATED_DIR",        tmp_path / "validated"),
             ("OUTPUTS_DIR",          tmp_path / "outputs"),
             ("REFERENCE_DATA_DIR",   tmp_path / "ref"),
             ("SCORING_DIR",          tmp_path / "scoring"),

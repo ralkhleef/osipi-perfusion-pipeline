@@ -81,6 +81,15 @@ def test_detect_dockerfile_uses_fallback_when_submission_has_none(tmp_path: Path
     assert detect_dockerfile(sub, fallback_dockerfile=fallback) == fallback
 
 
+def test_packaged_fallback_dockerfile_is_available(tmp_path: Path) -> None:
+    sub = _make_submission(tmp_path, with_dockerfile=False)
+    fallback = detect_dockerfile(sub)
+
+    assert fallback == docker_runner.DEFAULT_FALLBACK_DOCKERFILE
+    assert fallback.is_file()
+    assert fallback.read_text(encoding="utf-8").startswith("# OSIPI pipeline")
+
+
 def test_detect_dockerfile_raises_when_both_missing(tmp_path: Path) -> None:
     sub = _make_submission(tmp_path, with_dockerfile=False)
     with pytest.raises(DockerExecutionError, match="No Dockerfile"):

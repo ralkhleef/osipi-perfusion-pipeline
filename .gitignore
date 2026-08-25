@@ -33,26 +33,11 @@ test-results/
 *.pem
 *.token
 
-# Uploaded and extracted submissions
-/submissions/incoming/*
-!/submissions/incoming/.gitkeep
-/submissions/extracted/*
-!/submissions/extracted/.gitkeep
-/submissions/validated/*
-!/submissions/validated/.gitkeep
+# Uploaded and extracted submissions are runtime data.
+/submissions/
 
 # Generated pipeline output
-/data/outputs/*
-!/data/outputs/.gitkeep
-!/data/outputs/execution/
-!/data/outputs/manifests/
-!/data/outputs/validation/
-/data/outputs/execution/*
-!/data/outputs/execution/.gitkeep
-/data/outputs/manifests/*
-!/data/outputs/manifests/.gitkeep
-/data/outputs/validation/*
-!/data/outputs/validation/.gitkeep
+/data/outputs/
 /outputs/
 /release/
 /tmp/
@@ -60,8 +45,7 @@ test-results/
 # Organiser-managed configuration, packages, references, and private assets
 /data/configuration_manager/
 /data/scoring/
-/data/reference_data/*
-!/data/reference_data/.gitkeep
+/data/reference_data/
 /private_scoring_assets/
 /data/hidden/
 /data/organizer_data/

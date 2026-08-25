@@ -35,8 +35,7 @@ RUN mkdir -p \
     data/outputs \
     data/reference_data \
     submissions/incoming \
-    submissions/extracted \
-    submissions/validated
+    submissions/extracted
 
 EXPOSE 8000
 

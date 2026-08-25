@@ -63,7 +63,6 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
     mapping = {
         "INCOMING_DIR": tmp_path / "incoming",
         "EXTRACTED_DIR": tmp_path / "extracted",
-        "VALIDATED_DIR": tmp_path / "validated",
         "OUTPUTS_DIR": tmp_path / "outputs",
         "REFERENCE_DATA_DIR": tmp_path / "ref",
         "SCORING_DIR": tmp_path / "scoring",
@@ -82,7 +81,7 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
         for attr, val in mapping.items():
             if hasattr(mod, attr):
                 monkeypatch.setattr(mod, attr, val, raising=False)
-    for d in (mapping["INCOMING_DIR"], mapping["EXTRACTED_DIR"], mapping["VALIDATED_DIR"],
+    for d in (mapping["INCOMING_DIR"], mapping["EXTRACTED_DIR"],
               mapping["OUTPUTS_DIR"], mapping["VALIDATION_SUBDIR"], mapping["REFERENCE_DATA_DIR"],
               mapping["SCORING_DIR"], mapping["SCORING_OUTPUTS_DIR"], mapping["OSIPI_TF62_DIR"],
               mapping["CODECOLLECTION_DIR"], mapping["SCORING_PACKAGES_DIR"]):

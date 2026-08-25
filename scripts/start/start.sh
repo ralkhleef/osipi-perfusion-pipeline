@@ -42,7 +42,7 @@ if ! docker info >/dev/null 2>&1; then
   done
 fi
 
-mkdir -p data/outputs data/reference_data submissions/incoming submissions/extracted submissions/validated
+mkdir -p data/outputs data/reference_data submissions/incoming submissions/extracted
 
 if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
   echo "Port 8000 is already being used by another app."
