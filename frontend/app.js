@@ -8959,6 +8959,36 @@ function _roiRange(record) {
   return `${_roiNumber(record.roi_minimum)} to ${_roiNumber(record.roi_maximum)}`;
 }
 
+/* The identity shared by every row, stated once above the table. */
+function _renderRoiScope(pairs) {
+  const host = el("roi-descriptive-scope");
+  if (!host) return;
+  if (!pairs.length) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+  host.innerHTML = pairs
+    .map(([label, value]) =>
+      `<span class="roi-scope-item">${escapeHtml(label)}
+        <strong>${escapeHtml(value)}</strong></span>`)
+    .join("");
+  host.hidden = false;
+}
+
+/* Hide the header cell of any identity column that has been lifted out, so
+   the header and the body keep the same number of columns. */
+function _setRoiIdentityColumns(varying) {
+  const table = el("roi-descriptive-table");
+  // Rendering the rows matters more than styling the header, so a host that
+  // cannot be queried is skipped rather than allowed to throw and take the
+  // whole table with it.
+  if (!table || typeof table.querySelectorAll !== "function") return;
+  table.querySelectorAll("th[data-roi-identity]").forEach((cell) => {
+    cell.hidden = !varying.has(cell.dataset.roiIdentity);
+  });
+}
+
 function renderRoiDescriptiveStatistics(records, status) {
   const card = el("roi-descriptive-card");
   if (!card) return;
@@ -8996,6 +9026,29 @@ function renderRoiDescriptiveStatistics(records, status) {
   if (empty) empty.style.display = "none";
   if (table) table.style.display = "";
 
+  // Identity columns that never vary carry no information per row. A single
+  // scan submission filled Dataset, Participant, Repeat and Site with four
+  // dashes on every row, taking a third of the width and pushing Status off
+  // the right edge. They are lifted into one line above the table instead.
+  // The CSV export is built from the records and keeps every column.
+  const IDENTITY = [
+    ["dataset", "Dataset", (r) => _roiDatasetLabel(r.dataset)],
+    ["participant", "Participant", (r) => _roiIdentity(r.participant)],
+    ["repeat", "Repeat", (r) => _roiIdentity(r.repeat)],
+    ["site", "Site", (r) => _roiIdentity(r.site)],
+  ];
+  const varying = new Set();
+  const lifted = [];
+  IDENTITY.forEach(([key, label, read]) => {
+    const values = new Set(rows.map((r) => read(r)));
+    if (values.size > 1) { varying.add(key); return; }
+    const [only] = [...values];
+    if (only && only !== "—") lifted.push([label, only]);
+  });
+
+  _renderRoiScope(lifted);
+  _setRoiIdentityColumns(varying);
+
   // One table, built as a single string, no card per scan, no per-cell
   // listeners. Every dynamic field is escaped.
   if (body) {
@@ -9005,19 +9058,20 @@ function renderRoiDescriptiveStatistics(records, status) {
       const voxels = r.mask_voxel_count && r.mask_voxel_count !== r.voxel_count
         ? `${r.voxel_count} of ${r.mask_voxel_count}`
         : String(r.voxel_count ?? 0);
+      const identity = IDENTITY
+        .filter(([key]) => varying.has(key))
+        .map(([, , read]) => `<td>${escapeHtml(read(r))}</td>`)
+        .join("");
       return `<tr>
-        <td>${escapeHtml(_roiDatasetLabel(r.dataset))}</td>
-        <td>${escapeHtml(_roiIdentity(r.participant))}</td>
-        <td>${escapeHtml(_roiIdentity(r.repeat))}</td>
-        <td>${escapeHtml(_roiIdentity(r.site))}</td>
+        ${identity}
         <td>${escapeHtml(_roiIdentity(r.map_type).toUpperCase())}</td>
         <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
-        <td>${escapeHtml(_roiNumber(r.roi_mean))}</td>
-        <td>${escapeHtml(_roiNumber(r.roi_median))}</td>
-        <td>${escapeHtml(_roiNumber(r.roi_within_scan_sd))}</td>
-        <td>${escapeHtml(_roiRange(r))}</td>
-        <td>${escapeHtml(_roiPercent(r.roi_within_scan_cov))}</td>
-        <td>${escapeHtml(voxels)}</td>
+        <td class="num">${escapeHtml(_roiNumber(r.roi_mean))}</td>
+        <td class="num">${escapeHtml(_roiNumber(r.roi_median))}</td>
+        <td class="num">${escapeHtml(_roiNumber(r.roi_within_scan_sd))}</td>
+        <td class="num roi-range">${escapeHtml(_roiRange(r))}</td>
+        <td class="num">${escapeHtml(_roiPercent(r.roi_within_scan_cov))}</td>
+        <td class="num">${escapeHtml(voxels)}</td>
         <td>${escapeHtml(reason)}</td>
       </tr>`;
     }).join("");

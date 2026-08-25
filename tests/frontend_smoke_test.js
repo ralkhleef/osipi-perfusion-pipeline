@@ -1444,10 +1444,10 @@ check("ROI table body present", "roi-descriptive-body");
 check("ROI empty-state element present", "roi-descriptive-empty");
 checkContains("ROI section titled correctly", html, "ROI Parameter-map Statistics");
 checkContains("ROI table has a Map column", html, "<th>Map</th>");
-checkContains("ROI table has a Mean column", html, "<th>Mean</th>");
-checkContains("ROI table has a Median column", html, "<th>Median</th>");
-checkContains("ROI table has a Range column", html, "<th>Range</th>");
-checkContains("ROI table has a CoV column", html, "<th>CoV</th>");
+checkContains("ROI table has a Mean column", html, '<th class="num">Mean</th>');
+checkContains("ROI table has a Median column", html, '<th class="num">Median</th>');
+checkContains("ROI table has a Range column", html, '<th class="num">Range</th>');
+checkContains("ROI table has a CoV column", html, '<th class="num">CoV</th>');
 checkContains("ROI renderer exists", appJs, "function renderRoiDescriptiveStatistics(");
 
 // Display rules
@@ -1466,11 +1466,16 @@ checkContains("Empty-state text is actually looked up by status", appJs,
 checkContains("Methodology text present", appJs, "SD uses the population definition");
 checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio in exports");
 
-// Safety: every dynamic field escaped
-["r.roi_label || r.roi_id", "_roiDatasetLabel(r.dataset)", "_roiIdentity(r.participant)",
- "_roiNumber(r.roi_median)", "_roiPercent(r.roi_within_scan_cov)"].forEach((expr) => {
+// Safety: every dynamic field escaped. The identity cells are emitted through
+// one shared reader now that they can be dropped per submission, so that path
+// is checked once rather than per field.
+["r.roi_label || r.roi_id", "_roiNumber(r.roi_median)",
+ "_roiPercent(r.roi_within_scan_cov)"].forEach((expr) => {
   checkContains(`ROI field escaped: ${expr}`, appJs, `escapeHtml(${expr}`);
 });
+checkContains("ROI identity cells escaped through the shared reader", appJs,
+  "escapeHtml(read(r))");
+checkContains("ROI scope values escaped", appJs, "escapeHtml(value)");
 
 // Performance: one table, not a card per scan
 checkContains("ROI rows built as one joined table body", appJs, "}).join(\"\");");

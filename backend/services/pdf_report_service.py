@@ -293,14 +293,45 @@ def _roi_descriptive_model(
             str(record.get("unavailable_reason") or record.get("status") or "Not available").replace("_", " "),
         ])
 
+    headers = [
+        "Dataset", "Participant", "Repeat", "Site", "Map", "ROI",
+        *(metric_labels[metric] for metric in selected_metrics),
+        "Voxels", "Units", "Status",
+    ]
+
+    # A single-scan submission has nothing to put in Dataset, Participant,
+    # Repeat or Site, so four columns of dashes took a third of the width and
+    # pushed Status off the edge. Any column whose value never varies carries
+    # no information per row: it is lifted out and stated once above the table
+    # instead. The full rows stay untouched below for the CSV, which must keep
+    # every column whatever one submission happens to look like.
+    LIFTABLE = ("Dataset", "Participant", "Repeat", "Site", "Units", "Status")
+    scope: dict[str, str] = {}
+    drop: set[int] = set()
+    if rows:
+        for index, header in enumerate(headers):
+            if header not in LIFTABLE:
+                continue
+            values = {row[index] for row in rows}
+            if len(values) != 1:
+                continue
+            (only,) = values
+            drop.add(index)
+            if only and only != "Not available":
+                scope[header] = only
+
+    display_headers = [h for i, h in enumerate(headers) if i not in drop]
+    display_rows = [[c for i, c in enumerate(row) if i not in drop] for row in rows]
+
     available = sum(1 for r in records if r.get("status") == "available")
     return {
         "roi_descriptive_rows": rows,
-        "roi_descriptive_headers": [
-            "Dataset", "Participant", "Repeat", "Site", "Map", "ROI",
-            *(metric_labels[metric] for metric in selected_metrics),
-            "Voxels", "Units", "Status",
-        ],
+        "roi_descriptive_headers": headers,
+        # What both report formats and the app actually render.
+        "roi_descriptive_display_rows": display_rows,
+        "roi_descriptive_display_headers": display_headers,
+        # The lifted columns, in order, for the line above the table.
+        "roi_descriptive_scope": scope,
         "roi_descriptive_report_metrics": selected_metrics,
         "roi_descriptive_records": records,
         "roi_descriptive_methodology": dict(DESCRIPTIVE_METHODOLOGY),
@@ -2104,38 +2135,42 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 note_style,
             ))
 
-    roi_rows = model.get("roi_descriptive_rows") or []
+    roi_rows = model.get("roi_descriptive_display_rows") or []
     if roi_rows:
-        # The HTML/CSV retain every identifier and status column. The PDF
-        # keeps the reviewer-facing identity plus exactly the descriptive
-        # metrics selected by configuration. Resolve columns by name, never
-        # by fixed offsets: configurable metrics change both count and order.
-        roi_headers = list(model.get("roi_descriptive_headers") or [])
+        # Columns that never vary have already been lifted out of the display
+        # rows by _roi_descriptive_model, so a single-scan submission no longer
+        # prints four columns of dashes. Resolve the rest by name, never by
+        # fixed offsets: configurable metrics change both count and order.
+        roi_headers = list(model.get("roi_descriptive_display_headers") or [])
         configured_labels = [
             dict(ROI_METRIC_COLUMNS)[metric]
             for metric in model.get("roi_descriptive_report_metrics") or ()
             if metric in dict(ROI_METRIC_COLUMNS)
         ]
-        compact_roi_headers = [
+        keep = [
             header for header in (
-                "Dataset", "Participant", "Map", "ROI",
+                "Dataset", "Participant", "Repeat", "Site", "Map", "ROI",
                 *configured_labels, "Voxels",
             ) if header in roi_headers
         ]
-        column_indexes = [roi_headers.index(header) for header in compact_roi_headers]
-        compact_roi_rows = [
-            [row[index] for index in column_indexes] for row in roi_rows
-        ]
+        column_indexes = [roi_headers.index(header) for header in keep]
+        compact_roi_rows = [[row[index] for index in column_indexes] for row in roi_rows]
         compact_display_headers = [
-            {"Map": "Parameter", "ROI": "Region"}.get(header, header)
-            for header in compact_roi_headers
+            {"Map": "Parameter", "ROI": "Region"}.get(header, header) for header in keep
         ]
         numeric_headers = set(configured_labels) | {"Voxels"}
         story.append(section("ROI results"))
+        scope = model.get("roi_descriptive_scope") or {}
+        if scope:
+            # States once what would otherwise repeat identically on every row.
+            story.append(Paragraph(
+                "  ·  ".join(f"{label}: {value}" for label, value in scope.items()),
+                note_style,
+            ))
         story.append(data_table(
             compact_display_headers, compact_roi_rows,
             num_cols=[
-                index for index, header in enumerate(compact_roi_headers)
+                index for index, header in enumerate(keep)
                 if header in numeric_headers
             ],
         ))

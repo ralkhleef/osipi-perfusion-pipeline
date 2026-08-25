@@ -914,26 +914,31 @@
           </div>
         </div>
         <div id="roi-descriptive-empty" class="smc-hint" style="display:none"></div>
-        <table class="sc-table" id="roi-descriptive-table" style="display:none">
-          <thead>
-            <tr class="sc-table-head">
-              <th>Dataset</th>
-              <th>Participant</th>
-              <th>Repeat</th>
-              <th>Site</th>
-              <th>Map</th>
-              <th>ROI</th>
-              <th>Mean</th>
-              <th>Median</th>
-              <th>SD</th>
-              <th>Range</th>
-              <th>CoV</th>
-              <th>Voxels</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="roi-descriptive-body"></tbody>
-        </table>
+        <!-- Identity shared by every row, so it is not repeated down the table.
+             Filled by _renderRoiScope(). -->
+        <div id="roi-descriptive-scope" class="roi-scope" hidden></div>
+        <div class="roi-table-wrap">
+          <table class="sc-table roi-table" id="roi-descriptive-table" style="display:none">
+            <thead>
+              <tr class="sc-table-head">
+                <th data-roi-identity="dataset">Dataset</th>
+                <th data-roi-identity="participant">Participant</th>
+                <th data-roi-identity="repeat">Repeat</th>
+                <th data-roi-identity="site">Site</th>
+                <th>Map</th>
+                <th>ROI</th>
+                <th class="num">Mean</th>
+                <th class="num">Median</th>
+                <th class="num">SD</th>
+                <th class="num">Range</th>
+                <th class="num">CoV</th>
+                <th class="num">Voxels</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="roi-descriptive-body"></tbody>
+          </table>
+        </div>
         <p class="smc-hint" id="roi-descriptive-method" style="margin-top:8px"></p>
       </div>
 

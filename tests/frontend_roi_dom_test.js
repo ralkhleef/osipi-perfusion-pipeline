@@ -72,7 +72,8 @@ function makeDom() {
   const nodes = {};
   for (const id of ["roi-descriptive-card", "roi-descriptive-table",
                     "roi-descriptive-body", "roi-descriptive-empty",
-                    "roi-descriptive-count", "roi-descriptive-method"]) {
+                    "roi-descriptive-count", "roi-descriptive-method",
+                    "roi-descriptive-scope"]) {
     nodes[id] = makeElement(id);
   }
   return nodes;
@@ -128,7 +129,14 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   check("range displayed", html.includes("0.1000 to 0.5000"));
   check("map type displayed", html.includes("KTRANS"));
   check("ROI label displayed", html.includes("Tumour"));
-  check("dataset title-cased for display", html.includes("Synthetic"));
+  // Identity that is the same on every row is stated once above the table
+  // rather than repeated down a column. With a single row that is always all
+  // of it, so the dataset moves to the scope line but must still be shown.
+  check("dataset title-cased for display",
+        nodes["roi-descriptive-scope"].innerHTML.includes("Synthetic"),
+        nodes["roi-descriptive-scope"].innerHTML);
+  check("lifted identity is not also repeated in the row",
+        !html.includes("Synthetic"));
   checkEqual("card visible", nodes["roi-descriptive-card"].style.display, "");
   checkEqual("table visible", nodes["roi-descriptive-table"].style.display, "");
   checkEqual("row count shown", nodes["roi-descriptive-count"].textContent, "1");
@@ -142,9 +150,14 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
 {
   const nodes = run([CLINICAL_NO_SITE], "available", makeDom());
   const html = nodes["roi-descriptive-body"].innerHTML;
-  check("null site renders as a dash", html.includes("<td>—</td>"), html);
-  check("null site never renders the word null", !html.includes(">null<"));
-  check("null site never renders undefined", !html.includes("undefined"));
+  const scope = nodes["roi-descriptive-scope"].innerHTML;
+  // An absent site is dropped rather than announced. The point of the original
+  // check stands: it must never surface as null or undefined anywhere.
+  check("absent site is not listed above the table", !scope.includes("Site"), scope);
+  check("null site never renders the word null",
+        !html.includes(">null<") && !scope.includes(">null<"));
+  check("null site never renders undefined",
+        !html.includes("undefined") && !scope.includes("undefined"));
 }
 
 // ── Unavailable values ───────────────────────────────────────────────────

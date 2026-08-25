@@ -3289,8 +3289,12 @@ def export_report(
     # Rendered from the same pre-formatted records summarized by the PDF.
     # Nothing is recomputed or refiltered here; HTML keeps the complete table
     # while the printable report carries a compact availability summary.
-    _roi_rows = report_model.get("roi_descriptive_rows") or []
-    _roi_headers = report_model.get("roi_descriptive_headers") or []
+    # Display rows, not the full rows: columns whose value never varies are
+    # lifted into a caption instead of repeating identically down the table.
+    # The CSV export is built separately from the records and keeps everything.
+    _roi_rows = report_model.get("roi_descriptive_display_rows") or []
+    _roi_headers = report_model.get("roi_descriptive_display_headers") or []
+    _roi_scope = report_model.get("roi_descriptive_scope") or {}
     _roi_summary = report_model.get("roi_descriptive_summary") or {}
     _roi_caption = (
         f"Within-ROI parameter-map statistics: "
@@ -3300,15 +3304,32 @@ def export_report(
         "Within-ROI parameter-map statistics. None were available for this "
         "submission. "
     ) + ROI_METHOD_TEXT
-    _roi_numeric = {5, 6, 7, 8}
+    # Resolved by name. Fixed offsets were wrong the moment a column could be
+    # dropped, and the configurable metric list already changes both the count
+    # and the order of these columns.
+    _ROI_TEXT_COLUMNS = {"Dataset", "Participant", "Repeat", "Site",
+                         "Map", "ROI", "Units", "Status"}
+    _roi_numeric = {
+        index for index, header in enumerate(_roi_headers)
+        if str(header) not in _ROI_TEXT_COLUMNS
+    }
     _num_attr = ' class="num"'
 
     def _roi_cell(tag: str, index: int, value: object) -> str:
         attr = _num_attr if index in _roi_numeric else ""
         return f"<{tag}{attr}>{_esc(value)}</{tag}>"
 
+    # Whatever was identical on every row, said once instead of repeated.
+    _roi_scope_html = (
+        '<p class="roi-scope">'
+        + " · ".join(f"{_esc(label)}: <strong>{_esc(value)}</strong>"
+                     for label, value in _roi_scope.items())
+        + "</p>"
+    ) if _roi_scope else ""
+
     roi_table_html = (
-        '<div class="table-wrap"><table>'
+        _roi_scope_html
+        + '<div class="table-wrap"><table>'
         + f"<caption>{_esc(_roi_caption)}</caption><thead><tr>"
         + "".join(_roi_cell("th", i, h) for i, h in enumerate(_roi_headers))
         + "</tr></thead><tbody>"

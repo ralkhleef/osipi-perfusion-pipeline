@@ -12163,3 +12163,29 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   background: #fce9e9; color: #9b4142;
   font-size: 0.7rem; font-weight: 600;
 }
+
+/* ── ROI parameter-map statistics table ───────────────────────────────────
+   A single-scan submission filled Dataset, Participant, Repeat and Site with
+   a dash on every row: four columns of no information taking a third of the
+   width, which pushed Status off the right edge. Those columns are now lifted
+   into the line above when they never vary, and what remains fits.
+
+   The range reads as one value, so it must not break across three lines the
+   way "0.9988 to 1.1106" did. */
+.roi-scope {
+  display: flex; flex-wrap: wrap; gap: 6px 8px;
+  margin: 0 0 10px;
+}
+.roi-scope-item {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  background: #f4f2fa; color: var(--muted);
+  font-size: 0.72rem;
+}
+.roi-scope-item strong { color: var(--text); font-weight: 600; }
+
+.roi-table-wrap { overflow-x: auto; }
+.roi-table { width: 100%; }
+.roi-table th.num, .roi-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.roi-table td.roi-range { white-space: nowrap; }
+.roi-table th[hidden], .roi-table td[hidden] { display: none; }
