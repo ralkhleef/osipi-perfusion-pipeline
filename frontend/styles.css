@@ -12117,3 +12117,39 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .score-run-outcome--ok   { border-color: #9ae6b4; background: #f0fff4; color: #276749; }
 .score-run-outcome--warn { border-color: #fac775; background: #fffaf0; color: #854f0b; }
 .score-run-outcome--err  { border-color: #f7c1c1; background: #fff5f5; color: #c53030; }
+
+/* ── Unsaved configuration changes ────────────────────────────────────────
+   An edit used to leave no trace until a version was saved and read back.
+   Changes are named here rather than counted, because "CBF: Not used to
+   Required" answers "did that click do what I meant" and a number does not.
+   The card marker uses a left rule and a text badge, not colour alone. */
+.config-manager-changes {
+  margin: 14px 0 0;
+  padding: 13px 15px;
+  border: 1px solid #d9cffa;
+  border-radius: 10px;
+  background: #f8f6ff;
+}
+.config-changes-head {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  align-items: center; justify-content: space-between;
+}
+.config-changes-count { font-size: 0.8rem; font-weight: 600; color: #4b3a86; }
+.config-changes-list { margin: 10px 0 0; padding-left: 18px; font-size: 0.76rem; line-height: 1.55; }
+.config-changes-list > li { margin-bottom: 5px; }
+.config-changes-list > li > strong { color: var(--text); }
+.config-changes-list ul { margin: 2px 0 0; padding-left: 16px; color: var(--muted); }
+.config-changes-note { margin: 10px 0 0; font-size: 0.73rem; color: var(--muted); }
+
+.config-manager-summary-card.config-card-changed {
+  border-color: #b8a8df;
+  border-left: 3px solid #6d4ac2;
+  border-radius: 0 9px 9px 0;
+  background: #fdfcff;
+}
+.config-changed-badge {
+  display: inline-block; margin-top: 6px;
+  padding: 2px 8px; border-radius: 999px;
+  background: #f0ebff; color: #4b3a86;
+  font-size: 0.7rem; font-weight: 600;
+}
