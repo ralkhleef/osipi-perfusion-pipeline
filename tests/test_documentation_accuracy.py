@@ -248,8 +248,8 @@ def test_the_manifest_example_carries_every_required_field() -> None:
         assert not missing, f"manifest example is missing {sorted(missing)}"
     else:
         # Fall back to the fields the shipped demo package declares.
-        demo = json.loads((ROOT / "data" / "sample_submissions" /
-                           "demo_scoring_package" / "manifest.json").read_text())
+        demo = json.loads((ROOT / "examples" / "demo-scoring-package" /
+                           "manifest.json").read_text())
         for key in ("package_id", "challenge_type", "entry_point", "metrics"):
             assert key in manifest, f"manifest example omits {key!r}"
             assert key in demo

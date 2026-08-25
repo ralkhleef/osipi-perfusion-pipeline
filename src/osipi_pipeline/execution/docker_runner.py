@@ -15,7 +15,7 @@ from osipi_pipeline.execution.models import ExecutionResult
 # Defaults: can be overridden per call or via run_config.json
 # ---------------------------------------------------------------------------
 
-DEFAULT_FALLBACK_DOCKERFILE = Path("docker/Dockerfile.example")
+DEFAULT_FALLBACK_DOCKERFILE = Path(__file__).with_name("Dockerfile.example")
 DEFAULT_EXECUTION_DIR       = Path("data/outputs/execution")
 DEFAULT_RUN_COMMAND         = "python3 run.py"
 DEFAULT_TIMEOUT_SECONDS     = 300   # 5 minutes

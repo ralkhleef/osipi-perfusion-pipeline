@@ -25,7 +25,6 @@ CONFIG_ACTIVE_VERSION = CONFIG_MANAGER_DIR / "active.json"
 SUBMISSIONS_DIR = PROJECT_ROOT / "submissions"
 INCOMING_DIR    = SUBMISSIONS_DIR / "incoming"      # uploaded ZIPs
 EXTRACTED_DIR   = SUBMISSIONS_DIR / "extracted"     # extracted submission folders
-VALIDATED_DIR   = SUBMISSIONS_DIR / "validated"     # reserved for future use
 
 # --- frontend ---
 FRONTEND_DIR = PROJECT_ROOT / "frontend"

@@ -19,6 +19,9 @@ dev = ["pytest>=8"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"osipi_pipeline.execution" = ["Dockerfile.example"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src", "backend"]
 testpaths = ["tests"]

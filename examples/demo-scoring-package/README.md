@@ -29,6 +29,6 @@ python scoring.py \
 The package writes `metrics.json` and `scoring_log.txt` to the output folder.
 
 For a new package, start with
-[`examples/scoring-package-template/`](../../../examples/scoring-package-template/)
+[`examples/scoring-package-template/`](../scoring-package-template/)
 and use a new versioned package id. Upload and activation are separate actions
 in Scoring Setup.

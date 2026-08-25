@@ -72,7 +72,7 @@ node tests/frontend_roi_dom_test.js
 node tests/frontend_header_check_test.js
 ```
 
-The trusted scoring-package example is in `data/sample_submissions/`; test inputs
+The trusted scoring-package example is in `examples/demo-scoring-package/`; test inputs
 are in `tests/fixtures/`. Generated outputs, uploaded submissions, private
 reference assets, and installed scoring packages are ignored by Git.
 

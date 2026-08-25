@@ -106,7 +106,7 @@ in its results.
 
 Use a new versioned `package_id` for each release. Only trusted people should
 upload packages because a package is a program that runs on the server. The
-tracked `data/sample_submissions/demo_scoring_package/` directory is a safe
+tracked `examples/demo-scoring-package/` directory is a safe
 demo source that can be zipped locally for practice.
 
 ---
