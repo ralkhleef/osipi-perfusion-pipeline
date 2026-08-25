@@ -194,7 +194,20 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
             ],
         },
     }
-    assert cfg.analysis_by_challenge()["dsc"] == {}
+    # DSC carries the same descriptive statistics. Mean, median, SD, range
+    # and CoV inside a supplied mask need no definition from the challenge
+    # leads, unlike accuracy, deviance or a pass threshold, so they are set
+    # provisionally rather than leaving DSC reporting nothing.
+    assert cfg.analysis_by_challenge()["dsc"] == {
+        "roi_descriptive": {
+            "enabled": True,
+            "map_types": ["cbv", "cbf", "mtt"],
+            "report_metrics": [
+                "mean", "median", "standard_deviation", "range",
+                "coefficient_of_variation",
+            ],
+        },
+    }
 
 
 def test_asl_and_dsc_declare_the_maps_they_exist_to_collect() -> None:

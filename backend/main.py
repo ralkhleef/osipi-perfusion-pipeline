@@ -46,7 +46,6 @@ from services.path_config import (
     SCORING_DIR,
     SCORING_OUTPUTS_DIR,
     SCORING_PACKAGES_DIR,
-    SCORING_RESULTS_DIR,  # backward-compat alias
     VALIDATED_DIR,
 )
 from services.execution_service import run_submission

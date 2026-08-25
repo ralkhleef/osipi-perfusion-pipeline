@@ -1536,7 +1536,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfgen import canvas as pdfcanvas
     from reportlab.platypus import (
-        BaseDocTemplate, Frame, Image, KeepTogether, NextPageTemplate, PageBreak,
+        BaseDocTemplate, Frame, Image, KeepTogether, NextPageTemplate,
         PageTemplate, Paragraph, Spacer, Table, TableStyle,
     )
 
