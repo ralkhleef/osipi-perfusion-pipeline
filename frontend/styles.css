@@ -12122,19 +12122,29 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
    An edit used to leave no trace until a version was saved and read back.
    Changes are named here rather than counted, because "CBF: Not used to
    Required" answers "did that click do what I meant" and a number does not.
-   The card marker uses a left rule and a text badge, not colour alone. */
+
+   Coloured with the coral from the OSIPI mark (#eb6364) rather than the
+   purple used everywhere else in this panel, so pending work is visible
+   against its surroundings instead of blending into them. Text is darkened
+   to #9b4142, which is 6.06:1 on the panel tint and 5.57:1 on the badge,
+   both past the 4.5:1 threshold.
+
+   Coral sits near the error styling, so the panel is distinguished by shape
+   as well as hue: it carries a solid left rule that no error message has,
+   and the marker on a card is a text badge, never colour on its own. */
 .config-manager-changes {
   margin: 14px 0 0;
   padding: 13px 15px;
-  border: 1px solid #d9cffa;
-  border-radius: 10px;
-  background: #f8f6ff;
+  border: 1px solid #f7c3c4;
+  border-left: 4px solid #eb6364;
+  border-radius: 0 10px 10px 0;
+  background: #fdf5f5;
 }
 .config-changes-head {
   display: flex; flex-wrap: wrap; gap: 10px;
   align-items: center; justify-content: space-between;
 }
-.config-changes-count { font-size: 0.8rem; font-weight: 600; color: #4b3a86; }
+.config-changes-count { font-size: 0.8rem; font-weight: 600; color: #9b4142; }
 .config-changes-list { margin: 10px 0 0; padding-left: 18px; font-size: 0.76rem; line-height: 1.55; }
 .config-changes-list > li { margin-bottom: 5px; }
 .config-changes-list > li > strong { color: var(--text); }
@@ -12142,14 +12152,14 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .config-changes-note { margin: 10px 0 0; font-size: 0.73rem; color: var(--muted); }
 
 .config-manager-summary-card.config-card-changed {
-  border-color: #b8a8df;
-  border-left: 3px solid #6d4ac2;
+  border-color: #f7c3c4;
+  border-left: 3px solid #eb6364;
   border-radius: 0 9px 9px 0;
-  background: #fdfcff;
+  background: #fffbfb;
 }
 .config-changed-badge {
   display: inline-block; margin-top: 6px;
   padding: 2px 8px; border-radius: 999px;
-  background: #f0ebff; color: #4b3a86;
+  background: #fce9e9; color: #9b4142;
   font-size: 0.7rem; font-weight: 600;
 }
