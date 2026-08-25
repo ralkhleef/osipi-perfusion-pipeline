@@ -740,7 +740,13 @@ checkContains("Responsive modal width", css, ".config-manager-modal-dialog-wide 
 checkContains("Modal body vertical scroll", css, "overflow-y: auto;");
 checkContains("Configuration values wrap", css, ".config-manager dd { overflow-wrap: anywhere; }");
 checkContains("Map units shown in manager", appJs, "_configurationMapUnit(item.id)");
-checkContains("Long map aliases use wrapping textareas", appJs, '<textarea class="config-map-aliases"');
+// Aliases used to be a comma separated textarea, which wrapped but asked an
+// organiser to punctuate a list correctly. They are chips now; the original
+// concern was that a long list must not overflow its container, so that is
+// what is checked, along with the hidden input the save path still reads.
+checkContains("Long map aliases wrap rather than overflow", css, ".cfg-chips {");
+checkContains("Long map aliases wrap rather than overflow (flex-wrap)", css, "flex-wrap: wrap");
+checkContains("Map aliases still reach the save path", appJs, 'class="config-map-aliases"');
 checkContains("Long package names get wrapping detail text", html, 'id="config-manager-package-detail"');
 checkContains("Private assets local-only warning", html, "These files remain local and are not included in GitHub or configuration exports.");
 checkContains("Private asset file chooser is visible", html, "Choose NIfTI file");
