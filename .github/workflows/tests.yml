@@ -30,8 +30,10 @@ jobs:
       fail-fast: false
       matrix:
         # The floor declared in pyproject.toml and a current release, so a
-        # syntax feature newer than the floor cannot slip in unnoticed.
-        python-version: ["3.9", "3.12"]
+        # syntax feature newer than the floor cannot slip in unnoticed. The
+        # floor is 3.10 because the code uses X | None unions throughout;
+        # the image itself ships 3.11.
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
 

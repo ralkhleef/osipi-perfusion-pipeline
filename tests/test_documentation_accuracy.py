@@ -1014,3 +1014,51 @@ def test_every_repository_link_points_at_a_real_file() -> None:
         if target not in tracked
     })
     assert not missing, f"pages link to repository files that do not exist: {missing}"
+
+
+# ── The declared Python floor ─────────────────────────────────────────────
+
+def test_the_python_floor_is_declared_consistently() -> None:
+    """pyproject, CI and the Install page must agree on the minimum Python.
+
+    They did not. pyproject claimed 3.9, the Install page repeated it, and
+    nothing ever ran on 3.9 because the image ships 3.11, so the claim went
+    untested until CI was added and then failed on 136 union annotations
+    across 32 files. Rewriting those to support a version nobody runs would
+    have been the wrong repair; the declaration was what was wrong.
+    """
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    declared = re.search(r'requires-python\s*=\s*">=(\d+\.\d+)"', pyproject)
+    assert declared, "pyproject does not declare requires-python"
+    floor = declared.group(1)
+
+    workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    matrix = re.search(r'python-version:\s*\[(.*?)\]', workflow)
+    assert matrix, "the test workflow declares no Python matrix"
+    versions = re.findall(r'"(\d+\.\d+)"', matrix.group(1))
+    assert floor in versions, (
+        f"pyproject declares >={floor} but CI does not test it: {versions}. "
+        f"An untested floor is a claim, not a guarantee."
+    )
+
+    assert f"Python {floor} or newer" in TEXT, (
+        f"the Install page does not say Python {floor} or newer"
+    )
+
+
+def test_the_declared_floor_supports_the_syntax_actually_used() -> None:
+    """X | None needs 3.10. Declaring less would fail on import, not on lint."""
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    floor = re.search(r'requires-python\s*=\s*">=(\d+)\.(\d+)"', pyproject)
+    assert floor, "pyproject does not declare requires-python"
+    major, minor = int(floor.group(1)), int(floor.group(2))
+
+    uses_union = subprocess.run(
+        ["git", "grep", "-l", "| None", "--", "*.py"],
+        cwd=ROOT, capture_output=True, text=True,
+    ).stdout.split()
+    if uses_union:
+        assert (major, minor) >= (3, 10), (
+            f"{len(uses_union)} files use X | None, which needs 3.10, but the "
+            f"declared floor is {major}.{minor}"
+        )

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "osipi-perfusion-pipeline"
 version = "0.1.0"
 description = "Modular OSIPI perfusion MRI challenge pipeline."
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "nibabel>=3.0",
     "numpy>=1.20",
