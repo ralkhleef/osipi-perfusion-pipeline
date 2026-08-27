@@ -572,11 +572,15 @@ h3:hover .docs-anchor,
 
 /* A control or menu item named in prose. Bold was doing this job and reads as
    emphasis, which these are not: the name is a label, not a stressed word. */
+/* Both are set explicitly. --docs-code-bg is the near-black used behind code
+   blocks, which pair it with light text; borrowing it here without also
+   setting a colour rendered dark text on a dark chip. */
 .docs-ui {
-  padding: .05rem .3rem;
+  padding: .05rem .35rem;
   border: 1px solid var(--docs-border);
   border-radius: .2rem;
-  background: var(--docs-code-bg);
+  background: #f1f3f5;
+  color: #212529;
   font-size: .95em;
   white-space: nowrap;
 }

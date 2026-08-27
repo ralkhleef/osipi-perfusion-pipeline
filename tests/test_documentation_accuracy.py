@@ -1062,3 +1062,48 @@ def test_the_declared_floor_supports_the_syntax_actually_used() -> None:
             f"{len(uses_union)} files use X | None, which needs 3.10, but the "
             f"declared floor is {major}.{minor}"
         )
+
+
+def test_no_documentation_style_sets_a_dark_background_without_a_text_colour() -> None:
+    """A dark background with inherited text is invisible, and looks fine in CSS.
+
+    ``--docs-code-bg`` is the near-black behind code blocks, which pair it with
+    light text. Borrowing it for an inline chip without also setting a colour
+    shipped dark text on a dark chip: the rule read plausibly, and the page was
+    unreadable. Anything dark must state its own text colour.
+    """
+    css = (DOCS / "assets" / "stylesheets" / "site.css").read_text(encoding="utf-8")
+
+    def luminance(colour: str) -> float:
+        colour = colour.lstrip("#")
+        if len(colour) != 6:
+            return 1.0  # not a hex literal, treat as light and skip
+        parts = [int(colour[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        parts = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+                 for v in parts]
+        return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
+
+    dark_tokens = {
+        name for name, value in re.findall(r"(--docs-[\w-]+):\s*(#[0-9a-fA-F]{6})", css)
+        if luminance(value) < 0.3
+    }
+
+    offenders = []
+    for block in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        selector = block.group(1).strip().splitlines()[-1].strip()
+        body = block.group(2)
+        background = re.search(r"background(?:-color)?\s*:\s*([^;]+)", body)
+        if not background:
+            continue
+        value = background.group(1).strip()
+        token = re.search(r"var\((--docs-[\w-]+)\)", value)
+        is_dark = (token and token.group(1) in dark_tokens) or (
+            value.startswith("#") and luminance(value.split()[0]) < 0.3
+        )
+        if is_dark and not re.search(r"(^|[;\s])color\s*:", body):
+            offenders.append(f"{selector} (background: {value})")
+
+    assert not offenders, (
+        "dark background with no text colour, so the text inherits and "
+        f"disappears: {offenders}"
+    )
