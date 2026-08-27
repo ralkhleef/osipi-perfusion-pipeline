@@ -75,3 +75,6 @@ test-results/
 /.codex-ui-audit/
 /docs-preview.png
 /video-preview.png
+
+# Personal meeting prep. Not for publication.
+/MEETING_NOTES.md
