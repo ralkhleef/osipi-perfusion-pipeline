@@ -12221,3 +12221,70 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cfg-preview-row, .cfg-preview-row-long { grid-template-columns: 1fr; }
   .cfg-preview-row .cfg-preview-arrow { display: none; }
 }
+
+/* ── Private reference assets ─────────────────────────────────────────────
+   The panel used to show a count line and a flat list of filenames, which
+   left the obvious question unanswered: where do these live, and where do I
+   put mine. Each kind is now its own group stating what it is for and the
+   folder it occupies, so an empty group still tells you something. */
+.cfg-asset-groups { display: grid; gap: 10px; }
+.cfg-asset-group {
+  padding: 12px 14px;
+  border: 1px solid #e8e3f7;
+  border-radius: 9px;
+  background: #fff;
+}
+.cfg-asset-head {
+  display: flex; align-items: center; gap: 9px;
+  margin-bottom: 3px;
+}
+.cfg-asset-head h5 { margin: 0; font-size: 0.82rem; font-weight: 600; }
+.cfg-asset-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; padding: 1px 7px; border-radius: 999px;
+  background: #f1eff8; color: var(--muted);
+  font-size: 0.72rem; font-weight: 600;
+}
+.cfg-asset-count-has { background: #f0ebff; color: #4b3a86; }
+.cfg-asset-purpose { margin: 0 0 7px; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+.cfg-asset-path { margin: 0 0 8px; }
+.cfg-asset-path code {
+  padding: 2px 7px; border-radius: 5px;
+  background: #f6f4fc; color: #4b3a86;
+  font-size: 0.72rem; overflow-wrap: anywhere;
+}
+.cfg-asset-files { margin: 0; padding: 0; list-style: none; }
+.cfg-asset-files li {
+  display: flex; flex-wrap: wrap; gap: 4px 12px;
+  align-items: baseline; justify-content: space-between;
+  padding: 6px 0; border-top: 1px solid #f4f2fa;
+  font-size: 0.76rem;
+}
+.cfg-asset-name { overflow-wrap: anywhere; }
+.cfg-asset-meta { color: #276749; font-size: 0.72rem; white-space: nowrap; }
+.cfg-asset-bad { color: #c53030; }
+.cfg-asset-empty { margin: 0; font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
+
+.cfg-asset-add {
+  margin-top: 14px; padding-top: 13px;
+  border-top: 1px solid #f0edf8;
+}
+.cfg-asset-add h5 { margin: 0 0 2px; font-size: 0.82rem; font-weight: 600; }
+.cfg-asset-add-note { margin: 0 0 10px; font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
+.cfg-asset-field { display: inline-flex; flex-direction: column; gap: 3px; font-size: 0.72rem; color: var(--muted); }
+
+/* An export whose file would come out empty. Disabled and explained, rather
+   than left clickable to produce a header row and no data. */
+.export-unavailable {
+  display: block;
+  margin-top: 4px;
+  color: #854f0b;
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+.export-file-row:has(.export-unavailable) { background: #fdfcfa; }
+.export-dl-btn[disabled] {
+  opacity: .55;
+  cursor: not-allowed;
+  pointer-events: none;
+}

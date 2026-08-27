@@ -1,233 +1,194 @@
 version: 1
 default_challenge_type: dce
-
 nifti_suffixes:
-  - .nii
-  - .nii.gz
-
+- .nii
+- .nii.gz
 metadata_suffixes:
-  - .json
-  - .yaml
-  - .yml
-  - .csv
-  - .tsv
-
+- .json
+- .yaml
+- .yml
+- .csv
+- .tsv
 readme_names:
-  - readme.md
-  - readme.txt
-  - readme
-  - sop.pdf
-  - metadata.json
-
+- readme.md
+- readme.txt
+- readme
+- sop.pdf
+- metadata.json
 code_file_names:
-  - dockerfile
-  - requirements.txt
-  - environment.yml
-  - main.py
-  - run.py
-  - setup.py
-
+- dockerfile
+- requirements.txt
+- environment.yml
+- main.py
+- run.py
+- setup.py
 code_extensions:
-  - .py
-  - .sh
-  - .m
-  - .r
-  - .ipynb
-  - .jl
-  - .c
-  - .cpp
-  - .h
-  - .hpp
-
+- .py
+- .sh
+- .m
+- .r
+- .ipynb
+- .jl
+- .c
+- .cpp
+- .h
+- .hpp
 code_folder_names:
-  - scripts
-  - code
-  - src
-
+- scripts
+- code
+- src
 map_types:
   cbf:
     display: CBF
     label: Cerebral blood flow
     units: mL/100g/min
-    # Parameter maps are single-volume 3-D images. A 4-D file with this name is
-    # not a parameter map (it is a fitted signal / time series) and must not be
-    # scored voxelwise against a 3-D reference. Such files are described under
-    # `artifact_types` below, which carries an explicit `role`.
     dimensions: 3
     patterns:
-      - cbf
-      - cerebral_blood_flow
-      - cerebralbloodflow
-      - perfmap
-      - perfusion
-      - perf
+    - cbf
+    - cerebral_blood_flow
+    - cerebralbloodflow
+    - perfmap
+    - perfusion
+    - perf
   att:
     display: ATT
     label: Arterial transit time
     units: seconds
     dimensions: 3
     patterns:
-      - att
-      - arterial_transit_time
-      - arterialtransittime
-      - arrivaltransittime
-      - attmap
+    - att
+    - arterial_transit_time
+    - arterialtransittime
+    - arrivaltransittime
+    - attmap
   ktrans:
     display: Ktrans
     label: Volume transfer constant
     units: min^-1
     dimensions: 3
     patterns:
-      - ktrans
-      - k-trans
-      - k_trans
-      - transfer_constant
+    - ktrans
+    - k-trans
+    - k_trans
+    - transfer_constant
   ve:
     display: ve
     label: Extravascular extracellular volume fraction
-    units:
+    units: null
     dimensions: 3
     patterns:
-      - ve
-      - v_e
+    - ve
+    - v_e
   kep:
     display: Kep
     label: Rate constant
-    units:
+    units: null
     dimensions: 3
     patterns:
-      - kep
-      - k_ep
-      - rate_constant
+    - kep
+    - k_ep
+    - rate_constant
   vp:
     display: Vp
     label: Plasma volume fraction
-    units:
+    units: null
     dimensions: 3
     patterns:
-      - vp
-      - v_p
-      - plasma_volume
+    - vp
+    - v_p
+    - plasma_volume
   cbv:
     display: CBV
     label: Cerebral blood volume
-    units:
+    units: null
     patterns:
-      - cbv
-      - cerebral_blood_volume
+    - cbv
+    - cerebral_blood_volume
   mtt:
     display: MTT
     label: Mean transit time
-    units:
+    units: null
     patterns:
-      - mtt
-      - mean_transit_time
-
-# Submitted files that are not parameter maps. Each carries a semantic `role`
-# so a 4-D fitted signal is never mistaken for a 3-D parameter map.
-#
-# Declaring an artifact here makes it classifiable; listing it under a
-# challenge's `required_artifacts` makes it mandatory. `dimensions`, where
-# given, is checked against the file's NIfTI header, so a 3-D file submitted
-# as a modelled signal-time curve is reported rather than accepted.
+    - mtt
+    - mean_transit_time
 artifact_types:
   modelled_st:
     role: fitted_signal
     label: Modelled signal-time curve
     dimensions: 4
     suffixes:
-      - .nii
-      - .nii.gz
+    - .nii
+    - .nii.gz
     patterns:
-      - modelled_st
-      - modeled_st
-      - fitted_signal
+    - modelled_st
+    - modeled_st
+    - fitted_signal
   measured_st:
     role: measured_signal
     label: Measured signal-time curve
     dimensions: 4
     suffixes:
-      - .nii
-      - .nii.gz
+    - .nii
+    - .nii.gz
     patterns:
-      - measured_st
-      - measured_signal
-      - observed_st
+    - measured_st
+    - measured_signal
+    - observed_st
   methods:
     role: methods
     label: Methods document
     suffixes:
-      - .docx
-      - .txt
+    - .docx
+    - .txt
     patterns:
-      - methods
-      - methodology
-
+    - methods
+    - methodology
 challenges:
   dce:
     label: DCE
     description: Dynamic contrast enhanced MRI
-
     expected_maps:
-      - ktrans
-      - kep
-      - vp
-    # DCE-2026 requirements:
-    # a missing required map or artifact is a blocking error, an optional map
-    # is not, and the dataset grid below is checked against resolved scan
-    # identity. Change these to change the rules; no code edit is needed.
+    - ktrans
+    - kep
+    - vp
     required_maps:
-      - ktrans
+    - ktrans
     optional_maps:
-      - vp
-      - ve
-      - kep
+    - vp
+    - ve
+    - kep
     required_artifacts:
-      - modelled_st
-      - methods
-    # Analysis selection belongs in configuration; the mathematical formulas
-    # remain tested implementation code. This keeps challenge enablement and
-    # artifact/map pairing out of service-level conditionals.
+    - modelled_st
+    - methods
     analysis:
       roi_descriptive:
         enabled: true
         map_types:
-          - ktrans
-        # Reorder or remove entries to change the descriptive columns shown
-        # in generated HTML/PDF reports without changing the calculations.
+        - ktrans
         report_metrics:
-          - mean
-          - median
-          - standard_deviation
-          - range
-          - coefficient_of_variation
+        - mean
+        - median
+        - standard_deviation
+        - range
+        - coefficient_of_variation
       signal_rss:
         enabled: true
         modelled_artifact: modelled_st
         measured_artifact: measured_st
-    # Descriptive aggregation of scan-level ROI medians. These are explicitly
-    # provisional summaries, not repeatability, ICC, pass/fail, or ranking.
     grouped_statistics:
       enabled: true
       axes:
-        - inter_repeat
-        - inter_site
-        - inter_participant
+      - inter_repeat
+      - inter_site
+      - inter_participant
       source: roi_median
       minimum_group_size: 2
-    # Fallback identity parsing, used only when the directory layout does not
-    # already supply an identifier. Applied to the filename stem with any
-    # .nii/.nii.gz removed; first match wins. The first entry preserves the
-    # existing TF6.2 Synthetic_P#_Visit# convention, extended with an
-    # optional site so the DCE-2026 three-site layout can be expressed.
     filename_identity_patterns:
-      - '^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)_Site(?P<site>\d+)$'
-      - '^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)$'
+    - ^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)_Site(?P<site>\d+)$
+    - ^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)$
     datasets:
       synthetic:
-        # Not finalised by OSIPI. null means "count not yet decided" — an
-        # invented integer would read as a decision that has not been made.
-        participants:
+        participants: null
         repeats: 2
         sites: 3
       clinical:
@@ -235,86 +196,67 @@ challenges:
         repeats: 2
         sites: 1
     keywords:
-      - ktrans
-      - kep
-      - vp
-      - dce
-      - dynamic contrast enhanced
+    - ktrans
+    - kep
+    - vp
+    - dce
+    - dynamic contrast enhanced
   asl:
     label: ASL
     description: Arterial spin labeling MRI
     expected_maps:
-      - cbf
-      - att
-    # CBF and ATT are what an ASL submission exists to deliver, so a missing
-    # one is an error rather than a warning. Everything below this line is
-    # structure, not science: no metric or threshold is decided here.
+    - cbf
+    - att
     required_maps:
-      - cbf
-      - att
+    - cbf
+    - att
     analysis:
-      # Apply every organiser-provided ROI (GM, WM, lesion, or any other mask)
-      # to both submitted ASL parameter maps.
       roi_descriptive:
         enabled: true
         map_types:
-          - cbf
-          - att
+        - cbf
+        - att
         report_metrics:
-          - mean
-          - median
-          - standard_deviation
-          - range
-          - coefficient_of_variation
-    # No required_artifacts key: nothing beyond the maps is required yet. A
-    # methods document is required for DCE, but that call for ASL is theirs.
-    # No `datasets` block. Whether ASL has one cohort or several, and what
-    # the grid is, has not been stated. Declaring a placeholder dataset would
-    # invent a layout, and the ingest layer reads dataset names from here, so
-    # the invention would change how real archives are unpacked. The schema
-    # now accepts null counts, so the grid can be added the moment it exists.
+        - mean
+        - median
+        - standard_deviation
+        - range
+        - coefficient_of_variation
     keywords:
-      - cbf
-      - att
-      - asl
-      - arterial spin labeling
+    - cbf
+    - att
+    - asl
+    - arterial spin labeling
+    optional_maps: []
+    required_artifacts: []
+    code_execution_required: false
   dsc:
     label: DSC
     description: Dynamic susceptibility contrast MRI
     expected_maps:
-      - cbv
-      - cbf
-      - mtt
-    # CBV, CBF and MTT are the standard DSC outputs and are what this
-    # challenge asks for. Same reasoning as ASL above.
+    - cbv
+    - cbf
+    - mtt
     required_maps:
-      - cbv
-      - cbf
-      - mtt
-    # Descriptive statistics inside whatever masks the organiser supplies.
-    # These involve no scientific decision: the median CBV inside a grey
-    # matter mask means the same thing whoever computes it, unlike accuracy,
-    # deviance or a pass threshold, which still need definitions from the
-    # challenge leads. Set provisionally so DSC behaves like ASL and DCE
-    # rather than silently reporting nothing, and untested against real DSC
-    # reference data because none has been supplied yet.
+    - cbv
+    - cbf
+    - mtt
     analysis:
       roi_descriptive:
         enabled: true
         map_types:
-          - cbv
-          - cbf
-          - mtt
+        - cbv
+        - cbf
+        - mtt
         report_metrics:
-          - mean
-          - median
-          - standard_deviation
-          - range
-          - coefficient_of_variation
-    # No `datasets` block, for the same reason as ASL above.
+        - mean
+        - median
+        - standard_deviation
+        - range
+        - coefficient_of_variation
     keywords:
-      - cbv
-      - cbf
-      - mtt
-      - dsc
-      - dynamic susceptibility contrast
+    - cbv
+    - cbf
+    - mtt
+    - dsc
+    - dynamic susceptibility contrast

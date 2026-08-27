@@ -74,6 +74,7 @@ node tests/frontend_config_maps_test.js
 node tests/frontend_run_outcome_test.js
 node tests/frontend_config_changes_test.js
 node tests/frontend_config_preview_test.js
+node tests/frontend_config_assets_test.js
 ```
 
 The trusted scoring-package example is in `examples/demo-scoring-package/`; test inputs

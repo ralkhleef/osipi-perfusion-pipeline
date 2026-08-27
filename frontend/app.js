@@ -6491,15 +6491,21 @@ function _renderProviderCard(p) {
 function _runOutcomeHost() {
   let host = el("score-run-outcome");
   if (host) return host;
-  const anchor = el("score-status-hint") || el("btn-score-all");
-  if (!anchor || !anchor.parentNode) return null;
+  // Above the button row, not below the card. Placed after the hint it sat
+  // below the metric preview, which can be tall enough to push the outcome
+  // off screen, so the run still looked like it had done nothing until you
+  // scrolled. It now sits where the eye already is, next to the button that
+  // was just pressed.
+  const actions = document.querySelector("#step-score .smc-actions")
+    || el("btn-score-all")?.parentNode;
+  if (!actions || !actions.parentNode) return null;
   host = document.createElement("p");
   host.id = "score-run-outcome";
   host.className = "score-run-outcome";
   host.setAttribute("role", "status");
   host.setAttribute("aria-live", "polite");
   host.style.display = "none";
-  anchor.parentNode.insertBefore(host, anchor.nextSibling);
+  actions.parentNode.insertBefore(host, actions);
   return host;
 }
 
@@ -7080,14 +7086,55 @@ function _renderConfigurationVersions(versions) {
     </div>`).join("") : `<p>No saved versions yet. Test, preview, then save the first version.</p>`;
 }
 
+/* The three kinds of organiser file, what each is for, and the folder it goes
+   in. The folder matters most: the panel previously showed a count and a flat
+   list of names, so the obvious question, where do these live and where do I
+   put mine, had no answer anywhere on screen. */
+const ASSET_KINDS = [
+  ["reference", "Reference maps", "maps",
+   "Ground truth parameter maps. Submitted maps are compared against these."],
+  ["mask", "ROI masks", "masks",
+   "Regions to report statistics inside, such as grey matter or a lesion."],
+  ["measured_signal", "Measured signal-time curves", "signals",
+   "The measured curve, compared against a submitted modelled curve."],
+];
+
 function _renderConfigurationAssets(assets) {
   const target = el("config-manager-assets-status");
   if (!target) return;
-  const counts = assets.counts || {};
-  const summary = `<p>${Number(counts.reference || 0)} reference map(s) · ${Number(counts.mask || 0)} mask(s) · ${Number(counts.measured_signal || 0)} measured signal(s)</p>`;
-  const rows = (assets.items || []).map((item) => `
-    <div class="config-asset-row"><span>${escapeHtml(item.name)}<br><small>${escapeHtml(item.kind.replaceAll("_", " "))}</small></span><span class="${item.readable ? "config-version-active" : ""}">${item.readable ? "Readable" : "Unreadable"}${item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : ""}</span></div>`).join("");
-  target.innerHTML = summary + (rows || `<p>No private assets have been added for this challenge.</p>`);
+  const items = assets.items || [];
+  // Before the panel has loaded there is no challenge yet. Showing a
+  // placeholder keeps the path readable as a template; interpolating an empty
+  // string produced data/reference_data//maps/, which someone would copy.
+  const challenge = String(assets.challenge_type || "").toLowerCase() || "<challenge>";
+
+  const groups = ASSET_KINDS.map(([kind, title, folder, purpose]) => {
+    const mine = items.filter((item) => item.kind === kind);
+    const path = `data/reference_data/${challenge}/${folder}/`;
+    const body = mine.length
+      ? `<ul class="cfg-asset-files">${mine.map((item) => `
+          <li>
+            <span class="cfg-asset-name">${escapeHtml(item.name)}</span>
+            <span class="cfg-asset-meta${item.readable ? "" : " cfg-asset-bad"}">
+              ${item.readable ? "Readable" : "Cannot be read"}${
+                item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : ""}
+            </span>
+          </li>`).join("")}</ul>`
+      : `<p class="cfg-asset-empty">None yet. Add one below, or copy files
+           straight into this folder.</p>`;
+    return `
+      <section class="cfg-asset-group" data-asset-kind="${escapeHtml(kind)}">
+        <header class="cfg-asset-head">
+          <h5>${escapeHtml(title)}</h5>
+          <span class="cfg-asset-count${mine.length ? " cfg-asset-count-has" : ""}">${mine.length}</span>
+        </header>
+        <p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>
+        <p class="cfg-asset-path"><code>${escapeHtml(path)}</code></p>
+        ${body}
+      </section>`;
+  }).join("");
+
+  target.innerHTML = `<div class="cfg-asset-groups">${groups}</div>`;
 }
 
 function _renderConfigurationCapabilities(rows) {
@@ -8754,31 +8801,69 @@ function _makeCombinedJsonExportHandler(btn, blinded = true) {
   });
 }
 
+/* Which exports would actually contain something.
+
+   Every row used to be clickable regardless. Downloading a file that turns
+   out to hold nothing but a header row is a worse answer than being told in
+   advance why it is empty, so a row with no data to put in it is disabled and
+   says what is missing. */
+function _exportAvailability() {
+  const [roiRows] = _roiDescriptivePayload();
+  const analyses = _niftiAnalysisEntries();
+  const compared = analyses.some((analysis) => {
+    const ref = analysis.reference_scoring;
+    return ref && Array.isArray(ref.maps) && ref.maps.some((m) => m && m.status === "compared");
+  });
+  return {
+    roi: (roiRows || []).length > 0,
+    reference: compared,
+    submission: _getKnownSubmissions().length > 0,
+  };
+}
+
 // Export rows come from the SAME shared file-row renderer as every other step.
 // Rendered once at load so the button ids exist before the handlers wire below.
 function _renderExportRows() {
   const host = el("export-main-list");
   if (!host) return;
+  const have = _exportAvailability();
+  const noSubmission = have.submission ? null : "Nothing has been reviewed yet.";
   const rows = [
     { id: "export-pdf-report-group", icon: "PDF", iconClass: "export-icon-check", title: "PDF Report",
-      meta: "Concise shareable report with metadata, validation and execution status, QC results, and limitations.",
+      meta: "Metadata, validation, execution, QC and limitations.",
+      unavailable: noSubmission,
       btn: `<button type="button" id="export-pdf-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download PDF report" title="Downloads the blinded PDF report.">Download PDF</button>` },
     { id: "export-report-group", icon: "HTML", iconClass: "export-icon-check", title: "HTML Report",
-      meta: "Self-contained report with validation, execution, QC and configured analysis tables, issues, methodology, and limitations.",
+      meta: "The same content as the PDF, with the full tables.",
+      unavailable: noSubmission,
       btn: `<button type="button" id="export-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Open HTML report" title="Opens the blinded HTML report in a new tab.">Open Report</button>` },
     { id: "export-combined-csv-group", icon: "CSV", iconClass: "export-icon-score", title: "CSV Results",
-      meta: "Standard blinded tabular QC/reference summary without team or contact details.",
+      meta: "One row per submission, for a spreadsheet.",
+      unavailable: noSubmission,
       btn: `<button type="button" id="export-combined-csv-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download CSV results" title="Downloads the blinded combined CSV summary.">Download CSV</button>` },
     { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON Results",
-      meta: "Machine-readable validation, execution, QC, reference, and limitation summary.",
+      meta: "The same data, for another program to read.",
+      unavailable: noSubmission,
       btn: `<button type="button" id="export-combined-json-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download JSON results" title="Downloads the blinded combined JSON summary.">Download JSON</button>` },
-    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Parameter-map Statistics CSV",
-      meta: "Scan-level mean, median, SD, range, and CoV for configured parameter maps within each compatible ROI. Descriptive within-scan values, not accuracy or repeatability.",
+    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Statistics CSV",
+      meta: "Mean, median, SD, range and CoV inside each ROI, per scan.",
+      unavailable: noSubmission || (have.roi ? null
+        : "No ROI statistics were produced, so this would be empty. It needs compatible ROI masks."),
       btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI parameter-map statistics CSV" title="Downloads within-ROI descriptive statistics per map and scan.">Download CSV</button>` },
     { id: "export-combined-unblinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Unblinded CSV",
-      meta: "CSV with team, contact, and original submission identifiers for internal review.",
+      meta: "The same rows, with team and contact included.",
+      unavailable: noSubmission,
       btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
   ];
+  // Disabling the control and saying why, rather than removing the row: a row
+  // that vanishes leaves someone hunting for an export that was there before.
+  rows.forEach((row) => {
+    if (!row.unavailable) return;
+    row.meta = `${row.meta}<span class="export-unavailable">${escapeHtml(row.unavailable)}</span>`;
+    row.btn = row.btn
+      .replace("<button ", '<button disabled aria-disabled="true" ')
+      .replace(/title="[^"]*"/, `title="${escapeHtml(row.unavailable)}"`);
+  });
   const renderRows = (items) => items.map((r) => renderFileRow({
     extraClass: "export-main-row export-file-row",
     attrs: `id="${r.id}"`,

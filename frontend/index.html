@@ -716,16 +716,24 @@
                   </div>
                   <div class="config-manager-modal-body">
                     <div id="config-manager-assets-status"></div>
-                    <div class="config-manager-asset-upload">
-                      <select id="config-manager-asset-kind" aria-label="Private asset type">
-                        <option value="reference">Reference map</option>
-                        <option value="mask">ROI mask</option>
-                        <option value="measured_signal">Measured signal-time curve</option>
-                      </select>
-                      <label class="btn btn-secondary btn-sm" for="config-manager-asset-file">Choose NIfTI file</label>
-                      <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
-                      <span class="config-manager-selected-file" id="config-manager-asset-file-name">No file selected</span>
-                      <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+
+                    <div class="cfg-asset-add">
+                      <h5>Add a file</h5>
+                      <p class="cfg-asset-add-note">It is copied into the folder for the
+                        type you pick above. Nothing leaves this machine.</p>
+                      <div class="config-manager-asset-upload">
+                        <label class="cfg-asset-field">Type
+                          <select id="config-manager-asset-kind" aria-label="Private asset type">
+                            <option value="reference">Reference map</option>
+                            <option value="mask">ROI mask</option>
+                            <option value="measured_signal">Measured signal-time curve</option>
+                          </select>
+                        </label>
+                        <label class="btn btn-secondary btn-sm" for="config-manager-asset-file">Choose NIfTI file</label>
+                        <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
+                        <span class="config-manager-selected-file" id="config-manager-asset-file-name">No file selected</span>
+                        <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+                      </div>
                     </div>
                   </div>
                 </div>

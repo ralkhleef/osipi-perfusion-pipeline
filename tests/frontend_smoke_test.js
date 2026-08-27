@@ -1185,9 +1185,9 @@ checkContains("Main CSV Results option", mainExportOptions, "CSV Results");
 checkContains("Main JSON Results option", mainExportOptions, "JSON Results");
 checkNotContains("Redundant Blinded CSV option removed", mainExportOptions, "Blinded CSV");
 checkContains("Main Unblinded CSV option", mainExportOptions, "Unblinded CSV");
-checkContains("Main report description", mainExportOptions, "Self-contained report");
-checkContains("Main PDF report description", mainExportOptions, "Concise shareable report");
-checkContains("Main unblinded CSV description", mainExportOptions, "CSV with team, contact");
+checkContains("Main report description", mainExportOptions, "the full tables");
+checkContains("Main PDF report description", mainExportOptions, "validation, execution, QC and limitations");
+checkContains("Main unblinded CSV description", mainExportOptions, "team and contact included");
 checkNotContains("Main copy avoids reviewer-safe wording", mainExportOptions, "reviewer-safe");
 checkNotContains("Main copy avoids external evaluation wording", mainExportOptions, "external evaluation");
 checkNotContains("Main copy avoids internal organizer wording", mainExportOptions, "internal organizer");
@@ -1369,7 +1369,7 @@ checkContains("Shared card width variable drives every shell", css, "max-width: 
 
 // Export exposes ONLY the four consolidated worklist rows
 const exportSec = mainExportOptions;
-["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Parameter-map Statistics CSV", "Unblinded CSV"].forEach((label) => {
+["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Statistics CSV", "Unblinded CSV"].forEach((label) => {
   checkContains(`Export shows ${label} row`, exportSec, `title: "${label}"`);
 });
 checkNotContains("Export hides raw Validation CSV", exportSec, "Validation CSV");
@@ -1428,7 +1428,8 @@ checkContains("Reset clears wizard + session state", appJs, "clearWizardState();
 
 // ROI parameter-map statistics (within-scan descriptive values)
 // Export row
-checkContains("ROI export row present", appJs, "ROI Parameter-map Statistics CSV");
+checkContains("ROI export row present", appJs, "export-roi-descriptive-group");
+checkContains("ROI export row is titled", appJs, "ROI Statistics CSV");
 checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
 checkContains("ROI export reuses the session query helper", appJs, "export-roi-descriptive?${q}");
 checkContains("ROI export handles a missing filename header", appJs, '"roi_descriptive_statistics.csv"');
