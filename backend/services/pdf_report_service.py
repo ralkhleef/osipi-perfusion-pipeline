@@ -948,6 +948,66 @@ def _header_check_model(
     }
 
 
+def _reference_by_region_model(
+    summaries: Sequence[Mapping[str, Any]], *, blinded: bool,
+) -> dict[str, Any]:
+    """Comparison against ground truth, broken down by region.
+
+    Both challenge leads asked for exactly this and the report did not show
+    it. The scorer has computed it per mask for a while, but the only place
+    it appeared was an appendix that is off by default, so a reader saw the
+    whole-image bias and nothing else.
+
+    That difference is not cosmetic. On the challenge lead's own ASL data the
+    whole-image CBF bias is +0.83, which looks like close agreement, while
+    grey matter is +7.99 and white matter is -4.20. Averaged over the brain
+    the two nearly cancel. The regional rows are the result; the single
+    number hides it.
+
+    The whole image is kept as its own row so the two sit together and the
+    cancellation is visible rather than inferred.
+    """
+    rows: list[list[str]] = []
+    for index, summary in enumerate(summaries, start=1):
+        label = _submission_label(summary, index, blinded=blinded)
+        analysis = summary.get("nifti_analysis")
+        analysis = analysis if isinstance(analysis, Mapping) else {}
+        scoring = analysis.get("reference_scoring")
+        scoring = scoring if isinstance(scoring, Mapping) else {}
+        for row in scoring.get("maps") or []:
+            if not isinstance(row, Mapping):
+                continue
+            map_type = str(row.get("detected_map_type") or "").upper()
+            regions: list[tuple[str, Mapping]] = []
+            whole = row.get("whole_map")
+            if isinstance(whole, Mapping) and whole.get("status") == "compared":
+                regions.append(("Whole image", whole))
+            for mask in row.get("masks") or []:
+                metrics = mask.get("metrics") if isinstance(mask, Mapping) else None
+                if isinstance(metrics, Mapping) and metrics.get("status") == "compared":
+                    regions.append((
+                        str(mask.get("mask_label") or mask.get("mask_name") or "ROI"),
+                        metrics,
+                    ))
+            for region, metrics in regions:
+                rows.append([
+                    label, map_type, region,
+                    _fmt(metrics.get("bias")),
+                    _fmt(metrics.get("mae")),
+                    _fmt(metrics.get("rmse")),
+                    _roi_percent(metrics.get("error_coefficient_of_variation")),
+                    _fmt(metrics.get("correlation")),
+                    _fmt(metrics.get("voxel_count") or 0, 0),
+                ])
+    return {
+        "reference_region_headers": [
+            "Submission", "Map", "Region", "Bias", "MAE", "RMSE",
+            "Error CoV", "Corr.", "Voxels",
+        ],
+        "reference_region_rows": rows,
+    }
+
+
 def _build_report_model(
     summaries: Sequence[Mapping[str, Any]],
     *,
@@ -994,6 +1054,7 @@ def _build_report_model(
     roi_model = _roi_descriptive_model(summaries)
     prototype_model = _prototype_analysis_model(summaries)
     header_check_model = _header_check_model(summaries, blinded=blinded)
+    region_model = _reference_by_region_model(summaries, blinded=blinded)
     roi_available = bool(roi_model.get("roi_descriptive_rows"))
     grouped_available = bool(prototype_model.get("grouped_roi_rows"))
     rss_available = bool(prototype_model.get("dce_rss_rows"))
@@ -1328,6 +1389,7 @@ def _build_report_model(
         **roi_model,
         **prototype_model,
         **header_check_model,
+        **region_model,
         "analysis_availability": {
             "qc_and_previews": bool(map_count),
             "roi_statistics": roi_available,
@@ -2174,6 +2236,25 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 index for index, header in enumerate(keep)
                 if header in numeric_headers
             ],
+        ))
+
+    region_rows = model.get("reference_region_rows") or []
+    if region_rows:
+        story.append(section("Comparison against ground truth, by region"))
+        story.append(Paragraph(
+            "A whole-image figure can hide opposite regional errors that cancel. "
+            "The whole image is shown as its own row for that reason.",
+            note_style))
+        headers = list(model.get("reference_region_headers") or [])
+        # The submission column repeats one value on a single-submission
+        # report, so it is dropped there the way the ROI table drops its
+        # constant identity columns.
+        if len({row[0] for row in region_rows}) == 1:
+            headers, region_rows = headers[1:], [row[1:] for row in region_rows]
+        story.append(data_table(
+            headers, region_rows,
+            num_cols=[i for i, h in enumerate(headers)
+                      if h in {"Bias", "MAE", "RMSE", "Error CoV", "Corr.", "Voxels"}],
         ))
 
     # ── Submitted outputs & reference comparison, per submission and per map ──

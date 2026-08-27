@@ -3367,6 +3367,18 @@ def export_report(
         report_model.get("dce_rss_rows") or [],
         "Residual Sum of Squares (RSS): raw voxelwise sum across time of (measured − modelled)², summarized by region. This is not deviance or official scoring.",
     )
+    # The per-region comparison, from the same model rows the PDF renders.
+    _region_rows = report_model.get("reference_region_rows") or []
+    _region_headers = list(report_model.get("reference_region_headers") or [])
+    if _region_rows and len({r[0] for r in _region_rows}) == 1:
+        _region_headers, _region_rows = _region_headers[1:], [r[1:] for r in _region_rows]
+    region_table_html = _prototype_table(
+        _region_headers, _region_rows,
+        "Comparison against ground truth within each region. A whole-image "
+        "figure can hide opposite regional errors that cancel, so the whole "
+        "image is shown as its own row.",
+    )
+
     prototype_analysis_html = (
         grouped_table_html + rss_table_html
         if grouped_table_html or rss_table_html else ""
@@ -3749,6 +3761,11 @@ def export_report(
       {main_map_results_html}
     </div>
   </details>
+
+  {f'''<details class="report-section" open>
+    <summary>Comparison by Region <span class="section-count">{len(_region_rows)}</span></summary>
+    <div class="report-section-body">{region_table_html}</div>
+  </details>''' if _region_rows else ''}
 
   {f'''<details class="report-section" open>
     <summary>Header and Orientation Check <span class="section-count">{len(_header_check_rows)}</span></summary>
