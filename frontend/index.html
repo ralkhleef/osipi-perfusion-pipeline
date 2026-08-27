@@ -485,7 +485,27 @@
             <button id="btn-score-all" class="btn btn-primary" type="button">Run Analysis</button>
             <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue to Export</button>
           </div>
+          <!-- Declared here rather than created in script. When this was built
+               on demand it lived only until the next re-render of the card, so
+               the one message telling you the run had happened could vanish
+               between the run finishing and you looking at it. -->
+          <p class="score-run-outcome" id="score-run-outcome" role="status" aria-live="polite" style="display:none"></p>
           <p class="smc-hint" id="score-status-hint"></p>
+        </div>
+      </div>
+
+      <!-- Confirmation that a run happened. A banner alone was missed, because
+           the button returns to reading "Run Analysis" either way and the card
+           looks identical to how it looked beforehand. -->
+      <div class="run-result-modal" id="run-result-modal" hidden aria-hidden="true">
+        <div class="run-result-dialog" role="dialog" aria-modal="true" aria-labelledby="run-result-title">
+          <span class="run-result-icon" id="run-result-icon" aria-hidden="true">Done</span>
+          <h4 id="run-result-title">Analysis complete</h4>
+          <p id="run-result-text"></p>
+          <div class="run-result-actions">
+            <button type="button" class="btn btn-secondary" id="run-result-close">Stay on this step</button>
+            <button type="button" class="btn btn-primary" id="run-result-continue">Continue to Export</button>
+          </div>
         </div>
       </div>
 

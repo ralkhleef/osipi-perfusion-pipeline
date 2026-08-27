@@ -4654,8 +4654,25 @@ body {
 .config-manager-package-block { margin-top: 12px; min-width: 0; }
 .config-manager-package-detail { margin-top: 7px !important; overflow-wrap: anywhere; }
 .config-manager-message { padding: 12px 0; color: var(--muted); font-size: 0.75rem; }
+.config-manager-asset-upload { align-items: flex-end; }
 .config-manager-asset-upload > * { min-width: 0; max-width: 100%; }
-.config-manager-asset-upload select { flex: 1 1 210px; width: auto; }
+/* Direct children only. This rule used to match the select nested inside
+   .cfg-asset-field, whose flex direction is column. A flex basis meant for the
+   width was therefore applied to the height and then grown to fill, which is
+   how the Type dropdown ended up roughly 350 pixels tall. */
+.config-manager-asset-upload > select { flex: 0 1 210px; width: auto; }
+.config-manager-asset-upload > .cfg-asset-field { flex: 0 1 220px; }
+.cfg-asset-field select {
+  flex: none;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid #d9d4e8;
+  border-radius: 6px;
+}
 .config-manager-selected-file {
   flex: 1 1 220px;
   min-width: 0;
@@ -4773,7 +4790,8 @@ body.config-manager-modal-open { overflow: hidden; }
   .config-capability-list dd { margin-bottom: 8px; }
   .config-manager-inline-actions .btn { flex: 1 1 150px; text-align: center; }
   .config-manager-asset-upload { align-items: stretch; flex-direction: column; }
-  .config-manager-asset-upload select { flex-basis: auto; width: 100%; }
+  .config-manager-asset-upload > select,
+  .config-manager-asset-upload > .cfg-asset-field { flex-basis: auto; width: 100%; }
   .config-manager-selected-file { flex-basis: auto; }
 }
 
@@ -12117,6 +12135,64 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .score-run-outcome--ok   { border-color: #9ae6b4; background: #f0fff4; color: #276749; }
 .score-run-outcome--warn { border-color: #fac775; background: #fffaf0; color: #854f0b; }
 .score-run-outcome--err  { border-color: #f7c1c1; background: #fff5f5; color: #c53030; }
+
+/* ── The run confirmation popup ──────────────────────────────────────────
+   Colours match the banner tone for tone, so the popup and the line left
+   behind on the page cannot tell different stories about the same run. */
+.run-result-modal[hidden] { display: none; }
+.run-result-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(38, 30, 66, 0.42);
+}
+.run-result-dialog {
+  width: min(420px, 100%);
+  padding: 22px 24px 20px;
+  border-top: 4px solid #48bb78;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(38, 30, 66, 0.24);
+  text-align: center;
+}
+.run-result-dialog--warn { border-top-color: #ed8936; }
+.run-result-dialog--err  { border-top-color: #e53e3e; }
+.run-result-icon {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: #f0fff4;
+  color: #276749;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.run-result-icon--warn { background: #fffaf0; color: #854f0b; }
+.run-result-icon--err  { background: #fff5f5; color: #c53030; }
+.run-result-dialog h4 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text, #212529);
+}
+.run-result-dialog p {
+  margin: 0 0 18px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--muted, #6b7280);
+}
+.run-result-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
 
 /* ── Unsaved configuration changes ────────────────────────────────────────
    An edit used to leave no trace until a version was saved and read back.

@@ -288,13 +288,40 @@ def preview_configuration(payload: dict[str, Any]) -> dict[str, Any]:
     return {"valid": True, "challenge_type": challenge, "changes": rows, "change_count": len(rows)}
 
 
+def _asset_roots(challenge: str) -> list[Path]:
+    """The folders reference assets may live in, best first.
+
+    These are deliberately the same three roots backend/scoring.py searches.
+    While this function knew only about the challenge-scoped layout, the panel
+    reported zero reference maps at the same time as the pipeline was happily
+    scoring against files in the flat one. That is the worst kind of wrong:
+    quiet, and about the single thing the panel exists to report.
+    """
+    base = paths.REFERENCE_DATA_DIR
+    return [base / challenge, base / "reference", base]
+
+
 def _asset_files(challenge: str) -> list[tuple[str, Path]]:
-    base = paths.REFERENCE_DATA_DIR / challenge
+    """Every asset across all three layouts, each file reported once.
+
+    Dotfiles are skipped so the ingestion manifests that sit beside the data
+    are not counted as reference maps.
+    """
     result: list[tuple[str, Path]] = []
-    for kind, directory in _ASSET_DIRS.items():
-        folder = base / directory
-        if folder.exists():
-            result.extend((kind, file) for file in sorted(folder.rglob("*")) if file.is_file())
+    seen: set[Path] = set()
+    for root in _asset_roots(challenge):
+        for kind, directory in _ASSET_DIRS.items():
+            folder = root / directory
+            if not folder.exists():
+                continue
+            for file in sorted(folder.rglob("*")):
+                if not file.is_file() or file.name.startswith("."):
+                    continue
+                resolved = file.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                result.append((kind, file))
     return result
 
 
@@ -314,10 +341,14 @@ def asset_status(challenge_type: str) -> dict[str, Any]:
     items = []
     for kind, file in _asset_files(challenge):
         inspected = _inspect_nifti(file)
+        relative = file.relative_to(paths.REFERENCE_DATA_DIR)
         items.append({
             "kind": kind,
             "name": file.name,
-            "relative_path": str(file.relative_to(paths.REFERENCE_DATA_DIR)),
+            "relative_path": str(relative),
+            # The folder this file was actually found in, so the panel can name
+            # the real location rather than the one an upload would have used.
+            "folder": f"data/reference_data/{relative.parent.as_posix()}/",
             **inspected,
         })
     return {
@@ -326,6 +357,12 @@ def asset_status(challenge_type: str) -> dict[str, Any]:
         "counts": {
             kind: sum(1 for item in items if item["kind"] == kind)
             for kind in _ASSET_DIRS
+        },
+        # Where an upload would put each kind. Shown when a kind is empty, so
+        # the answer to "where do I put mine" is on screen either way.
+        "upload_folders": {
+            kind: f"data/reference_data/{challenge}/{directory}/"
+            for kind, directory in _ASSET_DIRS.items()
         },
         "local_only": True,
     }

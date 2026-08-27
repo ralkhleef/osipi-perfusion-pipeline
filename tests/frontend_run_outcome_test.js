@@ -22,6 +22,7 @@ const path = require("path");
 const vm = require("vm");
 
 const appJs = fs.readFileSync(path.resolve(__dirname, "../frontend/app.js"), "utf8");
+const indexHtml = fs.readFileSync(path.resolve(__dirname, "../frontend/index.html"), "utf8");
 
 let passed = 0;
 let failed = 0;
@@ -97,10 +98,37 @@ check("an official failure is also named correctly",
   outcome(1, 0, 1, 2, true).text);
 
 console.log("\nWiring");
+/* The banner is declared in index.html rather than built by script. Built on
+   demand it survived only until the next re-render of the status card, so the
+   one line saying the run had happened could disappear before it was read. */
+check("the outcome banner is declared in the page, not created on demand",
+  /id="score-run-outcome"/.test(indexHtml), "score-run-outcome is not in index.html");
 check("the outcome is announced to screen readers",
-  appJs.includes('setAttribute("aria-live"'), "aria-live missing");
+  /id="score-run-outcome"[^>]*aria-live="polite"/.test(indexHtml), "aria-live missing");
 check("a new run clears the previous outcome first",
   appJs.includes("_clearRunOutcome()"));
+
+/* A banner alone was missed in use, because nothing else on the card changes:
+   the button returns to reading "Run Analysis" whether the run worked, failed
+   or never started. The popup states the outcome where the eye already is. */
+/* Anchored to the start of a line. A plain substring check passed even with
+   the call commented out, which is exactly the regression worth catching. */
+check("a run also raises a popup that has to be dismissed",
+  /^\s*_openRunResult\(tone, text, isOfficial\);/m.test(appJs),
+  "_showRunOutcome does not open the popup");
+check("the popup exists in the page",
+  /id="run-result-modal"/.test(indexHtml), "run-result-modal is not in index.html");
+check("the popup starts hidden",
+  /id="run-result-modal"[^>]*\shidden/.test(indexHtml), "the popup would show on load");
+check("the popup names the outcome rather than always saying it worked",
+  /RUN_RESULT_HEADINGS\s*=\s*\{[\s\S]{0,240}err:/.test(appJs),
+  "there is no distinct heading for a failed run");
+check("the popup only offers Continue to Export when a run succeeded",
+  /continueBtn\.style\.display = tone === "ok"/.test(appJs),
+  "a failed run would still invite you onward");
+check("the popup can be dismissed with Escape",
+  /event\.key === "Escape"[\s\S]{0,60}_closeRunResult/.test(appJs),
+  "Escape does not close the popup");
 check("the outcome is reported even if the run throws",
   /finally\s*\{[\s\S]{0,400}_showRunOutcome/.test(appJs),
   "_showRunOutcome is not in the finally block");

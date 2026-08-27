@@ -6489,25 +6489,68 @@ function _renderProviderCard(p) {
    never mistaken for a fresh one. */
 
 function _runOutcomeHost() {
-  let host = el("score-run-outcome");
-  if (host) return host;
-  // Above the button row, not below the card. Placed after the hint it sat
-  // below the metric preview, which can be tall enough to push the outcome
-  // off screen, so the run still looked like it had done nothing until you
-  // scrolled. It now sits where the eye already is, next to the button that
-  // was just pressed.
-  const actions = document.querySelector("#step-score .smc-actions")
-    || el("btn-score-all")?.parentNode;
-  if (!actions || !actions.parentNode) return null;
-  host = document.createElement("p");
-  host.id = "score-run-outcome";
-  host.className = "score-run-outcome";
-  host.setAttribute("role", "status");
-  host.setAttribute("aria-live", "polite");
-  host.style.display = "none";
-  actions.parentNode.insertBefore(host, actions);
-  return host;
+  // Declared in index.html directly beneath the button that was just pressed.
+  // It used to be built here on demand, which meant it lived only until the
+  // next re-render of the status card.
+  return el("score-run-outcome");
 }
+
+/* The popup. The banner is correct but quiet, and quiet was the original
+   complaint: nothing on screen changes enough to notice, so a completed run
+   and a click that did nothing look the same. This says so in the middle of
+   the screen and offers the next step, which is where people were heading. */
+const RUN_RESULT_HEADINGS = {
+  ok: "Analysis complete",
+  warn: "Analysis finished with nothing to do",
+  err: "Analysis finished with problems",
+};
+
+function _closeRunResult() {
+  const modal = el("run-result-modal");
+  if (!modal) return;
+  modal.hidden = true;
+  modal.setAttribute("aria-hidden", "true");
+  el("btn-score-all")?.focus();
+}
+
+function _openRunResult(tone, text, isOfficial) {
+  const modal = el("run-result-modal");
+  if (!modal) return;
+  const heading = (RUN_RESULT_HEADINGS[tone] || RUN_RESULT_HEADINGS.ok)
+    .replace("Analysis", isOfficial ? "Scoring" : "Analysis");
+  const titleEl = el("run-result-title");
+  const textEl = el("run-result-text");
+  const iconEl = el("run-result-icon");
+  if (titleEl) titleEl.textContent = heading;
+  if (textEl) textEl.textContent = text;
+  if (iconEl) {
+    iconEl.textContent = tone === "err" ? "Problem" : tone === "warn" ? "Check" : "Done";
+    iconEl.className = `run-result-icon run-result-icon--${tone}`;
+  }
+  const dialog = modal.querySelector(".run-result-dialog");
+  if (dialog) dialog.className = `run-result-dialog run-result-dialog--${tone}`;
+  // Only offer the next step when there is something to export.
+  const continueBtn = el("run-result-continue");
+  if (continueBtn) continueBtn.style.display = tone === "ok" ? "" : "none";
+  modal.hidden = false;
+  modal.setAttribute("aria-hidden", "false");
+  (continueBtn && tone === "ok" ? continueBtn : el("run-result-close"))?.focus();
+}
+
+document.addEventListener("click", (event) => {
+  const modal = el("run-result-modal");
+  if (!modal || modal.hidden) return;
+  if (event.target === modal || event.target.id === "run-result-close") {
+    _closeRunResult();
+  } else if (event.target.id === "run-result-continue") {
+    _closeRunResult();
+    el("btn-score-continue")?.click();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") _closeRunResult();
+});
 
 function _clearRunOutcome() {
   const host = el("score-run-outcome");
@@ -6540,12 +6583,16 @@ function _runOutcomeText(tally, isOfficial) {
 }
 
 function _showRunOutcome(tally, isOfficial) {
-  const host = _runOutcomeHost();
-  if (!host) return;
   const { tone, text } = _runOutcomeText(tally, isOfficial);
-  host.textContent = text;
-  host.className = `score-run-outcome score-run-outcome--${tone}`;
-  host.style.display = "";
+  const host = _runOutcomeHost();
+  if (host) {
+    host.textContent = text;
+    host.className = `score-run-outcome score-run-outcome--${tone}`;
+    host.style.display = "";
+  }
+  // The banner stays as the durable record on the page; the popup is what
+  // makes the run impossible to miss at the moment it finishes.
+  _openRunResult(tone, text, isOfficial);
 }
 
 // packageName: display name of active custom package, or null
@@ -7108,9 +7155,17 @@ function _renderConfigurationAssets(assets) {
   // string produced data/reference_data//maps/, which someone would copy.
   const challenge = String(assets.challenge_type || "").toLowerCase() || "<challenge>";
 
+  const uploadFolders = assets.upload_folders || {};
+
   const groups = ASSET_KINDS.map(([kind, title, folder, purpose]) => {
     const mine = items.filter((item) => item.kind === kind);
-    const path = `data/reference_data/${challenge}/${folder}/`;
+    // Name the folder these files are really in. A file found in the flat
+    // layout used to be described as living in the challenge-scoped one,
+    // which sent anyone looking for it to an empty directory.
+    const found = Array.from(new Set(mine.map((item) => item.folder).filter(Boolean)));
+    const paths = found.length
+      ? found
+      : [uploadFolders[kind] || `data/reference_data/${challenge}/${folder}/`];
     const body = mine.length
       ? `<ul class="cfg-asset-files">${mine.map((item) => `
           <li>
@@ -7129,7 +7184,8 @@ function _renderConfigurationAssets(assets) {
           <span class="cfg-asset-count${mine.length ? " cfg-asset-count-has" : ""}">${mine.length}</span>
         </header>
         <p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>
-        <p class="cfg-asset-path"><code>${escapeHtml(path)}</code></p>
+        <p class="cfg-asset-path">${paths.map((one) =>
+          `<code>${escapeHtml(one)}</code>`).join(" ")}</p>
         ${body}
       </section>`;
   }).join("");
