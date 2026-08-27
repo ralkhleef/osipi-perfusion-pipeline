@@ -6565,6 +6565,16 @@ function _clearRunOutcome() {
    different results and a reviewer needs to notice the difference. */
 function _runOutcomeText(tally, isOfficial) {
   const noun = isOfficial ? "Scoring" : "Analysis";
+  /* Distinguished from "no submissions", because the two have different
+     remedies and telling someone to upload a submission they have already
+     uploaded is how a person concludes the button is broken. */
+  if (tally.unconfigured) {
+    return {
+      tone: "warn",
+      text: `No analysis provider is configured, so there is nothing for this button to run. `
+        + `QC, ROI statistics and the comparison against ground truth do not need one and are already below.`,
+    };
+  }
   if (!tally.total) return { tone: "warn", text: "There are no submissions to analyse yet. Upload one first." };
   const parts = [];
   if (tally.scored) parts.push(`${tally.scored} of ${tally.total} analysed`);
@@ -6632,6 +6642,25 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
     if (btnAll)  btnAll.disabled      = false;
   } else {
     if (btnAll)  btnAll.disabled      = true;
+  }
+
+  /* A visible button with no click listener is the worst outcome available:
+     it looks pressable, it presses, and nothing happens, forever, with no
+     explanation. That is reachable whenever the card is on screen while
+     nothing is configured, which happens if the active configuration changes
+     under a page that is already open, for instance after an activation
+     fails and resets the provider to none.
+
+     So the button is always wired. When there is nothing to run it says so
+     rather than absorbing the click in silence. */
+  if (btnAll && !isConfigured) {
+    const fresh = btnAll.cloneNode(true);
+    fresh.disabled = false;
+    fresh.textContent = actionText;
+    btnAll.replaceWith(fresh);
+    fresh.addEventListener("click", () => {
+      _showRunOutcome({ scored: 0, skipped: 0, failed: 0, total: 0, unconfigured: true }, isOfficial);
+    });
   }
 
   // Re-wire the configured analysis action (clone clears old listeners)

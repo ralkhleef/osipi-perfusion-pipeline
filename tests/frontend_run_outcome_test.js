@@ -137,5 +137,26 @@ check("a single score returns its status so a batch can be counted",
 check("an empty provider list hides the expander instead of showing an empty one",
   /providerDetails\.hidden = provs\.length === 0/.test(appJs));
 
+
+/* A visible button with no listener absorbs every click in silence. That state
+   is reachable whenever the card is on screen while nothing is configured, for
+   instance after an activation fails and resets the provider back to none. */
+console.log("\nThe button always does something");
+check("the button is wired even when nothing is configured",
+  /if \(btnAll && !isConfigured\)/.test(appJs),
+  "an unconfigured card leaves the button dead");
+check("an unconfigured click is told apart from having no submissions",
+  /tally\.unconfigured/.test(appJs), "the two cases share one message");
+check("it says the comparison does not need a provider",
+  /do not need one and are already below/.test(appJs),
+  "the message does not say what still works");
+{
+  const run = sandbox._runOutcomeText({ scored: 0, skipped: 0, failed: 0, total: 0, unconfigured: true }, false);
+  check("the unconfigured message does not tell you to upload again",
+    !/[Uu]pload/.test(run.text), `wrong remedy: ${run.text}`);
+  check("the unconfigured message is a warning, not a success",
+    run.tone === "warn", `tone was ${run.tone}`);
+}
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);
