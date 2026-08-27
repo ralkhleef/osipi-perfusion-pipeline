@@ -53,6 +53,7 @@ _CHALLENGE_KEYS = {
     "grouped_statistics",
     "analysis",
     "code_execution_required",
+    "bids_validation",
     "reference_dataset_version",
 }
 # Optional aggregation of per-scan ROI statistics.
@@ -396,6 +397,19 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
             if spec_map is None:
                 continue
             _reject_unknown_keys(spec_map, _CHALLENGE_KEYS, spec_path, errors)
+            if "bids_validation" in spec_map:
+                bids = spec_map.get("bids_validation")
+                bids_path = f"{spec_path}.bids_validation"
+                if not isinstance(bids, dict):
+                    errors.append(f"{bids_path}: must be a mapping")
+                else:
+                    _reject_unknown_keys(bids, _BIDS_VALIDATION_KEYS, bids_path, errors)
+                    for flag in ("enabled", "require_layout"):
+                        if flag in bids and not isinstance(bids.get(flag), bool):
+                            errors.append(f"{bids_path}.{flag}: must be true or false")
+                    if "severity" in bids and bids.get("severity") not in ("warning", "error"):
+                        errors.append(
+                            f"{bids_path}.severity: must be 'warning' or 'error'")
             for field in ("label", "expected_maps", "keywords"):
                 if field not in spec_map:
                     errors.append(f"{spec_path}.{field}: required field is missing")
@@ -918,6 +932,23 @@ def required_artifacts_by_challenge() -> dict[str, tuple[str, ...]]:
     Ids are guaranteed by schema validation to exist in ``artifact_types``.
     """
     return _challenge_id_list("required_artifacts")
+
+
+#: Keys a bids_validation block may carry.
+_BIDS_VALIDATION_KEYS = {"enabled", "severity", "require_layout"}
+
+
+def bids_validation_by_challenge() -> dict[str, dict[str, Any]]:
+    """Per challenge BIDS settings, or an empty block when not configured.
+
+    Absent means the checks do not run at all, which is the default: a
+    challenge that has never adopted BIDS should not start reporting a
+    submission as non-conformant because the setting was added.
+    """
+    return {
+        str(challenge).lower(): copy.deepcopy(config.get("bids_validation") or {})
+        for challenge, config in validation_rules().get("challenges", {}).items()
+    }
 
 
 def analysis_by_challenge() -> dict[str, dict[str, Any]]:

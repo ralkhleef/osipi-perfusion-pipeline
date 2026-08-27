@@ -2121,7 +2121,9 @@ def test_report_html_generated(client: TestClient) -> None:
     assert "Scoring Summary" not in r.text
     assert "Parameter Map Previews" not in r.text
     assert "QC checks NIfTI readability" in r.text
-    assert "full BIDS validation is not implemented" in r.text
+    # The limitation is still stated, with wording that matches what the
+    # BIDS checks now actually do rather than claiming none exist.
+    assert "not the full specification" in r.text
     # Report metadata: the labels lost their trailing colons when the block
     # became a definition list, and submission/map counts moved into the
     # leader sentence and the key-figures band.

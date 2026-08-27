@@ -152,7 +152,39 @@ def validate_submission(
             )
         )
 
+    # BIDS layout, only when the challenge asks for it and the submission is
+    # actually laid out that way. A folder with no description and no subject
+    # directories is not a broken BIDS dataset, it is not one, and reporting
+    # it as such would bury the real findings.
+    bids_issues = _bids_issues(path, normalized_challenge)
+    errors.extend(issue for issue in bids_issues if issue.severity == "error")
+    warnings.extend(issue for issue in bids_issues if issue.severity != "error")
+
     return _finish_validation(path, normalized_challenge, errors, warnings, nifti_summary, output_dir)
+
+
+def _bids_issues(path: Path, challenge_type: str) -> list[ValidationIssue]:
+    """BIDS findings for this submission, or nothing if it does not apply."""
+    from osipi_pipeline.config.rules import bids_validation_by_challenge
+    from osipi_pipeline.validation.bids import looks_like_bids, validate_bids_structure
+
+    settings = (bids_validation_by_challenge() or {}).get(challenge_type) or {}
+    if not settings.get("enabled"):
+        return []
+    if settings.get("require_layout"):
+        # The challenge insists on BIDS, so a submission that is not laid out
+        # that way is itself the finding.
+        if not looks_like_bids(path):
+            return [ValidationIssue(
+                severity="error", code="BIDS_LAYOUT_MISSING",
+                message="This challenge expects a BIDS layout: a "
+                        "dataset_description.json and sub-<label> directories.",
+                path=str(path),
+            )]
+    elif not looks_like_bids(path):
+        return []
+    return validate_bids_structure(path, severity=settings.get("severity") or "warning")
+
 
 def save_validation_result(result: ValidationResult, output_dir: str | Path) -> Path:
     """Save validation results as JSON."""

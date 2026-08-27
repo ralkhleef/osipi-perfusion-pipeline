@@ -179,6 +179,7 @@
                 <tr><td>ASL</td><td>CBF and ATT required. Comparison and ROI statistics verified on the challenge lead's own data.</td></tr>
                 <tr><td>DSC</td><td>CBV, CBF and MTT required, with the same ROI statistics as ASL. No real reference data has been supplied yet, so DSC is verified on synthetic data only.</td></tr>
                 <tr><td>Testing</td><td>Automated tests cover upload, validation, execution, analysis, reporting, exports and blinding. Real DCE and ASL submissions were run through the application end to end.</td></tr>
+                <tr><td>Scale</td><td>Measured, not assumed. A 229 MB submission of 32 maps validates in about 1.5 seconds, and peak memory stays near 54 MB whether the input is 57 MB or 229 MB, because files are read one at a time rather than held together. Ingestion reads metadata only and is flat with size. Run <code>scripts/benchmark_scale.py</code> to reproduce.</td></tr>
                 <tr><td>Official ranking</td><td>Not configured. Comparison against reference data is a general capability and does not constitute official OSIPI scoring.</td></tr>
               </tbody>
             </table>
@@ -203,8 +204,11 @@
             <li><strong>Thresholds and ranking.</strong> Pass and fail rules, the final ROI and mask
               sets, ranking aggregation, the required sections of a methods document, and which
               scoring package is designated official.</li>
-            <li><strong>BIDS validation.</strong> Not implemented. The NIfTI checks cover
-              readability, dimensionality, orientation and value sanity, which is not the same.</li>
+            <li><strong>Full BIDS validation.</strong> Layout and naming are checked when a
+              challenge enables it: the dataset description, subject and session directories,
+              filename entities and the order BIDS fixes for them. The rest of the
+              specification is not covered, and a submission passing these checks should be
+              called structurally consistent rather than BIDS valid.</li>
           </ul>
           <p>Everything except the metric formulas is configuration. See
             <a href="configuration.html">Configuration</a>.</p>

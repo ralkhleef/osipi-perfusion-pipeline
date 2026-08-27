@@ -550,8 +550,9 @@ def build_limitations(
     hardcoded, so a DCE-only report no longer claims something about ASL.
     """
     items = [
-        "QC checks NIfTI readability and voxel statistics; full BIDS "
-        "validation is not implemented.",
+        "QC checks NIfTI readability and voxel statistics. BIDS checking, "
+        "where a challenge enables it, covers layout and naming only, "
+        "not the full specification.",
     ]
     known = [str(c).strip() for c in challenges if str(c).strip()]
     if len(set(known)) > 1:

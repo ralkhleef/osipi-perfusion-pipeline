@@ -201,6 +201,14 @@ challenges:
     - vp
     - dce
     - dynamic contrast enhanced
+    # Structural BIDS checks: layout and naming only, not the full BIDS
+    # specification. Off by default. Turning it on reports findings as
+    # warnings; set severity to error to block, or require_layout to insist
+    # that every submission uses BIDS at all.
+    bids_validation:
+      enabled: false
+      severity: warning
+      require_layout: false
   asl:
     label: ASL
     description: Arterial spin labeling MRI

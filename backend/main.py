@@ -3000,7 +3000,7 @@ def export_combined(
                 ),
                 "submissions": summaries,
                 "limitations": [
-                    "Basic NIfTI QC is not full BIDS validation.",
+                    "BIDS checking covers layout and naming only: the dataset description, subject and session directories, filename entities and their order. It is not the full BIDS specification.",
                     "Generic QC/reference metrics are not official OSIPI scores unless an official provider is configured.",
                 ],
             }, indent=2),
