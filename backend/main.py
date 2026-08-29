@@ -2409,10 +2409,6 @@ _FRIENDLY_METRIC_LABELS = {
 }
 
 
-def _friendly_metric_label(key: str) -> str:
-    if key in _FRIENDLY_METRIC_LABELS:
-        return _FRIENDLY_METRIC_LABELS[key]
-    return str(key).replace("_", " ").title()
 
 
 def _fmt_report_num(value, digits: int = 3) -> str:
@@ -2448,14 +2444,6 @@ def _fmt_report_cell(value, digits: int = 3) -> str:
     return text if text != "" else "Not available"
 
 
-def _mean_numeric(values) -> Optional[float]:
-    nums = [
-        float(v) for v in values
-        if isinstance(v, (int, float)) and not isinstance(v, bool)
-    ]
-    if not nums:
-        return None
-    return sum(nums) / len(nums)
 
 
 def _weighted_percent(numerators, denominators) -> Optional[float]:

@@ -39,45 +39,6 @@ _SKIP_NAMES    = set(settings_tuple("ingestion", "skip_names"))
 # ── Public API, single submission (legacy) ───────────────────────────────────
 
 
-def save_and_extract(file_bytes: bytes, filename: str) -> Dict:
-    """Save an uploaded ZIP and extract it (single-submission path).
-
-    Superseded by ``save_and_extract_batch`` / ``save_and_extract_batch_from_path``
-    which also handle multi-submission ZIPs.  Kept for backward-compatibility.
-    """
-    if len(file_bytes) > ZIP_MAX_BYTES:
-        return {
-            "success": False,
-            "error": f"ZIP file is too large (limit: {ZIP_MAX_BYTES // (1024 * 1024)} MB).",
-        }
-
-    INCOMING_DIR.mkdir(parents=True, exist_ok=True)
-    safe_filename = Path(filename).name
-    zip_path = INCOMING_DIR / safe_filename
-    zip_path.write_bytes(file_bytes)
-
-    submission_id = _safe_id(Path(safe_filename).stem)
-    extracted_dir = _reset_submission_dir(submission_id)
-
-    try:
-        with zipfile.ZipFile(zip_path) as zf:
-            file_count, _ = _safe_extract_zip(zf, extracted_dir)
-    except zipfile.BadZipFile:
-        return {"success": False, "error": f"{safe_filename} is not a valid ZIP file."}
-    except ValueError as exc:
-        return {"success": False, "error": str(exc)}
-
-    detection = detect_submission_metadata(submission_id)
-    return {
-        "success": True,
-        "batch": False,
-        "source_type": "local",
-        "submission_id": submission_id,
-        "original_filename": safe_filename,
-        "file_count": file_count,
-        **detection,
-        "message": f"Extracted {file_count} file(s).",
-    }
 
 
 def save_and_extract_batch(file_bytes: bytes, filename: str) -> Dict:
@@ -327,17 +288,8 @@ def make_safe_id(stem: str) -> str:
     return _safe_id(stem)
 
 
-def reset_submission_dir(submission_id: str) -> Path:
-    """Create a clean internal submission folder and return it."""
-    return _reset_submission_dir(_safe_id(submission_id))
 
 
-def count_submission_files(submission_id: str) -> int:
-    """Count files in an internal submission folder."""
-    safe_id = _safe_id(submission_id)
-    folder = EXTRACTED_DIR / safe_id
-    manifest = load_manifest(folder, refresh_if_stale=True, submission_id=safe_id)
-    return int((manifest or {}).get("file_count") or 0)
 
 
 def detect_submission_metadata(submission_id: str) -> Dict:

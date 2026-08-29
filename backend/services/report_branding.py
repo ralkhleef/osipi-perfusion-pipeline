@@ -125,10 +125,6 @@ def status_tone(value: object) -> str:
     return "neutral"
 
 
-def tone_colors(tone: str) -> dict[str, str]:
-    """Return the ``fg`` / ``bg`` triple for a tone name."""
-    tone = tone if tone in _TONE_BG else "neutral"
-    return {"fg": BRAND[tone], "bg": _TONE_BG[tone]}
 
 
 @lru_cache(maxsize=1)

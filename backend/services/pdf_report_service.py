@@ -846,18 +846,6 @@ def _submission_label(summary: Mapping[str, Any], index: int, *, blinded: bool) 
     return str(summary.get("source_folder") or summary.get("submission_id") or f"Submission {index}")
 
 
-def _row_notes(summary: Mapping[str, Any], *, include_reference_note: bool = False) -> str:
-    fields = _analysis_fields(summary)
-    notes: list[str] = []
-    if include_reference_note and not _reference_available(fields):
-        notes.append(REFERENCE_UNAVAILABLE_NOTE)
-    warnings = int(summary.get("warning_count") or 0)
-    errors = int(summary.get("error_count") or 0)
-    if warnings:
-        notes.append(f"{warnings} warning(s) reported.")
-    if errors:
-        notes.append(f"{errors} error(s) reported.")
-    return " ".join(notes)
 
 
 #: How each header check verdict reads to a reviewer. Keyed by the status

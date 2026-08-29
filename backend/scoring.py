@@ -141,9 +141,6 @@ PROVIDERS: dict[str, dict] = {
 }
 
 
-def get_provider_by_id(provider_id: str) -> Optional[dict]:
-    """Return a provider dict by its exact provider_id, or None."""
-    return PROVIDERS.get(provider_id)
 
 
 def get_provider(challenge_type: str, map_type: str) -> Optional[dict]:
@@ -3028,30 +3025,6 @@ def _collect_artifacts(score_dir: Path) -> list[str]:
     return artifacts
 
 
-def _parse_metrics_from_artifacts(score_dir: Path) -> dict:
-    """Parse metric values from JSON files written by the scoring script.
-
-    Searches score_dir and its scoringOutputs/ subdirectory.
-    Returns an empty dict (never fabricates values) if nothing is found.
-    """
-    if not score_dir.exists():
-        return {}
-    metrics: dict = {}
-    # Try scoringOutputs/ first (common OSIPI script output convention)
-    search_dirs = [score_dir / "scoringOutputs", score_dir]
-    for search in search_dirs:
-        if not search.exists():
-            continue
-        for jf in sorted(search.glob("*.json")):
-            try:
-                data = json.loads(jf.read_text(encoding="utf-8"))
-                if isinstance(data, dict):
-                    metrics.update(data)
-            except Exception:
-                pass
-        if metrics:
-            break
-    return metrics
 
 
 # ---------------------------------------------------------------------------

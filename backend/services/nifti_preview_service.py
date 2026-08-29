@@ -163,8 +163,6 @@ def _json_float(value, ndigits: int = 6):
     return round(f, ndigits)
 
 
-def _safe_stat(stats: dict, key: str):
-    return _json_float(stats.get(key))
 
 
 def _png_chunk(tag: bytes, data: bytes) -> bytes:
@@ -693,8 +691,3 @@ def public_preview_manifest(manifest: dict) -> dict:
     }
 
 
-def iter_manifest_items(submission_id: str) -> Iterable[dict]:
-    manifest = _read_manifest(submission_id) or {}
-    for item in manifest.get("maps", []):
-        if isinstance(item, dict):
-            yield item

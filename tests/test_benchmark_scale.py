@@ -117,3 +117,30 @@ def test_the_published_memory_claim_is_the_one_the_script_checks() -> None:
     assert 1 <= int(match.group(1)) <= 512, (
         "a peak far outside the measured range suggests the figure was not "
         "updated with the measurement")
+
+
+def test_the_published_claim_covers_four_dimensional_data() -> None:
+    """The 3-D figure alone was true and misleading at the same time.
+
+    The benchmark measured only 3-D volumes, so it reported comfortable
+    numbers while the pipeline could not in fact read the DCE challenge data:
+    one 4-D concentration curve is 8 MB on disk and needed 2.38 GB to load.
+    A page that quotes the 3-D figure without saying so invites someone to
+    plan capacity from it and be badly wrong.
+    """
+    page = (ROOT / "docs" / "gsoc.html").read_text(encoding="utf-8")
+    assert "4-D" in page, "the page does not mention 4-D data at all"
+    assert re.search(r"0\.54 GB|chunk", page), (
+        "the page states a 3-D peak without saying how 4-D data is handled")
+
+
+def test_the_sweep_actually_measures_four_dimensional_data() -> None:
+    """Otherwise the claim above has nothing behind it."""
+    from importlib import util
+    spec = util.spec_from_file_location("bench", SCRIPT)
+    module = util.module_from_spec(spec)
+    sys.modules["bench"] = module
+    spec.loader.exec_module(module)
+    assert any(case[2] > 0 for case in module.DEFAULT_SWEEP), (
+        "no 4-D case in the default sweep, so the benchmark cannot fail the "
+        "way the pipeline actually failed")
