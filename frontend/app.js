@@ -1096,6 +1096,123 @@ function _resetToUploadAndClearPersistence() {
 // The session-card "Start New" button was removed. Start New remains available
 // on the Validate step header (#new-btn) and the Export step.
 
+/* ── Running the steps that need no decision ───────────────────────────────
+
+   Of the six steps, three ask the reviewer for nothing. Validation, the run
+   step and QC all compute from what was already uploaded, and clicking
+   through them is not review, it is just clicking. The project was asked for
+   a pipeline rather than a form, and the pipeline underneath is already
+   headless: scripts/preflight.py drives the whole thing through the API with
+   no interface at all. Only the interface insisted on being driven by hand.
+
+   So after a clean validation the wizard carries itself to QC and stops
+   there, because QC is the first screen with something worth looking at.
+
+   What it will not do is skip a decision. Validation errors stop it, because
+   a failed submission is exactly the thing a person is here to see. Warnings
+   do not stop it: a warning is advisory by definition, and halting on one
+   would mean halting on almost every real submission, which is how an
+   automatic thing teaches people to ignore it. */
+
+const AUTO_ADVANCE_KEY = "osipi_auto_advance";
+
+function _autoAdvanceEnabled() {
+  try { return localStorage.getItem(AUTO_ADVANCE_KEY) !== "off"; }
+  catch (_) { return true; }
+}
+
+function _setAutoAdvance(on) {
+  try { localStorage.setItem(AUTO_ADVANCE_KEY, on ? "on" : "off"); } catch (_) {}
+}
+
+let _autoAdvanceCancelled = false;
+
+/* Why the wizard should stop and hand back to a person, or null to carry on.
+   Returning a sentence rather than a boolean so the interface can say which
+   of these happened instead of just going quiet. */
+function _autoAdvanceBlocker(results) {
+  const list = results || [];
+  if (!list.length) return "Nothing was validated.";
+  const failed = list.filter((r) => !r.passed).length;
+  if (!failed) return null;
+  return failed === list.length
+    ? (list.length === 1
+        ? "The submission did not pass validation."
+        : `All ${list.length} submissions failed validation.`)
+    : `${failed} of ${list.length} submissions failed validation.`;
+}
+
+function _autoAdvanceNote(results) {
+  const list = results || [];
+  const warned = list.filter((r) => (r.warnings || []).length > 0).length;
+  if (!warned) return "";
+  return warned === 1
+    ? " One submission has warnings worth reading."
+    : ` ${warned} submissions have warnings worth reading.`;
+}
+
+function _showAutoAdvance(text, { busy = true } = {}) {
+  const host = el("auto-advance");
+  const label = el("auto-advance-text");
+  const stop = el("auto-advance-stop");
+  if (!host || !label) return;
+  label.textContent = text;
+  host.hidden = false;
+  host.dataset.busy = busy ? "true" : "false";
+  if (stop) stop.style.display = busy ? "" : "none";
+}
+
+function _hideAutoAdvance() {
+  const host = el("auto-advance");
+  if (host) host.hidden = true;
+}
+
+async function _autoAdvanceToQc(results) {
+  if (!_autoAdvanceEnabled()) return;
+  const blocker = _autoAdvanceBlocker(results);
+  if (blocker) {
+    _showAutoAdvance(`Stopped here. ${blocker}`, { busy: false });
+    return;
+  }
+  _autoAdvanceCancelled = false;
+  try {
+    _showAutoAdvance("Validation passed. Preparing the run step...");
+    unlockStep("run");
+    await renderRunStep();
+    if (_autoAdvanceCancelled) return;
+
+    _showAutoAdvance("Preparing QC and preview...");
+    unlockStep("score");
+    await renderScoreStep();
+    if (_autoAdvanceCancelled) return;
+
+    unlockStep("export");
+    goToStep("score");
+    _showAutoAdvance(
+      `Ran validation, the run step and QC for you.${_autoAdvanceNote(results)}`,
+      { busy: false });
+    setTimeout(_hideAutoAdvance, 9000);
+  } catch (error) {
+    // A failure here must not strand the reviewer on a half-built step, so
+    // it says what happened and leaves them where they can act.
+    _showAutoAdvance(
+      `Stopped after validation: ${error && error.message ? error.message : error}`,
+      { busy: false });
+    goToStep("validate");
+  }
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target && event.target.id === "auto-advance-stop") {
+    _autoAdvanceCancelled = true;
+    _setAutoAdvance(false);
+    _showAutoAdvance(
+      "Stopped. The wizard will wait for you from now on. Re-enable it in Reviewer settings.",
+      { busy: false });
+    setTimeout(_hideAutoAdvance, 9000);
+  }
+});
+
 function _advanceWizardStep(step) {
   const cfg = _WF_FOOTER_CONFIG[step];
   if (!cfg) return;
@@ -3880,6 +3997,10 @@ function renderValidateStep(data, isSingleMode) {
   _syncExportStep();
 
   goToStep("validate");
+
+  // The steps after this one ask the reviewer for nothing, so they run
+  // themselves as far as QC unless validation found something to look at.
+  _autoAdvanceToQc(results).catch(() => {});
 }
 
 // ── Review filter / sort / search ─────────────────────────────────────────────

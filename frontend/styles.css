@@ -12364,3 +12364,59 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ── The wizard running itself ─────────────────────────────────────────────
+   Bottom right, out of the way of the step content, but moving so it is
+   noticed. It has to be dismissable: an automatic thing that cannot be
+   stopped is worse than a manual one. */
+.auto-advance[hidden] { display: none; }
+.auto-advance {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1150;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 11px 14px;
+  border: 1px solid #d9d4e8;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(38, 30, 66, 0.18);
+  font-size: 0.79rem;
+  line-height: 1.45;
+  color: var(--text, #212529);
+}
+.auto-advance-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #6b46c1;
+}
+.auto-advance[data-busy="true"] .auto-advance-dot {
+  animation: auto-advance-pulse 1.1s ease-in-out infinite;
+}
+.auto-advance[data-busy="false"] .auto-advance-dot { background: #48bb78; }
+@keyframes auto-advance-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.72); }
+}
+/* Respect a reduced-motion preference: the colour still carries the state. */
+@media (prefers-reduced-motion: reduce) {
+  .auto-advance[data-busy="true"] .auto-advance-dot { animation: none; }
+}
+.auto-advance-text { flex: 1 1 auto; min-width: 0; }
+.auto-advance-stop {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid #d9d4e8;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text, #212529);
+  cursor: pointer;
+}
+.auto-advance-stop:hover { background: #f6f4fc; }

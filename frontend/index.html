@@ -494,6 +494,16 @@
         </div>
       </div>
 
+      <!-- Progress while the wizard runs the steps that need no decision.
+           Declared here rather than built in script, for the same reason as
+           the run outcome banner: anything created on demand lives only until
+           the next re-render of the step it was attached to. -->
+      <div class="auto-advance" id="auto-advance" hidden role="status" aria-live="polite">
+        <span class="auto-advance-dot" aria-hidden="true"></span>
+        <span class="auto-advance-text" id="auto-advance-text"></span>
+        <button type="button" class="auto-advance-stop" id="auto-advance-stop">Stop</button>
+      </div>
+
       <!-- Confirmation that a run happened. A banner alone was missed, because
            the button returns to reading "Run Analysis" either way and the card
            looks identical to how it looked beforehand. -->
