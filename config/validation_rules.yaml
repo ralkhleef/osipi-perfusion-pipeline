@@ -123,6 +123,9 @@ artifact_types:
     - modelled_st
     - modeled_st
     - fitted_signal
+    # The DCE challenge lead's synthetic submission names the fitted
+    # concentration curve Ct.nii.gz. Matching is case insensitive.
+    - ct
   measured_st:
     role: measured_signal
     label: Measured signal-time curve
@@ -157,6 +160,11 @@ challenges:
     - vp
     - ve
     - kep
+    # "methods" stays required deliberately. The challenge lead's synthetic
+    # submission does not contain one, so it is reported as missing, and that
+    # is the pipeline doing its job rather than failing. Whether the real
+    # challenge should demand a methods document is her decision, not an
+    # assumption to bake in here by quietly relaxing the rule.
     required_artifacts:
     - modelled_st
     - methods

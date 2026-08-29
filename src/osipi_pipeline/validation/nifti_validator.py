@@ -23,6 +23,88 @@ _CACHE_LOCK = threading.Lock()
 _VALIDATION_CACHE: dict[tuple[str, int, int, str, str], dict[str, Any]] = {}
 _LAST_WORKER_COUNT = 1
 
+#: How many voxels to hold in memory at once, as float32. 32 mebivoxels is
+#: 128 MB.
+#:
+#: Reading a whole image was fine while every image was 3-D. The DCE challenge
+#: sends 4-D concentration curves: one is 8 MB on disk and 0.93 GB decompressed,
+#: 121x compressed, and reading it whole cost 1.91 GB because the cast to
+#: float32 makes a second copy. Sixty of those files could not be validated on
+#: an ordinary machine.
+#:
+#: Anything smaller than this threshold is still read in a single piece, so the
+#: 3-D path is byte for byte what it was.
+MAX_VOXELS_PER_READ = 32 * 1024 * 1024
+
+
+class _VoxelStats:
+    """Statistics accumulated over an image read in pieces."""
+
+    __slots__ = ("nan_count", "inf_count", "finite_count", "total",
+                 "minimum", "maximum")
+
+    def __init__(self) -> None:
+        self.nan_count = 0
+        self.inf_count = 0
+        self.finite_count = 0
+        self.total = 0.0
+        self.minimum = 0.0
+        self.maximum = 0.0
+
+
+def _last_axis_chunks(shape: tuple[int, ...], max_voxels: int):
+    """Yield (start, stop) along the last axis, each at most max_voxels.
+
+    Splitting on the last axis is deliberate. For the 4-D curves that forced
+    this it is the time axis, so a chunk is a whole number of timepoints and
+    never a partial volume.
+    """
+    if not shape:
+        return
+    last = int(shape[-1])
+    plane = 1
+    for dim in shape[:-1]:
+        plane *= int(dim)
+    if last <= 0 or plane <= 0:
+        return
+    # At least one index per read, even if a single plane exceeds the budget:
+    # refusing to read is worse than briefly exceeding it.
+    step = max(1, int(max_voxels // plane))
+    for start in range(0, last, step):
+        yield start, min(start + step, last)
+
+
+def _streaming_stats(dataobj: Any, shape: tuple[int, ...],
+                     max_voxels: int = MAX_VOXELS_PER_READ) -> "_VoxelStats":
+    """NaN, infinite, min, max and mean, without holding the whole image.
+
+    The mean is accumulated as a float64 running total and a count, rather
+    than by averaging per-chunk means, which would weight a short final chunk
+    as heavily as a full one. Summation order still differs from reading the
+    array whole, so the mean can differ in the last bits or so; that is far
+    below any tolerance the reports display.
+    """
+    stats = _VoxelStats()
+    seen_finite = False
+    for start, stop in _last_axis_chunks(shape, max_voxels):
+        chunk = np.asarray(dataobj[..., start:stop], dtype=np.float32)
+        nan = np.isnan(chunk)
+        inf = np.isinf(chunk)
+        stats.nan_count += int(nan.sum())
+        stats.inf_count += int(inf.sum())
+        finite = ~(nan | inf)
+        if finite.any():
+            values = chunk[finite]
+            low = float(values.min())
+            high = float(values.max())
+            stats.minimum = low if not seen_finite else min(stats.minimum, low)
+            stats.maximum = high if not seen_finite else max(stats.maximum, high)
+            stats.total += float(values.sum(dtype=np.float64))
+            stats.finite_count += int(values.size)
+            seen_finite = True
+        del chunk
+    return stats
+
 
 def clear_validation_cache() -> None:
     with _CACHE_LOCK:
@@ -161,7 +243,7 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
 
     try:
         with timed("validation.nifti.voxels", path=str(path)):
-            data = np.asarray(img.dataobj, dtype=np.float32)
+            stats = _streaming_stats(img.dataobj, shape)
     except Exception as exc:
         result["errors"].append(f"Could not read NIfTI voxel data: {exc}")
         return result
@@ -171,22 +253,18 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
     # information from reviewers.
     result["dtype"] = source_dtype
     try:
-        finite_mask = np.isfinite(data)
-        nan_count = int(np.sum(np.isnan(data)))
-        inf_count = int(np.sum(np.isinf(data)))
-        result["nan_count"] = nan_count
-        result["inf_count"] = inf_count
+        result["nan_count"] = stats.nan_count
+        result["inf_count"] = stats.inf_count
 
-        if nan_count > 0:
-            result["warnings"].append(f"Image contains {nan_count} NaN value(s).")
-        if inf_count > 0:
-            result["warnings"].append(f"Image contains {inf_count} infinite value(s).")
+        if stats.nan_count > 0:
+            result["warnings"].append(f"Image contains {stats.nan_count} NaN value(s).")
+        if stats.inf_count > 0:
+            result["warnings"].append(f"Image contains {stats.inf_count} infinite value(s).")
 
-        if bool(finite_mask.any()):
-            finite_data = data[finite_mask]
-            result["min"] = float(np.min(finite_data))
-            result["max"] = float(np.max(finite_data))
-            result["mean"] = float(np.mean(finite_data, dtype=np.float64))
+        if stats.finite_count:
+            result["min"] = stats.minimum
+            result["max"] = stats.maximum
+            result["mean"] = stats.total / stats.finite_count
         else:
             result["warnings"].append("Image contains no finite values (all NaN or infinite).")
     except Exception as exc:

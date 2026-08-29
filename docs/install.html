@@ -263,6 +263,105 @@ node tests/footer_logic_test.js</code></pre>
           </div>
         </section>
 
+        <section>
+          <h2 id="updating" data-toc-title="Updating your copy">Updating your copy</h2>
+
+          <p>The application is served from inside the Docker image, and the browser interface is
+            copied into that image when it is built. Neither is read live from disk. So pulling new
+            code changes nothing you can see until you rebuild, and rebuilding changes nothing you
+            can see until the browser drops its cached copy. Both steps are needed, in that order.</p>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Update and restart</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>cd osipi-perfusion-pipeline
+git pull
+docker compose up -d --build</code></pre>
+          </div>
+
+          <p>Then reload the page in the browser. A plain refresh often keeps the old JavaScript,
+            so use a cache-clearing reload: open DevTools, right click the reload button, and
+            choose <em>Empty Cache and Hard Reload</em>. In Firefox and Safari, hold Shift and
+            click reload.</p>
+
+          <div class="docs-callout">
+            <p class="mb-0"><strong>If the interface looks unchanged after all that</strong>, it is
+              almost always one of these three, in order of likelihood: the browser served a cached
+              script, the image was not rebuilt, or the container was never restarted. The check
+              below distinguishes them without guessing.</p>
+          </div>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Check what the server is actually serving</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>python3 scripts/diagnose_run_analysis.py</code></pre>
+          </div>
+
+          <p>It reports whether the running application is serving the current interface or an
+            older copy, and prints the fix for whichever case it finds.</p>
+
+          <h3>What each kind of change needs</h3>
+
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>What you changed</th><th>What you need to do</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><code>frontend/</code>, <code>backend/</code>, <code>src/</code></td>
+                  <td>Rebuild the image, then a cache-clearing reload</td>
+                </tr>
+                <tr>
+                  <td><code>config/validation_rules.yaml</code></td>
+                  <td>Nothing. The folder is mounted, so edits are picked up. Use the reload button
+                    in the Configuration Manager, or restart the container.</td>
+                </tr>
+                <tr>
+                  <td>Files under <code>data/</code> or <code>submissions/</code></td>
+                  <td>Nothing. Both are mounted from disk, not copied into the image.</td>
+                </tr>
+                <tr>
+                  <td><code>requirements.txt</code>, <code>Dockerfile</code></td>
+                  <td>Rebuild. The dependency layer is cached, so this one takes longer.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>If you have your own edits</h3>
+
+          <p><code>git pull</code> refuses to overwrite uncommitted work, which is a feature rather
+            than an obstacle. To see what is yours before pulling:</p>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>See your changes</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>git status
+git diff</code></pre>
+          </div>
+
+          <p>Commit them, or set them aside and bring them back after the pull:</p>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Set aside, update, restore</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>git stash
+git pull
+git stash pop</code></pre>
+          </div>
+
+          <p>Your imaging data is never at risk from any of this. Reference maps, ROI masks and
+            submissions are excluded from version control, so <code>git pull</code> and
+            <code>git stash</code> do not touch them.</p>
+
+          <h3>Confirming the update worked</h3>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Full check</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code>python3 scripts/preflight.py</code></pre>
+          </div>
+
+          <p>This walks a generated submission through all six steps against the running
+            application and prints one line per step. It uploads nothing real and removes what it
+            creates. If every check passes and the browser still looks wrong, the problem is the
+            browser rather than the pipeline.</p>
+        </section>
+
       </div>
 
       <footer class="docs-footer mt-5">
