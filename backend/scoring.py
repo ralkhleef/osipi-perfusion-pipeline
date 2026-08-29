@@ -843,7 +843,17 @@ def _header_check(submitted: dict, reference: dict) -> dict:
     # dtype differing is normal and harmless: a team may submit float64 where
     # the ground truth is float32. Geometry differing is not.
     geometry = [name for name in mismatched if name != "dtype"]
-    if not checked:
+    # A file that could not be read is not the same as one nobody checked.
+    # Both used to arrive here with nothing comparable and both were reported
+    # as "not verified", which reads as "we did not look" when the truth is
+    # "we looked and the file is broken".
+    unreadable = [
+        side for side, data in (("submitted", submitted), ("reference", reference))
+        if data.get("read_error")
+    ]
+    if unreadable:
+        status = "unreadable"
+    elif not checked:
         status = "not_verified"
     elif geometry:
         status = "geometry_mismatch"
@@ -852,7 +862,10 @@ def _header_check(submitted: dict, reference: dict) -> dict:
     else:
         status = "matches"
 
-    return {"status": status, "mismatched_fields": mismatched, "fields": fields}
+    result = {"status": status, "mismatched_fields": mismatched, "fields": fields}
+    if unreadable:
+        result["unreadable_sides"] = unreadable
+    return result
 
 
 def _grids_compatible(a: dict, b: dict, *, vox_tol: float = 1e-3, aff_tol: float = 1e-2) -> Optional[bool]:

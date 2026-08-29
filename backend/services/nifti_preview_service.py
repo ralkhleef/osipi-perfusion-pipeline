@@ -347,6 +347,7 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
     dtype = None
     voxel_size = []
     orientation = None
+    read_error = None
     try:
         import nibabel as nib  # type: ignore
 
@@ -355,8 +356,13 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         dtype = str(img.get_data_dtype())
         voxel_size = [float(v) for v in img.header.get_zooms()[: min(3, len(img.shape or []))]]
         orientation = "".join(code or "?" for code in nib.aff2axcodes(img.affine))
-    except Exception:
-        pass
+    except Exception as exc:
+        # Record why, rather than returning empty fields. A file that cannot be
+        # read used to be indistinguishable from one whose header happened to
+        # be blank: both arrived with no shape, no orientation and no dtype. The
+        # header check then reported "Not verified", which reads as "we did not
+        # look" when the truth is "we looked and the file is broken".
+        read_error = str(exc) or exc.__class__.__name__
     try:
         stat = path.stat()
         source_mtime = stat.st_mtime
@@ -376,6 +382,9 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         "voxel_size": voxel_size,
         "orientation": orientation,
         "dtype": dtype,
+        # None when the header was read. A string when it could not be, so
+        # every consumer can tell "no header" apart from "unreadable file".
+        "read_error": read_error,
         "finite_percent": None,
         "negative_percent": None,
         "mean": None,

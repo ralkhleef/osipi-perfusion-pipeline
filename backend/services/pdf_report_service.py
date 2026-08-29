@@ -856,6 +856,9 @@ _HEADER_CHECK_VERDICTS = {
     "dtype_differs": "Data type differs",
     "geometry_mismatch": "Geometry differs",
     "not_verified": "Not verified",
+    # Distinct from "not verified" on purpose. One means nobody looked, the
+    # other means we looked and the file would not open.
+    "unreadable": "File could not be read",
 }
 
 

@@ -6334,6 +6334,9 @@ const HEADER_CHECK_VERDICTS = {
   dtype_differs: "Data type differs",
   geometry_mismatch: "Geometry differs",
   not_verified: "Not verified",
+  // "Not verified" means nobody looked. This means we looked and the file
+  // would not open, which is a finding rather than an absence of one.
+  unreadable: "File could not be read",
 };
 
 /* One header field for display. A field that differs shows both values,
