@@ -223,7 +223,8 @@ def _unclassified_parameter_maps(folder: Path, challenge: str) -> int:
     return int(submission_counts(folder, challenge).get("unclassified", 0))
 
 
-def _completeness_issues(folder: Path, challenge: str) -> List[Dict]:
+def _completeness_issues(folder: Path, challenge: str,
+                         dataset: str | None = None) -> List[Dict]:
     """Structural completeness issues from the normalized manifest artifacts.
 
     Reads the manifest that was just refreshed rather than walking the tree
@@ -248,7 +249,8 @@ def _completeness_issues(folder: Path, challenge: str) -> List[Dict]:
         logger.exception("Could not read normalized artifacts for %s", folder)
         return []
     return validate_completeness(
-        artifacts, challenge=challenge, identity_conflicts=conflicts
+        artifacts, challenge=challenge, identity_conflicts=conflicts,
+        dataset=dataset,
     )
 
 
@@ -269,6 +271,9 @@ def validate_submission(
     map_type_mode: Optional[str] = None,
     notes: Optional[str] = None,
     mode: str = "auto",
+    # Which declared dataset this submission belongs to, when its folders do
+    # not say. None means infer it when exactly one declared grid fits.
+    dataset: Optional[str] = None,
     qc_mode: str = "deep",
     force_validation_refresh: bool = False,
     nifti_validation_workers: Optional[int] = None,
@@ -340,7 +345,8 @@ def validate_submission(
     # Completeness runs off the normalized artifacts the manifest already
     # built, so map detection is not repeated here and filenames are never
     # re-parsed. Returns nothing for challenges without the new config.
-    completeness_issues = _completeness_issues(folder, normalized_challenge)
+    completeness_issues = _completeness_issues(
+        folder, normalized_challenge, dataset=dataset)
     if not all_files:
         errors.append(_err("SUBMISSION_FOLDER_EMPTY", "The submission folder is empty.", str(folder)))
         result = _finish(submission_id, normalized_challenge, errors, warnings, 0, 0,
@@ -965,6 +971,8 @@ def validate_batch(
     team_names: Optional[Dict] = None,
     contact_emails: Optional[Dict] = None,
     mode: str = "result_validation",
+    # Passed to every submission in the batch. See validate_submission.
+    dataset: Optional[str] = None,
     qc_mode: str = "deep",
 ) -> Dict:
     """Validate multiple submissions and return an aggregate batch result.
@@ -1002,6 +1010,7 @@ def validate_batch(
                 team_name=team_names.get(sid),
                 contact_email=contact_emails.get(sid),
                 mode=mode,
+                dataset=dataset,
                 qc_mode=qc_mode,
                 nifti_validation_workers=1,
             )

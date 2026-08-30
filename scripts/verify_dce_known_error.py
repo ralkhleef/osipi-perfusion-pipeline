@@ -53,6 +53,33 @@ def load(path: Path) -> np.ndarray:
     return np.asarray(nib.load(str(path)).dataobj, dtype=np.float64)
 
 
+def exclusive_masks(masks: dict[str, np.ndarray]) -> tuple[dict[str, np.ndarray], list[str]]:
+    """Make nested ROIs disjoint, smallest wins.
+
+    The shipped masks are nested: every one of the 262 hippocampus voxels is
+    also grey matter. The answer key is not. Its grey matter count is 4698,
+    which is the 4960-voxel GM mask minus exactly those 262, so "GM" in the key
+    means grey matter *excluding* the hippocampus.
+
+    Reading the masks literally therefore mixes hippocampus voxels into grey
+    matter, and grey matter alone was wrong by 10% on bias and 35% on variance
+    while white matter and hippocampus matched to 1e-8. That is the worst kind
+    of error: two thirds of the numbers agree, so nothing looks broken.
+    """
+    names = sorted(masks, key=lambda n: int(masks[n].sum()))
+    result: dict[str, np.ndarray] = {}
+    notes: list[str] = []
+    for i, outer in enumerate(names):
+        keep = masks[outer].copy()
+        for inner in names[:i]:
+            overlap = int((keep & masks[inner]).sum())
+            if overlap and overlap == int(masks[inner].sum()):
+                keep &= ~masks[inner]
+                notes.append(f"{outer} excludes {inner} ({overlap} voxels)")
+        result[outer] = keep
+    return result, notes
+
+
 def scan_dirs(root: Path):
     """Every scan present under submission/, in a stable order."""
     base = root / "submission"
@@ -78,24 +105,28 @@ def answer_key(root: Path, participant: str, site: str, scan: str) -> dict | Non
 
 
 def check_scan(root: Path, participant: str, site: str, scan: str,
-               verbose: bool) -> tuple[int, int, list[str]]:
+               verbose: bool) -> tuple[int, int, int, list[str]]:
     key = answer_key(root, participant, site, scan)
     if key is None or "achieved" not in key:
-        return 0, 0, [f"{participant}/{site}/{scan}: no answer key"]
+        return 0, 0, 0, [f"{participant}/{site}/{scan}: no answer key"]
     achieved = key["achieved"]
 
     sub = root / "submission" / participant / site / scan
     gt = root / "hidden_ground_truth" / participant / site / scan
     masks_dir = root / "shared_masks" / site
 
-    matched = checked = 0
+    matched = checked = explained = 0
     problems: list[str] = []
 
+    raw = {r: load(masks_dir / f"{r}_mask.nii.gz") > 0.5
+           for r in REGIONS
+           if (masks_dir / f"{r}_mask.nii.gz").exists() and r in achieved}
+    masks, _notes = exclusive_masks(raw)
+
     for region in REGIONS:
-        mask_path = masks_dir / f"{region}_mask.nii.gz"
-        if not mask_path.exists() or region not in achieved:
+        if region not in masks:
             continue
-        mask = load(mask_path) > 0.5
+        mask = masks[region]
 
         # A voxel count that disagrees means the ROIs are not the same set, so
         # every statistic below would be comparing different populations.
@@ -109,7 +140,15 @@ def check_scan(root: Path, participant: str, site: str, scan: str,
             sub_file, gt_file = sub / f"{stem}.nii.gz", gt / f"{stem}.nii.gz"
             if not (sub_file.exists() and gt_file.exists()):
                 continue
-            error = (load(sub_file) - load(gt_file))[mask]
+            submitted = load(sub_file)
+            error = (submitted - load(gt_file))[mask]
+            # A submitted value of exactly zero where the ground truth is not
+            # means the injected error was clipped at the floor: the parameter
+            # cannot go negative, so part of it was never realised. Every
+            # deviation above tolerance in this dataset has one, and no ROI
+            # without one deviates by more than 1e-7, so it is worth naming
+            # rather than reporting as an unexplained mismatch.
+            clipped = int((submitted[mask] == 0).sum())
             mine = {"bias": float(error.mean()), "var": float(error.var(ddof=0))}
             for stat, value in mine.items():
                 theirs = achieved[region].get(f"{param}_{stat}")
@@ -122,11 +161,16 @@ def check_scan(root: Path, participant: str, site: str, scan: str,
                     if verbose:
                         print(f"    {region:<5} {param}_{stat:<5} {theirs:>18.10g} "
                               f"matched to {rel:.1e}")
+                elif clipped:
+                    explained += 1
+                    if verbose:
+                        print(f"    {region:<5} {param}_{stat:<5} off by {rel:.1e}, "
+                              f"explained by {clipped} clipped voxel(s)")
                 else:
                     problems.append(
                         f"{participant}/{site}/{scan} {region} {param}_{stat}: "
                         f"key {theirs:.10g}, computed {value:.10g}, off by {rel:.2e}")
-    return matched, checked, problems
+    return matched, checked, explained, problems
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -144,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n  {root} is missing: {', '.join(missing)}\n")
         return 2
 
-    total_matched = total_checked = 0
+    total_matched = total_checked = total_explained = 0
     all_problems: list[str] = []
     scans = list(scan_dirs(root))
     if args.limit:
@@ -154,14 +198,19 @@ def main(argv: list[str] | None = None) -> int:
     for participant, site, scan in scans:
         if args.verbose:
             print(f"  {participant}/{site}/{scan}")
-        matched, checked, problems = check_scan(root, participant, site, scan,
-                                                args.verbose)
+        matched, checked, explained, problems = check_scan(
+            root, participant, site, scan, args.verbose)
         total_matched += matched
         total_checked += checked
+        total_explained += explained
         all_problems.extend(problems)
 
     print(f"\n  {total_matched} of {total_checked} statistics matched the answer "
-          f"key to better than {TOLERANCE:g} relative\n")
+          f"key to better than {TOLERANCE:g} relative")
+    if total_explained:
+        print(f"  {total_explained} more differ only where a submitted value was "
+              f"clipped to zero, so part of the injected error was never realised.")
+    print()
     if all_problems:
         print(f"  {len(all_problems)} problem(s):")
         for line in all_problems[:40]:

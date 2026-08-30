@@ -763,6 +763,9 @@ class ValidateRequest(BaseModel):
     map_type_mode: Optional[str] = None
     notes: Optional[str] = None
     mode: str = "auto"  # "auto" | "result_only" | "result_validation" | "reproducible" | "reproducible_execution"
+    # Which declared dataset the submission belongs to, when its folders do not
+    # say. Left unset, one is inferred if exactly one declared grid fits.
+    dataset: Optional[str] = None
     qc_mode: str = "deep"  # "deep" preserves current behavior; "quick" skips voxel loading
     force_validation_refresh: bool = False
 
@@ -813,6 +816,7 @@ def validate(req: ValidateRequest):
         map_type_mode=req.map_type_mode,
         notes=req.notes,
         mode=mode,
+        dataset=req.dataset,
         qc_mode=req.qc_mode,
         force_validation_refresh=req.force_validation_refresh,
     )
@@ -1184,6 +1188,10 @@ class BatchValidateRequest(BaseModel):
     notes: Optional[str] = None
     team_names: Optional[Dict[str, str]] = None
     contact_emails: Optional[Dict[str, str]] = None
+    # Which declared dataset these submissions belong to, when their folders do
+    # not say. One value for the batch: a batch is one upload, and a mixture
+    # would need the dataset to come from the folders anyway.
+    dataset: Optional[str] = None
     mode: str = "auto"  # "auto" | "result_only" | "result_validation" | "reproducible" | "reproducible_execution"
     qc_mode: str = "deep"
 
@@ -1209,6 +1217,7 @@ def validate_batch_endpoint(req: BatchValidateRequest):
         team_names=req.team_names,
         contact_emails=req.contact_emails,
         mode=mode,
+        dataset=req.dataset,
         qc_mode=req.qc_mode,
     )
 

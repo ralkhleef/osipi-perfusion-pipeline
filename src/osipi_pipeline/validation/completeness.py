@@ -25,6 +25,7 @@ no scientific quantity.
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from typing import Any, Iterable, Mapping, Sequence
 
 from osipi_pipeline.config.rules import (
@@ -118,11 +119,18 @@ def validate_completeness(
     *,
     challenge: str,
     identity_conflicts: Iterable[Any] = (),
+    dataset: str | None = None,
 ) -> list[dict]:
     """Return validation issues for a submission's normalized artifacts.
 
     Returns an empty list for any challenge that declares none of the
     DCE-2026 configuration, so existing challenges are untouched.
+
+    ``dataset`` names the dataset a submission belongs to when its folders do
+    not. Organisers lay data out as participant, site, scan without a dataset
+    level, which is a perfectly reasonable layout that nonetheless failed every
+    file as missing a dataset. When it is not given and exactly one declared
+    dataset fits the observed grid, that one is used and the report says so.
     """
     challenge = (challenge or "").strip().lower()
     required_maps = required_maps_by_challenge().get(challenge, ())
@@ -142,6 +150,32 @@ def validate_completeness(
     scan_artifacts = [a for a in artifacts if a.role in _SCAN_ROLES]
 
     # ── 2. Dataset identity ──────────────────────────────────────────────
+    # A submission with no dataset folder is assigned one, either because the
+    # reviewer said which it is or because only one declared dataset fits.
+    # Recorded as an informational issue rather than applied silently: the
+    # dataset decides which grid the counts below are checked against, so it
+    # has to be visible in the report.
+    if datasets and not any(getattr(a, "dataset", None) for a in scan_artifacts):
+        chosen, reason = (dataset, "selected by the reviewer") if dataset \
+            else infer_dataset(scan_artifacts, datasets)
+        if chosen and chosen in datasets:
+            # SubmissionArtifact is frozen, so this replaces rather than
+            # mutates. Assigning in place silently did nothing and every file
+            # still failed as missing a dataset, with the exception swallowed.
+            scan_artifacts = [replace(a, dataset=chosen) for a in scan_artifacts]
+            issues.append(_issue(
+                "info", DATASET_INFERRED,
+                f"No dataset folder was found, so every scan was treated as "
+                f"{chosen!r} ({reason}). Counts below are checked against that "
+                f"dataset's grid.",
+                dataset=chosen, reason=reason))
+        elif scan_artifacts:
+            issues.append(_issue(
+                "warning", DATASET_AMBIGUOUS,
+                f"No dataset folder was found and one could not be chosen: "
+                f"{reason}. Name the dataset to have the counts checked.",
+                reason=reason))
+
     issues.extend(_unknown_dataset_issues(scan_artifacts, datasets))
 
     # ── 3. Identity completeness ─────────────────────────────────────────
@@ -238,30 +272,122 @@ def _unknown_dataset_issues(scan_artifacts, datasets) -> list[dict]:
     ]
 
 
+#: Reported when a submission carries no dataset folder and one was inferred.
+DATASET_INFERRED = "DATASET_INFERRED"
+DATASET_AMBIGUOUS = "DATASET_AMBIGUOUS"
+
+
+def _observed_grid(scan_artifacts) -> dict[str, int]:
+    """How many distinct participants, repeats and sites the scans cover."""
+    grid: dict[str, int] = {}
+    for field, key in (("participant", "participants"),
+                       ("repeat", "repeats"),
+                       ("site", "sites")):
+        values = {getattr(a, field, None) for a in scan_artifacts}
+        values.discard(None)
+        values.discard("")
+        grid[key] = len(values)
+    return grid
+
+
+def _grid_matches(observed: Mapping[str, int], spec: Mapping[str, Any] | None) -> bool:
+    """Whether an observed grid fits a declared one.
+
+    A declared count of ``None`` means the organiser has not decided that axis
+    yet, so anything satisfies it. That is deliberately not the same as zero.
+    """
+    if not spec:
+        return False
+    for key in ("participants", "repeats", "sites"):
+        declared = spec.get(key)
+        if declared is None:
+            continue
+        if int(observed.get(key) or 0) != int(declared):
+            return False
+    return True
+
+
+def infer_dataset(scan_artifacts, datasets) -> tuple[str | None, str]:
+    """Which declared dataset a submission without a dataset folder must be.
+
+    The DCE challenge lead's submission is laid out as participant, site, scan
+    with no dataset level at all, so every file failed as missing a dataset
+    even though its grid, 3 sites and 2 repeats, matches exactly one of the
+    declared datasets and nothing else.
+
+    Inference only happens when the answer is forced: exactly one declared
+    dataset fits the observed grid. Two candidates, or none, and it declines
+    and says so, because quietly picking one would attribute a submission to
+    the wrong dataset and every grouped statistic after it would be wrong.
+    """
+    if not datasets:
+        return None, "the challenge declares no datasets"
+    declared = {a.dataset for a in scan_artifacts if getattr(a, "dataset", None)}
+    if declared:
+        return None, "the submission already names its dataset"
+
+    observed = _observed_grid(scan_artifacts)
+    candidates = [name for name, spec in datasets.items()
+                  if _grid_matches(observed, spec)]
+    if len(candidates) == 1:
+        return candidates[0], (
+            f"{observed['participants']} participants, {observed['repeats']} "
+            f"repeats and {observed['sites']} sites match only {candidates[0]}")
+    if not candidates:
+        return None, (
+            f"{observed['participants']} participants, {observed['repeats']} "
+            f"repeats and {observed['sites']} sites match none of "
+            f"{', '.join(sorted(datasets))}")
+    return None, (f"the grid fits more than one dataset: {', '.join(sorted(candidates))}")
+
+
 def _identity_issues(scan_artifacts, datasets, issues) -> tuple[set[str], list]:
     """Split artifacts into those with usable identity and those without."""
     if not datasets:
         return set(), list(scan_artifacts)
     incomplete: set[str] = set()
     complete = []
+    # Grouped by which fields are missing, because the cause is a missing
+    # folder level rather than a problem with each file. A submission laid out
+    # without a dataset folder produced one identical error per file: eighteen
+    # lines saying the same thing, which buries every other finding and tells
+    # the reader nothing the first line did not.
+    grouped: dict[tuple[str, ...], list[Any]] = defaultdict(list)
     for artifact in scan_artifacts:
         spec = datasets.get(artifact.dataset or "")
         required = _required_identity_fields(spec)
-        missing = [f for f in required if getattr(artifact, f, None) in (None, "")]
+        missing = tuple(f for f in required if getattr(artifact, f, None) in (None, ""))
         if missing:
             incomplete.add(artifact.path)
-            issues.append(_issue(
-                "error", INCOMPLETE_ARTIFACT_IDENTITY,
-                f"{artifact.path} could not be assigned to a scan because "
-                f"{', '.join(missing)} could not be determined, so "
-                f"completeness cannot be verified.",
-                path=artifact.path,
-                missing_fields=list(missing),
-                map_type=artifact.map_type,
-                artifact_type=artifact.artifact_type,
-            ))
+            grouped[missing].append(artifact)
         else:
             complete.append(artifact)
+
+    for missing, affected in sorted(grouped.items()):
+        paths = [a.path for a in affected]
+        fields = ", ".join(missing)
+        if len(paths) == 1:
+            message = (f"{paths[0]} could not be assigned to a scan because "
+                       f"{fields} could not be determined, so completeness "
+                       f"cannot be verified.")
+        else:
+            message = (f"{len(paths)} files could not be assigned to a scan "
+                       f"because {fields} could not be determined, so "
+                       f"completeness cannot be verified. Every one is missing "
+                       f"the same thing, so this is a missing folder level "
+                       f"rather than a problem with the files. For example: "
+                       f"{paths[0]}.")
+        issues.append(_issue(
+            "error", INCOMPLETE_ARTIFACT_IDENTITY, message,
+            # The first path stays in ``path`` so anything reading one file
+            # name still works; the full list is alongside it.
+            path=paths[0],
+            paths=paths,
+            affected_count=len(paths),
+            missing_fields=list(missing),
+            map_type=affected[0].map_type,
+            artifact_type=affected[0].artifact_type,
+        ))
     return incomplete, complete
 
 
