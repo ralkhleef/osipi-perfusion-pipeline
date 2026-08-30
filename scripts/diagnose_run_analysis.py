@@ -22,8 +22,15 @@ import urllib.request
 # an older copy, the browser cannot possibly show the new behaviour, and that is
 # by far the most common cause.
 FRONTEND_MARKERS = {
-    "/": ["run-result-modal", "score-run-outcome"],
-    "/static/app.js": ["_openRunResult", "if (btnAll && !isConfigured)"],
+    "/": ["run-result-modal", "score-run-outcome", "grouping-note", "auto-advance"],
+    "/static/app.js": [
+        "_openRunResult",
+        "if (btnAll && !isConfigured)",
+        "_autoAdvanceToQc",       # the wizard carrying itself to QC
+        "_mapCountLabel",         # maps counted by role, not by file
+        "_groupingModel",         # correcting how an upload was grouped
+        "fromRestore",            # a reload must not re-run the wizard
+    ],
 }
 
 

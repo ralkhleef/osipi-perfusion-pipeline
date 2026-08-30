@@ -324,10 +324,17 @@ checkContains("Items-to-review list is neutral gray", css, ".issue-list li.revie
 checkContains("Run notice hides success icon", css, "#step-run .run-skipped-notice .rsn-icon { display: none; }");
 checkContains("Run completion banner stays neutral", css, "#run-completion-banner.step-completion-banner");
 checkNotContains("Validate subtitle no longer repeats run readiness", section("step-validate"), "run readiness, and output-map");
-checkContains("CSS version bumped for Configuration Manager cleanup", html, "styles.css?v=102");
+/* These two used to pin the exact numbers in styles.css?v=102 and app.js?v=91,
+   which asserted that somebody had remembered to bump a version by hand. Nobody
+   did, the numbers stopped changing while the files kept changing, and browsers
+   served a cached script for weeks. The version is now a hash of the file's
+   contents, computed when the page is served, so what is worth testing is that
+   the mechanism is in place rather than what today's number happens to be. */
+checkContains("Stylesheet carries a cache-busting placeholder", html, "styles.css?v=");
 checkNotContains("Step 5 capability strip removed", html, "analysis-scope-bar");
 checkNotContains("Step 5 capability strip CSS removed", css, ".analysis-scope-bar");
-checkContains("JS version bumped for preview-modal cleanup", html, "app.js?v=91");
+checkContains("Script carries a cache-busting placeholder", html, "app.js?v=");
+checkNotContains("No hand-maintained asset version remains", html, "app.js?v=91");
 checkContains("Official provider status comes from API metadata", appJs, "activeOfficial = entry.official === true");
 checkContains("Official UI state uses provider metadata", appJs, "const activeIsOfficial = activeOfficial");
 checkNotContains("Built-in mode is not assumed official", appJs, 'const activeIsOfficial = activeMode === "builtin"');

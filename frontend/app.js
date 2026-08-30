@@ -1046,6 +1046,32 @@ function _syncInactiveStepActions(activeStep) {
   });
 }
 
+/* ── Run Analysis, next to the step it belongs to ─────────────────────────
+   The button lived in the status card at the top of QC and Preview, while the
+   action a reviewer is looking for lives in the footer beside Continue to
+   Export. Pressing it produced no visible change up there, so it read as
+   broken even when it had run.
+
+   The element is moved rather than duplicated, so its click handler, loading
+   state and label come along with it and there is still exactly one button. */
+function _placeRunAnalysisInFooter(step, row) {
+  const button = el("btn-score-all");
+  if (!button || !row) return;
+  const right = row.querySelector(".step-action-right");
+  const primary = row.querySelector(".step-action-primary");
+  if (step !== "score") {
+    // Any other step: put it back where the markup declares it, so leaving
+    // and returning does not lose it.
+    const home = document.querySelector("#score-status-card .smc-actions");
+    if (home && button.parentElement !== home) home.insertBefore(button, home.firstChild);
+    return;
+  }
+  if (right && primary && button.parentElement !== right) {
+    button.classList.add("step-action-run");
+    right.insertBefore(button, primary);
+  }
+}
+
 function _ensureStepActionRow(step) {
   const cfg = _WF_FOOTER_CONFIG[step];
   if (!cfg || step === "upload") return null;
@@ -1113,6 +1139,37 @@ function _resetToUploadAndClearPersistence() {
    do not stop it: a warning is advisory by definition, and halting on one
    would mean halting on almost every real submission, which is how an
    automatic thing teaches people to ignore it. */
+
+/* ── Which sections on Score & Preview are folded shut ─────────────────────
+   The panel is rebuilt with innerHTML on every status resolution, so a
+   details element there forgets whether it was open the moment anything
+   async lands. Collapsing a section and watching it spring back open two
+   seconds later reads as the app fighting you, so the closed ones are
+   remembered here by key and reapplied on each render.
+
+   Held in memory, not localStorage: it is a reading position within one
+   review, not a setting, and a reviewer opening a different submission
+   should get the sections back. */
+const _collapsedFolds = new Set();
+
+/* Emits the attributes for a foldable section. Open unless the reviewer
+   closed this one. */
+function _foldAttrs(key) {
+  return ` data-fold="${key}"${_collapsedFolds.has(key) ? "" : " open"}`;
+}
+
+/* `toggle` does not bubble, so this listens in the capture phase. Registered
+   once on the document rather than per render, because the elements it
+   watches are replaced wholesale each time the panel redraws. */
+function _watchFolds() {
+  document.addEventListener("toggle", (event) => {
+    const target = event.target;
+    if (!target || !target.dataset || !target.dataset.fold) return;
+    if (target.open) _collapsedFolds.delete(target.dataset.fold);
+    else _collapsedFolds.add(target.dataset.fold);
+  }, true);
+}
+_watchFolds();
 
 const AUTO_ADVANCE_KEY = "osipi_auto_advance";
 
@@ -1269,6 +1326,8 @@ function _syncStepActionRow(step) {
       backBtn.onclick = null;
     }
   }
+
+    _placeRunAnalysisInFooter(step, row);
 
   if (!primaryBtn) return;
   const label = _stepPrimaryLabel(step);
@@ -1953,7 +2012,8 @@ async function restoreSessionFromStorage() {
     const synthData = _synthValidationData(saved.validationSummary);
     batchState.validationData = synthData;
     // renderValidateStep may auto-advance to "run", we'll override with goToStep after
-    renderValidateStep(synthData);
+    // fromRestore: rebuilding the step from saved state, not a fresh run.
+    renderValidateStep(synthData, /*isSingleMode=*/undefined, /*fromRestore=*/true);
   }
 
   // 6. Apply saved exec summaries to run rows (after run step renders)
@@ -3900,7 +3960,7 @@ function _refreshValidationFilterBar() {
   _wireValidationFilterBar();
 }
 
-function renderValidateStep(data, isSingleMode) {
+function renderValidateStep(data, isSingleMode, fromRestore) {
   const results = data.results || [];
   const single  = isSingleMode === true || !batchState.isBatch;
   const issueDetails = new Map(results.map((r) => [r.submission_id, _validationIssueDetails(r)]));
@@ -4142,9 +4202,14 @@ function renderValidateStep(data, isSingleMode) {
 
   goToStep("validate");
 
-  // The steps after this one ask the reviewer for nothing, so they run
-  // themselves as far as QC unless validation found something to look at.
-  _autoAdvanceToQc(results).catch(() => {});
+  // Only after a validation the reviewer just ran. This function is also the
+  // one that rebuilds the step from saved state on reload, and carrying the
+  // wizard forward there fought the restore's own navigation: two things
+  // deciding which step you land on, from a state that was only a summary.
+  // Reloading is not an instruction to run anything.
+  if (!fromRestore) {
+    _autoAdvanceToQc(results).catch(() => {});
+  }
 }
 
 // ── Review filter / sort / search ─────────────────────────────────────────────
@@ -6224,14 +6289,14 @@ function _renderImagePreviewSection(manifest, options = {}) {
         }).join("")}
       </ul>
     </details>` : "";
-  return `<section id="score-image-preview-section" class="imaging-preview-panel sdc score-image-preview" data-submission-id="${escapeHtml(submissionId)}">
-    <div class="sdc-head">
+  return `<details id="score-image-preview-section" class="imaging-preview-panel sdc sdc-fold score-image-preview" data-submission-id="${escapeHtml(submissionId)}"${_foldAttrs("map-previews")}>
+    <summary class="sdc-head">
       <h3>Parameter Map Previews</h3>
-    </div>
+    </summary>
     ${_previewNote()}
     ${body}
     ${otherFilesHtml}
-  </section>`;
+  </details>`;
 }
 
 async function _loadAndRenderImagePreviews(submissionId, challengeType) {
@@ -6261,13 +6326,13 @@ async function _loadAndRenderImagePreviews(submissionId, challengeType) {
   } catch (err) {
     const current = el("score-image-preview-section") || section;
     if (current && current.dataset.submissionId === String(submissionId)) {
-      current.outerHTML = `<section id="score-image-preview-section" class="imaging-preview-panel sdc score-image-preview" data-submission-id="${escapeHtml(submissionId)}">
-        <div class="sdc-head">
+      current.outerHTML = `<details id="score-image-preview-section" class="imaging-preview-panel sdc sdc-fold score-image-preview" data-submission-id="${escapeHtml(submissionId)}"${_foldAttrs("map-previews")}>
+        <summary class="sdc-head">
           <h3>Parameter Map Previews</h3>
-        </div>
+        </summary>
         ${_previewNote()}
         <div class="nifti-preview-empty">Preview unavailable: ${escapeHtml(err.message || String(err))}</div>
-      </section>`;
+      </details>`;
     }
   }
 }
@@ -6556,11 +6621,11 @@ function _renderReferenceReportSection(mapSummary) {
         _summaryMetric(row.map, row.status)).join("")}</div>`
     : "";
   // Compact status panel; raw per-map strings stay inside the collapsed details.
-  return `<section class="compact-review-panel compact-status-panel reference-status-card sdc">
-    <div class="sdc-head">
+  return `<details class="compact-review-panel compact-status-panel reference-status-card sdc sdc-fold"${_foldAttrs("reference-comparison")}>
+    <summary class="sdc-head">
       <h3>Reference Comparison ${helpTooltip("Reference metrics are calculated only when a matching private ground-truth map is available.", "Reference comparison status help")}</h3>
       ${refChip}
-    </div>
+    </summary>
     <p class="sdc-reason">${escapeHtml(refReason)}</p>
     <details class="summary-details summary-reference-report">
     <summary>View details</summary>
@@ -6608,7 +6673,7 @@ function _renderReferenceReportSection(mapSummary) {
     </div>
     </div>
     </details>
-  </section>`;
+  </details>`;
 }
 
 function _shapeText(shape) {
@@ -8146,7 +8211,10 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
         ${escapeHtml(pkg.name)} v${escapeHtml(pkg.version)} (${escapeHtml(pkg.challenge_type.toUpperCase())})
       </option>`
     ).join("");
-    if (wrapEl) wrapEl.style.display = "";
+      // Shown only when there is a choice to make: with one package installed
+      // the panel listed it three times over, as a card, as the only option
+      // in a dropdown, and again as a line of text beneath.
+      if (wrapEl) wrapEl.style.display = packages.length > 1 ? "" : "none";
     _renderScoringPackageSelectionDetail();
   }
 }
@@ -8918,10 +8986,10 @@ function renderScorePreviewPanel() {
     ? `<div class="qc-quality-bar"><div class="qc-bar-track"><div class="qc-bar-fill${finitePct >= 99.5 ? " is-good" : ""}" style="width:${finitePct}%"></div></div></div>`
     : "";
   const qcSummaryHtml = `
-    <section class="compact-review-panel qc-results-panel sdc">
-      <div class="sdc-head">
+    <details class="compact-review-panel qc-results-panel sdc sdc-fold"${_foldAttrs("qc-results")}>
+      <summary class="sdc-head">
         <h3>QC Results ${helpTooltip("QC metrics describe map validity and statistics. They are not official OSIPI scores.", "QC metrics help")}</h3>
-      </div>
+      </summary>
       <div class="qc-results-table">
         <div class="qc-result-row qc-result-head" aria-hidden="true">
           <span class="qc-cell qc-cell-metric">Metric</span>
@@ -8934,7 +9002,7 @@ function renderScorePreviewPanel() {
           <span class="qc-cell qc-cell-status">${escapeHtml(r.status || "")}</span>
         </div>${r.bar ? finiteBarHtml : ""}`).join("")}
       </div>
-    </section>`;
+    </details>`;
 
   const imagePreviewHtml = _renderImagePreviewSection(previewManifest, {
     loading: !!previewSubmissionId && !previewManifest,

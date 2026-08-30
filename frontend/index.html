@@ -7,7 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/static/styles.css?v=102" />
+<!-- The ?v= value is replaced at serve time with a hash of the file's
+     contents, so it never needs bumping by hand. It used to, nobody did, and
+     browsers served a cached script for weeks while the file kept changing. -->
+<link rel="stylesheet" href="/static/styles.css?v=dev" />
 </head>
 <body data-step="upload">
 
@@ -932,13 +935,13 @@
       </details>
 
       <!-- Submission scoring table (shown after scoring runs) -->
-      <div class="pg-card" id="score-table-card" style="display:none">
-        <div class="pg-card-header">
+      <details class="pg-card qc-fold" id="score-table-card" open style="display:none">
+        <summary class="pg-card-header">
           <div>
             <div class="pg-card-title">Submissions</div>
             <div class="pg-card-sub" id="score-table-sub">Ready to score</div>
           </div>
-        </div>
+        </summary>
         <table class="sc-table" id="score-table">
           <thead>
             <tr class="sc-table-head">
@@ -951,18 +954,22 @@
           </thead>
           <tbody id="score-table-body"></tbody>
         </table>
-      </div>
+      </details>
 
       <!-- ROI parameter-map statistics: within-scan descriptive values per ROI.
            Rendered from the canonical records already computed during
            scoring; the frontend never recalculates them. -->
-      <div class="pg-card" id="roi-descriptive-card" style="margin-top:16px;display:none">
-        <div class="pg-card-header">
+      <!-- A details element so the table folds away. It is the tallest thing
+           on the step, and a reviewer who has read it wants it out of the
+           way rather than scrolling past it every time. Open by default,
+           because it is the point of the step. -->
+      <details class="pg-card qc-fold" id="roi-descriptive-card" open style="margin-top:16px;display:none">
+        <summary class="pg-card-header">
           <div>
             <div class="pg-card-title">ROI Parameter-map Statistics <span class="collapsible-count section-count" id="roi-descriptive-count">0</span></div>
             <div class="pg-card-sub" id="roi-descriptive-sub">Within-scan values for each configured ROI</div>
           </div>
-        </div>
+        </summary>
         <div id="roi-descriptive-empty" class="smc-hint" style="display:none"></div>
         <!-- Identity shared by every row, so it is not repeated down the table.
              Filled by _renderRoiScope(). -->
@@ -990,7 +997,7 @@
           </table>
         </div>
         <p class="smc-hint" id="roi-descriptive-method" style="margin-top:8px"></p>
-      </div>
+      </details>
 
       <!-- Analysis results from previously processed submissions -->
       <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
@@ -1075,6 +1082,6 @@
 
 </div><!-- .app -->
 
-<script src="/static/app.js?v=91" defer></script>
+<script src="/static/app.js?v=dev" defer></script>
 </body>
 </html>

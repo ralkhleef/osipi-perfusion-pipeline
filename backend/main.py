@@ -16,6 +16,9 @@ from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+import hashlib
+import re
+import uuid
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -174,9 +177,43 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
+def _asset_fingerprint(name: str) -> str:
+    """A short hash of a frontend file's current contents.
+
+    The page used to carry hand-written cache-busting numbers, ``app.js?v=91``
+    and ``styles.css?v=102``. Nobody remembers to bump a number by hand, so
+    they stopped changing while the files kept changing, and browsers went on
+    serving a cached script for weeks. Every symptom of that looks like a bug
+    in the application rather than a stale file, which is exactly how it wasted
+    an afternoon: rebuilding the image changes nothing when the URL is
+    identical.
+
+    Deriving the version from the bytes means it cannot drift. Same file, same
+    URL, cached. Changed file, new URL, fetched.
+    """
+    try:
+        digest = hashlib.sha256((FRONTEND_DIR / name).read_bytes()).hexdigest()
+    except OSError:
+        # An unreadable asset is the static mount's problem to report. Falling
+        # back to a per-process value keeps the page loading and, because it
+        # changes on restart, still cannot serve a stale file indefinitely.
+        return uuid.uuid4().hex[:12]
+    return digest[:12]
+
+
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+def index() -> Response:
+    html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    for asset in ("app.js", "styles.css"):
+        html = re.sub(
+            rf"(/static/{re.escape(asset)})\?v=[^\"']*",
+            lambda m, a=asset: f"{m.group(1)}?v={_asset_fingerprint(a)}",
+            html,
+        )
+    # no-store on the HTML itself: it is the document that names the versioned
+    # assets, so a cached copy would point at the old ones and undo all of this.
+    return Response(content=html, media_type="text/html",
+                    headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/health")

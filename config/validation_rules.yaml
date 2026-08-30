@@ -123,9 +123,6 @@ artifact_types:
     - modelled_st
     - modeled_st
     - fitted_signal
-    # The DCE challenge lead's synthetic submission names the fitted
-    # concentration curve Ct.nii.gz. Matching is case insensitive.
-    - ct
   measured_st:
     role: measured_signal
     label: Measured signal-time curve
@@ -160,11 +157,6 @@ challenges:
     - vp
     - ve
     - kep
-    # "methods" stays required deliberately. The challenge lead's synthetic
-    # submission does not contain one, so it is reported as missing, and that
-    # is the pipeline doing its job rather than failing. Whether the real
-    # challenge should demand a methods document is her decision, not an
-    # assumption to bake in here by quietly relaxing the rule.
     required_artifacts:
     - modelled_st
     - methods
@@ -209,10 +201,6 @@ challenges:
     - vp
     - dce
     - dynamic contrast enhanced
-    # Structural BIDS checks: layout and naming only, not the full BIDS
-    # specification. Off by default. Turning it on reports findings as
-    # warnings; set severity to error to block, or require_layout to insist
-    # that every submission uses BIDS at all.
     bids_validation:
       enabled: false
       severity: warning

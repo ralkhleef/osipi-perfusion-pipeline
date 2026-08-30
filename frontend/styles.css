@@ -12452,3 +12452,190 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 .grouping-note-folders:empty { display: none; }
 .grouping-note .btn { flex: none; }
+
+/* ── Active Analysis Provider, tidied ──────────────────────────────────────
+   Three problems, all of them the panel showing more than it knows.
+
+   An unavailable option kept a live-looking radio, so the one row you cannot
+   choose looked exactly like the two you can. The radio is now hidden and the
+   row reads as a statement of fact rather than a rejected choice.
+
+   The security notice was the loudest thing on screen, competing with the
+   choice it is meant to annotate. It still says the same words. */
+.scoring-mode-row-unavailable input[type="radio"] { display: none; }
+.scoring-mode-row-unavailable {
+  border-style: dashed;
+  padding-left: 14px;
+}
+.scoring-mode-row-unavailable .scoring-mode-title,
+.scoring-mode-row-unavailable .scoring-mode-desc {
+  color: var(--muted, #6b7280);
+}
+.scoring-mode-row-unavailable .scoring-mode-chip { opacity: 0.55; }
+
+.scoring-security-warning {
+  border-width: 1px;
+  border-left-width: 3px;
+  padding: 8px 11px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+
+/* The label sat outside the control it names, so it read as a heading for the
+   whole section rather than for the dropdown directly beneath it. */
+#scoring-pkg-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.scoring-pkg-select-label {
+  flex: none;
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+}
+.scoring-pkg-select { flex: 1 1 260px; min-width: 0; }
+.scoring-pkg-selection-detail { flex: 1 1 100%; margin: 0; }
+
+/* Run Analysis, once moved into the step footer. Secondary weight beside
+   Continue to Export: the primary action on this step is moving on, and the
+   analysis is optional. */
+.step-action-right .step-action-run {
+  flex: none;
+  margin-right: 8px;
+  background: #fff;
+  color: var(--text, #212529);
+  border: 1px solid #d9d4e8;
+}
+.step-action-right .step-action-run:hover:not(:disabled) { background: #f6f4fc; }
+.step-action-right .step-action-run:disabled { opacity: 0.55; }
+
+/* ── Collapsible section headers on QC and Preview ─────────────────────────
+   The grey fill read as a disabled control rather than something to open, and
+   it was the only grey block on an otherwise white page, so the eye went to
+   it for the wrong reason. White with a hairline rule keeps it quiet while
+   the hover state and the arrow say it is interactive. */
+.scoring-admin-summary {
+  background: #fff;
+  border-bottom: 1px solid transparent;
+  transition: background 120ms ease;
+}
+.scoring-admin-summary:hover { background: #faf9fe; }
+.scoring-admin-summary:focus-visible {
+  outline: 2px solid #6b46c1;
+  outline-offset: -2px;
+}
+.scoring-admin-panel { border-color: #e6e2f2; }
+.scoring-admin-panel[open] > .scoring-admin-summary { background: #faf9fe; }
+
+/* The "Settings" word is a label for the row, not a heading competing with
+   the section name beside it. */
+.scoring-admin-icon {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, #6b7280);
+}
+
+/* A card whose body folds away. Same shape as the panel above, so the page
+   has one way of collapsing things rather than two that look different.
+
+   Deliberately does not restate the card header's padding. .step-shell
+   .pg-card-header sets it with !important, so any value here would either
+   lose silently or have to shout back, and either way a folding card would
+   drift out of line with a plain one the next time that rule is touched.
+   Only the things a fold actually needs are declared. */
+.qc-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  transition: background 120ms ease;
+}
+/* Summaries that are not card headers have no padding of their own. */
+.qc-fold > summary:not(.pg-card-header) {
+  padding: 14px 18px;
+  border-radius: 10px;
+}
+.qc-fold > summary::-webkit-details-marker { display: none; }
+.qc-fold > summary:hover { background: #faf9fe; }
+.qc-fold > summary:focus-visible {
+  outline: 2px solid #6b46c1;
+  outline-offset: -2px;
+}
+.qc-fold > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted, #6b7280);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 140ms ease;
+}
+.qc-fold[open] > summary::after { transform: rotate(90deg); }
+.qc-fold > summary .pg-card-title { margin: 0; }
+.qc-fold > summary .pg-card-sub { margin: 2px 0 0; }
+
+/* Closed, the header is the whole card. The rule under it would run along
+   the bottom edge with nothing beneath, and the margin would leave a band of
+   empty card below that. Both come from rules that carry !important, so
+   undoing them takes the same, at higher specificity so this still wins. */
+.qc-fold:not([open]) > summary.pg-card-header {
+  border-bottom: none !important;
+  margin-bottom: 0 !important;
+  border-radius: 14px;
+}
+
+/* ── Foldable sections inside the Score & Preview panel ────────────────────
+   These are <details> whose summary is the existing .sdc-head, so the header
+   keeps the look it already had and only gains a pointer, a hover tint and
+   an arrow. The arrow is drawn here rather than left to the browser default,
+   because the default marker sits at the start of the line and pushes the
+   heading out of alignment with the sections that do not fold. */
+#step-score .sdc-fold > summary.sdc-head {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  border-radius: 8px;
+  margin: -4px -6px 5px;
+  padding: 4px 6px;
+  transition: background 120ms ease;
+}
+.sdc-fold > summary.sdc-head::-webkit-details-marker { display: none; }
+.sdc-fold > summary.sdc-head:hover { background: #faf9fe; }
+.sdc-fold > summary.sdc-head:focus-visible {
+  outline: 2px solid #6b46c1;
+  outline-offset: -2px;
+}
+/* .sdc-head is justify-content: space-between and may already hold a chip on
+   the right, so the arrow is pinned last with a left margin of its own
+   rather than relying on margin-left: auto. */
+.sdc-fold > summary.sdc-head::after {
+  content: "";
+  order: 99;
+  flex: none;
+  margin-left: 4px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted, #6b7280);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 140ms ease;
+}
+.sdc-fold[open] > summary.sdc-head::after { transform: rotate(90deg); }
+/* Closed, the header is the whole card, so it should not keep a gap under
+   itself where the body used to be. */
+#step-score .sdc-fold:not([open]) > summary.sdc-head { margin-bottom: -4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sdc-fold > summary.sdc-head::after,
+  .qc-fold > summary::after { transition: none; }
+}

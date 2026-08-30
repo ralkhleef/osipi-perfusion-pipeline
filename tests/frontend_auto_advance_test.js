@@ -136,6 +136,53 @@ check("the run step is awaited before the next one starts",
 check("QC is awaited too",
   /await renderScoreStep\(\)/.test(autoAdvanceBody));
 
+/* Reloading a page is not an instruction to run anything. renderValidateStep
+   is also how saved state is rebuilt on reload, and carrying the wizard
+   forward from there fought the restore's own navigation: two things deciding
+   which step you land on, from a state that is only a summary. */
+console.log("\nReloading does not re-run the wizard");
+check("the restore path is told it is a restore",
+  /renderValidateStep\(synthData, \/\*isSingleMode=\*\/undefined, \/\*fromRestore=\*\/true\)/.test(appJs),
+  "session restore still looks like a fresh validation");
+check("auto-advance is skipped when restoring",
+  /if \(!fromRestore\) \{[\s\S]{0,120}_autoAdvanceToQc/.test(appJs),
+  "a page reload would advance the wizard again");
+check("a fresh validation still advances",
+  /_autoAdvanceToQc\(results\)/.test(appJs));
+
+
+/* ── Run Analysis sits beside Continue to Export ───────────────────────────
+   It lived in the status card at the top of QC and Preview, far from where a
+   reviewer looks for the next action, and pressing it changed nothing visible
+   up there, so it read as broken even when it had run. */
+console.log("\nRun Analysis is in the step footer");
+{
+  const body = (() => {
+    const start = appJs.indexOf("function _placeRunAnalysisInFooter(");
+    if (start < 0) return "";
+    let depth = 0, seen = false;
+    for (let i = start; i < appJs.length; i += 1) {
+      if (appJs[i] === "{") { depth += 1; seen = true; }
+      else if (appJs[i] === "}") { depth -= 1; if (seen && depth === 0) return appJs.slice(start, i + 1); }
+    }
+    return "";
+  })();
+  check("the placement helper exists", body.length > 0);
+  check("it applies to the score step only",
+    /step !== "score"/.test(body), "every step would grow a Run button");
+  check("it goes before the primary action",
+    /right\.insertBefore\(button, primary\)/.test(body),
+    "Run Analysis would sit after Continue to Export");
+  check("the button is moved, not copied",
+    !/cloneNode/.test(body),
+    "a copy would leave a dead button with no handler behind");
+  check("leaving the step returns it to the card",
+    /home\.insertBefore\(button/.test(body),
+    "navigating away would lose the button entirely");
+  check("the footer wiring calls it",
+    /_placeRunAnalysisInFooter\(step, row\);/.test(appJs));
+}
+
 console.log("\nPresentation");
 check("the toast is declared in the page, not created on demand",
   /id="auto-advance"/.test(indexHtml));

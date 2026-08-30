@@ -139,5 +139,6 @@ const validateGateSource = stepReadySource.slice(stepReadySource.indexOf('case "
 ok("validate gate (in _isStepReady) does not call inferredRunReadiness", !validateGateSource.includes("inferredRunReadiness"));
 ok("nav refreshed after async steps (_refreshWizardFooter present)", /function _refreshWizardFooter/.test(src) && (src.match(/_refreshWizardFooter\(\)/g) || []).length >= 3);
 
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);
