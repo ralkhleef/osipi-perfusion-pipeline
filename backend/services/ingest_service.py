@@ -706,23 +706,27 @@ def _merge_submissions(submission_ids: List[str]) -> Dict:
 
 
 def _is_participant_layout(dirs: List[Path]) -> bool:
-    """True when every directory names a participant rather than a team.
+    """True when every directory names part of a scan rather than a team.
 
-    One team's submission covering many participants::
+    Participants, sites and repeats are all levels *inside* one submission::
 
-        submission/
-            P01/            <- participant, not a submission
-            P02/
+        submission/          P01/             P01/site_1/
+            P01/                 site_1/          scan_1/
+            P02/                 site_2/          scan_2/
 
-    A real batch of separate submissions::
+    Splitting on any of them throws away the level that identifies a scan, and
+    every file below it then fails with INCOMPLETE_ARTIFACT_IDENTITY. A real
+    batch has team-named directories, which parse as none of these::
 
         batch_upload/
             Team_A/
             Team_B/
 
-    What counts as a participant name is not decided here. It defers to the
-    same identity parser the rest of the pipeline uses, so the two cannot drift
-    apart and start disagreeing about what ``P01`` means.
+    Only participants were recognised at first, so a submission uploaded one
+    participant at a time still carved on its sites. What counts as each name
+    is not decided here: it defers to the same identity parser the rest of the
+    pipeline uses, so the two cannot drift apart and start disagreeing about
+    what ``site_1`` means.
     """
     if len(dirs) < 2:
         return False
@@ -732,7 +736,7 @@ def _is_participant_layout(dirs: List[Path]) -> bool:
         # The parser reads directory components and ignores the last element,
         # which is normally the filename, hence the sentinel.
         identity = parse_directory_identity((directory.name, "_"))
-        if "participant" not in identity:
+        if not {"participant", "site", "repeat"} & set(identity):
             return False
     return True
 

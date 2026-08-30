@@ -40,6 +40,13 @@ def _dirs(tmp_path: Path, names: list[str]) -> list[Path]:
 
 @pytest.mark.parametrize("names", [
     ["P01", "P02"],
+    # Sites and repeats are inside a submission too. Recognising only
+    # participants meant a submission uploaded one participant at a time still
+    # carved on its sites, and the identity broke exactly as before.
+    ["site_1", "site_2", "site_3"],
+    ["scan_1", "scan_2"],
+    ["ses-01", "ses-02"],
+    ["visit_1", "visit_2"],
     ["P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10"],
     ["sub-01", "sub-02"],
     ["Participant1", "Participant2"],
@@ -107,6 +114,24 @@ def test_a_wrapper_around_participants_is_also_one_submission(tmp_path) -> None:
     (root / "submission").mkdir(parents=True)
     _submission_tree(root / "submission", ["P01", "P02", "P03"])
     assert detect_batch_boundaries(root) is None
+
+
+def test_one_participants_folder_uploaded_alone(tmp_path) -> None:
+    """Uploading P01 on its own, to avoid waiting for all sixty scans.
+
+    Its top level is then site_1, site_2, site_3, which recognising only
+    participants did not catch, so it carved into three "submissions" whose
+    paths began at scan_1 and every file lost its site.
+    """
+    from services.ingest_service import detect_batch_boundaries
+    root = tmp_path / "extracted"
+    for site in ("site_1", "site_2", "site_3"):
+        for scan in ("scan_1", "scan_2"):
+            d = root / site / scan
+            d.mkdir(parents=True)
+            (d / "Ktrans.nii.gz").write_bytes(b"placeholder")
+    assert detect_batch_boundaries(root) is None, (
+        "one participant's sites were carved into separate submissions")
 
 
 def test_a_genuine_batch_is_still_split(tmp_path) -> None:
