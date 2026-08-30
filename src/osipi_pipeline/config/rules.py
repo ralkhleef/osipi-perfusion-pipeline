@@ -50,6 +50,7 @@ _CHALLENGE_KEYS = {
     "required_artifacts",
     "datasets",
     "filename_identity_patterns",
+    "issue_severity",
     "grouped_statistics",
     "analysis",
     "code_execution_required",
@@ -410,6 +411,20 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                     if "severity" in bids and bids.get("severity") not in ("warning", "error"):
                         errors.append(
                             f"{bids_path}.severity: must be 'warning' or 'error'")
+            if "issue_severity" in spec_map:
+                overrides = spec_map.get("issue_severity")
+                sev_path = f"{spec_path}.issue_severity"
+                if not isinstance(overrides, dict):
+                    errors.append(f"{sev_path}: must be a mapping of issue code to severity")
+                else:
+                    for code, level in overrides.items():
+                        if code not in _OVERRIDABLE_ISSUE_CODES:
+                            errors.append(
+                                f"{sev_path}.{code}: unknown issue code. Known codes: "
+                                + ", ".join(sorted(_OVERRIDABLE_ISSUE_CODES)))
+                        if level not in ("error", "warning", "info"):
+                            errors.append(
+                                f"{sev_path}.{code}: must be 'error', 'warning' or 'info'")
             for field in ("label", "expected_maps", "keywords"):
                 if field not in spec_map:
                     errors.append(f"{spec_path}.{field}: required field is missing")
@@ -936,6 +951,43 @@ def required_artifacts_by_challenge() -> dict[str, tuple[str, ...]]:
 
 #: Keys a bids_validation block may carry.
 _BIDS_VALIDATION_KEYS = {"enabled", "severity", "require_layout"}
+
+#: Completeness findings whose severity an organiser may change. Deliberately
+#: a closed list: a typo in a config file must be rejected rather than silently
+#: leaving a rule at its default, and only structural findings belong here.
+#: Nothing that indicates unreadable or corrupt data can be downgraded.
+_OVERRIDABLE_ISSUE_CODES = {
+    "REQUIRED_MAP_MISSING",
+    "REQUIRED_ARTIFACT_MISSING",
+    "MAP_DIMENSION_MISMATCH",
+    "ARTIFACT_DIMENSION_MISMATCH",
+    "DUPLICATE_PARAMETER_MAP",
+    "DUPLICATE_REQUIRED_ARTIFACT",
+    "DUPLICATE_METHODS_DOCUMENT",
+    "INCOMPLETE_ARTIFACT_IDENTITY",
+    "DATASET_COUNT_MISMATCH",
+    "IDENTITY_CONFLICT",
+    "UNKNOWN_DATASET",
+    "DATASET_AMBIGUOUS",
+}
+
+
+def issue_severity_by_challenge() -> dict[str, dict[str, str]]:
+    """Per challenge severity overrides, empty when not configured.
+
+    Which findings stop a submission is a challenge policy rather than a
+    property of the code. An organiser who accepts submissions that cannot be
+    checked for completeness, because their layout omits a level the config
+    declares, should be able to say so in YAML instead of asking for a code
+    change.
+    """
+    return {
+        str(challenge).lower(): {
+            str(code): str(level)
+            for code, level in (config.get("issue_severity") or {}).items()
+        }
+        for challenge, config in validation_rules().get("challenges", {}).items()
+    }
 
 
 def bids_validation_by_challenge() -> dict[str, dict[str, Any]]:

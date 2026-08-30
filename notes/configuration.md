@@ -199,6 +199,37 @@ and CoV. Exactly two clearly matched repeats or sites also receive a signed
 second-minus-first difference. These are descriptive prototype results, not
 formal repeatability, reproducibility, ICC, pass/fail, or ranking.
 
+### Which findings block a submission
+
+`challenges.<id>.issue_severity` maps an issue code to `error`, `warning` or
+`info`. Anything not listed keeps its default. This exists because whether a
+submission is acceptable is the organiser's decision, not the pipeline's: a
+challenge whose teams submit without a methods document, or whose layout omits
+a level the configuration declares, should be able to say so here rather than
+ask for a code change.
+
+```yaml
+challenges:
+  dce:
+    issue_severity:
+      REQUIRED_ARTIFACT_MISSING: warning
+```
+
+Overridable codes: `REQUIRED_MAP_MISSING`, `REQUIRED_ARTIFACT_MISSING`,
+`MAP_DIMENSION_MISMATCH`, `ARTIFACT_DIMENSION_MISMATCH`,
+`DUPLICATE_PARAMETER_MAP`, `DUPLICATE_REQUIRED_ARTIFACT`,
+`DUPLICATE_METHODS_DOCUMENT`, `INCOMPLETE_ARTIFACT_IDENTITY`,
+`DATASET_COUNT_MISMATCH`, `IDENTITY_CONFLICT`, `UNKNOWN_DATASET`,
+`DATASET_AMBIGUOUS`.
+
+An unknown code is rejected when the configuration loads rather than ignored,
+because a typo would otherwise leave a rule at a severity nobody chose.
+
+Findings about unreadable or corrupt data cannot be changed. Accepting a file
+that will not open is not a policy an organiser should be able to configure:
+every number computed from it would be wrong while the submission read as
+acceptable.
+
 ### Dataset structure
 
 `challenges.<id>.datasets` describes how many images a complete submission

@@ -580,7 +580,10 @@ checkContains("Row uses shared worklist title", appJs, 'titleClass: "sub-row-nam
 checkContains("Row uses shared worklist meta", appJs, 'metaClass: "sub-row-meta"');
 checkContains("Row meta line builder", appJs, "function _subRowMetaLine");
 checkContains("Meta line joins with middots", appJs, 'parts.join(" · ")');
-checkContains("Review meta shows compact map count", appJs, "map${Number(niftiCount) === 1 ? \"\" : \"s\"}");
+// Was pinned to the raw file-count expression, which is the bug: a DCE
+// submission of 12 maps and 6 fitted curves is 18 files, and the row called
+// that "18 maps". The count now comes from the backend's role breakdown.
+checkContains("Review meta shows a map count", appJs, "_mapCountLabel(sub),");
 checkContains("Full metadata grid moved into collapsed details", appJs, 'detailsClass: "sub-row-detail"');
 checkContains("Rows use shared Details toggle", appJs, 'class="details-toggle"');
 checkContains("Step 2 has Step 3-style section", html, 'id="index-list-section"');

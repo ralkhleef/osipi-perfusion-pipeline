@@ -2842,6 +2842,34 @@ function _subChallengeKey(sub) {
 }
 
 // One-line row summary: challenge, map labels, and map count.
+/* How many parameter maps a submission has, and how many files it has, are
+   different numbers. A DCE scan carries two maps and one 4-D fitted curve, so
+   a six-scan submission is 12 maps and 18 files. Labelling the file count
+   "18 maps" tells a reviewer the submission contains half again as many maps
+   as it does, and the count they are checking against the challenge is the
+   one that is wrong.
+
+   The backend already separates them. This prefers its counts and falls back
+   to the file count only when they are absent, which is what old cached
+   session state looks like. */
+function _mapCountLabel(sub) {
+  const counts = sub && sub.counts;
+  const maps = counts && Number(counts.parameter_maps);
+  if (Number.isFinite(maps)) {
+    const signals = Number(counts.fitted_signals);
+    const parts = [`${maps} parameter map${maps === 1 ? "" : "s"}`];
+    if (Number.isFinite(signals) && signals > 0) {
+      parts.push(`${signals} fitted signal${signals === 1 ? "" : "s"}`);
+    }
+    return parts.join(" · ");
+  }
+  const files = Number(sub && sub.nifti_count);
+  if (!Number.isFinite(files)) return null;
+  // Deliberately says "files" rather than "maps": without the breakdown the
+  // honest label is the one that does not claim to know what they are.
+  return `${files} file${files === 1 ? "" : "s"}`;
+}
+
 function _subRowMetaLine(sub) {
   // Collapsed row shows only the essentials; NIfTI count and readiness live in Details.
   const niftiCount = sub.nifti_count;
@@ -2852,7 +2880,7 @@ function _subRowMetaLine(sub) {
   const parts = [
     challengeLabel(sub.confirmed_challenge_type || sub.challenge_type || detected),
     _subMapTypesLabel(sub),
-    Number.isFinite(Number(niftiCount)) ? `${niftiCount} map${Number(niftiCount) === 1 ? "" : "s"}` : null,
+    _mapCountLabel(sub),
   ].filter(Boolean);
   return escapeHtml(parts.join(" · "));
 }
@@ -3738,6 +3766,12 @@ function _renderSingleAsValidate(data) {
       errors:               data.errors  || [],
       warnings:             data.warnings || [],
       nifti_count:          data.nifti_count ?? state.detection.nifti_count,
+      // Carried through rather than dropped. Rebuilding the row from a subset
+      // of the response meant a single submission fell back to the raw file
+      // count and reported 18 maps where the backend had said 12 maps and 6
+      // fitted signals. A batch of one showed different numbers from a batch
+      // of two, for no reason a reader could see.
+      counts:               data.counts || null,
       map_type:             data.map_type || state.detection.detected_parameter_map_type,
       has_run_instructions: data.has_run_instructions ?? data.has_dockerfile ?? null,
       source_folder:        data.source_folder || null,

@@ -193,5 +193,59 @@ console.log("\nTechnical details");
         detailsSource.includes('class="validation-technical-detail"'));
 }
 
+
+
+/* ── Files are not maps ────────────────────────────────────────────────────
+   A DCE scan carries two parameter maps and one 4-D fitted curve, so six
+   scans are 12 maps and 18 files. The review row labelled the file count
+   "18 maps", which overstates the maps by half and is exactly the number a
+   reviewer checks against the challenge. */
+console.log("\nMap counts are not file counts");
+{
+  const fn = (() => {
+    const start = SOURCE.indexOf("function _mapCountLabel(");
+    let depth = 0, seen = false;
+    for (let i = start; i < SOURCE.length; i += 1) {
+      if (SOURCE[i] === "{") { depth += 1; seen = true; }
+      else if (SOURCE[i] === "}") { depth -= 1; if (seen && depth === 0) return SOURCE.slice(start, i + 1); }
+    }
+  })();
+  const box = { console };
+  require("vm").createContext(box);
+  require("vm").runInContext(fn, box);
+
+  const dce = { counts: { parameter_maps: 12, fitted_signals: 6 }, nifti_count: 18 };
+  check("it reports maps, not the file count",
+    /12 parameter maps/.test(box._mapCountLabel(dce)), box._mapCountLabel(dce));
+  check("it does not call 18 files 18 maps",
+    !/18 maps/.test(box._mapCountLabel(dce)), box._mapCountLabel(dce));
+  check("fitted signals are named separately",
+    /6 fitted signals/.test(box._mapCountLabel(dce)), box._mapCountLabel(dce));
+  check("one map is singular",
+    /1 parameter map$/.test(box._mapCountLabel({ counts: { parameter_maps: 1, fitted_signals: 0 } })));
+  check("no fitted signals are not mentioned",
+    !/fitted/.test(box._mapCountLabel({ counts: { parameter_maps: 4, fitted_signals: 0 } })));
+  /* Old cached session state has no counts. Falling back to the file count is
+     fine; calling it maps is not, so the fallback says "files". */
+  check("without counts it says files rather than guessing",
+    box._mapCountLabel({ nifti_count: 18 }) === "18 files",
+    box._mapCountLabel({ nifti_count: 18 }));
+  check("nothing at all produces no label",
+    box._mapCountLabel({}) === null);
+}
+
+/* Testing the helper alone passed with the row still using the raw count.
+   The row has to be shown to call it. */
+check("the review row uses that label rather than the raw file count",
+  /_mapCountLabel\(sub\),/.test(SOURCE),
+  "_subRowMetaLine no longer uses _mapCountLabel");
+check("the raw nifti count is no longer labelled as maps anywhere",
+  !/\$\{niftiCount\} map/.test(SOURCE),
+  "a raw file count is still being called maps");
+
+check("the single-submission path carries the backend counts through",
+  /counts:\s+data\.counts \|\| null/.test(SOURCE),
+  "a batch of one would fall back to the raw file count again");
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);

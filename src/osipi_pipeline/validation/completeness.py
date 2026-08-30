@@ -31,6 +31,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from osipi_pipeline.config.rules import (
     artifact_type_specs,
     datasets_by_challenge,
+    issue_severity_by_challenge,
     map_type_specs,
     optional_maps_by_challenge,
     required_artifacts_by_challenge,
@@ -141,6 +142,24 @@ def validate_completeness(
     if not (required_maps or required_artifacts or datasets):
         return []
 
+    overrides = issue_severity_by_challenge().get(challenge, {})
+
+    def apply_overrides(found: list[dict]) -> list[dict]:
+        """Re-label findings the challenge has chosen to treat differently.
+
+        Applied once at the end rather than threaded through every helper, so
+        there is a single place where a configured severity takes effect and
+        no helper can quietly forget to consult it.
+        """
+        if not overrides:
+            return found
+        for issue in found:
+            level = overrides.get(issue.get("code"))
+            if level:
+                issue["severity"] = level
+                issue["severity_source"] = "challenge configuration"
+        return found
+
     issues: list[dict] = []
 
     # ── 1. Identity conflicts ────────────────────────────────────────────
@@ -194,7 +213,7 @@ def validate_completeness(
     issues.extend(_dimension_issues(artifacts, required_maps, optional_maps))
 
     _ = incomplete_paths
-    return issues
+    return apply_overrides(issues)
 
 
 def validate_generated_map_completeness(

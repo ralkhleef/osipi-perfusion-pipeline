@@ -752,6 +752,13 @@ def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
     Returns the inner directory only when *staged_dir* contains exactly one
     entry, that entry is a directory, and its name is NOT a structural subdir
     (``input``/``results``/…). Returns None otherwise (nothing to unwrap).
+
+    A folder that names a participant, site or repeat is never redundant. A ZIP
+    of one participant extracts to a single ``P01/`` directory, which looks
+    exactly like a wrapper and is not one: promoting its contents discarded the
+    participant, and all eighteen files then failed as unidentifiable. The
+    wrapper this exists for carries no information; ``P01`` carries the only
+    thing that says whose scans these are.
     """
     try:
         entries = [e for e in staged_dir.iterdir()]
@@ -762,9 +769,22 @@ def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
         len(entries) == 1
         and len(dirs) == 1
         and dirs[0].name.lower() not in _STRUCTURAL_SUBDIRS
+        and not _names_an_identity_level(dirs[0])
     ):
         return dirs[0]
     return None
+
+
+def _names_an_identity_level(directory: Path) -> bool:
+    """Whether this directory name carries scan identity rather than nothing.
+
+    Defers to the same parser used everywhere else, so "what P01 means" is
+    decided in one place.
+    """
+    from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
+
+    identity = parse_directory_identity((directory.name, "_"))
+    return bool({"participant", "site", "repeat"} & set(identity))
 
 
 def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
