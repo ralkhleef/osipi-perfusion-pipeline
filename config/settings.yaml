@@ -16,7 +16,16 @@ reporting:
   include_pdf_export: true
 
 performance:
-  nifti_validation_workers: 3
+  # Raised from 3 after measuring the DCE challenge data. Its 4-D fitted
+  # curves are 8 MB on disk and about 1 GB decompressed, and reading one takes
+  # roughly 20 seconds, so a 60-scan submission spends almost all of its
+  # validation time in gzip. Decompression releases the GIL, so more threads
+  # genuinely help here rather than just queueing.
+  #
+  # Capped at 6 in code, and further capped by the CPU count, so setting this
+  # higher than the machine has cores does nothing. Lower it if validation is
+  # competing with something else for the machine.
+  nifti_validation_workers: 6
   batch_validation_workers: 2
   validation_cache_enabled: true
   manifest_cache_enabled: true
