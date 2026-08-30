@@ -170,3 +170,43 @@ def test_a_small_3d_image_is_read_in_one_piece() -> None:
     """The ASL path must be byte for byte what it was."""
     spans = list(_last_axis_chunks((121, 145, 91), MAX_VOXELS_PER_READ))
     assert spans == [(0, 91)]
+
+
+def test_reducing_over_nan_does_not_warn() -> None:
+    """NaN propagation through min/max is the detection mechanism, not a slip.
+
+    Without errstate, NumPy warns "invalid value encountered in reduce" once
+    per chunk for any map that legitimately contains NaN. On a 4-D curve that
+    is a wall of warnings, and it breaks anyone running with -W error.
+
+    In a subprocess, because NumPy records a warning as already issued for a
+    given source line and stays quiet afterwards. In-process this test passed
+    with the guard removed, since an earlier test had already tripped it.
+    """
+    import subprocess
+    import textwrap
+
+    program = textwrap.dedent(f"""
+        import sys, numpy as np
+        sys.path[:0] = [{str(ROOT / "src")!r}]
+        from osipi_pipeline.validation.nifti_validator import _streaming_stats
+        # Both infinities in one chunk, so the probe sum is inf + -inf = NaN,
+        # which is the case NumPy actually complains about. An all-NaN chunk
+        # does not warn, so testing that would prove nothing.
+        data = np.arange(60, dtype=np.float32).reshape(2, 2, 15)
+        data[..., 0] = np.nan
+        data[..., 7] = np.inf
+        data[..., 14] = -np.inf
+        stats = _streaming_stats(data, data.shape, max_voxels=10**9)
+        assert stats.nan_count == 4, stats.nan_count
+        assert stats.inf_count == 8, stats.inf_count
+        print("ok")
+    """)
+    result = subprocess.run(
+        [sys.executable, "-W", "error::RuntimeWarning", "-c", program],
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, (
+        "reducing over NaN warned, so the errstate guard is gone:\n"
+        + result.stderr[-800:])
+    assert "ok" in result.stdout

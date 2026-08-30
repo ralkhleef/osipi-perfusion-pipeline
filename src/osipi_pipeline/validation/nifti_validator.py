@@ -88,19 +88,47 @@ def _streaming_stats(dataobj: Any, shape: tuple[int, ...],
     seen_finite = False
     for start, stop in _last_axis_chunks(shape, max_voxels):
         chunk = np.asarray(dataobj[..., start:stop], dtype=np.float32)
-        nan = np.isnan(chunk)
-        inf = np.isinf(chunk)
-        stats.nan_count += int(nan.sum())
-        stats.inf_count += int(inf.sum())
-        finite = ~(nan | inf)
-        if finite.any():
-            values = chunk[finite]
-            low = float(values.min())
-            high = float(values.max())
+        size = chunk.size
+        if not size:
+            continue
+
+        # Three reductions, no temporary arrays. NumPy propagates: a NaN
+        # anywhere makes both the minimum and the maximum NaN, and an infinity
+        # shows up as an infinite minimum or maximum. So these three numbers
+        # answer "is anything non-finite here" without building a boolean mask
+        # the size of the chunk, which is what the previous version did before
+        # gathering every finite value into a second full-size copy.
+        # errstate because reducing over a NaN is the detection mechanism here,
+        # not an accident. Without it NumPy warns "invalid value encountered in
+        # reduce" for every chunk of a map that legitimately contains NaN,
+        # which fills the log and breaks anyone running with -W error.
+        with np.errstate(invalid="ignore"):
+            low = float(chunk.min())
+            high = float(chunk.max())
+            total = float(chunk.sum(dtype=np.float64))
+
+        if np.isfinite(low) and np.isfinite(high) and np.isfinite(total):
+            finite_count = size          # the common case, and now the cheap one
+        else:
+            # Something is not finite, so now it is worth paying to say what.
+            finite = np.isfinite(chunk)
+            finite_count = int(np.count_nonzero(finite))
+            nan_count = int(np.count_nonzero(np.isnan(chunk)))
+            stats.nan_count += nan_count
+            stats.inf_count += (size - finite_count) - nan_count
+            if finite_count:
+                # where= keeps the non-finite values out of the result without
+                # materialising the finite ones.
+                low = float(chunk.min(where=finite, initial=np.inf))
+                high = float(chunk.max(where=finite, initial=-np.inf))
+                total = float(chunk.sum(dtype=np.float64, where=finite))
+            del finite
+
+        if finite_count:
             stats.minimum = low if not seen_finite else min(stats.minimum, low)
             stats.maximum = high if not seen_finite else max(stats.maximum, high)
-            stats.total += float(values.sum(dtype=np.float64))
-            stats.finite_count += int(values.size)
+            stats.total += total
+            stats.finite_count += finite_count
             seen_finite = True
         del chunk
     return stats

@@ -3649,11 +3649,11 @@ async function runBatchValidation(submissionIds) {
   };
   disableBtns(true);
   if (actionNext) setLoading(actionNext, true, "Validating");
-  if (statusEl) {
-    statusEl.style.display = "block";
-    statusEl.className = "submit-status status-info";
-    statusEl.textContent = `Validating ${submissionIds.length} submission${submissionIds.length !== 1 ? "s" : ""}…`;
-  }
+  // No "Validating N submissions" banner. The button already says Validating
+  // and spins, so the banner repeated it a few centimetres away and pushed the
+  // list down while it did. The element is kept for failures, which the button
+  // cannot express.
+  if (statusEl) statusEl.style.display = "none";
 
   try {
     // ── Single submission path ────────────────────────────────────────────
