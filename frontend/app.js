@@ -3241,10 +3241,120 @@ function _worklistRowEl(opts) {
 
 // Render detected submissions as compact list rows. Selection state and
 // action-row validation both work through batchState.selectedIds.
+/* ── Correcting how an upload was grouped ──────────────────────────────────
+
+   A ZIP containing P01 through P10 is either one submission covering ten
+   participants or ten separate submissions. Nothing in the files tells those
+   apart, so detection has to guess. The guess is usually right, and when it is
+   wrong the consequences are bad in a quiet way: split a single submission and
+   every file loses the participant level that identified it; merge a real
+   batch and several teams get scored as one.
+
+   So the decision is shown, with the folder names that drove it, and can be
+   changed in one click by the person who knows which it is. */
+
+function _groupingModel(submissions) {
+  const list = submissions || [];
+  if (!list.length) return null;
+
+  if (list.length === 1) {
+    const only = list[0];
+    const folders = only.inner_folders || [];
+    // Nothing to split into, so there is no decision to show.
+    if (folders.length < 2) return null;
+    return {
+      mode: "split",
+      ids: [only.submission_id],
+      text: `Read as 1 submission containing ${folders.length} inner folders.`,
+      folders,
+      action: `Treat as ${folders.length} separate submissions`,
+    };
+  }
+
+  return {
+    mode: "merge",
+    ids: list.map((s) => s.submission_id),
+    text: `Read as ${list.length} separate submissions.`,
+    folders: list.map((s) => s.source_folder || s.submission_id),
+    action: "Treat as 1 submission",
+  };
+}
+
+/* At most this many folder names, then a count. A ten-participant list is
+   useful; a two-hundred-scan list is a wall of text nobody reads. */
+const GROUPING_FOLDER_LIMIT = 8;
+
+function _groupingFolderText(folders) {
+  const names = (folders || []).filter(Boolean).map(String);
+  if (!names.length) return "";
+  if (names.length <= GROUPING_FOLDER_LIMIT) return names.join(", ");
+  const shown = names.slice(0, GROUPING_FOLDER_LIMIT).join(", ");
+  return `${shown} and ${names.length - GROUPING_FOLDER_LIMIT} more`;
+}
+
+function _renderGroupingNote(submissions) {
+  const host = el("grouping-note");
+  if (!host) return;
+  const model = _groupingModel(submissions);
+  if (!model) { host.hidden = true; return; }
+
+  const text = el("grouping-note-text");
+  const folders = el("grouping-note-folders");
+  const action = el("grouping-note-action");
+  if (text) text.textContent = model.text;
+  if (folders) folders.textContent = _groupingFolderText(model.folders);
+  if (action) {
+    action.textContent = model.action;
+    action.disabled = false;
+    action.dataset.mode = model.mode;
+    action.dataset.ids = JSON.stringify(model.ids);
+  }
+  host.hidden = false;
+}
+
+async function _regroupSubmissions(mode, ids) {
+  const action = el("grouping-note-action");
+  if (action) { action.disabled = true; action.textContent = "Regrouping..."; }
+  try {
+    const response = await fetch(`${API}/api/regroup-submissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_ids: ids, mode }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Regrouping failed.");
+    // Re-enter the review step from the new grouping, rather than patching the
+    // old rows: everything downstream keys off submission ids, and half of the
+    // ids no longer exist.
+    const submissions = data.submissions
+      || [{ submission_id: data.submission_id, ...data }];
+    batchState.uploadData = { ...(batchState.uploadData || {}), submissions };
+    batchState.selectedIds = new Set(submissions.map((s) => s.submission_id));
+    batchState.isBatch = submissions.length > 1;
+    renderBatchTable(submissions);
+    _refreshWizardFooter();
+    saveSessionState();
+  } catch (error) {
+    const text = el("grouping-note-text");
+    if (text) text.textContent = `Could not regroup: ${error && error.message ? error.message : error}`;
+    if (action) { action.disabled = false; action.textContent = "Try again"; }
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!target || target.id !== "grouping-note-action" || target.disabled) return;
+  let ids = [];
+  try { ids = JSON.parse(target.dataset.ids || "[]"); } catch (_) { ids = []; }
+  if (!ids.length) return;
+  _regroupSubmissions(target.dataset.mode, ids);
+});
+
 function renderBatchTable(submissions) {
   const wrap = el("batch-table-wrap");
   if (!wrap) return;
   wrap.innerHTML = "";
+  _renderGroupingNote(submissions);
 
   const safeSubmissions = submissions || [];
   const isSingle = safeSubmissions.length <= 1;

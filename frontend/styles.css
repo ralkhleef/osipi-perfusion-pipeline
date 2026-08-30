@@ -12420,3 +12420,35 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   cursor: pointer;
 }
 .auto-advance-stop:hover { background: #f6f4fc; }
+
+/* ── Correcting how an upload was grouped ──────────────────────────────────
+   Deliberately quiet. The detection is usually right, so this reads as a
+   statement of what happened with a way to change it, not as a warning that
+   something is wrong. */
+.grouping-note[hidden] { display: none; }
+.grouping-note {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 11px 14px;
+  border: 1px solid #e6e2f2;
+  border-radius: 9px;
+  background: #faf9fe;
+}
+.grouping-note-body { flex: 1 1 320px; min-width: 0; }
+.grouping-note-text {
+  margin: 0;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--text, #212529);
+}
+.grouping-note-folders {
+  margin: 3px 0 0;
+  font-size: 0.73rem;
+  color: var(--muted, #6b7280);
+  overflow-wrap: anywhere;
+}
+.grouping-note-folders:empty { display: none; }
+.grouping-note .btn { flex: none; }

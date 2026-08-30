@@ -4,7 +4,9 @@ Returns a submission_id (the ZIP stem) so the rest of the backend
 can locate the extracted folder without exposing file paths to the frontend.
 """
 
+import os
 import shutil
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
@@ -24,12 +26,10 @@ def _map_type_patterns() -> dict[str, tuple[str, ...]]:
 
 # ── Safety limits (override via environment variables) ─────────────────────────
 
-import os as _os
-
 _LIMITS = app_settings().get("limits", {})
-ZIP_MAX_BYTES = int(_os.environ.get("OSIPI_ZIP_MAX_BYTES", str(_LIMITS.get("zip_max_bytes", 500 * 1024 * 1024))))
-EXTRACT_MAX_BYTES = int(_os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(_LIMITS.get("extract_max_bytes", 2 * 1024 * 1024 * 1024))))
-EXTRACT_MAX_FILES = int(_os.environ.get("OSIPI_EXTRACT_MAX_FILES", str(_LIMITS.get("extract_max_files", 10000))))
+ZIP_MAX_BYTES = int(os.environ.get("OSIPI_ZIP_MAX_BYTES", str(_LIMITS.get("zip_max_bytes", 500 * 1024 * 1024))))
+EXTRACT_MAX_BYTES = int(os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(_LIMITS.get("extract_max_bytes", 2 * 1024 * 1024 * 1024))))
+EXTRACT_MAX_FILES = int(os.environ.get("OSIPI_EXTRACT_MAX_FILES", str(_LIMITS.get("extract_max_files", 10000))))
 
 # Paths/filenames to silently skip when extracting ZIPs
 _SKIP_PREFIXES = set(settings_tuple("ingestion", "skip_prefixes"))
@@ -324,12 +324,23 @@ def detect_submission_metadata(submission_id: str) -> Dict:
     except Exception:
         detected_challenge = "unknown"
 
+    # The inner folder names, so the Review step can show what this submission
+    # would split into and let a reviewer judge. Whether P01..P10 are
+    # participants of one submission or ten separate submissions cannot be told
+    # from the files, so the names have to be visible rather than inferred.
+    try:
+        inner = sorted(d.name for d in folder.iterdir()
+                       if d.is_dir() and not d.name.startswith("."))
+    except OSError:
+        inner = []
+
     return {
         "nifti_count": nifti_count,
         "detected_parameter_map_type": detected,
         "detected_map_type_confidence": confidence,
         "detection_warning": warning,
         "detected_challenge_type": detected_challenge,
+        "inner_folders": inner,
     }
 
 
@@ -393,6 +404,15 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
     # ``input/`` and ``results/maps/`` at its top level would be wrongly split
     # into two submissions (e.g. ``<name>_input`` and ``<name>_results``).
     if _is_structural_layout(submission_dirs):
+        return None
+
+    # Participants are not submissions. The DCE challenge lead's synthetic
+    # submission is one team's work laid out as P01..P10. Splitting it per
+    # participant produced ten "submissions" whose paths then began at site_1/,
+    # so the participant could no longer be determined and every file failed
+    # with INCOMPLETE_ARTIFACT_IDENTITY. The submission was fine; the carve had
+    # discarded the level that identified it.
+    if _is_participant_layout(submission_dirs):
         return None
 
     return submission_dirs
@@ -547,6 +567,176 @@ def _is_structural_layout(dirs: List[Path]) -> bool:
     return all(d.name.lower() in known for d in dirs)
 
 
+def regroup_submissions(submission_ids: List[str], mode: str) -> Dict:
+    """Re-decide whether one upload is one submission or several.
+
+    A ZIP containing ``P01`` through ``P10`` is either one submission covering
+    ten participants or ten separate submissions, and nothing in the files can
+    tell those apart. Detection guesses, sensibly, and this is how a reviewer
+    overrules the guess after seeing the actual folder names.
+
+    ``mode`` is ``"split"``, which takes one submission and makes each of its
+    top-level directories a submission of its own, or ``"merge"``, which takes
+    several and nests them back under one.
+
+    Files are staged and only committed once every move has succeeded, because
+    a regrouping that half-finishes would leave a reviewer with a submission
+    that is missing scans and no indication that anything went wrong.
+    """
+    mode = (mode or "").strip().lower()
+    if mode not in ("split", "merge"):
+        return {"success": False, "error": "mode must be 'split' or 'merge'."}
+    ids = [str(s).strip() for s in (submission_ids or []) if str(s).strip()]
+    if not ids:
+        return {"success": False, "error": "No submissions were given."}
+
+    if mode == "split":
+        if len(ids) != 1:
+            return {"success": False, "error": "Splitting takes exactly one submission."}
+        return _split_submission(_safe_id(ids[0]))
+    if len(ids) < 2:
+        return {"success": False, "error": "Merging takes two or more submissions."}
+    return _merge_submissions([_safe_id(s) for s in ids])
+
+
+def _split_submission(submission_id: str) -> Dict:
+    source = EXTRACTED_DIR / submission_id
+    if not source.is_dir():
+        return {"success": False, "error": f"{submission_id} was not found."}
+
+    children = sorted(d for d in source.iterdir() if d.is_dir())
+    if len(children) < 2:
+        return {"success": False,
+                "error": "This submission has no inner folders to split into."}
+    shared_files = sorted(item for item in source.iterdir() if item.is_file())
+
+    staged = EXTRACTED_DIR / f".regroup-{uuid.uuid4().hex}"
+    staged.mkdir(parents=True)
+    try:
+        planned = []
+        for child in children:
+            sub_id = _safe_id(f"{submission_id}_{child.name}")
+            target = staged / sub_id
+            shutil.move(str(child), str(target))
+            for shared in shared_files:
+                copy_to = target / shared.name
+                if not copy_to.exists():
+                    shutil.copy2(str(shared), str(copy_to))
+            planned.append((sub_id, target, child.name))
+
+        submissions = []
+        for sub_id, target, source_folder in planned:
+            final = _reset_submission_dir(sub_id)
+            for item in sorted(target.iterdir()):
+                shutil.move(str(item), str(final / item.name))
+            manifest = refresh_manifest(final, submission_id=sub_id,
+                                        original_path=source_folder)
+            submissions.append({
+                "submission_id": sub_id,
+                "source_folder": source_folder,
+                "file_count": int(manifest.get("file_count") or 0),
+                **detect_submission_metadata(sub_id),
+            })
+        shutil.rmtree(source, ignore_errors=True)
+        return {"success": True, "batch": True, "mode": "split",
+                "submissions": submissions, "count": len(submissions)}
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)
+
+
+def _merged_stem(submission_ids: List[str]) -> str:
+    """What the upload was called before it was carved into these.
+
+    Trimmed back to an underscore boundary. A character-wise common prefix of
+    ``upload_P01`` and ``upload_P02`` is ``upload_P0``, which would restore the
+    participants as ``1`` and ``2`` and so destroy the very level the merge
+    exists to bring back.
+    """
+    ids = [s for s in submission_ids if s]
+    if not ids:
+        return ""
+    if len(ids) == 1:
+        return ids[0]
+    shared = os.path.commonprefix(ids)
+    if "_" in shared:
+        return shared[: shared.rfind("_")]
+    # No shared boundary at all: the ids came from different uploads, so the
+    # first is a defensible name and inventing a merged one would be worse.
+    return shared or ids[0]
+
+
+def _merge_submissions(submission_ids: List[str]) -> Dict:
+    sources = [EXTRACTED_DIR / s for s in submission_ids]
+    missing = [s.name for s in sources if not s.is_dir()]
+    if missing:
+        return {"success": False, "error": f"Not found: {', '.join(missing)}."}
+
+    merged_id = _safe_id(_merged_stem(submission_ids))
+
+    staged = EXTRACTED_DIR / f".regroup-{uuid.uuid4().hex}"
+    staged.mkdir(parents=True)
+    try:
+        for source, sub_id in zip(sources, submission_ids):
+            # Restore the folder name the carve consumed, so identity parsing
+            # sees P01/site_1/... again rather than site_1/... The manifest
+            # recorded it at carve time; the id is only a fallback, because
+            # deriving a name from an id is guesswork and this is not.
+            recorded = (load_manifest(source) or {}).get("original_path")
+            name = str(recorded or "").strip() or sub_id[len(merged_id):].lstrip("_") or sub_id
+            name = Path(name).name
+            inner = staged / name
+            inner.mkdir(parents=True, exist_ok=True)
+            for item in sorted(source.iterdir()):
+                shutil.move(str(item), str(inner / item.name))
+
+        final = _reset_submission_dir(merged_id)
+        for item in sorted(staged.iterdir()):
+            shutil.move(str(item), str(final / item.name))
+        for source in sources:
+            if source.resolve() != final.resolve():
+                shutil.rmtree(source, ignore_errors=True)
+        manifest = refresh_manifest(final, submission_id=merged_id,
+                                    original_path=merged_id)
+        return {"success": True, "batch": False, "mode": "merge",
+                "submission_id": merged_id,
+                "file_count": int(manifest.get("file_count") or 0),
+                **detect_submission_metadata(merged_id)}
+    finally:
+        shutil.rmtree(staged, ignore_errors=True)
+
+
+def _is_participant_layout(dirs: List[Path]) -> bool:
+    """True when every directory names a participant rather than a team.
+
+    One team's submission covering many participants::
+
+        submission/
+            P01/            <- participant, not a submission
+            P02/
+
+    A real batch of separate submissions::
+
+        batch_upload/
+            Team_A/
+            Team_B/
+
+    What counts as a participant name is not decided here. It defers to the
+    same identity parser the rest of the pipeline uses, so the two cannot drift
+    apart and start disagreeing about what ``P01`` means.
+    """
+    if len(dirs) < 2:
+        return False
+    from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
+
+    for directory in dirs:
+        # The parser reads directory components and ignores the last element,
+        # which is normally the filename, hence the sentinel.
+        identity = parse_directory_identity((directory.name, "_"))
+        if "participant" not in identity:
+            return False
+    return True
+
+
 def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
     """Return the inner directory if *staged_dir* is just a single wrapper folder.
 
@@ -604,6 +794,15 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
     # If all subdirs are structural names (input/, results/, maps/, …)
     # this is a single submission with an internal data layout, not a batch.
     if _is_structural_layout(submission_dirs):
+        return None
+
+    # Participants are not submissions. The DCE challenge lead's synthetic
+    # submission is one team's work laid out as P01..P10. Splitting it per
+    # participant produced ten "submissions" whose paths then began at site_1/,
+    # so the participant could no longer be determined and every file failed
+    # with INCOMPLETE_ARTIFACT_IDENTITY. The submission was fine; the carve had
+    # discarded the level that identified it.
+    if _is_participant_layout(submission_dirs):
         return None
 
     return submission_dirs

@@ -254,6 +254,18 @@
             </div>
           </div>
           <div id="batch-validate-status" class="submit-status" style="display:none;margin-top:10px;"></div>
+
+          <!-- Whether P01..P10 are participants of one submission or ten
+               separate submissions cannot be told from the files. Detection
+               guesses; this is where the guess is shown and can be corrected. -->
+          <div class="grouping-note" id="grouping-note" hidden>
+            <div class="grouping-note-body">
+              <p class="grouping-note-text" id="grouping-note-text"></p>
+              <p class="grouping-note-folders" id="grouping-note-folders"></p>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" id="grouping-note-action"></button>
+          </div>
+
           <section class="collapsible-section" id="index-list-section">
             <div class="collapsible-section-header section-row">
               <span class="collapsible-section-title section-title">Review submissions <span class="collapsible-count section-count" id="index-section-count">0</span></span>

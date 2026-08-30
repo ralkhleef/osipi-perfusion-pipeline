@@ -28,6 +28,7 @@ from services.ingest_service import (
     detect_submission_metadata,
     finalize_imported_dir,
     make_safe_id,
+    regroup_submissions,
     save_and_extract_batch_from_path,
     save_folder_as_batch,
     save_uploaded_folder,
@@ -399,6 +400,26 @@ def execution_status():
 # ---------------------------------------------------------------------------
 # Submission intake: upload and extract a ZIP
 # ---------------------------------------------------------------------------
+
+
+class RegroupRequest(BaseModel):
+    submission_ids: List[str]
+    mode: str  # "split" or "merge"
+
+
+@app.post("/api/regroup-submissions")
+def regroup_submissions_endpoint(req: RegroupRequest):
+    """Overrule how an upload was grouped into submissions.
+
+    A ZIP containing P01..P10 is either one submission covering ten
+    participants or ten separate submissions, and nothing in the files
+    distinguishes them. Detection guesses; this is how a reviewer who can see
+    the folder names corrects it.
+    """
+    result = regroup_submissions(req.submission_ids, req.mode)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Regrouping failed."))
+    return result
 
 
 @app.post("/api/upload-submission")
