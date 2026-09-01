@@ -333,3 +333,101 @@ def test_reference_artifacts_include_json_csv_and_difference_map(scoring_workspa
     assert "reference_scoring.json" in artifacts
     assert "reference_scoring.csv" in artifacts
     assert any(name.endswith("_difference.nii") for name in artifacts)
+
+
+# ── Matching a scan to its own ground truth ───────────────────────────────
+#
+# The DCE challenge lays a submission out as P05/site_2/scan_1/Ktrans.nii.gz
+# with the ground truth in the same shape, so every one of the sixty candidate
+# files is named exactly "Ktrans.nii.gz". Matching on the filename alone left
+# all sixty tied and broke the tie on path length, which is arbitrary: measured
+# against the real data, 59 of 60 scans were paired with P01/site_1/scan_1.
+#
+# Where the grids differed that surfaced as a shape mismatch, which is at least
+# visible. Where they agreed, within site_1, it produced a full set of accuracy
+# metrics computed against another participant's ground truth. Nothing in the
+# output would have looked wrong.
+
+def _tree(root: Path, name: str = "Ktrans.nii.gz") -> list[Path]:
+    made = []
+    for participant in ("P01", "P05", "P10"):
+        for site in ("site_1", "site_2"):
+            for scan in ("scan_1", "scan_2"):
+                path = root / participant / site / scan / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"nifti")
+                made.append(path)
+    return made
+
+
+def test_a_scan_is_matched_to_its_own_ground_truth(tmp_path) -> None:
+    submission = tmp_path / "submission"
+    reference = tmp_path / "hidden_ground_truth"
+    _tree(submission)
+    candidates = _tree(reference)
+
+    for submitted in sorted(submission.rglob("Ktrans.nii.gz")):
+        chosen = scoring._choose_reference_match(
+            submitted, candidates,
+            submission_root=submission, reference_root=reference,
+        )
+        assert chosen == reference / submitted.relative_to(submission), (
+            f"{submitted.relative_to(submission)} was matched to "
+            f"{chosen.relative_to(reference)}"
+        )
+
+
+def test_identity_beats_the_filename_when_they_disagree(tmp_path) -> None:
+    """Directory identity is the stronger signal and must win.
+
+    A reference file whose *name* happens to share more tokens with the
+    submission must not outrank the one that is actually this scan.
+    """
+    submission = tmp_path / "submission"
+    reference = tmp_path / "gt"
+    submitted = submission / "P05" / "site_2" / "scan_1" / "Ktrans.nii.gz"
+    submitted.parent.mkdir(parents=True)
+    submitted.write_bytes(b"x")
+
+    right = reference / "P05" / "site_2" / "scan_1" / "Ktrans.nii.gz"
+    decoy = reference / "P01" / "site_1" / "scan_1" / "Ktrans_P05_site_2.nii.gz"
+    for path in (right, decoy):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+
+    chosen = scoring._choose_reference_match(
+        submitted, [decoy, right], submission_root=submission, reference_root=reference,
+    )
+    assert chosen == right
+
+
+def test_the_filename_still_decides_when_there_is_no_identity(tmp_path) -> None:
+    """Submissions that encode identity in the filename keep working."""
+    flat = tmp_path / "flat"
+    flat.mkdir()
+    submitted = flat / "Synthetic_P1_Visit1_Site1_Ktrans.nii.gz"
+    submitted.write_bytes(b"x")
+    right = flat / "Synthetic_P1_Visit1_Site1_Ktrans.nii.gz"
+    other = flat / "unrelated_map.nii.gz"
+    other.write_bytes(b"x")
+
+    chosen = scoring._choose_reference_match(submitted, [other, right])
+    assert chosen == right
+
+
+def test_a_single_candidate_is_used_without_question(tmp_path) -> None:
+    only = tmp_path / "Ktrans.nii.gz"
+    only.write_bytes(b"x")
+    assert scoring._choose_reference_match(tmp_path / "sub.nii.gz", [only]) == only
+    assert scoring._choose_reference_match(tmp_path / "sub.nii.gz", []) is None
+
+
+def test_scan_identity_is_read_relative_to_its_root(tmp_path) -> None:
+    """A root that happens to contain 'P01' must not become the identity."""
+    root = tmp_path / "P01_archive"
+    path = root / "P05" / "site_2" / "scan_1" / "Ktrans.nii.gz"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x")
+
+    dataset, participant, repeat, site = scoring._scan_identity(path, root)
+    assert (participant, site, repeat) == ("5", "2", "1")

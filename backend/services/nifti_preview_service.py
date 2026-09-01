@@ -10,7 +10,7 @@ import re
 import struct
 import zlib
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 from services.ingest_service import make_safe_id
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR, REFERENCE_DATA_DIR

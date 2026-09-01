@@ -11,7 +11,6 @@ from typing import Any, Iterable
 
 from osipi_pipeline.config.rules import (
     app_settings,
-    map_type_patterns,
     mask_name_patterns,
     private_path_parts,
     tuple_setting,

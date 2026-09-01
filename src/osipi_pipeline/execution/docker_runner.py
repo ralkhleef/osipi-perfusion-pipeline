@@ -19,8 +19,24 @@ DEFAULT_FALLBACK_DOCKERFILE = Path(__file__).with_name("Dockerfile.example")
 DEFAULT_EXECUTION_DIR       = Path("data/outputs/execution")
 DEFAULT_RUN_COMMAND         = "python3 run.py"
 DEFAULT_TIMEOUT_SECONDS     = 300   # 5 minutes
+# The *run* timeout bounds participant code; this one bounds `docker build`.
+# Without it a Dockerfile that hangs (an unreachable package index, an
+# interactive prompt, a `RUN sleep`) blocks the request thread indefinitely,
+# with no log written and no result returned. A build is mostly downloading,
+# so it gets more room than the default run.
+DEFAULT_BUILD_TIMEOUT_SECONDS = 1800  # 30 minutes
 DEFAULT_MEMORY_LIMIT        = "4g"
 DEFAULT_CPU_LIMIT           = "2.0"
+# --memory and --cpus do not bound process *count*. A fork bomb in participant
+# code exhausts the host's process table while sitting inside both other caps,
+# taking the reviewer's machine down with it. 512 is far above what a fitting
+# script needs and far below anything that threatens the host.
+DEFAULT_PIDS_LIMIT          = "512"
+# Every submission builds an image. Without removal a challenge round leaves
+# one per submission behind, and the reviewer discovers it as a full disk
+# rather than as anything this tool said. Removal is best-effort: a failure to
+# clean up must never change the reported outcome of the run.
+DEFAULT_REMOVE_IMAGE        = True
 
 # ---------------------------------------------------------------------------
 # Host-path translation for containers started through the Docker socket
@@ -61,6 +77,14 @@ def _to_host_path(container_path: Path) -> Path:
     return resolved
 
 
+#: Reported when `docker build` is killed for exceeding its timeout. 124 is the
+#: conventional shell timeout code and matches what the run path already uses.
+_BUILD_TIMEOUT_EXIT_CODE = 124
+
+#: Cleanup must not outlast the work it cleans up after.
+_IMAGE_REMOVAL_TIMEOUT_SECONDS = 60
+
+
 class DockerExecutionError(RuntimeError):
     """Raised for pre-flight failures such as unavailable Docker or bad paths."""
 
@@ -78,8 +102,11 @@ def execute_submission(
     output_dir: str | Path = DEFAULT_EXECUTION_DIR,
     fallback_dockerfile: str | Path = DEFAULT_FALLBACK_DOCKERFILE,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    build_timeout_seconds: int = DEFAULT_BUILD_TIMEOUT_SECONDS,
     memory_limit: str = DEFAULT_MEMORY_LIMIT,
     cpu_limit: str = DEFAULT_CPU_LIMIT,
+    pids_limit: str = DEFAULT_PIDS_LIMIT,
+    remove_image: bool = DEFAULT_REMOVE_IMAGE,
     input_dir: str | Path | None = None,
 ) -> ExecutionResult:
     """Build a Docker image from the submission, run it, and save all artefacts.
@@ -110,8 +137,15 @@ def execute_submission(
         timeout_seconds:     Kill the container run after this many seconds.
                              ``run_config.json`` ``timeout_seconds`` can override
                              the code default when ``command`` is also auto-resolved.
+        build_timeout_seconds: Kill ``docker build`` after this many seconds.
+                             Expiry is returned as a build failure, not raised.
         memory_limit:        Docker ``--memory`` value (e.g. ``"4g"``).
         cpu_limit:           Docker ``--cpus`` value (e.g. ``"2.0"``).
+        pids_limit:          Docker ``--pids-limit`` value, capping how many
+                             processes the container may create at once.
+        remove_image:        Delete the built image once the run finishes, so a
+                             challenge round does not fill the disk. Best
+                             effort; a failed removal never changes the result.
 
     Returns:
         An :class:`ExecutionResult` describing the outcome.
@@ -157,6 +191,7 @@ def execute_submission(
         image_name,
         dockerfile,
         _build_context(dockerfile, submission),
+        timeout_seconds=build_timeout_seconds,
     )
     build_cmd_str = " ".join(build_cmd)
     if build_result.returncode != 0:
@@ -177,6 +212,7 @@ def execute_submission(
             started_at=started_at,
             finished_at=_timestamp(),
             passed=False,
+            timed_out=build_result.returncode == _BUILD_TIMEOUT_EXIT_CODE,
             build_failed=True,
             docker_build_cmd=build_cmd_str,
         )
@@ -194,6 +230,7 @@ def execute_submission(
             memory_limit,
             cpu_limit,
             timeout_seconds,
+            pids_limit=pids_limit,
             input_host_path=input_path,
         )
     except subprocess.TimeoutExpired:
@@ -217,6 +254,10 @@ def execute_submission(
 
     # ── Collect all output files ──────────────────────────────────────────────
     output_files = _collect_output_files(output_host_path)
+
+    # Outputs are already on disk, so the image has nothing left to give.
+    if remove_image:
+        _remove_image(image_name)
 
     return ExecutionResult(
         submission_path=str(submission.resolve()),
@@ -308,15 +349,45 @@ def _run_docker_build(
     image_name: str,
     dockerfile: Path,
     build_context: Path,
+    *,
+    timeout_seconds: int = DEFAULT_BUILD_TIMEOUT_SECONDS,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """Build the Docker image and return (result, command_list)."""
+    """Build the Docker image and return (result, command_list).
+
+    A build that exceeds ``timeout_seconds`` is reported as an ordinary build
+    failure carrying :data:`_BUILD_TIMEOUT_EXIT_CODE`, not as an exception, so
+    the caller still writes logs and returns an ``ExecutionResult`` the
+    reviewer can read. Partial output captured before the kill is preserved.
+    """
     cmd = [
         "docker", "build",
         "-t", image_name,
         "-f", str(dockerfile),
         str(build_context),
     ]
-    return subprocess.run(cmd, capture_output=True, text=True), cmd
+    try:
+        return subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout_seconds
+        ), cmd
+    except subprocess.TimeoutExpired as expired:
+        return subprocess.CompletedProcess(
+            cmd,
+            _BUILD_TIMEOUT_EXIT_CODE,
+            stdout=_decode(expired.stdout),
+            stderr=(
+                _decode(expired.stderr)
+                + f"\nDocker build timed out after {timeout_seconds} seconds."
+            ),
+        ), cmd
+
+
+def _decode(stream: str | bytes | None) -> str:
+    """Output captured before a timeout, which may be bytes or absent."""
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return stream
 
 
 def _run_docker_container(
@@ -328,6 +399,7 @@ def _run_docker_container(
     cpu_limit: str,
     timeout_seconds: int,
     *,
+    pids_limit: str = DEFAULT_PIDS_LIMIT,
     input_host_path: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     """Run the Docker container with security and resource constraints.
@@ -340,6 +412,9 @@ def _run_docker_container(
     Security:
         ``--network none``              , no outbound network access.
         ``--security-opt no-new-privileges``, prevent privilege escalation.
+        ``--pids-limit``                , cap concurrent processes, so a fork
+                                          bomb cannot exhaust the host while
+                                          staying inside the memory and CPU caps.
 
     DooD path translation:
         Paths are translated from container-internal paths to host-visible
@@ -368,6 +443,7 @@ def _run_docker_container(
         # --- resource limits ---
         "--memory", memory_limit,
         "--cpus",   cpu_limit,
+        "--pids-limit", str(pids_limit),
         # --- security ---
         "--network",      "none",
         "--security-opt", "no-new-privileges",
@@ -380,6 +456,25 @@ def _run_docker_container(
         text=True,
         timeout=timeout_seconds,
     ), cmd
+
+
+def _remove_image(image_name: str) -> bool:
+    """Delete the built image. Returns whether Docker reported success.
+
+    Best effort by design. The run has already finished and its outputs are on
+    disk, so a failure here, Docker gone, the image still in use by another
+    container, a daemon that has stopped, is a housekeeping problem and must
+    not change what the caller is told about the submission. A short timeout
+    keeps cleanup from becoming the thing that hangs the request.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "image", "rm", "-f", image_name],
+            capture_output=True, text=True, timeout=_IMAGE_REMOVAL_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
 
 
 def _collect_output_files(output_dir: Path) -> list[str]:

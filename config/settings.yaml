@@ -16,11 +16,16 @@ reporting:
   include_pdf_export: true
 
 performance:
-  # Raised from 3 after measuring the DCE challenge data. Its 4-D fitted
-  # curves are 8 MB on disk and about 1 GB decompressed, and reading one takes
-  # roughly 20 seconds, so a 60-scan submission spends almost all of its
-  # validation time in gzip. Decompression releases the GIL, so more threads
-  # genuinely help here rather than just queueing.
+  # Applies to the small 3-D parameter maps, where threads measurably help:
+  # four workers over sixteen real Ktrans maps is 2.5x faster than serial.
+  #
+  # It does NOT apply to large 4-D files. An earlier version of this comment
+  # claimed decompression releases the GIL so more threads always help. That
+  # is true of one big `decompress` call and false for the many small reads
+  # nibabel actually makes: four threads over four real 1 GB concentration
+  # curves measured 1.8x *slower* than reading them one at a time. The
+  # validator now picks by file size, so large files are read serially however
+  # this is set, and raising it cannot reintroduce that slowdown.
   #
   # Capped at 6 in code, and further capped by the CPU count, so setting this
   # higher than the machine has cores does nothing. Lower it if validation is
@@ -30,6 +35,12 @@ performance:
   validation_cache_enabled: true
   manifest_cache_enabled: true
   preview_cache_enabled: true
+  # The analysis is what the report, every export and the frontend all ask
+  # for, and on a real DCE submission it reads a gigabyte of 4-D data and
+  # takes about a minute. Memoised on the submitted maps, the ground truth,
+  # the masks and the configuration, so changing any of them recomputes and
+  # changing none of them does not. Turn off to force a fresh read every time.
+  analysis_cache_enabled: true
 
 paths:
   output_map_subdirs:
@@ -66,6 +77,13 @@ paths:
     # Before the generic `roi` rule: the first match wins, so a file named
     # lesion_roi_mask.nii.gz would otherwise be labelled "ROI" and a reader
     # could not tell which region a row referred to.
+    # Matches the abbreviation the DCE challenge ships (Hipp_mask.nii.gz) and
+    # nothing more. A plain `hipp` would swallow left_hippocampus.nii.gz and
+    # right_hippocampus.nii.gz into one indistinguishable label; those names
+    # already read well through the filename fallback and are left alone.
+    - label: hippocampus
+      patterns:
+        - hipp_mask
     - label: lesion
       patterns:
         - lesion

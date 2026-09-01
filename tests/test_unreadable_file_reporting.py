@@ -15,7 +15,6 @@ on; one who sees "could not be read" does not.
 from __future__ import annotations
 
 import sys
-import tempfile
 from pathlib import Path
 
 import numpy as np

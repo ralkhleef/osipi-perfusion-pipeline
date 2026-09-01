@@ -102,10 +102,25 @@ map_types:
     patterns: [att, attmap, arterial_transit_time]
 ```
 
-ROIs/masks are discovered from the reference `masks/` folder; their friendly
-labels come from `paths.mask_label_rules` in `config/settings.yaml` (e.g. gray
-matter, white matter, tumour, additional ROI). Add a label rule there to
-standardise a new ROI name.
+ROIs/masks are discovered from a `masks/` folder under **any** reference root,
+not only the one holding the ground-truth maps, so a shared mask folder and a
+per-challenge map folder both work. Drop a `gm_mask.nii.gz` into any of:
+
+```text
+data/reference_data/masks/            # shared across challenges
+data/reference_data/<challenge>/masks/
+data/scoring/reference/masks/
+submissions/extracted/<id>/reference/masks/   # for local testing
+```
+
+A mask must be on the same grid as the map it is applied to: same shape, voxel
+size and affine. A mask on a different grid is reported per map with
+`shape_mismatch` rather than skipped, so a mismatch is visible instead of
+looking like an empty region.
+
+Friendly labels come from `paths.mask_label_rules` in `config/settings.yaml`
+(gray matter, white matter, lesion, ROI). Add a label rule there to standardise
+a new ROI name; `gm_mask.nii.gz` already reads as "gray matter".
 
 `_comparison_metrics` already runs for the whole image and for every discovered
 ROI, so a new metric automatically appears for all of them — no per-ROI wiring.
@@ -130,15 +145,123 @@ Run `python -m pytest -q` to confirm.
 These are placeholders on purpose and need mentor-provided data or a
 challenge-approved definition first:
 
-- **Repeatability CoV / ICC** — require repeated (noise-varied) datasets and a
-  chosen ICC model + confidence-interval method. The pipeline reports
-  `repeatability_status: unavailable_requires_repeated_datasets` until then.
-- **Reproducibility across sites** — requires multi-site acquisitions.
-- **4-D fitted-model comparison** against the ground-truth ASL series — needs the
-  4-D reference file; 4-D submissions are currently tagged as a fitted-model role
-  and not scored as parameter maps.
+- **Repeatability CoV** — requires repeated (noise-varied) datasets. The
+  pipeline reports `repeatability_status: unavailable_requires_repeated_datasets`
+  until they exist.
+- **Overall/composite score, weighting, and ranking** — see below.
 - **Overall/composite score, weighting, and ranking** — the ASL team has not
   approved a formula; ASL results are shown per-metric and per-map, not ranked.
 - **Unconfirmed DCE / ASL / DSC rules** — references, masks, thresholds, and
   official metrics still need challenge-team approval where noted in
   `SCIENTIFIC_REQUIREMENTS_PENDING.md`.
+
+
+## Things you can now turn on yourself
+
+These needed code when the list above was written. They no longer do: each is
+one configuration block in `config/validation_rules.yaml`, and each ships off
+so that turning it on is a recorded decision rather than an assumption.
+
+### ICC
+
+All six Shrout & Fleiss models are implemented with exact F-based confidence
+intervals. Choosing the model is the scientific decision, so no model is
+applied by default and ICC keeps reporting "not configured":
+
+```yaml
+challenges:
+  asl:
+    grouped_statistics:
+      icc:
+        model: icc2_1        # or icc1_1, icc3_1, icc1_k, icc2_k, icc3_k
+        axes: [inter_repeat] # inter_site for reproducibility across sites
+        confidence_level: 0.95   # null to report the estimate with no interval
+```
+
+Which model to pick, in one line each:
+
+| Model | Use when |
+|---|---|
+| `icc1_1` | each participant is measured by a *different* set of sessions |
+| `icc2_1` | same sessions for everyone; a systematic session offset should count against agreement; result should generalise to other sessions |
+| `icc3_1` | same sessions for everyone; those sessions are the only ones of interest, so a systematic offset does not count against agreement |
+| `_k` forms | you are quoting the reliability of the *mean* of k measurements rather than one |
+
+`icc3_1` is never lower than `icc2_1` on the same data, because it forgives
+session offsets. Participants are the targets ICC measures over, so
+`inter_participant` is not a valid axis and is rejected by the schema.
+
+### The 4-D fitted-model comparison
+
+Enabled for ASL and DCE. Participants submit what they fitted; it is compared
+voxel by voxel against the ground-truth 4-D series and summarised as RSS for
+the whole image and for every compatible mask:
+
+```yaml
+challenges:
+  asl:
+    analysis:
+      signal_rss:
+        enabled: true
+        modelled_artifact: modelled_st
+        measured_artifact: measured_st
+```
+
+It stays inert until the files exist: a submission with no 4-D model reports
+`modelled_signal_not_available` rather than failing. To make the 4-D model
+**mandatory**, add it to that challenge's `required_artifacts`:
+
+```yaml
+    required_artifacts: [modelled_st, methods]
+```
+
+The filename patterns that identify these files are in `artifact_types` at the
+top of the same file — add a pattern there if your naming differs.
+
+### Advisory thresholds
+
+To mark rows for a reviewer to look at, without any pass/fail:
+
+```yaml
+challenges:
+  asl:
+    analysis:
+      thresholds:
+        roi_within_scan_cov:
+          warn_above: 0.15
+          note: Rough guide only; not a pass/fail criterion.
+```
+
+Thresholds use **stored units**, so a CoV threshold is the ratio `0.15`, not
+`15`. Writing `15` is rejected with a message telling you what to write,
+because it would otherwise load cleanly and never fire.
+
+A flagged row keeps every one of its values; flagging annotates, it never
+blanks, excludes or orders anything. There is deliberately no `fail_above`.
+
+### Which statistics the report shows
+
+Per challenge, per map type:
+
+```yaml
+challenges:
+  asl:
+    analysis:
+      roi_descriptive:
+        enabled: true
+        map_types: [cbf, att]
+        report_metrics: [mean, median, standard_deviation, range,
+                         coefficient_of_variation]
+```
+
+Every metric in `report_metrics` is computed inside each discovered mask as
+well as over the whole image.
+
+## Still needing a decision, not code
+
+- **An overall or composite score, weighting, and ranking.** Nothing is
+  configured and nothing is implemented, because "reproducibility matters more
+  than accuracy" needs a weighting before it can be arithmetic.
+- **Pass/fail.** Deliberately absent throughout; thresholds are advisory only.
+- **The expected cohort grid for ASL and DSC** (`datasets:`), which drives
+  completeness checking.

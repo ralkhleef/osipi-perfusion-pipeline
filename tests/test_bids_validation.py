@@ -227,11 +227,59 @@ def _bids_codes(result) -> list[str]:
                   if i.code.startswith("BIDS"))
 
 
-def test_nothing_runs_when_the_challenge_has_not_asked(tmp_path: Path) -> None:
-    """The default. Adding the setting must not change existing behaviour."""
+def test_nothing_runs_when_the_challenge_has_not_asked(
+    tmp_path: Path, challenge_bids,
+) -> None:
+    """A challenge that has switched BIDS off gets no BIDS findings at all.
+
+    This used to read the shipped configuration, which had the checks off for
+    every challenge. They are now on, so the off state has to be configured
+    explicitly here; the behaviour under test is unchanged.
+    """
+    challenge_bids(enabled=False, severity="warning", require_layout=False)
     root = bids_root(tmp_path)
     add(root, "run-1_sub-01_cbf.nii.gz")
     result = validate_submission(root, challenge_type="dce", output_dir=tmp_path / "out")
+    assert _bids_codes(result) == []
+
+
+def test_every_shipped_challenge_enables_bids_advisorily() -> None:
+    """The shipped posture, pinned so a silent flip in either direction shows up.
+
+    On, at warning severity, without ``require_layout``: findings are reported
+    for submissions that are already BIDS-shaped and nothing is rejected for
+    not using BIDS. Turning this into an error, or requiring the layout, is a
+    decision about what participants must supply, so it should have to break a
+    test rather than slip through as a config tweak.
+    """
+    settings = rules.bids_validation_by_challenge()
+    assert settings, "no challenges are configured"
+    for challenge, block in sorted(settings.items()):
+        assert block.get("enabled") is True, f"{challenge} does not enable BIDS checks"
+        assert block.get("severity") == "warning", (
+            f"{challenge} would reject submissions over BIDS conformance"
+        )
+        assert block.get("require_layout") is False, (
+            f"{challenge} would require every submission to be a BIDS dataset"
+        )
+
+
+def test_a_submission_that_is_not_bids_is_left_alone_by_the_shipped_config(
+    tmp_path: Path,
+) -> None:
+    """Enabling the checks must not start reporting ordinary submissions.
+
+    A folder with no ``dataset_description.json`` and no ``sub-<label>``
+    directory is not a broken BIDS dataset; it is not one. Reporting it would
+    make the finding list noisier for every participant who never opted in,
+    which is the cost that kept these checks switched off.
+    """
+    root = tmp_path / "team_gamma"
+    (root / "results" / "maps").mkdir(parents=True)
+    (root / "results" / "maps" / "cbf_map.nii.gz").write_bytes(b"not really a nifti")
+    (root / "README.md").write_text("# submission\n", encoding="utf-8")
+
+    result = validate_submission(root, challenge_type="asl", output_dir=tmp_path / "out")
     assert _bids_codes(result) == []
 
 

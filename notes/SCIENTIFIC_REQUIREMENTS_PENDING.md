@@ -10,7 +10,11 @@ The following decisions still require confirmation from the challenge leads:
 - the exact statistical definition of deviance;
 - whether DCE signal-time RSS should remain raw or be normalized;
 - whether repeat/site variability should be voxelwise, ROI-median based, or both;
-- whether formal ICC is required and, if so, which ICC model;
+- **which ICC model applies.** All six Shrout & Fleiss models are now
+  implemented with exact F-based confidence intervals; none is applied.
+  `grouped_statistics.icc.model` is `none` for every challenge, so ICC
+  is still reported as not configured. Choosing a model is now a
+  one-line configuration change, not a development task;
 - any formal CoV threshold, including a possible `<15%` rule;
 - confirmation that the provisional error CoV denominator should be the
   absolute mean ground-truth value within the same region;
@@ -37,7 +41,12 @@ The following decisions still require confirmation from the challenge leads:
   mean, population SD, CoV, and a signed paired difference for exactly two
   clearly matched repeats or sites;
 - ASL CBF/Perfmap and ATT/ATTmap generic reference comparison with the same
-  compatible whole-image and ROI error metrics.
+  compatible whole-image and ROI error metrics;
+- intraclass correlation for a participant x session table, in any of
+  ICC(1,1), ICC(2,1), ICC(3,1), ICC(1,k), ICC(2,k) and ICC(3,k), with exact
+  F-based intervals, verified against Shrout & Fleiss (1979). Off until a
+  model is configured. A participant missing any session is excluded from the
+  table and counted, never imputed.
 
 Submitted maps, private references, and masks must have compatible shape,
 voxel size, and affine/orientation before voxelwise comparison or masking.
@@ -54,5 +63,13 @@ abs(mean(ground truth))` within the scored region, and spatial CoV is
 Both are ratios in stored data and percentages only at presentation time.
 
 RSS is not called deviance. Grouped statistics are
-not called repeatability, reproducibility, or ICC. No official OSIPI challenge
-ranking is currently configured.
+not called repeatability, reproducibility, or ICC: ICC is a separate,
+explicitly modelled statistic that appears only when a challenge configures a
+model. No official OSIPI challenge ranking is currently configured.
+
+BIDS structural validation is enabled for every challenge at `warning`
+severity with `require_layout: false`, so a submission that is already
+BIDS-shaped is checked and one that is not is left alone. Cross-scan grouping
+is enabled for ASL and DSC as well as DCE: it needs resolved identity, which
+comes from directory structure and prefixed filename tokens, not from a
+challenge-specific filename pattern.

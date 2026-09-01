@@ -218,3 +218,237 @@ def test_generated_outputs_require_configured_analysis_maps(
         and missing_label.lower() in issue["message"].lower()
         for issue in result["errors"]
     )
+
+
+# ── The analysis is computed once, not once per reader ────────────────────
+#
+# The report, the HTML and PDF renderers, every export route and the frontend
+# each ask for the same analysis. On the DCE lead's real submission it reads a
+# gigabyte of 4-D data and takes about a minute, so recomputing it per request
+# made opening a report cost as much as producing it. It is now memoised on
+# its inputs.
+
+@pytest.fixture()
+def analysis_workspace(tmp_path, monkeypatch):
+    import scoring
+
+    monkeypatch.setattr(scoring, "EXTRACTED_DIR", tmp_path / "extracted")
+    monkeypatch.setattr(scoring, "REFERENCE_DATA_DIR", tmp_path / "ref")
+    monkeypatch.setattr(scoring, "SCORING_DIR", tmp_path / "scoring")
+    monkeypatch.setattr(scoring, "OUTPUTS_DIR", tmp_path / "outputs")
+    for name in ("extracted", "ref", "scoring", "outputs"):
+        (tmp_path / name).mkdir(parents=True, exist_ok=True)
+    scoring.clear_analysis_cache()
+    root = tmp_path / "extracted" / "sub"
+    root.mkdir(parents=True)
+    submitted = root / "Ktrans.nii.gz"
+    submitted.write_bytes(b"not really a nifti")
+    yield tmp_path, submitted
+    scoring.clear_analysis_cache()
+
+
+def _count_analyses(monkeypatch, scoring):
+    calls = {"n": 0}
+    real = scoring._score_reference_maps
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(scoring, "_score_reference_maps", counting)
+    return calls
+
+
+def test_a_repeated_analysis_is_served_from_cache(analysis_workspace, monkeypatch) -> None:
+    import scoring
+
+    calls = _count_analyses(monkeypatch, scoring)
+    first = scoring.analyze_submission_niftis("sub", "dce")
+    second = scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 1, "the analysis was recomputed for an unchanged submission"
+    assert second.get("cache_hit") == "memory"
+    assert first.get("cache_hit") is None
+    first.pop("cache_hit", None)
+    second.pop("cache_hit", None)
+    assert first == second
+
+
+def test_a_changed_submission_is_analysed_again(analysis_workspace, monkeypatch) -> None:
+    """A cache that cannot notice new data is worse than no cache."""
+    import os
+    import scoring
+
+    _tmp, submitted = analysis_workspace
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    submitted.write_bytes(b"different content entirely")
+    os.utime(submitted, (0, 0))
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 2, "a modified map was served from cache"
+
+
+def test_changing_the_configuration_invalidates_the_cache(
+    analysis_workspace, monkeypatch,
+) -> None:
+    import scoring
+    from osipi_pipeline.ingestion import manifest
+
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    monkeypatch.setattr(manifest, "config_fingerprint", lambda: "a-different-config")
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 2, "a configuration change did not invalidate the cache"
+
+
+def test_a_run_that_writes_artifacts_is_never_cached(
+    analysis_workspace, monkeypatch, tmp_path,
+) -> None:
+    """Those runs are wanted for their side effects, not only their numbers."""
+    import scoring
+
+    calls = _count_analyses(monkeypatch, scoring)
+    artifacts = tmp_path / "artifacts"
+    artifacts.mkdir()
+    scoring.analyze_submission_niftis("sub", "dce", artifact_dir=artifacts)
+    scoring.analyze_submission_niftis("sub", "dce", artifact_dir=artifacts)
+
+    assert calls["n"] == 2
+
+
+def test_the_cache_can_be_switched_off(analysis_workspace, monkeypatch) -> None:
+    import scoring
+
+    monkeypatch.setattr(
+        scoring, "performance_settings",
+        lambda: {"analysis_cache_enabled": False},
+    )
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 2
+
+
+def test_a_cached_result_cannot_be_mutated_by_its_reader(analysis_workspace) -> None:
+    """Two callers must not share one dict; the report mutates what it reads."""
+    import scoring
+
+    first = scoring.analyze_submission_niftis("sub", "dce")
+    first["reference_scoring"]["maps"] = ["tampered"]
+    second = scoring.analyze_submission_niftis("sub", "dce")
+    assert second["reference_scoring"].get("maps") != ["tampered"]
+
+
+# ── The cache survives a restart ──────────────────────────────────────────
+#
+# An in-memory cache empties when the app stops. A reviewer who restarts the
+# server and reopens yesterday's report should not wait a minute to be told
+# what it already computed, so the analysis is also written beside the
+# validation results and read back on a cold start.
+
+def test_a_cold_start_reads_the_saved_analysis(analysis_workspace, monkeypatch) -> None:
+    import scoring
+
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+    assert calls["n"] == 1
+
+    # A new process has the same files on disk and an empty memory cache.
+    scoring.clear_analysis_cache()
+    restarted = scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 1, "the analysis was recomputed after a restart"
+    assert restarted.get("cache_hit") == "disk"
+
+
+def test_the_saved_analysis_is_reachable_only_for_the_same_inputs(
+    analysis_workspace, monkeypatch,
+) -> None:
+    """A saved file must never answer for a submission that has changed."""
+    import os
+    import scoring
+
+    _tmp, submitted = analysis_workspace
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    submitted.write_bytes(b"a different map entirely")
+    os.utime(submitted, (0, 0))
+    scoring.clear_analysis_cache()
+    scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 2
+
+
+def test_superseded_files_are_removed_rather_than_accumulating(
+    analysis_workspace, monkeypatch,
+) -> None:
+    """Re-uploading a submission repeatedly must not fill the disk."""
+    import os
+    import scoring
+
+    _tmp, submitted = analysis_workspace
+    directory = scoring._analysis_cache_dir()
+
+    for i in range(4):
+        submitted.write_bytes(b"content %d" % i)
+        os.utime(submitted, (i + 1, i + 1))
+        scoring.clear_analysis_cache()
+        scoring.analyze_submission_niftis("sub", "dce")
+
+    assert len(list(directory.glob("*.json"))) == 1
+
+
+def test_a_corrupt_saved_analysis_is_a_miss_not_a_crash(
+    analysis_workspace, monkeypatch,
+) -> None:
+    """A truncated write must cost seconds, never a broken report."""
+    import scoring
+
+    calls = _count_analyses(monkeypatch, scoring)
+    scoring.analyze_submission_niftis("sub", "dce")
+    for path in scoring._analysis_cache_dir().glob("*.json"):
+        path.write_text("{ this is not json", encoding="utf-8")
+
+    scoring.clear_analysis_cache()
+    result = scoring.analyze_submission_niftis("sub", "dce")
+
+    assert calls["n"] == 2
+    assert result.get("cache_hit") is None
+
+
+def test_a_read_only_cache_directory_does_not_break_analysis(
+    analysis_workspace, monkeypatch,
+) -> None:
+    """Failing to cache is not failing to analyse."""
+    import scoring
+
+    def refuse(*_args, **_kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(scoring.Path, "mkdir", refuse)
+    result = scoring.analyze_submission_niftis("sub", "dce")
+    assert result["submission_id"] == "sub"
+
+
+def test_no_temporary_files_are_left_behind(analysis_workspace) -> None:
+    import scoring
+
+    scoring.analyze_submission_niftis("sub", "dce")
+    leftovers = [p.name for p in scoring._analysis_cache_dir().iterdir()
+                 if p.suffix == ".tmp" or ".tmp" in p.name]
+    assert not leftovers, leftovers
+
+
+def test_clearing_on_disk_empties_the_folder(analysis_workspace) -> None:
+    import scoring
+
+    scoring.analyze_submission_niftis("sub", "dce")
+    assert list(scoring._analysis_cache_dir().glob("*.json"))
+    scoring.clear_analysis_cache(on_disk=True)
+    assert not list(scoring._analysis_cache_dir().glob("*.json"))

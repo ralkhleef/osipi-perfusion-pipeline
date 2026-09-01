@@ -210,3 +210,242 @@ def test_reducing_over_nan_does_not_warn() -> None:
         "reducing over NaN warned, so the errstate guard is gone:\n"
         + result.stderr[-800:])
     assert "ok" in result.stdout
+
+
+# ── Threads help small files and hurt large ones ──────────────────────────
+#
+# Measured on the DCE challenge lead's real submission: four threads over
+# sixteen 3-D parameter maps is 2.5x faster than serial, while four threads
+# over four 4-D concentration curves is 1.8x SLOWER. gzip decompression holds
+# the GIL through the many small reads nibabel makes, so the threads take
+# turns while each holds a decompression buffer. Applying one worker count to
+# both made a real 60-scan submission take about 16 minutes; reading the large
+# files one at a time takes about 9.
+
+import time  # noqa: E402
+
+
+def test_a_large_file_is_recognised_by_size(tmp_path) -> None:
+    from osipi_pipeline.validation.nifti_validator import LARGE_FILE_BYTES, _is_large
+
+    small = tmp_path / "ktrans.nii.gz"
+    small.write_bytes(b"0" * 1024)
+    large = tmp_path / "ct.nii.gz"
+    large.write_bytes(b"0" * (LARGE_FILE_BYTES + 1))
+
+    assert _is_large(small) is False
+    assert _is_large(large) is True
+    # A real 3-D map is ~50 KB and a real 4-D curve ~8 MB on disk, so the
+    # threshold has to sit between them with room to spare.
+    assert 64 * 1024 < LARGE_FILE_BYTES < 8 * 1024 * 1024
+
+
+def test_a_missing_file_is_not_called_large(tmp_path) -> None:
+    from osipi_pipeline.validation.nifti_validator import _is_large
+
+    assert _is_large(tmp_path / "gone.nii.gz") is False
+
+
+def _sized(tmp_path, name: str, payload: int):
+    path = tmp_path / name
+    path.write_bytes(b"0" * payload)
+    return path
+
+
+def test_the_batch_is_split_by_size(tmp_path, monkeypatch) -> None:
+    """Large and small files take different routes, which is the whole point.
+
+    Small files go through the thread pool, where threads measurably help.
+    Large ones go to `_validate_large_files`, which runs them in separate
+    processes because gzip's hold on the GIL makes threads counterproductive
+    there. This asserts the split itself; the concurrency of each half is
+    covered separately.
+    """
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    routed: dict[str, list[str]] = {"large": [], "small": []}
+
+    def fake_large(paths, *, force_refresh, quick, workers):
+        routed["large"] = [Path(p).name for p in paths]
+        return [{"file_path": str(p), "valid": True, "errors": [], "warnings": []}
+                for p in paths]
+
+    def fake_check(path, **_kw):
+        routed["small"].append(Path(path).name)
+        return {"file_path": str(path), "valid": True, "errors": [], "warnings": []}
+
+    monkeypatch.setattr(nv, "_validate_large_files", fake_large)
+    monkeypatch.setattr(nv, "_validate_single_cached", fake_check)
+
+    paths = [_sized(tmp_path, f"small{i}.nii.gz", 1024) for i in range(6)]
+    paths += [_sized(tmp_path, f"big{i}.nii.gz", nv.LARGE_FILE_BYTES + 1) for i in range(3)]
+
+    results = nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+
+    assert len(results) == len(paths)
+    assert sorted(routed["large"]) == ["big0.nii.gz", "big1.nii.gz", "big2.nii.gz"]
+    assert sorted(routed["small"]) == [f"small{i}.nii.gz" for i in range(6)]
+
+
+def test_small_files_are_still_read_in_parallel(tmp_path, monkeypatch) -> None:
+    """Threads are a real 2.5x win on 3-D maps and must not be lost."""
+    import threading
+
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    live = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_check(path, **_kw):
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        time.sleep(0.02)
+        with lock:
+            live -= 1
+        return {"file_path": str(path), "valid": True, "errors": [], "warnings": []}
+
+    monkeypatch.setattr(nv, "_validate_single_cached", fake_check)
+    paths = [_sized(tmp_path, f"small{i}.nii.gz", 1024) for i in range(6)]
+    paths += [_sized(tmp_path, f"big{i}.nii.gz", nv.LARGE_FILE_BYTES + 1) for i in range(2)]
+
+    nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+    assert peak > 1, "small files were not read in parallel"
+
+
+def test_results_stay_in_input_order_when_the_batch_is_split(tmp_path, monkeypatch) -> None:
+    """Splitting the batch must not reorder it; callers zip results to inputs."""
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    monkeypatch.setattr(
+        nv, "_validate_single_cached",
+        lambda path, **_kw: {"file_path": str(path), "valid": True,
+                             "errors": [], "warnings": []},
+    )
+    paths = []
+    for i in range(8):
+        payload = (nv.LARGE_FILE_BYTES + 1) if i % 3 == 0 else 1024
+        paths.append(_sized(tmp_path, f"f{i}.nii.gz", payload))
+
+    results = nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+    assert [r["file_path"] for r in results] == [str(p) for p in paths]
+
+
+def test_a_batch_of_only_small_files_is_fully_parallel(tmp_path, monkeypatch) -> None:
+    """The split must not cost anything when there is nothing large."""
+    import threading
+
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    live = 0
+    peak = 0
+    lock = threading.Lock()
+
+    def fake_check(path, **_kw):
+        nonlocal live, peak
+        with lock:
+            live += 1
+            peak = max(peak, live)
+        time.sleep(0.02)
+        with lock:
+            live -= 1
+        return {"file_path": str(path), "valid": True, "errors": [], "warnings": []}
+
+    monkeypatch.setattr(nv, "_validate_single_cached", fake_check)
+    paths = [_sized(tmp_path, f"s{i}.nii.gz", 1024) for i in range(8)]
+
+    nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+    assert peak > 1
+
+
+# ── Large files go to processes, not threads ──────────────────────────────
+#
+# Measured on the DCE lead's real 1 GB concentration curves: four threads are
+# 1.8x SLOWER than serial because gzip holds the GIL through nibabel's many
+# small reads, while four processes are 3.3x FASTER because they do not share
+# one. On a 60-scan submission that is ~2 minutes of validation instead of ~9.
+
+def test_large_files_are_read_in_separate_processes(tmp_path, monkeypatch) -> None:
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    used = {}
+
+    class RecordingPool:
+        def __init__(self, max_workers=None):
+            used["workers"] = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def map(self, fn, payloads):
+            return [fn(p) for p in payloads]
+
+    monkeypatch.setattr(nv, "ProcessPoolExecutor", RecordingPool)
+    monkeypatch.setattr(
+        nv, "_validate_single_cached",
+        lambda path, **_kw: {"file_path": str(path), "valid": True,
+                             "errors": [], "warnings": []},
+    )
+    paths = [_sized(tmp_path, f"big{i}.nii.gz", nv.LARGE_FILE_BYTES + 1) for i in range(3)]
+    results = nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+
+    assert used.get("workers") == 3, "the process pool was not used for large files"
+    assert [r["file_path"] for r in results] == [str(p) for p in paths]
+
+
+def test_a_process_pool_that_cannot_start_falls_back_to_serial(
+    tmp_path, monkeypatch,
+) -> None:
+    """Some sandboxes and frozen builds forbid subprocesses.
+
+    Validation must still complete, just more slowly, rather than failing.
+    """
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    def refuse(*_args, **_kwargs):
+        raise OSError("subprocesses are not permitted here")
+
+    monkeypatch.setattr(nv, "ProcessPoolExecutor", refuse)
+    monkeypatch.setattr(
+        nv, "_validate_single_cached",
+        lambda path, **_kw: {"file_path": str(path), "valid": True,
+                             "errors": [], "warnings": []},
+    )
+    paths = [_sized(tmp_path, f"big{i}.nii.gz", nv.LARGE_FILE_BYTES + 1) for i in range(3)]
+    results = nv.validate_nifti_files(paths, force_refresh=True, workers=4)
+
+    assert len(results) == 3
+    assert all(r["valid"] for r in results)
+
+
+def test_one_large_file_needs_no_pool_at_all(tmp_path, monkeypatch) -> None:
+    """Starting workers to do one thing costs more than doing it."""
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("a pool was started for a single file")
+
+    monkeypatch.setattr(nv, "ProcessPoolExecutor", fail)
+    monkeypatch.setattr(
+        nv, "_validate_single_cached",
+        lambda path, **_kw: {"file_path": str(path), "valid": True,
+                             "errors": [], "warnings": []},
+    )
+    only = _sized(tmp_path, "big.nii.gz", nv.LARGE_FILE_BYTES + 1)
+    assert len(nv.validate_nifti_files([only], force_refresh=True, workers=4)) == 1
+
+
+def test_the_worker_payload_survives_pickling(tmp_path) -> None:
+    """A closure or a keyword call cannot cross a process boundary."""
+    import pickle
+
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    payload = (str(tmp_path / "x.nii.gz"), True, False)
+    assert pickle.loads(pickle.dumps(payload)) == payload
+    assert pickle.loads(pickle.dumps(nv._check_one)) is nv._check_one

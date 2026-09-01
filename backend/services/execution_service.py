@@ -29,7 +29,6 @@ if str(_SRC_DIR) not in sys.path:
 
 from osipi_pipeline.execution.docker_runner import (  # noqa: E402
     DEFAULT_CPU_LIMIT,
-    DEFAULT_EXECUTION_DIR,
     DEFAULT_MEMORY_LIMIT,
     DEFAULT_TIMEOUT_SECONDS,
     DockerExecutionError,

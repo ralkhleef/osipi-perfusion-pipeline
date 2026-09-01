@@ -203,3 +203,57 @@ def _make_dce_submission(root: Path) -> Path:
     (root / "Dockerfile").write_text("FROM python:3.12-slim\n", encoding="utf-8")
     (root / "README.md").write_text("# Submission\n", encoding="utf-8")
     return root
+
+
+# ── Re-uploading a submission, when the old copy cannot be removed ────────
+
+def test_replacing_a_previous_extraction_explains_itself(tmp_path, monkeypatch) -> None:
+    """A failed replace must name the operation, not just a file.
+
+    Re-uploading is the most ordinary thing a reviewer does, and it deletes the
+    previous extraction. When that delete fails (read-only mount, folder open
+    elsewhere, missing permission) `shutil.rmtree` raises with only the first
+    file it could not remove:
+
+        [Errno 1] Operation not permitted: 'sub-001_acq-001_asl_32float.nii.gz'
+
+    which names a file the reviewer did not choose, in a folder they were not
+    told about, for an operation they did not know was happening.
+    """
+    import shutil as _shutil
+
+    from services import ingest_service
+
+    target = tmp_path / "ASL_Mentor_Demo"
+    target.mkdir()
+
+    def refuse(path):
+        raise PermissionError(1, "Operation not permitted",
+                              "sub-001_acq-001_asl_32float.nii.gz")
+
+    monkeypatch.setattr(_shutil, "rmtree", refuse)
+    monkeypatch.setattr(ingest_service.shutil, "rmtree", refuse)
+
+    with pytest.raises(RuntimeError) as raised:
+        ingest_service._replace_previous_extraction(target)
+
+    message = str(raised.value)
+    assert "previous version of this submission" in message
+    assert "ASL_Mentor_Demo" in message
+    assert "Operation not permitted" in message
+    # It has to say what to do, not only what went wrong.
+    assert "uploading again" in message.lower()
+    # The original error is preserved for the log.
+    assert isinstance(raised.value.__cause__, PermissionError)
+
+
+def test_replacing_a_previous_extraction_succeeds_normally(tmp_path) -> None:
+    """The ordinary path stays ordinary."""
+    from services import ingest_service
+
+    target = tmp_path / "sub"
+    (target / "results").mkdir(parents=True)
+    (target / "results" / "cbf.nii.gz").write_bytes(b"map")
+
+    ingest_service._replace_previous_extraction(target)
+    assert not target.exists()

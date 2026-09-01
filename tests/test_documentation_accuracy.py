@@ -1107,3 +1107,70 @@ def test_no_documentation_style_sets_a_dark_background_without_a_text_colour() -
         "dark background with no text colour, so the text inherits and "
         f"disappears: {offenders}"
     )
+
+
+# ── Update instructions have to fit how people actually installed ─────────
+#
+# The update section assumed everyone cloned with Git. A mentor who downloaded
+# a ZIP from GitHub has no Git, no remote and no `.git` folder, so `git pull`
+# fails with "not a git repository" and the documented path stops there.
+
+def test_updating_covers_a_zip_download_not_only_git() -> None:
+    page = (DOCS / "install.html").read_text()
+    assert "If you downloaded a ZIP" in page, "only the Git path is documented"
+    assert "not a git repository" in page, (
+        "the error a ZIP user actually sees is not explained"
+    )
+
+
+def test_the_zip_path_preserves_data_and_submissions() -> None:
+    """The two folders a ZIP does not contain are the two that must survive.
+
+    `data/` holds reference maps and ROI masks, `submissions/` holds every
+    upload. Neither is in the download, so an update that unpacks over the top
+    destroys them.
+    """
+    page = (DOCS / "install.html").read_text()
+    zip_section = page[page.index("If you downloaded a ZIP"):]
+    for folder in ("data", "submissions"):
+        assert f"osipi-perfusion-pipeline/{folder}" in zip_section, (
+            f"the ZIP update does not move {folder}/ across"
+        )
+    assert "docker compose down" in zip_section, (
+        "the app is not stopped before its folder is moved"
+    )
+
+
+def test_the_docs_do_not_ask_for_a_hard_reload() -> None:
+    """The page is versioned by content, so a plain refresh is enough.
+
+    `backend.main._asset_fingerprint` names app.js and styles.css by a hash of
+    their bytes, and the HTML itself is served `no-store`. A changed file
+    therefore arrives at a new URL and is fetched. Telling readers to empty
+    the cache first sends them at the least likely cause and hides the real
+    one, which is usually that the image was never rebuilt.
+    """
+    for path in PUBLISHED:
+        text = without_comments(path.read_text())
+        for match in re.finditer(r"Empty Cache and Hard Reload", text):
+            window = text[max(0, match.start() - 120):match.start()]
+            assert "do not need" in window or "not need" in window, (
+                f"{path.name} prescribes a hard reload instead of explaining "
+                "that content-versioned assets make one unnecessary"
+            )
+
+
+def test_the_cache_busting_the_docs_rely_on_actually_exists() -> None:
+    """The claim above is only safe while the fingerprinting is real."""
+    import sys
+
+    backend = ROOT / "backend"
+    if str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+    import main as backend_main
+
+    assert hasattr(backend_main, "_asset_fingerprint")
+    first = backend_main._asset_fingerprint("app.js")
+    assert first and first == backend_main._asset_fingerprint("app.js")
+    # Different files must not share a version, or one could mask the other.
+    assert first != backend_main._asset_fingerprint("styles.css")

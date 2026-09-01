@@ -320,10 +320,14 @@ def test_scoring_result_always_has_predictable_roi_keys() -> None:
     assert isinstance(result["roi_descriptive_statistics"], list)
 
 
-def test_roi_failure_preserves_existing_reference_metrics() -> None:
+def test_roi_failure_preserves_existing_reference_metrics(monkeypatch) -> None:
     """A broken ROI layer must not take the reference metrics with it."""
     import scoring
 
+    # No masks anywhere, which is the condition under test. Stubbing the
+    # discovery keeps this independent of whether the machine running the
+    # suite happens to have organiser reference data on disk.
+    monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: [])
     result = {"summary": {"mean_rmse": 1.23}, "reference_root": None}
     scoring._attach_roi_descriptives(result, "does-not-exist", "dce")
     assert result["summary"]["mean_rmse"] == 1.23
@@ -384,3 +388,80 @@ def test_other_challenges_get_no_roi_rows(challenge: str) -> None:
     summary["challenge_type"] = challenge
     model = _build_report_model([summary], tag="t", blinded=True)
     assert model["roi_descriptive_rows"] == []
+
+
+# ── The three ROI annotations must stay independent ───────────────────────
+#
+# Grouped statistics, ICC and advisory thresholds each annotate the same
+# per-scan ROI rows, and each has its own enable switch. Nesting one call
+# inside another makes the inner one inherit the outer function's early
+# returns, so it silently stops running in exactly the configurations where
+# the outer feature is off. That happened twice: ICC was nested inside the
+# grouping (so it vanished whenever grouping was disabled) and thresholds were
+# nested inside ICC (so they never ran at all, since no challenge configures an
+# ICC model). Both only surfaced by rendering a real report.
+
+def _annotation_keys(result: dict) -> set[str]:
+    return {k for k in result if k.startswith(("grouped_roi", "icc_", "threshold"))}
+
+
+def test_all_three_roi_annotations_run_on_the_production_path(monkeypatch, tmp_path) -> None:
+    import scoring
+
+    monkeypatch.setattr(scoring, "_find_output_niftis", lambda *a, **k: [])
+    monkeypatch.setattr(scoring, "_score_reference_maps",
+                        lambda *a, **k: {"roi_descriptive_statistics": []})
+    monkeypatch.setattr(scoring, "attach_roi_descriptive_statistics",
+                        lambda result, *a, **k: result)
+
+    analysis = scoring.analyze_submission_niftis("sub-1", "asl")
+    result = analysis.get("reference_scoring") or {}
+
+    for key in ("grouped_roi_status", "icc_status", "threshold_summary"):
+        assert key in result, f"{key} was not attached by the production path"
+
+
+def test_disabling_grouping_does_not_remove_icc_or_thresholds(monkeypatch) -> None:
+    """The exact shape of the first bug: ICC disappeared with grouping."""
+    import scoring
+
+    monkeypatch.setattr(
+        scoring, "grouped_statistics_by_challenge",
+        lambda: {"asl": {"enabled": False, "axes": (), "source": "roi_median",
+                         "minimum_group_size": 2}},
+    )
+    result: dict = {"roi_descriptive_statistics": []}
+    scoring._attach_grouped_roi_statistics(result, "asl")
+    scoring._attach_icc(result, "asl", [])
+    scoring._attach_threshold_flags(result, "asl")
+
+    assert result["grouped_roi_status"] == "disabled"
+    assert result["icc_status"] == "not_configured"
+    assert result["threshold_summary"]["configured"] is False
+
+
+def test_no_annotation_helper_calls_another(monkeypatch) -> None:
+    """Structural guard: keep them siblings, not nested.
+
+    Reading the source is blunt, but it is the only check that fails at the
+    moment someone re-nests these rather than months later when a reader
+    notices a column is always empty.
+    """
+    import inspect
+
+    import scoring
+
+    helpers = {
+        "_attach_grouped_roi_statistics": scoring._attach_grouped_roi_statistics,
+        "_attach_icc": scoring._attach_icc,
+        "_attach_threshold_flags": scoring._attach_threshold_flags,
+    }
+    for name, func in helpers.items():
+        body = inspect.getsource(func)
+        for other in helpers:
+            if other == name:
+                continue
+            assert f"{other}(" not in body, (
+                f"{name} calls {other}; keep these siblings at the call site so "
+                "one feature's early return cannot switch another one off"
+            )

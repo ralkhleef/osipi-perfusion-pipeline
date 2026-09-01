@@ -25,7 +25,6 @@ import pytest
 def service(monkeypatch, tmp_path):
     """The service with its extraction root pointed at a temp directory."""
     import services.execution_service as execution_service
-    from services import path_config
 
     extracted = tmp_path / "extracted"
     extracted.mkdir()

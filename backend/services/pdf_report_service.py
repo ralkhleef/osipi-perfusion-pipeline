@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import io
-import json
 import logging
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from services.ingest_service import make_safe_id
-from services.path_config import OUTPUTS_DIR
 from services.report_branding import (
     BRAND,
     PDF_SANS,
@@ -38,6 +35,28 @@ UNAVAILABLE_METRICS_NOTE = (
     "Repeatability CoV and ICC are unavailable: they require repeated "
     "(noise-varied) datasets, which have not been provided."
 )
+
+#: ICC now has two distinct reasons for being blank and a reader has to be able
+#: to tell them apart: the challenge has chosen no model, or it has chosen one
+#: and this submission has no repeated scans to apply it to. Reporting the
+#: second when the first is true would send someone looking for data when what
+#: is missing is a decision.
+ICC_NOT_CONFIGURED_NOTE = (
+    "ICC was not calculated: this challenge has not selected an ICC model. "
+    "All six Shrout & Fleiss models are implemented; set "
+    "grouped_statistics.icc.model to enable one."
+)
+
+
+def _repeatability_note(icc_status: str = "") -> str:
+    """The accurate reason ICC and repeatability CoV are blank."""
+    if str(icc_status) == "not_configured":
+        return (
+            "Repeatability CoV is unavailable: it requires repeated "
+            "(noise-varied) datasets, which have not been provided. "
+            + ICC_NOT_CONFIGURED_NOTE
+        )
+    return UNAVAILABLE_METRICS_NOTE
 
 
 def _pipeline_version() -> str:
@@ -357,7 +376,7 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
             dict(row) for row in scoring.get("grouped_roi_statistics") or ()
             if isinstance(row, Mapping)
         )
-        rss = scoring.get("dce_signal_rss")
+        rss = scoring.get("signal_rss") or scoring.get("dce_signal_rss")
         rss = rss if isinstance(rss, Mapping) else {}
         rss_records.extend(
             dict(row) for row in rss.get("records") or () if isinstance(row, Mapping)
@@ -534,12 +553,87 @@ def _status_fields(validation: str, execution: str, qc: str,
     return fields
 
 
+def _first_mask_overlaps(summaries: Sequence[Mapping[str, Any]]) -> list:
+    """Mask overlaps from the first summary that reports any.
+
+    One organiser mask set applies to the whole run, so one list describes it.
+    """
+    for summary in summaries or ():
+        if not isinstance(summary, Mapping):
+            continue
+        fields = summary.get("analysis_fields")
+        if not isinstance(fields, Mapping):
+            continue
+        scoring = fields.get("reference_scoring")
+        overlaps = scoring.get("mask_overlaps") if isinstance(scoring, Mapping) else None
+        if overlaps:
+            return list(overlaps)
+    return []
+
+
+def _overlap_notes(overlaps: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Say which ROIs share voxels, so the rows are not read as independent.
+
+    A table with one row per region invites the reader to treat the regions as
+    a partition. The DCE challenge's regions are nested, so grey matter carries
+    the hippocampus inside it and the two rows are not separate measurements.
+    Silence here is what makes the pipeline's grey-matter bias look like a
+    disagreement with the challenge's own answer key rather than a different
+    and clearly stated definition.
+    """
+    notes: list[str] = []
+    for overlap in overlaps or ():
+        regions = list(overlap.get("regions") or [])
+        if len(regions) != 2:
+            continue
+        shared = int(overlap.get("shared_voxels") or 0)
+        counts = list(overlap.get("voxels") or [0, 0])
+        if overlap.get("nested"):
+            inner, outer = (
+                (regions[0], regions[1]) if shared == counts[0]
+                else (regions[1], regions[0])
+            )
+            notes.append(
+                f"Regions overlap: every {inner} voxel ({shared:,}) is also "
+                f"inside {outer}, so those two rows are not independent "
+                f"measurements."
+            )
+        else:
+            notes.append(
+                f"Regions overlap: {regions[0]} and {regions[1]} share "
+                f"{shared:,} voxels, so those two rows are not independent "
+                f"measurements."
+            )
+    return notes
+
+
+def _first_icc_status(summaries: Sequence[Mapping[str, Any]]) -> str:
+    """The ICC status of the run, from the first summary that states one.
+
+    A batch shares one configuration, so one status describes it; a per-report
+    caveat is not the place to enumerate submissions.
+    """
+    for summary in summaries or ():
+        if not isinstance(summary, Mapping):
+            continue
+        fields = summary.get("analysis_fields")
+        if not isinstance(fields, Mapping):
+            continue
+        scoring = fields.get("reference_scoring")
+        status = scoring.get("icc_status") if isinstance(scoring, Mapping) else None
+        if status:
+            return str(status)
+    return ""
+
+
 def build_limitations(
     *,
     reference_available: bool,
     map_types: Sequence[str],
     challenges: Sequence[str],
     cov_reported: bool,
+    icc_status: str = "",
+    mask_overlaps: Sequence[Mapping[str, Any]] = (),
 ) -> list[str]:
     """Build the caveat list, including only caveats that actually apply.
 
@@ -571,13 +665,15 @@ def build_limitations(
                 "result, or ranking was calculated."
             )
         items.append(official_note)
-        repeatability_note = UNAVAILABLE_METRICS_NOTE
+        repeatability_note = _repeatability_note(icc_status)
         if cov_reported:
             repeatability_note += (
                 " The reported coefficient of variation is an accuracy "
                 "error-CoV, not a repeatability CoV."
             )
         items.append(repeatability_note)
+    for note in _overlap_notes(mask_overlaps):
+        items.append(note)
     # Only meaningful once more than one parameter type is present, and it
     # should name the types actually found rather than assume CBF and ATT.
     named = [str(m).strip() for m in map_types if str(m).strip()]
@@ -1469,6 +1565,8 @@ def _build_report_model(
                        if m.strip() and m.strip() != "Not available"],
             challenges=challenges,
             cov_reported=cov is not None,
+            icc_status=_first_icc_status(summaries),
+            mask_overlaps=_first_mask_overlaps(summaries),
         ),
         # "Notes" held counts like "1 warning(s) reported" while the issues
         # table below already lists each warning in full with its fix, so the
@@ -1780,7 +1878,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ``num_cols`` right-aligns those columns so magnitudes compare down
         the column rather than ragging against the left edge.
         """
-        n_cols = max(1, len(headers))
         widths = col_widths or fitted_widths(headers, rows, CONTENT_W)
         numeric = set(num_cols)
         cells = [[

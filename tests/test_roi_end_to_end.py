@@ -92,6 +92,15 @@ def dce_submission(tmp_path, monkeypatch):
     import services.path_config as path_config
     monkeypatch.setattr(path_config, "EXTRACTED_DIR", extracted, raising=False)
 
+    # Masks are discovered across *every* reference root, not only the one
+    # holding the ground-truth maps, so the organiser-wide roots have to be
+    # pinned inside tmp. Without this the developer's own
+    # data/reference_data/masks is picked up and the fixture's mask is no
+    # longer the only one, which is a real difference between this machine
+    # and a clean checkout.
+    for name in ("REFERENCE_DATA_DIR", "SCORING_DIR"):
+        monkeypatch.setattr(scoring, name, tmp_path / "organiser" / name.lower())
+
     # Shrink the expected dataset grid for the fixture only.
     rules = config_rules.validation_rules()
     import copy as _copy
@@ -260,7 +269,7 @@ def test_calculator_failure_preserves_scoring(dce_submission, monkeypatch) -> No
 def test_no_masks_yields_a_clear_status(dce_submission, monkeypatch) -> None:
     import scoring
 
-    monkeypatch.setattr(scoring, "_reference_masks", lambda root: [])
+    monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: [])
     reference = _analyse(dce_submission)["reference_scoring"]
     assert reference["roi_descriptive_status"] == "no_roi_configured"
     assert reference["roi_descriptive_statistics"] == []

@@ -1,7 +1,6 @@
 """FastAPI backend for the OSIPI perfusion pipeline web interface."""
 
 import csv
-import base64
 import html
 import io
 import json
@@ -28,7 +27,6 @@ from services.ingest_service import (
     EXTRACT_MAX_BYTES,
     EXTRACT_MAX_FILES,
     ZIP_MAX_BYTES,
-    detect_submission_metadata,
     finalize_imported_dir,
     make_safe_id,
     regroup_submissions,
@@ -46,7 +44,6 @@ from services.path_config import (
     OSIPI_TF62_DIR,
     OUTPUTS_DIR,
     REFERENCE_DATA_DIR,
-    SCORING_ACTIVE_CONFIG,
     SCORING_DIR,
     SCORING_OUTPUTS_DIR,
     SCORING_PACKAGES_DIR,
@@ -60,7 +57,6 @@ from services.validation_service import (
 )
 from services.zenodo_service import download_zenodo_record
 from services.scoring_package_service import (
-    get_active_entry,
     install_package,
     list_packages,
     load_active_config,
@@ -89,8 +85,6 @@ from services.nifti_preview_service import (
 from services.pdf_report_service import (
     ROI_METHOD_TEXT,
     _build_report_model,
-    affected_display,
-    build_limitations,
     generate_pdf_report,
     export_filename,
     report_filename_tag,
@@ -1891,6 +1885,8 @@ class ScoreBatchRequest(BaseModel):
 
 _PRIVATE_SCORING_FIELDS = {
     "path", "reference_root", "reference_path", "mask_path", "submitted_path", "source_path",
+    # Where the organiser keeps their masks is as private as the masks.
+    "mask_roots",
 }
 
 
@@ -2940,15 +2936,63 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                         value = None  # no comparison → blank, never zero
                     _emit(metric_name, value, status)
 
-        # Repeatability CoV and ICC are unavailable for the whole submission
-        # (they need repeated noise-varied datasets). Emit ONE submission-level
-        # row each instead of repeating an identical unavailable row per map/ROI,
+        # ICC rows, one per participant x session table the submission
+        # supported. A challenge that has configured a model and a submission
+        # with repeated scans produce real values here; everything else falls
+        # through to the submission-level unavailable row below, which states
+        # *why* rather than leaving an empty cell to interpret.
+        icc_rows = ref.get("icc_statistics") if isinstance(ref, dict) else None
+        emitted_icc = False
+        for icc_row in icc_rows or []:
+            if not isinstance(icc_row, dict) or icc_row.get("value") is None:
+                continue
+            emitted_icc = True
+            held = icc_row.get("held_fixed") or {}
+            interval = ""
+            low, high = icc_row.get("confidence_low"), icc_row.get("confidence_high")
+            if low is not None and high is not None:
+                interval = f"CI[{_fmt_export_cell(low)},{_fmt_export_cell(high)}]"
+            rows.append(identity_cells + [
+                blinded_id, challenge, "(all participants)",
+                str(held.get("repeat") or held.get("site") or ""),
+                str(icc_row.get("map_type") or ""), "",
+                str(icc_row.get("units") or ""),
+                str(icc_row.get("roi_label") or icc_row.get("roi_id") or ""),
+                f"icc[{icc_row.get('model')}:{icc_row.get('axis')}]",
+                _fmt_export_cell(icc_row.get("value")),
+                str(icc_row.get("status") or ""),
+                _fmt_export_cell(icc_row.get("target_count"), digits=0),
+                _fmt_export_cell(icc_row.get("excluded_target_count"), digits=0),
+                "", "", "", "",
+                interval or "not_applicable",
+                validation_status, warning_codes,
+                pipeline_version, config_version, export_date,
+            ])
+
+        # Repeatability CoV, and ICC when it could not be computed, are
+        # unavailable for the whole submission. Emit ONE submission-level row
+        # each rather than repeating an identical unavailable row per map/ROI,
         # keeping the tidy table machine-readable without noise.
+        icc_reason = (
+            str(ref.get("icc_unavailable_reason") or "")
+            if isinstance(ref, dict) else ""
+        )
         for metric_name in _LONG_UNAVAILABLE_METRICS:
+            if metric_name == "icc" and emitted_icc:
+                continue
+            status = "unavailable_requires_repeated_datasets"
+            if metric_name == "icc" and icc_reason:
+                # "no model configured" and "no repeated scans in this
+                # submission" are different facts and must not collapse.
+                status = (
+                    "unavailable_no_icc_model_configured"
+                    if ref.get("icc_status") == "not_configured"
+                    else "unavailable_no_repeated_scans"
+                )
             sci = [
                 blinded_id, challenge, "", "",
                 "(all maps)", "", "", "(submission-level)",
-                metric_name, "", "unavailable_requires_repeated_datasets",
+                metric_name, "", status,
                 "", "", "", "", "", "",
                 "not_applicable", validation_status, warning_codes,
                 pipeline_version, config_version, export_date,
@@ -3225,19 +3269,12 @@ def export_report(
         s.get("analysis_fields") if isinstance(s.get("analysis_fields"), dict) else {}
         for s in summaries
     ]
-    map_types = sorted({
-        mt.strip()
-        for af in fields
-        for mt in str(af.get("parameter_maps_detected") or "").split(",")
-        if mt.strip()
-    })
     challenges = sorted({
         str(s.get("challenge_type") or "").strip().upper()
         for s in summaries
         if str(s.get("challenge_type") or "").strip()
     })
     reference_available = any(_reference_available(af) for af in fields)
-    reference_status = "Available" if reference_available else "Not available"
     session_name = (
         (f"Batch ({len(summaries)} submissions)" if blinded else f"Batch {batch_id}") if batch_id
         else (_submission_display_name(summaries[0], 1, blinded=blinded) if len(summaries) == 1 else "Export session")

@@ -442,7 +442,7 @@ def _finalize_staged_dir(
     if not batch_dirs:
         final_dir = EXTRACTED_DIR / batch_stem
         if final_dir.exists():
-            shutil.rmtree(final_dir)
+            _replace_previous_extraction(final_dir)
         # Unwrap a single redundant wrapper folder so the submission root
         # directly contains input/ , results/maps/ , README, etc.  Without this
         # a ZIP shaped like ``Lena_ASL/input/ Lena_ASL/results/maps/`` would
@@ -739,6 +739,34 @@ def _is_participant_layout(dirs: List[Path]) -> bool:
         if not {"participant", "site", "repeat"} & set(identity):
             return False
     return True
+
+
+def _replace_previous_extraction(final_dir: Path) -> None:
+    """Delete a previous extraction of the same submission, or explain why not.
+
+    Re-uploading a submission is the most ordinary thing a reviewer does, and
+    it means deleting what was extracted last time. When that delete fails, a
+    read-only mount, a folder held open by another program, a permission the
+    account does not have, ``shutil.rmtree`` raises with only the name of the
+    first file it could not remove. The reviewer sees
+
+        [Errno 1] Operation not permitted: 'sub-001_acq-001_asl_32float.nii.gz'
+
+    which names a file they did not choose, in a folder they were not told
+    about, for an operation they did not know was happening. The failure is
+    real and worth surfacing; the message is not.
+    """
+    try:
+        shutil.rmtree(final_dir)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not replace the previous version of this submission at "
+            f"{final_dir.name}. Uploading again deletes what was extracted "
+            f"last time, and that delete failed ({exc.strerror or exc}). "
+            f"The folder may be open in another program, or the account "
+            f"running the app may not have permission to write there. "
+            f"Deleting {final_dir} by hand and uploading again will clear it."
+        ) from exc
 
 
 def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:

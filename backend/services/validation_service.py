@@ -400,7 +400,6 @@ def validate_submission(
         f for f in all_files if f.name.lower().endswith(NIFTI_SUFFIXES)
     ]
     reproducible = mode == "reproducible"
-    result_only  = mode == "result_only"
 
     nifti_summary: List[Dict] = []
 
@@ -485,7 +484,6 @@ def validate_submission(
     # ---- Canonical role-based counts ----------------------------------------
 
     counts = submission_counts(folder, normalized_challenge)
-    artifacts = submission_artifacts(folder, normalized_challenge)
 
     # ---- README / SOP -------------------------------------------------------
     #

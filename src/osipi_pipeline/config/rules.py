@@ -58,8 +58,15 @@ _CHALLENGE_KEYS = {
     "reference_dataset_version",
 }
 # Optional aggregation of per-scan ROI statistics.
-_GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size"}
-_ANALYSIS_KEYS = {"roi_descriptive", "signal_rss"}
+_GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size", "icc"}
+# The ICC model is configuration, not code: six defensible models exist and
+# choosing among them is a scientific decision for the challenge leads. The
+# default is "none", under which nothing is computed.
+_ICC_KEYS = {"model", "axes", "confidence_level"}
+_ANALYSIS_KEYS = {"roi_descriptive", "signal_rss", "thresholds"}
+#: One advisory threshold. `warn_above` marks a row for a reviewer to look at;
+#: it is never a pass/fail criterion, so there is no `fail_above`.
+_THRESHOLD_KEYS = {"warn_above", "note"}
 _ROI_DESCRIPTIVE_KEYS = {"enabled", "map_types", "report_metrics"}
 _ROI_REPORT_METRICS = {
     "mean", "median", "standard_deviation", "range", "coefficient_of_variation"
@@ -85,6 +92,7 @@ _SETTINGS_SECTION_KEYS = {
         "validation_cache_enabled",
         "manifest_cache_enabled",
         "preview_cache_enabled",
+        "analysis_cache_enabled",
     },
     "paths": {
         "output_map_subdirs",
@@ -234,6 +242,85 @@ def _require_positive_int(value: Any, path: str, errors: list[str]) -> None:
         return
     if value <= 0:
         errors.append(f"{path}: must be greater than 0")
+
+
+def _validate_thresholds(value: Any, path: str, errors: list[str]) -> None:
+    """Check advisory thresholds, and catch the percentage mistake.
+
+    Thresholds use stored units, so a CoV threshold is the ratio ``0.15``. A
+    threshold written as ``15`` would parse, load, and then never fire, which
+    is worse than being rejected: the reviewer would believe the check was
+    running. Ratio metrics therefore refuse a limit above 1.
+    """
+    from osipi_pipeline.scoring.thresholds import RATIO_METRICS
+
+    block = _require_mapping(value, path, errors)
+    if block is None:
+        return
+    for metric, spec in block.items():
+        metric_path = f"{path}.{metric}"
+        spec_map = _require_mapping(spec, metric_path, errors)
+        if spec_map is None:
+            continue
+        _reject_unknown_keys(spec_map, _THRESHOLD_KEYS, metric_path, errors)
+        limit = spec_map.get("warn_above")
+        if limit is None:
+            errors.append(f"{metric_path}: warn_above is required")
+            continue
+        if not isinstance(limit, (int, float)) or isinstance(limit, bool):
+            errors.append(f"{metric_path}.warn_above: must be a number")
+            continue
+        if str(metric) in RATIO_METRICS and float(limit) > 1:
+            errors.append(
+                f"{metric_path}.warn_above: {metric!r} is a ratio, so "
+                f"{limit} would never be reached; use {float(limit) / 100:g} "
+                f"for {limit:g}%"
+            )
+        if "note" in spec_map:
+            _require_string(spec_map.get("note"), f"{metric_path}.note", errors)
+
+
+def _validate_icc_block(value: Any, path: str, errors: list[str]) -> None:
+    """Check an ``icc`` block without deciding anything scientific.
+
+    Rejects an unknown model name outright rather than falling back to a
+    default: a typo in the model is the one mistake here that would silently
+    publish the wrong statistic under the right label.
+    """
+    from osipi_pipeline.scoring.icc import AXIS_SESSION_FIELD, MODEL_NONE, MODELS
+
+    block = _require_mapping(value, path, errors)
+    if block is None:
+        return
+    _reject_unknown_keys(block, _ICC_KEYS, path, errors)
+
+    if "model" in block:
+        model = _require_string(block.get("model"), f"{path}.model", errors)
+        allowed = (MODEL_NONE, *MODELS)
+        if model is not None and model not in allowed:
+            errors.append(
+                f"{path}.model: unknown ICC model {model!r}; expected one of "
+                f"{', '.join(allowed)}"
+            )
+
+    axes = _require_string_list(block.get("axes", []), f"{path}.axes", errors)
+    for index, axis in enumerate(axes):
+        if axis not in AXIS_SESSION_FIELD:
+            errors.append(
+                f"{path}.axes[{index}]: {axis!r} has no session dimension for "
+                f"ICC; expected one of {', '.join(sorted(AXIS_SESSION_FIELD))}"
+            )
+
+    if "confidence_level" in block:
+        level = block.get("confidence_level")
+        # None is meaningful: report the point estimate with no interval.
+        if level is not None:
+            if not isinstance(level, (int, float)) or isinstance(level, bool):
+                errors.append(f"{path}.confidence_level: must be a number or null")
+            elif not 0.0 < float(level) < 1.0:
+                errors.append(
+                    f"{path}.confidence_level: must lie strictly between 0 and 1"
+                )
 
 
 def _require_bool(value: Any, path: str, errors: list[str]) -> None:
@@ -523,12 +610,21 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                             grouped.get("minimum_group_size"),
                             f"{grouped_path}.minimum_group_size", errors,
                         )
+                    if "icc" in grouped:
+                        _validate_icc_block(
+                            grouped.get("icc"), f"{grouped_path}.icc", errors
+                        )
 
             if "analysis" in spec_map:
                 analysis_path = f"{spec_path}.analysis"
                 analysis = _require_mapping(spec_map.get("analysis"), analysis_path, errors)
                 if analysis is not None:
                     _reject_unknown_keys(analysis, _ANALYSIS_KEYS, analysis_path, errors)
+                    if "thresholds" in analysis:
+                        _validate_thresholds(
+                            analysis.get("thresholds"),
+                            f"{analysis_path}.thresholds", errors,
+                        )
                     roi = analysis.get("roi_descriptive")
                     if roi is not None:
                         roi_path = f"{analysis_path}.roi_descriptive"
@@ -1073,6 +1169,41 @@ def grouped_statistics_by_challenge() -> dict[str, dict[str, Any]]:
             "axes": tuple(spec.get("axes") or AXES),
             "source": str(spec.get("source") or "roi_median"),
             "minimum_group_size": int(spec.get("minimum_group_size") or MIN_GROUP_SIZE),
+        }
+    return result
+
+
+def thresholds_by_challenge() -> dict[str, dict[str, Any]]:
+    """Advisory thresholds per challenge; empty when none are configured.
+
+    Empty is the shipped state for every challenge, so nothing is flagged
+    until an organiser writes a number down.
+    """
+    return {
+        str(challenge).lower(): copy.deepcopy(
+            (config.get("analysis") or {}).get("thresholds") or {}
+        )
+        for challenge, config in validation_rules().get("challenges", {}).items()
+    }
+
+
+def icc_settings_by_challenge() -> dict[str, dict[str, Any]]:
+    """ICC settings per challenge, defaulting to "no model chosen".
+
+    Returns ``model: "none"`` when a challenge says nothing, so ICC stays
+    unavailable until the challenge leads pick a model. The default is the
+    absence of a decision, never a guess at one.
+    """
+    from osipi_pipeline.scoring.icc import DEFAULT_CONFIDENCE_LEVEL, MODEL_NONE
+
+    result: dict[str, dict[str, Any]] = {}
+    for challenge, config in validation_rules().get("challenges", {}).items():
+        spec = (config.get("grouped_statistics") or {}).get("icc") or {}
+        level = spec.get("confidence_level", DEFAULT_CONFIDENCE_LEVEL)
+        result[str(challenge).lower()] = {
+            "model": str(spec.get("model") or MODEL_NONE),
+            "axes": tuple(spec.get("axes") or ("inter_repeat",)),
+            "confidence_level": None if level is None else float(level),
         }
     return result
 

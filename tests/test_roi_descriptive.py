@@ -521,3 +521,48 @@ def test_attach_degrades_without_losing_reference_metrics() -> None:
         original, [], challenge_type="dce", root=Path("."))
     assert out["summary"]["mean_rmse"] == 1.0
     assert out["roi_descriptive_statistics"] == []
+
+
+# ── Region labels the DCE challenge actually ships ────────────────────────
+
+def test_the_shipped_dce_mask_names_all_resolve_to_readable_labels() -> None:
+    """`Hipp_mask.nii.gz` used to fall through to its filename stem.
+
+    The DCE lead's shared_masks archive ships GM, WM and Hipp per site. A
+    report row reading "site 1 hipp ma" instead of "hippocampus" is the kind
+    of detail that makes a table look unfinished in front of the people whose
+    data it is.
+    """
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    for extra in (repo / "src", repo / "backend"):
+        if str(extra) not in sys.path:
+            sys.path.insert(0, str(extra))
+    import scoring
+
+    assert scoring._mask_label_for_name("GM_mask.nii.gz") == "gray matter"
+    assert scoring._mask_label_for_name("WM_mask.nii.gz") == "white matter"
+    assert scoring._mask_label_for_name("Hipp_mask.nii.gz") == "hippocampus"
+    assert scoring._mask_label_for_name("lesion_roi_mask.nii.gz") == "lesion"
+
+
+def test_the_hippocampus_rule_does_not_swallow_more_specific_names() -> None:
+    """`left_hippocampus.nii.gz` must stay distinguishable from the right one.
+
+    The rule exists for the abbreviation the challenge ships. A broader `hipp`
+    pattern would collapse every hippocampal ROI into one label, which is a
+    worse table than the filename fallback it replaced.
+    """
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo / "backend") not in sys.path:
+        sys.path.insert(0, str(repo / "backend"))
+    import scoring
+
+    assert scoring._mask_label_for_name("left_hippocampus.nii.gz") == "left hippocampus"
+    assert scoring._mask_label_for_name("right_hippocampus.nii.gz") == "right hippocampus"
+    assert scoring._mask_label_for_name("Hipp_mask.nii.gz") == "hippocampus"

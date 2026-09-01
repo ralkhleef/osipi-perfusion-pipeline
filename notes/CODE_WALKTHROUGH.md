@@ -88,13 +88,15 @@ scientific pass/fail thresholds.
 
 ## 5. Run
 
-`backend/services/execution_service.py` and `backend/docker_runner.py` run
-participant code.
+`backend/services/execution_service.py` and
+`src/osipi_pipeline/execution/docker_runner.py` run participant code.
 
 - Result-only submissions keep their maps and skip execution.
 - Reproducible submissions need a supported Dockerfile.
 - Containers use configured resource and time limits and run without network
-  access.
+  access, including a process-count cap so a fork bomb cannot exhaust the host.
+- The build is bounded by its own timeout, and the image is removed after the
+  run so a challenge round does not fill the disk.
 - Generated maps return to the same validation and analysis path as submitted
   maps.
 
@@ -111,6 +113,15 @@ OSIPI score.
 `backend/services/roi_descriptive_service.py` reads the enabled map types from
 the challenge configuration. With compatible masks, it reports per-scan and
 per-ROI median, population SD, CoV, and voxel count.
+
+### Intraclass correlation
+
+`src/osipi_pipeline/scoring/icc.py` implements all six Shrout & Fleiss models
+with exact F-based confidence intervals, from a participants x sessions table
+built out of the same per-scan ROI rows the grouping uses. No model is applied
+by default: `challenges.<id>.grouped_statistics.icc.model` is `none`, and ICC
+stays reported as not configured until the challenge leads choose. A
+participant missing any session is excluded and counted, never imputed.
 
 ### Generic reference comparison
 
@@ -165,7 +176,8 @@ The following items still need mentor decisions or private data:
 
 - final DCE accuracy and deviance definitions;
 - RSS normalisation;
-- repeatability, reproducibility, and ICC method;
+- repeatability and reproducibility method, and which of the six implemented
+  ICC models applies (`grouped_statistics.icc.model`, `none` by default);
 - thresholds, pass/fail, and ranking rules;
 - final private references and masks; and
 - final ASL fitted-model comparison.
@@ -174,10 +186,7 @@ The following items still need mentor decisions or private data:
 
 ```bash
 OSIPI_REQUIRE_FULL_TESTS=1 PYTHONPATH=.:backend:src .venv/bin/pytest -q
-node tests/frontend_smoke_test.js
-node tests/footer_logic_test.js
-node tests/frontend_validation_card_test.js
-node tests/frontend_roi_dom_test.js
+for suite in tests/*_test.js; do node "$suite"; done
 PYTHONPATH=.:backend:src .venv/bin/pytest -q tests/test_documentation_accuracy.py
 PYTHONPATH=.:backend:src .venv/bin/pytest -q examples/scoring-package-template/tests/test_scorer.py
 PYTHONPATH=backend:src .venv/bin/python scripts/preview_reports.py

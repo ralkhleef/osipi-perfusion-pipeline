@@ -61,20 +61,12 @@ source .venv/bin/activate
 pip install -r requirements.txt -r backend/requirements.txt -r requirements-test.txt
 ```
 
-Run the Python and frontend suites:
+Run the Python and frontend suites (the frontend suites are discovered, so
+a new one needs no edit here):
 
 ```bash
 OSIPI_REQUIRE_FULL_TESTS=1 PYTHONPATH=.:backend:src .venv/bin/pytest -q
-node tests/frontend_smoke_test.js
-node tests/footer_logic_test.js
-node tests/frontend_validation_card_test.js
-node tests/frontend_roi_dom_test.js
-node tests/frontend_header_check_test.js
-node tests/frontend_config_maps_test.js
-node tests/frontend_run_outcome_test.js
-node tests/frontend_config_changes_test.js
-node tests/frontend_config_preview_test.js
-node tests/frontend_config_assets_test.js
+for suite in tests/*_test.js; do node "$suite"; done
 ```
 
 The trusted scoring-package example is in `examples/demo-scoring-package/`; test inputs

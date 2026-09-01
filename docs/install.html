@@ -270,9 +270,14 @@ node tests/footer_logic_test.js</code></pre>
           <h2 id="updating" data-toc-title="Updating your copy">Updating your copy</h2>
 
           <p>The application is served from inside the Docker image, and the browser interface is
-            copied into that image when it is built. Neither is read live from disk. So pulling new
-            code changes nothing you can see until you rebuild, and rebuilding changes nothing you
-            can see until the browser drops its cached copy. Both steps are needed, in that order.</p>
+            copied into that image when it is built. Neither is read live from disk. So new code
+            changes nothing you can see until you rebuild the image.</p>
+
+          <p>How you get the new code depends on how you got it the first time. If you cloned the
+            repository with Git, use the first block. If you downloaded a ZIP from GitHub, which
+            needs no Git installed at all, use the second.</p>
+
+          <h3>If you cloned with Git</h3>
 
           <div class="docs-code">
             <div class="docs-code-header"><span>Update and restart</span><button class="docs-copy" type="button">Copy</button></div>
@@ -281,16 +286,65 @@ git pull
 docker compose up -d --build</code></pre>
           </div>
 
-          <p>Then reload the page in the browser. A plain refresh often keeps the old JavaScript,
-            so use a cache-clearing reload: open DevTools, right click the reload button, and
-            choose <em>Empty Cache and Hard Reload</em>. In Firefox and Safari, hold Shift and
-            click reload.</p>
+          <p>If <code>git pull</code> reports <em>not a git repository</em>, you downloaded a ZIP
+            rather than cloning, and the steps below are the ones you want. Nothing is wrong.</p>
+
+          <h3>If you downloaded a ZIP</h3>
+
+          <p>There is no <code>git pull</code> to run, and no Git to install: download the new ZIP
+            from the same place and unpack it <em>beside</em> your current folder rather than on top
+            of it. Then move your data across. Unpacking over the top is what loses work, because a
+            ZIP has no idea which files are yours.</p>
+
+          <div class="docs-code">
+            <div class="docs-code-header"><span>Update from a downloaded ZIP</span><button class="docs-copy" type="button">Copy</button></div>
+            <pre><code># stop the running app first, from inside the OLD folder
+cd osipi-perfusion-pipeline
+docker compose down
+cd ..
+
+# unpack the new download beside it, then move your data into the new copy
+mv osipi-perfusion-pipeline osipi-perfusion-pipeline-old
+unzip osipi-perfusion-pipeline-main.zip
+mv osipi-perfusion-pipeline-main osipi-perfusion-pipeline
+
+mv osipi-perfusion-pipeline-old/data osipi-perfusion-pipeline/data
+mv osipi-perfusion-pipeline-old/submissions osipi-perfusion-pipeline/submissions
+
+cd osipi-perfusion-pipeline
+docker compose up -d --build</code></pre>
+          </div>
+
+          <p>The two <code>mv</code> lines are the whole point. <code>data/</code> holds your
+            reference maps and ROI masks and <code>submissions/</code> holds everything that has
+            been uploaded; neither is in the download, so moving them across is what keeps them.
+            The old folder is left in place until you delete it, so if a step goes wrong nothing is
+            gone.</p>
+
+          <p>On Windows, do the same thing in File Explorer: rename the old folder, extract the new
+            ZIP, then drag <code>data</code> and <code>submissions</code> from the old folder into
+            the new one.</p>
+
+          <p>If you also edited <code>config/validation_rules.yaml</code> or
+            <code>config/settings.yaml</code>, copy those across too, or re-apply your changes.
+            Configuration versions saved through the Configuration Manager live under
+            <code>data/</code> and move with it.</p>
+
+          <h3>Then reload the browser</h3>
+
+          <p>An ordinary refresh is enough. The page asks for its JavaScript and CSS by a version
+            derived from the file contents, so a changed file arrives at a new address and the
+            browser fetches it; the page itself is never cached. You do not need
+            <em>Empty Cache and Hard Reload</em>, and reaching for it first tends to hide the real
+            cause.</p>
 
           <div class="docs-callout">
-            <p class="mb-0"><strong>If the interface looks unchanged after all that</strong>, it is
-              almost always one of these three, in order of likelihood: the browser served a cached
-              script, the image was not rebuilt, or the container was never restarted. The check
-              below distinguishes them without guessing.</p>
+            <p class="mb-0"><strong>If the interface looks unchanged after all that</strong>, the
+              likely causes, in order: the new code never arrived (a <code>git pull</code> that
+              failed, or a ZIP unpacked into a different folder than the one you rebuilt), the
+              image was not rebuilt, or the container was never restarted. A stale script is last
+              and rare, for the reason above. The check below distinguishes them without
+              guessing.</p>
           </div>
 
           <div class="docs-code">
@@ -309,7 +363,7 @@ docker compose up -d --build</code></pre>
               <tbody>
                 <tr>
                   <td><code>frontend/</code>, <code>backend/</code>, <code>src/</code></td>
-                  <td>Rebuild the image, then a cache-clearing reload</td>
+                  <td>Rebuild the image, then an ordinary reload</td>
                 </tr>
                 <tr>
                   <td><code>config/validation_rules.yaml</code></td>
@@ -328,7 +382,7 @@ docker compose up -d --build</code></pre>
             </table>
           </div>
 
-          <h3>If you have your own edits</h3>
+          <h3>If you have your own edits (Git only)</h3>
 
           <p><code>git pull</code> refuses to overwrite uncommitted work, which is a feature rather
             than an obstacle. To see what is yours before pulling:</p>
@@ -361,8 +415,9 @@ git stash pop</code></pre>
 
           <p>This walks a generated submission through all six steps against the running
             application and prints one line per step. It uploads nothing real and removes what it
-            creates. If every check passes and the browser still looks wrong, the problem is the
-            browser rather than the pipeline.</p>
+            creates. If every check passes and the browser still looks wrong, confirm you rebuilt
+            the same folder you are running from: with a ZIP update that is the mistake that hides
+            longest, because both folders exist and only one of them is new.</p>
         </section>
 
       </div>

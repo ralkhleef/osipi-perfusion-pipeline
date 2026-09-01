@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import urllib.error
 import urllib.request
 
@@ -32,6 +31,41 @@ FRONTEND_MARKERS = {
         "fromRestore",            # a reload must not re-run the wizard
     ],
 }
+
+
+def _assets_differing_from_disk(base: str):
+    """Which frontend assets the server serves from a different build than this.
+
+    The page names its script and stylesheet with a version taken from the
+    file's own bytes, so the version in the served HTML is a fingerprint of
+    the copy the container was built from. Hashing the same files here and
+    comparing tells you whether the running app came from this folder.
+
+    Returns a list of (name, served_version, local_version) for anything that
+    disagrees, an empty list when everything matches, or None when the
+    comparison cannot be made.
+    """
+    import hashlib
+    import re as _re
+    from pathlib import Path as _Path
+
+    frontend = _Path(__file__).resolve().parent.parent / "frontend"
+    if not frontend.is_dir():
+        return None
+    status, html = get(f"{base}/")
+    if status != 200:
+        return None
+
+    differing = []
+    for name in ("app.js", "styles.css"):
+        match = _re.search(rf"/static/{_re.escape(name)}\?v=([a-f0-9]+)", html)
+        asset = frontend / name
+        if not match or not asset.is_file():
+            return None
+        local = hashlib.sha256(asset.read_bytes()).hexdigest()[:12]
+        if match.group(1) != local:
+            differing.append((name, match.group(1), local))
+    return differing
 
 
 def get(url: str, timeout: int = 20) -> tuple[int, str]:
@@ -75,10 +109,36 @@ def main(argv: list[str] | None = None) -> int:
         for line in stale:
             print(f"         {line}")
         print("\n  FIX:   docker compose up -d --build")
-        print("         then in Chrome: DevTools open, right click reload,")
-        print("         'Empty Cache and Hard Reload'\n")
+        print("         Run it from the folder you actually updated. This is")
+        print("         a server-side problem, so no amount of reloading the")
+        print("         browser will change it.\n")
         return 1
     print("  [ ok ] The served frontend is current")
+
+    # ── 2b. Is it built from THIS folder? ────────────────────────────────
+    #
+    # The markers above only prove the served copy is not ancient. Updating
+    # from a downloaded ZIP creates two folders that both look right, and
+    # rebuilding the wrong one leaves the old container running while every
+    # file on disk says it should not be. Comparing what the page asks for
+    # against what is on disk here names that mistake instead of leaving
+    # someone to rebuild repeatedly and wonder why nothing changes.
+    mismatched = _assets_differing_from_disk(base)
+    if mismatched is None:
+        print("  [ -- ] Could not compare the served assets with this folder")
+    elif mismatched:
+        print("  [FAIL] The running app was NOT built from this folder:")
+        for name, served, local in mismatched:
+            print(f"         {name}: serving {served}, this folder has {local}")
+        print()
+        print("  FIX:   You are probably in a different copy of the project.")
+        print("         Rebuild from here, or cd to the folder you updated:")
+        print("           docker compose up -d --build")
+        print("         After a ZIP update, the old folder is still on disk and")
+        print("         still runnable, which is what makes this easy to miss.\n")
+        return 1
+    else:
+        print("  [ ok ] The running app matches the files in this folder")
 
     # ── 3. What does the interface think is configured? ──────────────────
     code, text = get(f"{base}/api/scoring/active-config")
@@ -105,7 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("  This is NORMAL and is not what you are demonstrating.")
         print("  The card should be hidden. If your browser still shows")
-        print("  'Analysis is ready', the page is stale: hard reload it.")
+        print("  'Analysis is ready', reload the page; the checks above have")
+        print("  already confirmed the server is serving the current copy.")
         print()
         print("  QC, ROI statistics, the comparison against ground truth,")
         print("  previews and every export all work without a provider.")

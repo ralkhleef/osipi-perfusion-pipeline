@@ -449,3 +449,103 @@ def test_unblinded_model_keeps_team_columns():
     model = _build_report_model([_summary()], tag="t", blinded=False)
     assert "Team" in model["table_headers"]
     assert "Contact" in model["table_headers"]
+
+
+# ── ICC has two different reasons for being blank ─────────────────────────
+
+def test_the_icc_caveat_names_the_missing_decision_not_missing_data() -> None:
+    """A reader must not be sent looking for data when a choice is missing.
+
+    Before ICC existed there was one reason it was blank: no repeated scans.
+    There are now two, and they call for different actions. Reporting "requires
+    repeated datasets" when the real blocker is that nobody has picked a model
+    sends someone to collect data that would change nothing.
+    """
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["CBF"], challenges=["ASL"],
+        cov_reported=True, icc_status="not_configured",
+    )
+    text = " ".join(items)
+    assert "has not selected an ICC model" in text
+    assert "grouped_statistics.icc.model" in text
+    # Repeatability CoV genuinely does still need the data.
+    assert "repeated" in text
+
+
+def test_the_old_caveat_still_applies_once_a_model_is_chosen() -> None:
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["CBF"], challenges=["ASL"],
+        cov_reported=True, icc_status="no_groups",
+    )
+    text = " ".join(items)
+    assert "require repeated" in text
+    assert "has not selected an ICC model" not in text
+
+
+def test_the_caveat_is_unchanged_when_nothing_is_known() -> None:
+    """An omitted status must not silently change the wording."""
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["CBF"], challenges=["ASL"],
+        cov_reported=True,
+    )
+    assert any("require repeated" in item for item in items)
+
+
+# ── Overlapping regions are disclosed, not silently averaged ──────────────
+#
+# The DCE challenge ships nested ROIs: all 262 hippocampus voxels are also
+# grey matter. A table with one row per region invites the reader to treat the
+# regions as a partition, and the challenge's own answer key does exactly that
+# (its grey matter is 4698 voxels, the 4960-voxel mask minus the hippocampus).
+# The pipeline reports the mask as supplied, so the two differ for a reason
+# nothing on the page used to explain.
+
+def test_a_nested_region_is_called_out_by_name() -> None:
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["Ktrans"], challenges=["DCE"],
+        cov_reported=True,
+        mask_overlaps=[{
+            "regions": ["gray matter", "hippocampus"],
+            "shared_voxels": 262, "voxels": [4960, 262], "nested": True,
+        }],
+    )
+    note = next(i for i in items if "overlap" in i.lower())
+    assert "every hippocampus voxel" in note
+    assert "262" in note
+    assert "inside gray matter" in note
+    assert "not independent" in note
+
+
+def test_a_partial_overlap_reports_the_shared_count() -> None:
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["Ktrans"], challenges=["DCE"],
+        cov_reported=True,
+        mask_overlaps=[{
+            "regions": ["gray matter", "lesion"],
+            "shared_voxels": 40, "voxels": [4960, 120], "nested": False,
+        }],
+    )
+    note = next(i for i in items if "overlap" in i.lower())
+    assert "share 40 voxels" in note
+    assert "every" not in note
+
+
+def test_disjoint_regions_add_no_note() -> None:
+    """The caveat list is only useful if it stays short."""
+    from services.pdf_report_service import build_limitations
+
+    items = build_limitations(
+        reference_available=True, map_types=["Ktrans"], challenges=["DCE"],
+        cov_reported=True, mask_overlaps=[],
+    )
+    assert not any("overlap" in i.lower() for i in items)

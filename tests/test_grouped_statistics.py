@@ -187,16 +187,90 @@ def test_minimum_group_size_is_configurable() -> None:
 
 # ── Configuration ─────────────────────────────────────────────────────────
 
-def test_dce_descriptive_grouping_is_enabled_but_other_challenges_stay_off() -> None:
-    """DCE opts into provisional descriptions, never formal repeatability."""
+def test_every_shipped_challenge_opts_into_descriptive_grouping() -> None:
+    """Provisional descriptions for all three, never formal repeatability.
+
+    Grouping was DCE-only because DCE was the only challenge with a
+    `filename_identity_patterns` block, and that looked like a prerequisite.
+    It is not: `identity_parser` resolves participant, repeat and site from
+    directory structure and from explicit prefixed filename tokens for any
+    challenge, with the configured patterns as an extra layer on top. ASL and
+    DSC group correctly on identity they already carry, and a submission with
+    no identity at all still produces nothing rather than nonsense.
+    """
     from osipi_pipeline.config.rules import grouped_statistics_by_challenge
 
     settings = grouped_statistics_by_challenge()
     assert settings, "no challenges configured"
-    assert settings["dce"]["enabled"] is True
-    for challenge, spec in settings.items():
-        if challenge != "dce":
-            assert spec["enabled"] is False
+    for challenge, spec in sorted(settings.items()):
+        assert spec["enabled"] is True, f"{challenge} does not group across scans"
+        assert spec["source"] == "roi_median"
+        assert spec["minimum_group_size"] >= 2, (
+            f"{challenge} would claim variation from a single scan"
+        )
+
+
+def test_grouping_works_without_any_challenge_specific_filename_pattern() -> None:
+    """The claim the ASL and DSC rollout rests on, exercised rather than asserted.
+
+    ASL and DSC define no `filename_identity_patterns`. These are the two
+    layouts a participant actually submits, BIDS-style directories and prefixed
+    filename tokens, resolved through the real parser, then grouped.
+    """
+    from osipi_pipeline.ingestion.identity_parser import resolve_identity
+
+    paths = [
+        "sub-01/ses-1/cbf.nii.gz",
+        "sub-01/ses-2/cbf.nii.gz",
+        "results/maps/sub-02_ses-1_cbf.nii.gz",
+        "results/maps/sub-02_ses-2_cbf.nii.gz",
+    ]
+    medians = [42.0, 46.0, 51.0, 53.0]
+
+    rows = []
+    for path, median in zip(paths, medians):
+        identity, conflicts = resolve_identity(path, challenge="asl")
+        assert not conflicts
+        assert identity["participant"] is not None, path
+        assert identity["repeat"] is not None, path
+        rows.append({
+            "challenge": "asl", "dataset": None,
+            "participant": identity["participant"],
+            "repeat": identity["repeat"], "site": identity["site"],
+            "map_type": "cbf", "roi_id": "gm", "roi_label": "gray matter",
+            "units": "mL/100g/min", "roi_median": median,
+        })
+
+    results = compute_grouped_statistics(rows, axes=[AXIS_REPEAT])
+    available = [r for r in results if r.status == STATUS_AVAILABLE]
+    assert len(available) == 2, [r.status for r in results]
+    for result in available:
+        assert result.scan_count == 2
+        assert result.paired_difference is not None
+    # Participant 1 moved 42 → 46 between its two sessions.
+    first = next(r for r in available if r.held_fixed["participant"] == "1")
+    assert first.paired_difference == pytest.approx(4.0)
+
+
+def test_a_submission_carrying_no_identity_groups_into_nothing() -> None:
+    """Enabling grouping for ASL and DSC must not invent groups.
+
+    A team-named folder with no participant, repeat or site is the common
+    single-scan submission. It has to produce no rows at all, rather than one
+    group of everything pretending the scans are repeats of each other.
+    """
+    from osipi_pipeline.ingestion.identity_parser import resolve_identity
+
+    identity, _ = resolve_identity("team_gamma/results/cbf_map.nii.gz", challenge="asl")
+    assert identity == {"dataset": None, "participant": None,
+                        "repeat": None, "site": None}
+
+    rows = [{
+        "challenge": "asl", "participant": None, "repeat": None, "site": None,
+        "dataset": None, "map_type": "cbf", "roi_id": "gm",
+        "roi_label": "gray matter", "roi_median": 42.0,
+    }]
+    assert compute_grouped_statistics(rows, axes=list(AXES)) == []
 
 
 def test_defaults_are_the_documented_ones() -> None:

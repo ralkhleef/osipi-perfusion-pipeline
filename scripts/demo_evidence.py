@@ -20,7 +20,6 @@ Temporary submission files are removed when the script finishes.
 
 from __future__ import annotations
 
-import json
 import shutil
 import sys
 import tempfile

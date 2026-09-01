@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -17,7 +16,6 @@ if str(_SRC) not in sys.path:
 
 from osipi_pipeline.execution import docker_runner
 from osipi_pipeline.execution.docker_runner import (
-    DEFAULT_RUN_COMMAND,
     DEFAULT_TIMEOUT_SECONDS,
     DockerExecutionError,
     detect_dockerfile,
@@ -43,12 +41,19 @@ def _make_submission(tmp_path: Path, *, with_dockerfile: bool = True) -> Path:
     return sub
 
 
-def _fake_docker(build_rc: int = 0, run_rc: int = 0):
-    """Return a monkeypatched subprocess.run that simulates docker build/run."""
+def _fake_docker(build_rc: int = 0, run_rc: int = 0, rm_rc: int = 0):
+    """Return a monkeypatched subprocess.run that simulates docker build/run/rm.
+
+    ``docker image rm`` is a third verb, not an unrecognised run: a fake that
+    lumps it in with the run would let a cleanup call masquerade as executing
+    the submission twice.
+    """
     calls: list[list[str]] = []
 
     def fake_run(command, **_kwargs):
         calls.append(list(command))
+        if command[1] == "image":
+            return subprocess.CompletedProcess(command, rm_rc, stdout="", stderr="")
         if command[1] == "build":
             return subprocess.CompletedProcess(
                 command, build_rc,
@@ -240,7 +245,8 @@ def test_timeout_sets_timed_out_and_exit_124(tmp_path: Path, monkeypatch) -> Non
     assert result.timed_out is True
     assert result.passed is False
     assert result.exit_code == 124
-    assert call_count[0] == 2  # build + run
+    # build, run, then image cleanup: a timed-out run still leaves an image.
+    assert call_count[0] == 3
 
 
 # ===========================================================================
@@ -379,3 +385,235 @@ def test_fake_submission_run_py_is_valid_python() -> None:
     run_py = FAKE_SUBMISSION / "run.py"
     source = run_py.read_text(encoding="utf-8")
     compile(source, str(run_py), "exec")  # raises SyntaxError on bad code
+
+
+# ===========================================================================
+# Build timeout → build failure, not a hung request
+# ===========================================================================
+#
+# The run path has always been bounded by `timeout_seconds`. The build was not,
+# so a Dockerfile that never finishes (an unreachable package index, an
+# interactive prompt, a `RUN sleep`) blocked the caller forever with no log and
+# no result. These tests pin the bound and the shape of the reported failure.
+
+def test_build_timeout_is_reported_as_a_build_failure(tmp_path: Path, monkeypatch) -> None:
+    sub = _make_submission(tmp_path)
+    calls: list[str] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command[1])
+        if command[1] == "build":
+            raise subprocess.TimeoutExpired(
+                command, kwargs.get("timeout", 0),
+                output="Step 1/3 : FROM python", stderr="",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(
+        sub, challenge_type="dce", output_dir=tmp_path / "exec",
+        build_timeout_seconds=5,
+    )
+
+    assert result.build_failed is True
+    assert result.timed_out is True
+    assert result.passed is False
+    assert result.exit_code == docker_runner._BUILD_TIMEOUT_EXIT_CODE
+    # A timed-out build must not go on to run the image.
+    assert calls == ["build"]
+
+
+def test_build_timeout_keeps_partial_output_and_explains_itself(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Whatever the build printed before the kill is the only debugging signal."""
+    sub = _make_submission(tmp_path)
+
+    def fake_run(command, **kwargs):
+        raise subprocess.TimeoutExpired(
+            command, kwargs.get("timeout", 0),
+            output="Step 1/3 : FROM python:3.11",
+            stderr=b"resolving package index",
+        )
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(
+        sub, challenge_type="dce", output_dir=tmp_path / "exec",
+        build_timeout_seconds=7,
+    )
+
+    stdout_txt = Path(result.stdout_path).read_text(encoding="utf-8")
+    stderr_txt = Path(result.stderr_path).read_text(encoding="utf-8")
+    assert "Step 1/3 : FROM python:3.11" in stdout_txt
+    # Bytes captured before the kill are decoded rather than repr'd into the log.
+    assert "resolving package index" in stderr_txt
+    assert "timed out after 7 seconds" in stderr_txt
+
+
+def test_docker_build_is_always_given_a_timeout(tmp_path: Path, monkeypatch) -> None:
+    """An unbounded `docker build` is the bug these tests exist to prevent."""
+    sub = _make_submission(tmp_path)
+    seen: list[object] = []
+
+    def fake_run(command, **kwargs):
+        if command[1] == "build":
+            seen.append(kwargs.get("timeout"))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    assert seen == [docker_runner.DEFAULT_BUILD_TIMEOUT_SECONDS]
+    assert docker_runner.DEFAULT_BUILD_TIMEOUT_SECONDS > 0
+
+
+# ===========================================================================
+# Process-count cap and image cleanup
+# ===========================================================================
+#
+# `--memory` and `--cpus` bound how much a container may consume, not how many
+# processes it may create: a fork bomb stays inside both caps while exhausting
+# the host's process table. And every submission builds an image, so a
+# challenge round that never removes them ends as a full disk the reviewer
+# finds out about from the operating system rather than from this tool.
+
+def test_the_container_is_given_a_process_limit(tmp_path: Path, monkeypatch) -> None:
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker()
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    run_cmd = next(c for c in calls if c[1] == "run")
+    assert "--pids-limit" in run_cmd
+    assert run_cmd[run_cmd.index("--pids-limit") + 1] == docker_runner.DEFAULT_PIDS_LIMIT
+    assert int(docker_runner.DEFAULT_PIDS_LIMIT) > 0
+
+
+def test_the_process_limit_can_be_overridden(tmp_path: Path, monkeypatch) -> None:
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker()
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    execute_submission(
+        sub, challenge_type="dce", output_dir=tmp_path / "exec", pids_limit="64",
+    )
+
+    run_cmd = next(c for c in calls if c[1] == "run")
+    assert run_cmd[run_cmd.index("--pids-limit") + 1] == "64"
+
+
+def test_the_isolation_flags_are_all_still_present(tmp_path: Path, monkeypatch) -> None:
+    """One test that fails if any single guarantee is dropped."""
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker()
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    run_cmd = next(c for c in calls if c[1] == "run")
+    assert run_cmd[run_cmd.index("--network") + 1] == "none"
+    assert run_cmd[run_cmd.index("--security-opt") + 1] == "no-new-privileges"
+    for flag in ("--memory", "--cpus", "--pids-limit"):
+        assert flag in run_cmd, f"{flag} is missing from docker run"
+    # The submission must stay read-only however the mounts are ordered.
+    assert any(arg.endswith(":/submission:ro") for arg in run_cmd)
+
+
+def test_the_image_is_removed_after_a_successful_run(tmp_path: Path, monkeypatch) -> None:
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker()
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    verbs = [c[1] for c in calls]
+    assert verbs == ["build", "run", "image"], verbs
+    rm_cmd = calls[-1]
+    assert rm_cmd[:3] == ["docker", "image", "rm"]
+    assert result.image_name in rm_cmd
+    assert result.passed is True
+
+
+def test_the_image_is_removed_even_when_the_run_fails(tmp_path: Path, monkeypatch) -> None:
+    """A failed submission leaves an image behind exactly like a passing one."""
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker(run_rc=7)
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    assert result.passed is False
+    assert [c[1] for c in calls] == ["build", "run", "image"]
+
+
+def test_cleanup_can_be_switched_off(tmp_path: Path, monkeypatch) -> None:
+    """Keeping the image is a valid choice for someone debugging a submission."""
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker()
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    execute_submission(
+        sub, challenge_type="dce", output_dir=tmp_path / "exec", remove_image=False,
+    )
+
+    assert [c[1] for c in calls] == ["build", "run"]
+
+
+def test_a_failed_cleanup_does_not_change_the_reported_outcome(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Housekeeping must never rewrite what the reviewer is told about a run."""
+    sub = _make_submission(tmp_path)
+    exec_dir = tmp_path / "exec"
+
+    def fake_run(command, **_kwargs):
+        if command[1] == "image":
+            raise OSError("docker daemon went away")
+        if command[1] == "build":
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        outputs = exec_dir / "dce_submission" / "outputs"
+        outputs.mkdir(parents=True, exist_ok=True)
+        (outputs / "ktrans.nii.gz").write_bytes(b"map")
+        return subprocess.CompletedProcess(command, 0, stdout="ran", stderr="")
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(sub, challenge_type="dce", output_dir=exec_dir)
+
+    assert result.passed is True
+    assert result.exit_code == 0
+    assert "ktrans.nii.gz" in result.output_files
+
+
+def test_a_build_failure_leaves_no_image_to_remove(tmp_path: Path, monkeypatch) -> None:
+    """Nothing was tagged, so cleanup would just be a pointless docker call."""
+    sub = _make_submission(tmp_path)
+    fake_run, calls = _fake_docker(build_rc=1)
+
+    monkeypatch.setattr(docker_runner.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(docker_runner.subprocess, "run", fake_run)
+
+    result = execute_submission(sub, challenge_type="dce", output_dir=tmp_path / "exec")
+
+    assert result.build_failed is True
+    assert [c[1] for c in calls] == ["build"]

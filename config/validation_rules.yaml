@@ -101,6 +101,7 @@ map_types:
     display: CBV
     label: Cerebral blood volume
     units: null
+    dimensions: 3
     patterns:
     - cbv
     - cerebral_blood_volume
@@ -108,6 +109,7 @@ map_types:
     display: MTT
     label: Mean transit time
     units: null
+    dimensions: 3
     patterns:
     - mtt
     - mean_transit_time
@@ -123,6 +125,9 @@ artifact_types:
     - modelled_st
     - modeled_st
     - fitted_signal
+    # The DCE challenge lead's synthetic submission names the fitted
+    # concentration curve Ct.nii.gz. Matching is case insensitive.
+    - ct
   measured_st:
     role: measured_signal
     label: Measured signal-time curve
@@ -157,6 +162,11 @@ challenges:
     - vp
     - ve
     - kep
+    # "methods" stays required deliberately. The challenge lead's synthetic
+    # submission does not contain one, so it is reported as missing, and that
+    # is the pipeline doing its job rather than failing. Whether the real
+    # challenge should demand a methods document is her decision, not an
+    # assumption to bake in here by quietly relaxing the rule.
     required_artifacts:
     - modelled_st
     - methods
@@ -183,6 +193,23 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
+      # ICC is implemented for all six Shrout & Fleiss models; which one
+      # applies is a scientific decision, so no model is applied by default.
+      # `none` leaves ICC reported as "not configured" exactly as before.
+      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
+      # once the challenge leads have chosen:
+      #   model 1  each participant measured by a different set of sessions
+      #   model 2  same sessions for everyone, absolute agreement, generalises
+      #   model 3  same sessions for everyone, consistency, fixed sessions
+      #   _1 / _k  reliability of one measurement, or of the mean of k
+      # `axes` picks which factor plays the session role; participants are the
+      # targets, so inter_participant is not a valid ICC axis.
+      # `confidence_level: null` reports the estimate with no interval.
+      icc:
+        model: none
+        axes:
+        - inter_repeat
+        confidence_level: 0.95
     filename_identity_patterns:
     - ^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)_Site(?P<site>\d+)$
     - ^(?P<dataset>Synthetic|Clinical)_P(?P<participant>\d+)_Visit(?P<repeat>\d+)$
@@ -201,8 +228,11 @@ challenges:
     - vp
     - dce
     - dynamic contrast enhanced
+    # Structural BIDS checks: layout and naming only, not the full BIDS
+    # specification. Reports findings as warnings; set severity to error to
+    # block, or require_layout to insist that every submission uses BIDS.
     bids_validation:
-      enabled: false
+      enabled: true
       severity: warning
       require_layout: false
   asl:
@@ -226,6 +256,53 @@ challenges:
         - standard_deviation
         - range
         - coefficient_of_variation
+      # The 4-D fitted-model comparison: participants submit what they fitted
+      # to get CBF and ATT, and it is compared voxel by voxel against the
+      # ground-truth 4-D ASL signal. The analysis is challenge-generic; this
+      # block is all that turns it on.
+      #
+      # It stays inert until the files exist, so enabling it early costs
+      # nothing: a submission with no `modelled_st` reports
+      # `modelled_signal_not_available` rather than failing. To make the 4-D
+      # model mandatory, add `modelled_st` to `required_artifacts` below.
+      signal_rss:
+        enabled: true
+        modelled_artifact: modelled_st
+        measured_artifact: measured_st
+    # Grouping needs identity, not a challenge-specific filename convention:
+    # `identity_parser` resolves participant/repeat/site from directories
+    # (sub-01/ses-2/, Participant003/Site1/Repeat2/) and from explicit prefixed
+    # filename tokens (sub-004_ses-2_site-3_) for any challenge. Scans whose
+    # identity cannot be resolved are skipped rather than merged, and a group
+    # with only one scan is reported as `too_few_scans`, so enabling this on a
+    # submission that carries no identity produces nothing rather than nonsense.
+    # `datasets` below is still unset for ASL: the expected cohort grid is a
+    # separate organiser decision and completeness, not grouping, depends on it.
+    grouped_statistics:
+      enabled: true
+      axes:
+      - inter_repeat
+      - inter_site
+      - inter_participant
+      source: roi_median
+      minimum_group_size: 2
+      # ICC is implemented for all six Shrout & Fleiss models; which one
+      # applies is a scientific decision, so no model is applied by default.
+      # `none` leaves ICC reported as "not configured" exactly as before.
+      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
+      # once the challenge leads have chosen:
+      #   model 1  each participant measured by a different set of sessions
+      #   model 2  same sessions for everyone, absolute agreement, generalises
+      #   model 3  same sessions for everyone, consistency, fixed sessions
+      #   _1 / _k  reliability of one measurement, or of the mean of k
+      # `axes` picks which factor plays the session role; participants are the
+      # targets, so inter_participant is not a valid ICC axis.
+      # `confidence_level: null` reports the estimate with no interval.
+      icc:
+        model: none
+        axes:
+        - inter_repeat
+        confidence_level: 0.95
     keywords:
     - cbf
     - att
@@ -234,6 +311,16 @@ challenges:
     optional_maps: []
     required_artifacts: []
     code_execution_required: false
+    # Advisory, and only for submissions that are already BIDS-shaped:
+    # `require_layout: false` means a folder with no dataset_description.json
+    # and no sub-<label> directory is left alone rather than reported as a
+    # broken BIDS dataset, because it is not claiming to be one. Raise
+    # `severity` to `error`, or set `require_layout: true`, when the challenge
+    # decides to require the layout of every participant.
+    bids_validation:
+      enabled: true
+      severity: warning
+      require_layout: false
   dsc:
     label: DSC
     description: Dynamic susceptibility contrast MRI
@@ -258,9 +345,38 @@ challenges:
         - standard_deviation
         - range
         - coefficient_of_variation
+    grouped_statistics:
+      enabled: true
+      axes:
+      - inter_repeat
+      - inter_site
+      - inter_participant
+      source: roi_median
+      minimum_group_size: 2
+      # ICC is implemented for all six Shrout & Fleiss models; which one
+      # applies is a scientific decision, so no model is applied by default.
+      # `none` leaves ICC reported as "not configured" exactly as before.
+      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
+      # once the challenge leads have chosen:
+      #   model 1  each participant measured by a different set of sessions
+      #   model 2  same sessions for everyone, absolute agreement, generalises
+      #   model 3  same sessions for everyone, consistency, fixed sessions
+      #   _1 / _k  reliability of one measurement, or of the mean of k
+      # `axes` picks which factor plays the session role; participants are the
+      # targets, so inter_participant is not a valid ICC axis.
+      # `confidence_level: null` reports the estimate with no interval.
+      icc:
+        model: none
+        axes:
+        - inter_repeat
+        confidence_level: 0.95
     keywords:
     - cbv
     - cbf
     - mtt
     - dsc
     - dynamic susceptibility contrast
+    bids_validation:
+      enabled: true
+      severity: warning
+      require_layout: false

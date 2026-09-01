@@ -1339,7 +1339,6 @@ def test_custom_scoring_rejects_outputs_missing_manifest_metrics(client: TestCli
 def test_score_single_disabled_mode(client: TestClient) -> None:
     """When mode='none', score endpoint returns not_configured rather than fake metrics."""
     # Upload a submission so it exists
-    zip_bytes = _make_scoring_package_zip("ignored_pkg")
     data, fname = _make_result_only_zip()
     sid = _upload_and_get_id(client, data, fname)
 
@@ -1710,7 +1709,13 @@ def test_report_separates_cbf_att_and_flags_repeatability_unavailable(
     html = client.get(f"/api/report?submission_id={sid}").text
     assert "CBF" in html and "ATT" in html
     assert "Error CoV" in html
-    assert "Repeatability CoV and ICC are unavailable" in html
+    # The caveat now separates the two reasons ICC can be blank: no model
+    # chosen, versus a model chosen with no repeated scans to apply it to.
+    # Assert the substance rather than one sentence, so improving the wording
+    # does not fail the test but dropping the caveat does.
+    assert "Repeatability CoV is unavailable" in html
+    assert "requires repeated" in html
+    assert "has not selected an ICC model" in html
 
 
 def test_reference_scoring_constant_offset_expected_bias_rmse(client: TestClient, tmp_path: Path) -> None:
@@ -2481,7 +2486,13 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     assert "Valid voxels" in html
     assert "<th>ROI</th>" in html
     # unavailable-metric note, CBF and ATT both present
-    assert "Repeatability CoV and ICC are unavailable" in html
+    # The caveat now separates the two reasons ICC can be blank: no model
+    # chosen, versus a model chosen with no repeated scans to apply it to.
+    # Assert the substance rather than one sentence, so improving the wording
+    # does not fail the test but dropping the caveat does.
+    assert "Repeatability CoV is unavailable" in html
+    assert "requires repeated" in html
+    assert "has not selected an ICC model" in html
     assert "CBF" in html and "ATT" in html
     # offline + no internal path leakage / decorative map-mean chart removed
     assert "<script src=\"http" not in html and "/sessions/" not in html

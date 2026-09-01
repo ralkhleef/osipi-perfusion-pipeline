@@ -32,19 +32,22 @@ This module NEVER returns or fabricates metric values.
 
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import gzip
+import hashlib
 import math
 import os
 import re
+import threading
 import shutil
 import subprocess
 import struct
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional, Sequence
 
 from services.path_config import (
     CODECOLLECTION_DIR,
@@ -66,6 +69,9 @@ from osipi_pipeline.config.rules import (
     analysis_by_challenge,
     artifact_type_specs,
     grouped_statistics_by_challenge,
+    icc_settings_by_challenge,
+    performance_settings,
+    thresholds_by_challenge,
     map_type_specs,
     mask_label_rules,
     mask_name_patterns,
@@ -462,31 +468,118 @@ def _stats_from_values(values: list[float], total_voxel_count: int) -> tuple[dic
     return stats, finite_count, nan_count, inf_count, negative_count
 
 
+#: Above this voxel count a map is summarised in slabs instead of whole. A
+#: real DCE concentration curve is 250 million voxels; loading it, masking it
+#: and taking a median over the survivors peaked past 3 GB and the kernel
+#: killed the server. Parameter maps are far below this and take the exact
+#: path unchanged.
+_QC_STREAM_VOXELS = 32 * 1024 * 1024
+
+
+def _streamed_nifti_summary(img, total_voxel_count: int) -> dict:
+    """Voxel statistics for an image too large to hold, read a slab at a time.
+
+    Mean and standard deviation are accumulated with Chan's parallel form,
+    which combines per-slab moments exactly rather than summing squares, so
+    the answer matches the whole-array path to floating-point noise.
+
+    The median is the one statistic that cannot be accumulated: it needs every
+    finite value at once, which is the allocation being avoided. It is
+    reported as unavailable rather than approximated, because a silently
+    sampled median in a column headed "median" is worse than an empty cell.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    shape = tuple(int(v) for v in img.shape)
+    plane = 1
+    for dim in shape[:-1]:
+        plane *= int(dim)
+    step = max(1, int(_QC_STREAM_VOXELS // max(plane, 1)))
+
+    count = 0
+    mean = 0.0
+    m2 = 0.0
+    nan_count = inf_count = negative_count = 0
+    minimum = math.inf
+    maximum = -math.inf
+
+    for start in range(0, shape[-1], step):
+        chunk = np.asarray(img.dataobj[..., start:start + step], dtype=np.float32).ravel()
+        nan_count += int(np.isnan(chunk).sum())
+        inf_count += int(np.isinf(chunk).sum())
+        finite = chunk[np.isfinite(chunk)]
+        if finite.size:
+            negative_count += int((finite < 0).sum())
+            minimum = min(minimum, float(finite.min()))
+            maximum = max(maximum, float(finite.max()))
+            batch_n = int(finite.size)
+            batch_mean = float(finite.mean(dtype=np.float64))
+            batch_m2 = float(((finite.astype(np.float64) - batch_mean) ** 2).sum())
+            delta = batch_mean - mean
+            total = count + batch_n
+            mean += delta * batch_n / total
+            m2 += batch_m2 + delta * delta * count * batch_n / total
+            count = total
+        del chunk, finite
+
+    if not count:
+        return {"total_voxel_count": total_voxel_count, "finite_count": 0,
+                "nan_count": nan_count, "inf_count": inf_count,
+                "negative_count": 0, "mean": None, "median": None, "std": None,
+                "min": None, "max": None, "cv": None,
+                "median_status": "unavailable_streamed"}
+    std = math.sqrt(m2 / count)
+    return {
+        "total_voxel_count": total_voxel_count, "finite_count": count,
+        "nan_count": nan_count, "inf_count": inf_count,
+        "negative_count": negative_count,
+        "mean": mean, "median": None, "std": std,
+        "min": minimum, "max": maximum,
+        "cv": (std / abs(mean)) if mean else None,
+        "median_status": "unavailable_streamed",
+    }
+
+
 def _analyse_nifti_with_nibabel(path: Path) -> dict:
     import numpy as np  # type: ignore
     import nibabel as nib  # type: ignore
 
     img = nib.load(str(path))
-    data = np.asarray(img.dataobj, dtype=np.float32)
-    flat = data.ravel()
-    total_voxel_count = int(flat.size)
+    total_voxel_count = 1
+    for dim in img.shape:
+        total_voxel_count *= int(dim)
 
-    finite_mask = np.isfinite(flat)
-    finite_values = flat[finite_mask]
-    finite_count = int(finite_values.size)
-    nan_count = int(np.isnan(flat).sum())
-    inf_count = int(np.isinf(flat).sum())
-    negative_count = int((finite_values < 0).sum()) if finite_count else 0
-
-    if finite_count:
-        mean = float(np.mean(finite_values, dtype=np.float64))
-        median = float(np.median(finite_values))
-        std = float(np.std(finite_values, dtype=np.float64))
-        min_val = float(np.min(finite_values))
-        max_val = float(np.max(finite_values))
-        cv = std / abs(mean) if mean else None
+    median_status = None
+    if total_voxel_count > _QC_STREAM_VOXELS:
+        summary = _streamed_nifti_summary(img, total_voxel_count)
+        finite_count = summary["finite_count"]
+        nan_count = summary["nan_count"]
+        inf_count = summary["inf_count"]
+        negative_count = summary["negative_count"]
+        mean, median, std = summary["mean"], summary["median"], summary["std"]
+        min_val, max_val, cv = summary["min"], summary["max"], summary["cv"]
+        median_status = summary["median_status"]
     else:
-        mean = median = std = min_val = max_val = cv = None
+        data = np.asarray(img.dataobj, dtype=np.float32)
+        flat = data.ravel()
+        total_voxel_count = int(flat.size)
+
+        finite_mask = np.isfinite(flat)
+        finite_values = flat[finite_mask]
+        finite_count = int(finite_values.size)
+        nan_count = int(np.isnan(flat).sum())
+        inf_count = int(np.isinf(flat).sum())
+        negative_count = int((finite_values < 0).sum()) if finite_count else 0
+
+        if finite_count:
+            mean = float(np.mean(finite_values, dtype=np.float64))
+            median = float(np.median(finite_values))
+            std = float(np.std(finite_values, dtype=np.float64))
+            min_val = float(np.min(finite_values))
+            max_val = float(np.max(finite_values))
+            cv = std / abs(mean) if mean else None
+        else:
+            mean = median = std = min_val = max_val = cv = None
 
     try:
         orientation = "".join(ax or "?" for ax in nib.aff2axcodes(img.affine))
@@ -524,6 +617,10 @@ def _analyse_nifti_with_nibabel(path: Path) -> dict:
         "negative_voxel_percent": _pct(negative_count, finite_count),
         "coefficient_of_variation": _json_float(cv),
     }
+    if median_status:
+        # Says why the cell is empty. A blank median next to a populated mean
+        # otherwise reads as a defect rather than a deliberate omission.
+        stats["median_status"] = median_status
     return {"metadata": metadata, "stats": stats}
 
 
@@ -676,6 +773,34 @@ def _nifti_file_list(root: Path) -> list[Path]:
         f for f in manifest_files(root, refresh_if_stale=True, submission_id=root.name)
         if _is_nifti_path(f)
     )
+
+
+def _nifti_geometry(path: Path) -> dict:
+    """Header, affine and an unread array proxy, without loading the data.
+
+    The counterpart to :func:`_load_nifti_values` for images too large to hold.
+    ``dataobj`` is nibabel's lazy proxy: slicing it reads only that slice, so a
+    caller can stream a 4-D volume it could never materialise. Keys match
+    ``_load_nifti_values`` where they overlap so ``_grids_compatible`` works on
+    either.
+    """
+    import nibabel as nib  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    img = nib.load(str(path))
+    header = img.header
+    affine = [[float(v) for v in row]
+              for row in np.asarray(img.affine, dtype=np.float64).tolist()]
+    try:
+        voxel_size = [float(z) for z in header.get_zooms()[:3]]
+    except Exception:
+        voxel_size = None
+    return {
+        "shape": [int(v) for v in img.shape],
+        "affine": affine,
+        "voxel_size": voxel_size,
+        "dataobj": img.dataobj,
+    }
 
 
 def _load_nifti_values(path: Path) -> dict:
@@ -1063,6 +1188,56 @@ def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
     return by_type
 
 
+def _mask_overlaps(masks: list[dict]) -> list[dict]:
+    """Pairs of ROI masks that share voxels, with how many.
+
+    The DCE challenge ships nested regions: every one of the 262 hippocampus
+    voxels is also grey matter. That is a perfectly reasonable way to define
+    ROIs, and it means the per-region statistics are not independent, which a
+    reader has no way to see from a table of one row per region. The
+    challenge's own answer key uses disjoint regions, so its grey-matter bias
+    is computed over 4698 voxels while the pipeline reports the 4960-voxel
+    mask as supplied, and the two differ for a reason nothing on the page
+    explains.
+
+    Nothing here changes a number. Making the regions exclusive would be a
+    scientific decision about what "grey matter" means in this challenge, and
+    that belongs to the organisers. This only says what overlaps.
+    """
+    try:
+        import numpy as np  # noqa: PLC0415
+    except Exception:  # pragma: no cover - numpy is a hard dependency in practice
+        return []
+
+    loaded: list[tuple[str, Any]] = []
+    for mask in masks:
+        try:
+            data = _load_nifti_values(Path(mask["path"]))
+            selector = np.asarray(_mask_selector(data["values"]), dtype=bool)
+        except Exception:
+            continue
+        loaded.append((str(mask.get("label") or mask.get("name")), selector))
+
+    overlaps: list[dict] = []
+    for i, (label_a, a) in enumerate(loaded):
+        for label_b, b in loaded[i + 1:]:
+            if a.shape != b.shape:
+                continue
+            shared = int(np.logical_and(a, b).sum())
+            if not shared:
+                continue
+            count_a, count_b = int(a.sum()), int(b.sum())
+            overlaps.append({
+                "regions": [label_a, label_b],
+                "shared_voxels": shared,
+                "voxels": [count_a, count_b],
+                # "nested" when one region sits entirely inside the other,
+                # which is the case a reader is most likely to misread.
+                "nested": shared in (count_a, count_b),
+            })
+    return overlaps
+
+
 def _mask_label_for_name(name: str) -> str:
     low = name.lower()
     stem = _strip_nifti_suffix(name).replace("_", " ").replace("-", " ").strip()
@@ -1109,14 +1284,12 @@ def _attach_roi_descriptives(
     """
     from services.roi_descriptive_service import (
         eligible_artifacts,
-        roi_definitions_from_masks,
     )
 
     try:
         artifacts = submission_artifacts(submission_id)
         eligible = eligible_artifacts(artifacts, challenge=challenge_type)
-        reference_root = reference_scoring.get("reference_root")
-        masks = _reference_masks(Path(reference_root)) if reference_root else []
+        masks = masks_for_submission(submission_id, challenge_type)
 
         if not masks:
             reference_scoring["roi_descriptive_status"] = "no_roi_configured"
@@ -1163,7 +1336,7 @@ def _unique_signal_match(model_path: Path, candidates: list[Path]) -> Optional[P
     return ranked[0][1]
 
 
-def _score_dce_signal_rss(
+def _score_signal_rss(
     reference_scoring: dict,
     submission_id: str,
     challenge_type: str,
@@ -1177,8 +1350,8 @@ def _score_dce_signal_rss(
     """
     from osipi_pipeline.scoring.rss_statistics import (
         METHODOLOGY as RSS_METHODOLOGY,
+        streaming_voxelwise_rss,
         summarize_rss,
-        voxelwise_rss,
     )
 
     analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
@@ -1193,6 +1366,10 @@ def _score_dce_signal_rss(
         "records": [],
         "warnings": [],
     }
+    reference_scoring["signal_rss"] = result
+    # The analysis has always been challenge-generic; it was named for DCE
+    # because DCE enabled it first. The old key is kept so an existing saved
+    # result or an external reader does not break on the rename.
     reference_scoring["dce_signal_rss"] = result
     if not rss_enabled:
         return
@@ -1219,7 +1396,7 @@ def _score_dce_signal_rss(
 
     root = EXTRACTED_DIR / submission_id
     reference_root = reference_scoring.get("reference_root")
-    masks = _reference_masks(Path(reference_root)) if reference_root else []
+    masks = masks_for_submission(submission_id, challenge_type)
     measured_spec = artifact_type_specs().get(measured_artifact) or {}
     measured_patterns = tuple(str(value).lower() for value in measured_spec.get("patterns") or ())
     reference_measured = [
@@ -1260,23 +1437,28 @@ def _score_dce_signal_rss(
         record["modelled_file"] = str(model_artifact.path)
         record["measured_file"] = str(measured_artifact.path)
         try:
-            model_data = _load_nifti_values(model_path)
-            measured_data = _load_nifti_values(measured_path)
-            if len(model_data["shape"]) != 4 or len(measured_data["shape"]) != 4:
+            # Headers and array proxies only. A real DCE concentration curve is
+            # 1 GB as float32 and 2 GB as float64, so materialising the measured
+            # and modelled volumes here, as this used to, asked for about 6 GB
+            # for one scan pair and the kernel killed the process. RSS sums over
+            # time, so it streams.
+            model_meta = _nifti_geometry(model_path)
+            measured_meta = _nifti_geometry(measured_path)
+            if len(model_meta["shape"]) != 4 or len(measured_meta["shape"]) != 4:
                 raise ValueError("RSS requires measured and modelled 4-D signals")
-            if model_data["shape"] != measured_data["shape"]:
+            if model_meta["shape"] != measured_meta["shape"]:
                 raise ValueError(
-                    f"Measured shape {measured_data['shape']} does not match "
-                    f"modelled shape {model_data['shape']}"
+                    f"Measured shape {measured_meta['shape']} does not match "
+                    f"modelled shape {model_meta['shape']}"
                 )
-            grid_ok = _grids_compatible(measured_data, model_data)
+            grid_ok = _grids_compatible(measured_meta, model_meta)
             if grid_ok is False:
                 raise ValueError("Measured and modelled signals use different spatial grids")
-            rss = voxelwise_rss(
-                measured_data["values"], model_data["values"], measured_data["shape"]
+            rss = streaming_voxelwise_rss(
+                measured_meta["dataobj"], model_meta["dataobj"], measured_meta["shape"]
             )
             record["whole_image"] = summarize_rss(rss).to_dict()
-            spatial_shape = tuple(measured_data["shape"][:3])
+            spatial_shape = tuple(measured_meta["shape"][:3])
             for mask in masks:
                 roi = {"mask_name": mask["name"], "roi_label": mask["label"]}
                 try:
@@ -1291,11 +1473,11 @@ def _score_dce_signal_rss(
                     roi.update({"status": "unavailable", "error": str(exc)})
                 record["rois"].append(roi)
             if artifact_dir is not None:
-                rss_dir = artifact_dir / "dce_signal_rss"
+                rss_dir = artifact_dir / "signal_rss"
                 label = "_".join(str(value or "unknown") for value in identity)
                 rss_path = rss_dir / f"{label}_rss.nii"
                 _write_float32_nifti(
-                    rss_path, spatial_shape, rss.reshape(-1), affine=measured_data.get("affine")
+                    rss_path, spatial_shape, rss.reshape(-1), affine=measured_meta.get("affine")
                 )
                 record["rss_map"] = str(rss_path.relative_to(artifact_dir))
             record["status"] = "available"
@@ -1308,6 +1490,58 @@ def _score_dce_signal_rss(
     result["available"] = available > 0
     result["status"] = "available" if available == len(result["records"]) else (
         "partial" if available else "unavailable"
+    )
+
+
+def _attach_threshold_flags(reference_scoring: dict, challenge_type: str) -> None:
+    """Mark ROI rows a reviewer should look at, when a challenge asks for it.
+
+    Advisory only. Nothing here fails, excludes or ranks a submission; it
+    annotates rows so a reviewer scanning a long table knows where to start.
+    No challenge ships a threshold, so this normally records that none is
+    configured and changes nothing.
+    """
+    from osipi_pipeline.scoring.thresholds import (
+        METHODOLOGY as THRESHOLD_METHODOLOGY,
+        assess_row,
+        summarize,
+    )
+
+    thresholds = thresholds_by_challenge().get(challenge_type, {}) or {}
+    reference_scoring["threshold_methodology"] = dict(THRESHOLD_METHODOLOGY)
+    reference_scoring["thresholds"] = dict(thresholds)
+
+    rows = reference_scoring.get("roi_descriptive_statistics") or []
+    if thresholds:
+        for row in rows:
+            if isinstance(row, dict):
+                row["threshold_assessments"] = assess_row(row, thresholds)
+    reference_scoring["threshold_summary"] = summarize(
+        [row for row in rows if isinstance(row, dict)], thresholds,
+    )
+
+
+def _icc_definition(challenge_type: str) -> str:
+    """What the ICC column means for this challenge, in the reader's terms.
+
+    Two very different situations both produce a blank ICC: no model has been
+    chosen, or a model is chosen but this submission has no repeated scans to
+    apply it to. They are not the same and a reader has to be able to tell.
+    """
+    from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS, MODEL_NONE
+
+    model = str(
+        (icc_settings_by_challenge().get(challenge_type, {}) or {}).get("model")
+        or MODEL_NONE
+    )
+    if model == MODEL_NONE:
+        return (
+            "Not computed: no ICC model is configured for this challenge. "
+            "Requires repeated datasets and a challenge-approved ICC model."
+        )
+    return MODEL_DESCRIPTIONS.get(model, model) + (
+        " Computed from scan-level ROI medians across a participant x session "
+        "table; blank where a submission has too few repeated scans."
     )
 
 
@@ -1330,6 +1564,51 @@ def _attach_grouped_roi_statistics(reference_scoring: dict, challenge_type: str)
     )
     reference_scoring["grouped_roi_statistics"] = [item.to_dict() for item in results]
     reference_scoring["grouped_roi_status"] = "available" if results else "no_groups"
+
+
+def _attach_icc(reference_scoring: dict, challenge_type: str, roi_rows: list) -> None:
+    """Attach ICC when the challenge has chosen a model, and say so when not.
+
+    ICC needs the same per-scan ROI rows the grouping uses, arranged as a
+    participants x sessions table. The model is configuration because six
+    defensible models exist; with none chosen this records why the field is
+    empty rather than leaving a reader to guess whether it was zero, missing,
+    or not applicable.
+    """
+    from osipi_pipeline.scoring.icc import (
+        METHODOLOGY as ICC_METHODOLOGY,
+        MODEL_NONE,
+        REASON_NOT_CONFIGURED,
+        compute_icc_for_rows,
+    )
+
+    settings = icc_settings_by_challenge().get(challenge_type, {})
+    model = str(settings.get("model") or MODEL_NONE)
+    reference_scoring["icc_methodology"] = dict(ICC_METHODOLOGY)
+    reference_scoring["icc_model"] = model
+    reference_scoring["icc_statistics"] = []
+
+    if model == MODEL_NONE:
+        reference_scoring["icc_status"] = "not_configured"
+        reference_scoring["icc_unavailable_reason"] = REASON_NOT_CONFIGURED
+        return
+
+    results = compute_icc_for_rows(
+        roi_rows,
+        model=model,
+        axes=settings.get("axes") or ("inter_repeat",),
+        source=str(
+            (grouped_statistics_by_challenge().get(challenge_type, {}) or {})
+            .get("source") or "roi_median"
+        ),
+        confidence_level=settings.get("confidence_level"),
+    )
+    reference_scoring["icc_statistics"] = [item.to_dict() for item in results]
+    usable = [item for item in results if item.value is not None]
+    reference_scoring["icc_status"] = "available" if usable else "no_groups"
+    reference_scoring["icc_unavailable_reason"] = (
+        None if usable else "No participant x session table had enough scans."
+    )
 
 
 def _reference_scoring_result_keys_probe() -> dict:
@@ -1360,9 +1639,9 @@ def attach_roi_descriptive_statistics(
 ) -> dict:
     """Populate ``roi_descriptive_statistics`` on a reference-scoring result.
 
-    Reuses the masks the reference scoring already discovered, so ROI
-    definitions come from one place. Computed once here; the API, JSON, CSV
-    and report model all read these records rather than recomputing.
+    ROI definitions come from :func:`masks_for_submission`, the single mask
+    discovery used by every scoring path. Computed once here; the API, JSON,
+    CSV and report model all read these records rather than recomputing.
 
     Failure is non-fatal: descriptive statistics are additive, and existing
     reference metrics must not be lost because an ROI could not be read.
@@ -1372,8 +1651,8 @@ def attach_roi_descriptive_statistics(
         roi_definitions_from_masks,
     )
 
-    reference_root = reference_result.get("reference_root")
-    masks = _reference_masks(Path(reference_root)) if reference_root else []
+    # root is EXTRACTED_DIR / submission_id, so the id is its final component.
+    masks = masks_for_submission(Path(root).name, challenge_type)
     rois = roi_definitions_from_masks(masks)
     # Let the caller record failures and availability accurately.
     results = compute_roi_descriptive_statistics(
@@ -1385,8 +1664,47 @@ def attach_roi_descriptive_statistics(
     return reference_result
 
 
+def masks_for_submission(submission_id: str, challenge_type: str) -> list[dict]:
+    """Every ROI mask visible to this submission, from every reference root.
+
+    The one place mask discovery happens. Four call sites used to re-derive
+    masks from ``reference_root`` alone, which silently limited them to the
+    root that happened to hold the ground-truth maps.
+    """
+    return _reference_masks_across_roots(
+        _reference_roots(submission_id, challenge_type)
+    )
+
+
+def _reference_masks_across_roots(roots: Sequence[Path]) -> list[dict]:
+    """ROI masks from *every* reference root, once per physical file.
+
+    Masks and ground-truth maps are independent assets and organisers do not
+    reliably keep them together: a shared ``masks/`` folder alongside a
+    per-challenge ``asl/maps/`` folder is a natural layout, and so is a mask
+    dropped in the reference root while the maps sit one level down. The map
+    root has to be a single choice, mixing two ground truths would be wrong,
+    but a mask found anywhere the pipeline is already allowed to look is a
+    mask the reviewer meant to provide.
+
+    Searching only the map root is what made a supplied mask silently do
+    nothing: no ROI rows, and whole-image bias and MAE reported with no
+    indication that the region breakdown was missing rather than empty.
+    """
+    seen: set = set()
+    masks: list[dict] = []
+    for root in roots:
+        for mask in _reference_masks(root):
+            key = canonical_path_key(Path(mask["path"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            masks.append(mask)
+    return masks
+
+
 def _reference_masks(root: Path) -> list[dict]:
-    """Find ROI masks under a reference root, once per physical file."""
+    """Find ROI masks under one reference root, once per physical file."""
     mask_dirs = _dedupe_paths([root / "masks", root / "Masks"])
     paths: list[Path] = []
     for mask_dir in mask_dirs:
@@ -1405,11 +1723,66 @@ def _reference_masks(root: Path) -> list[dict]:
     return masks
 
 
-def _choose_reference_match(submitted_path: Path, candidates: list[Path]) -> Optional[Path]:
+def _scan_identity(path: Path, root: Optional[Path] = None) -> tuple:
+    """(dataset, participant, repeat, site) implied by a file's location.
+
+    Resolved from the path relative to ``root`` when one is given, so the
+    submission root or reference root is not itself mistaken for identity.
+    """
+    from osipi_pipeline.ingestion.identity_parser import resolve_identity
+
+    relative = path
+    if root is not None:
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = path
+    resolved, _conflicts = resolve_identity(str(relative).replace(os.sep, "/"))
+    return (
+        resolved.get("dataset"), resolved.get("participant"),
+        resolved.get("repeat"), resolved.get("site"),
+    )
+
+
+def _choose_reference_match(
+    submitted_path: Path,
+    candidates: list[Path],
+    *,
+    submission_root: Optional[Path] = None,
+    reference_root: Optional[Path] = None,
+) -> Optional[Path]:
+    """The ground-truth file belonging to this scan.
+
+    Scan identity is checked before the filename, because in a real challenge
+    submission the filename carries none. The DCE lead's data is laid out as
+    ``P05/site_2/scan_1/Ktrans.nii.gz`` with the ground truth in the same shape,
+    so all sixty candidates share the single token ``ktrans`` and tie. The
+    previous filename-only rule then broke the tie on path length, which is
+    arbitrary: it would score participant 5 at site 2 against participant 1 at
+    site 1 and report the result as a comparison. Wrong ground truth produces
+    numbers that look entirely reasonable, which is the worst kind of wrong.
+
+    A candidate whose participant, site, repeat and dataset all match is used.
+    When identity cannot be resolved on either side, or nothing matches, the
+    filename comparison still decides, so submissions that do encode identity
+    in the filename behave exactly as before.
+    """
     if not candidates:
         return None
     if len(candidates) == 1:
         return candidates[0]
+
+    wanted = _scan_identity(submitted_path, submission_root)
+    if any(value is not None for value in wanted):
+        matched = [
+            candidate for candidate in candidates
+            if _scan_identity(candidate, reference_root) == wanted
+        ]
+        if len(matched) == 1:
+            return matched[0]
+        if matched:
+            candidates = matched
+
     sub_tokens = _filename_tokens(submitted_path)
     best = sorted(
         candidates,
@@ -1443,8 +1816,12 @@ def _comparison_metrics(
 
     Uses a vectorised NumPy path (100x+ faster on full-resolution maps) and falls
     back to the pure-Python implementation when NumPy is unavailable. The two
-    paths compute the identical statistics (verified by the reference-scoring
-    tests), so scoring values are unchanged, only faster.
+    paths compute the identical statistics, so scoring values are unchanged,
+    only faster. That equivalence is pinned by
+    ``tests/test_comparison_metrics_parity.py``, which compares the two paths
+    key by key over the cases that separate a vectorised implementation from a
+    loop: NaN and infinity on either side, ROI selectors, no finite overlap, a
+    zero reference mean, a constant map, and randomised maps.
     """
     try:
         import numpy as np  # type: ignore
@@ -1706,8 +2083,12 @@ def _score_reference_maps(
 
     selected_root = next((root for root in roots if _reference_maps_by_type(root)), roots[0])
     refs_by_type = _reference_maps_by_type(selected_root)
-    masks = _reference_masks(selected_root)
+    # Maps come from one root; masks come from all of them. See
+    # _reference_masks_across_roots for why the two differ.
+    masks = _reference_masks_across_roots(roots)
     result["reference_root"] = str(selected_root)
+    result["mask_roots"] = sorted({str(Path(m["path"]).parent) for m in masks})
+    result["mask_overlaps"] = _mask_overlaps(masks)
     result["masks_available"] = bool(masks)
     result["mask_count"] = len(masks)
     result["summary"]["reference_map_count"] = sum(len(v) for v in refs_by_type.values())
@@ -1718,7 +2099,11 @@ def _score_reference_maps(
     for submitted in submitted_maps:
         map_type = str(submitted.get("detected_map_type"))
         submitted_path = Path(str(submitted.get("path") or ""))
-        ref_path = _choose_reference_match(submitted_path, refs_by_type.get(map_type, []))
+        ref_path = _choose_reference_match(
+            submitted_path, refs_by_type.get(map_type, []),
+            submission_root=EXTRACTED_DIR / submission_id,
+            reference_root=selected_root,
+        )
         row = {
             "submitted_file": submitted.get("file_name"),
             "submitted_path": str(submitted_path),
@@ -1947,7 +2332,7 @@ def _score_reference_maps(
         "error_coefficient_of_variation": "Std. dev. of voxelwise errors divided by the reference mean; a spread-of-error ratio, NOT a repeatability CoV.",
         "correlation": "Pearson correlation between submitted and reference voxels.",
         "repeatability_cov": "Not computed: requires repeated (noise-varied) datasets provided by the challenge.",
-        "icc": "Not computed: requires repeated datasets and a challenge-approved ICC model.",
+        "icc": _icc_definition(challenge_type),
     }
 
     map_statuses = [str(m.get("status") or "") for m in result["maps"]]
@@ -2173,6 +2558,134 @@ def _build_nifti_summary(maps: list[dict]) -> dict:
     }
 
 
+_ANALYSIS_CACHE: dict[tuple, dict] = {}
+_ANALYSIS_CACHE_LOCK = threading.Lock()
+
+
+def clear_analysis_cache(*, on_disk: bool = False) -> None:
+    """Drop memoised analyses. Called when configuration changes.
+
+    The saved copies are keyed by a configuration fingerprint, so a config
+    change makes them unreachable without deleting them; ``on_disk`` is for
+    tests and for anyone who wants the folder actually emptied.
+    """
+    with _ANALYSIS_CACHE_LOCK:
+        _ANALYSIS_CACHE.clear()
+    if on_disk:
+        for path in _analysis_cache_dir().glob("*.json"):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def _analysis_cache_key(
+    submission_id: str, challenge_type: str, files: list[Path],
+) -> Optional[tuple]:
+    """Identity of an analysis: its inputs, not just its submission id.
+
+    Everything the result depends on and nothing else: the submitted maps, the
+    ground truth and masks it is compared against, and the challenge
+    configuration. Any of them changing produces a different key, so a stale
+    answer cannot be served; none of them changing means the answer is the one
+    already computed.
+
+    Only file identity is read (path, size, mtime), never contents, so building
+    a key costs a handful of stat calls against the ~60 seconds it can save.
+    """
+    from osipi_pipeline.ingestion.manifest import config_fingerprint
+
+    def stamp(paths) -> tuple:
+        out = []
+        for path in sorted(paths, key=str):
+            try:
+                stat = Path(path).stat()
+            except OSError:
+                return ()
+            out.append((str(path), int(stat.st_size), int(stat.st_mtime_ns)))
+        return tuple(out)
+
+    submitted = stamp(files)
+    if not submitted:
+        return None
+    try:
+        masks = stamp(m["path"] for m in masks_for_submission(submission_id, challenge_type))
+        roots = _reference_roots(submission_id, challenge_type)
+        references = stamp(
+            path for root in roots
+            for paths in _reference_maps_by_type(root).values()
+            for path in paths
+        )
+    except Exception:  # noqa: BLE001 - a key we cannot build is simply no key
+        return None
+    return (submission_id, challenge_type, config_fingerprint(),
+            submitted, masks, references)
+
+
+#: Where memoised analyses live between runs, beside the validation results
+#: they belong with.
+def _analysis_cache_dir() -> Path:
+    return OUTPUTS_DIR / "analysis_cache"
+
+
+def _analysis_cache_file(submission_id: str, cache_key: tuple) -> Path:
+    """One file per (submission, inputs) pair.
+
+    The submission id leads the filename so a human can see what a file is
+    for, and the digest of the full key follows so a changed input lands on a
+    different file rather than overwriting a valid one.
+    """
+    digest = hashlib.sha1(
+        json.dumps(cache_key, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
+    return _analysis_cache_dir() / f"{_safe_name(submission_id)}.{digest}.json"
+
+
+def _read_cached_analysis(path: Path) -> Optional[dict]:
+    """A previously saved analysis, or nothing.
+
+    Any failure to read is a cache miss, never an error: a truncated file from
+    an interrupted write, a partial disk, or a file written by an older
+    version of this code must all end in recomputing rather than in a broken
+    report.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_cached_analysis(path: Path, result: dict, submission_id: str) -> None:
+    """Save an analysis, replacing whatever this submission had before.
+
+    Written to a temporary name and moved into place, so a reader never sees a
+    half-written file. Older entries for the same submission are removed: a
+    new key means the submitted maps, the references or the configuration
+    changed, which makes every earlier entry unreachable rather than merely
+    old, and keeping them would grow the folder for every re-upload.
+
+    Failing to cache is not failing to analyse. A read-only disk or a full one
+    costs the next reader some seconds and nothing else, so nothing here
+    propagates.
+    """
+    directory = _analysis_cache_dir()
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(f".{os.getpid()}.tmp")
+        temporary.write_text(json.dumps(result, default=str), encoding="utf-8")
+        temporary.replace(path)
+    except (OSError, TypeError, ValueError):
+        return
+    prefix = f"{_safe_name(submission_id)}."
+    for stale in directory.glob(f"{prefix}*.json"):
+        if stale != path:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
+
+
 def analyze_submission_niftis(
     submission_id: str,
     challenge_type: str,
@@ -2182,8 +2695,37 @@ def analyze_submission_niftis(
 
     This includes descriptive QC/statistics and, when matching reference maps
     exist, reference-based comparison metrics. It is not official OSIPI scoring.
+
+    The result is memoised on its inputs. Every export route, the report, the
+    HTML and PDF renderers and the frontend each ask for this analysis, and on
+    a real DCE submission it reads a gigabyte of 4-D data and takes about a
+    minute: recomputing it per request made opening a report cost as much as
+    producing it in the first place. ``artifact_dir`` runs are never served
+    from cache, because those write difference maps and RSS volumes to disk as
+    a side effect and the caller wants the files, not only the numbers.
     """
     files = _find_output_niftis(submission_id, challenge_type)
+
+    cache_key = None
+    if artifact_dir is None and performance_settings().get("analysis_cache_enabled", True):
+        cache_key = _analysis_cache_key(submission_id, challenge_type, files)
+        if cache_key is not None:
+            with _ANALYSIS_CACHE_LOCK:
+                cached = _ANALYSIS_CACHE.get(cache_key)
+            if cached is not None:
+                result = copy.deepcopy(cached)
+                result["cache_hit"] = "memory"
+                return result
+            # Nothing in this process, but the work may already have been done
+            # by a previous one. Restarting the app should not cost a minute
+            # per submission to tell a reviewer what it told them yesterday.
+            on_disk = _read_cached_analysis(_analysis_cache_file(submission_id, cache_key))
+            if on_disk is not None:
+                with _ANALYSIS_CACHE_LOCK:
+                    _ANALYSIS_CACHE[cache_key] = copy.deepcopy(on_disk)
+                on_disk["cache_hit"] = "disk"
+                return on_disk
+
     maps = [_analyse_nifti_file(path) for path in files]
     reference_scoring = _score_reference_maps(submission_id, challenge_type, maps, artifact_dir)
     # ROI descriptive statistics are computed exactly once, here, using the
@@ -2191,8 +2733,17 @@ def analyze_submission_niftis(
     # (API, JSON, CSV, HTML, PDF, frontend) reads the records off this result
     # rather than recomputing them.
     _attach_roi_descriptives(reference_scoring, submission_id, challenge_type)
+    # Three independent annotations of the same ROI rows. Each has its own
+    # enable switch, so none may be nested inside another: a nested call
+    # inherits the outer function's early returns and silently stops running
+    # in exactly the configurations where the outer feature is off.
     _attach_grouped_roi_statistics(reference_scoring, challenge_type)
-    _score_dce_signal_rss(
+    _attach_icc(
+        reference_scoring, challenge_type,
+        reference_scoring.get("roi_descriptive_statistics") or [],
+    )
+    _attach_threshold_flags(reference_scoring, challenge_type)
+    _score_signal_rss(
         reference_scoring, submission_id, challenge_type, artifact_dir=artifact_dir
     )
     if artifact_dir is not None:
@@ -2205,7 +2756,7 @@ def analyze_submission_niftis(
         for m in maps
         if m.get("error")
     ]
-    return {
+    result = {
         "submission_id": submission_id,
         "challenge_type": challenge_type,
         "reference_based_scoring_available": bool(reference_scoring.get("available")),
@@ -2215,6 +2766,13 @@ def analyze_submission_niftis(
         "summary": _build_nifti_summary(maps),
         "errors": errors,
     }
+    if cache_key is not None:
+        with _ANALYSIS_CACHE_LOCK:
+            _ANALYSIS_CACHE[cache_key] = copy.deepcopy(result)
+        _write_cached_analysis(
+            _analysis_cache_file(submission_id, cache_key), result, submission_id,
+        )
+    return result
 
 
 def _attach_nifti_analysis(

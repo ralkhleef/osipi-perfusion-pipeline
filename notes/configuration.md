@@ -541,10 +541,15 @@ Generic reference comparison remains separate from provider-specific or official
 Useful checks after adding a challenge:
 
 ```bash
-python -m pytest tests/test_api.py -q
-node tests/frontend_smoke_test.js
+OSIPI_REQUIRE_FULL_TESTS=1 PYTHONPATH=.:backend:src pytest -q
+for suite in tests/*_test.js; do node "$suite"; done
 python -m py_compile backend/main.py backend/scoring.py backend/services/*.py src/osipi_pipeline/config/*.py src/osipi_pipeline/validation/validate.py
 ```
+
+A new challenge touches configuration loading, detection, validation, analysis
+enablement, and the report, so run the whole suite rather than one file. The
+frontend suites are discovered rather than listed, so the command stays correct
+as suites are added.
 
 For manual smoke testing, call `/api/config` and confirm the new challenge and map types appear before uploading a submission.
 

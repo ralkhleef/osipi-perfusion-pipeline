@@ -184,6 +184,10 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
         "modelled_artifact": "modelled_st",
         "measured_artifact": "measured_st",
     }
+    # ASL now enables the same 4-D fitted-model comparison as DCE: participants
+    # submit what they fitted to obtain CBF and ATT, and it is compared against
+    # the ground-truth 4-D ASL signal. The analysis was always generic; only
+    # the configuration block is new.
     assert cfg.analysis_by_challenge()["asl"] == {
         "roi_descriptive": {
             "enabled": True,
@@ -192,6 +196,11 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
                 "mean", "median", "standard_deviation", "range",
                 "coefficient_of_variation",
             ],
+        },
+        "signal_rss": {
+            "enabled": True,
+            "modelled_artifact": "modelled_st",
+            "measured_artifact": "measured_st",
         },
     }
     # DSC carries the same descriptive statistics. Mean, median, SD, range

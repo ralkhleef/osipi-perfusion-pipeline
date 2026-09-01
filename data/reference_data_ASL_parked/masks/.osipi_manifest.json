@@ -1,0 +1,119 @@
+{
+  "submission_id": "masks",
+  "challenge_type": "",
+  "original_path": "/sessions/rcw-01a81oca11yfssg8m1dz5qge/mnt/osipi-perfusion-pipeline/data/reference_data/masks",
+  "extracted_path": "/sessions/rcw-01a81oca11yfssg8m1dz5qge/mnt/osipi-perfusion-pipeline/data/reference_data/masks",
+  "file_count": 3,
+  "nifti_files": [
+    "gm_mask.nii.gz",
+    "lesion_roi_mask.nii.gz",
+    "wm_mask.nii.gz"
+  ],
+  "metadata_files": [],
+  "code_files": [],
+  "docker_files": [],
+  "readme_files": [],
+  "timestamp": "2026-09-01T06:33:31.212566+00:00",
+  "files": [
+    {
+      "relative_path": "gm_mask.nii.gz",
+      "size": 190684,
+      "mtime": 1787832142.0793097,
+      "mtime_ns": 1787832142079309612,
+      "suffix": ".nii.gz",
+      "is_nifti": true,
+      "nifti_classification": "nifti",
+      "detected_parameter_map_id": "",
+      "is_code": false,
+      "is_readme": false,
+      "is_metadata": false,
+      "is_docker": false,
+      "is_output": false,
+      "is_mask": true,
+      "is_reference": false,
+      "is_preview": false
+    },
+    {
+      "relative_path": "lesion_roi_mask.nii.gz",
+      "size": 17112,
+      "mtime": 1787832142.0878816,
+      "mtime_ns": 1787832142087881645,
+      "suffix": ".nii.gz",
+      "is_nifti": true,
+      "nifti_classification": "nifti",
+      "detected_parameter_map_id": "",
+      "is_code": false,
+      "is_readme": false,
+      "is_metadata": false,
+      "is_docker": false,
+      "is_output": false,
+      "is_mask": true,
+      "is_reference": false,
+      "is_preview": false
+    },
+    {
+      "relative_path": "wm_mask.nii.gz",
+      "size": 124132,
+      "mtime": 1787832142.0848818,
+      "mtime_ns": 1787832142084881875,
+      "suffix": ".nii.gz",
+      "is_nifti": true,
+      "nifti_classification": "nifti",
+      "detected_parameter_map_id": "",
+      "is_code": false,
+      "is_readme": false,
+      "is_metadata": false,
+      "is_docker": false,
+      "is_output": false,
+      "is_mask": true,
+      "is_reference": false,
+      "is_preview": false
+    }
+  ],
+  "directories": [
+    {
+      "relative_path": ".",
+      "mtime_ns": 1787832174689404596
+    }
+  ],
+  "config_fingerprint": "3e1c971d8a90a56f735e1b860a8feabb623577cd",
+  "artifacts": [
+    {
+      "path": "gm_mask.nii.gz",
+      "role": "unknown",
+      "challenge": null,
+      "dataset": null,
+      "participant": null,
+      "repeat": null,
+      "site": null,
+      "map_type": null,
+      "artifact_type": null,
+      "dimensions": 3
+    },
+    {
+      "path": "lesion_roi_mask.nii.gz",
+      "role": "unknown",
+      "challenge": null,
+      "dataset": null,
+      "participant": null,
+      "repeat": null,
+      "site": null,
+      "map_type": null,
+      "artifact_type": null,
+      "dimensions": 3
+    },
+    {
+      "path": "wm_mask.nii.gz",
+      "role": "unknown",
+      "challenge": null,
+      "dataset": null,
+      "participant": null,
+      "repeat": null,
+      "site": null,
+      "map_type": null,
+      "artifact_type": null,
+      "dimensions": 3
+    }
+  ],
+  "identity_conflicts": []
+}

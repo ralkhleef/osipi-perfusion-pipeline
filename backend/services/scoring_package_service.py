@@ -55,7 +55,6 @@ from typing import Optional
 from services.path_config import (
     EXTRACTED_DIR,
     SCORING_ACTIVE_CONFIG,
-    SCORING_OUTPUTS_DIR,
     SCORING_PACKAGES_DIR,
 )
 from osipi_pipeline.config.rules import (
