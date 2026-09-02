@@ -1,0 +1,12 @@
+{
+  "_captured_from": "GET /api/scoring-status, recorded by scripts/verify_run_without_provider.py",
+  "_why": "No scoring provider is configured, yet the comparison against the organisers' ground truth has already run. The Score step has to tell those two apart.",
+  "status": "not_configured",
+  "active_mode": "none",
+  "reference_scoring": {
+    "status": "available",
+    "mask_count": 2,
+    "masks_available": true,
+    "available": true
+  }
+}

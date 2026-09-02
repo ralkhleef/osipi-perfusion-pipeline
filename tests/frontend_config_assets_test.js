@@ -55,6 +55,11 @@ vm.createContext(sandbox);
 vm.runInContext([
   extractFunction("escapeHtml"),
   extractConst("ASSET_KINDS"),
+  // The renderer now groups files by the scan their folder names and prints
+  // the shared root once instead of sixty sibling paths, so it leans on these.
+  extractFunction("_assetScanLabel"),
+  extractFunction("_assetCommonRoot"),
+  extractFunction("_assetFileRow"),
   extractFunction("_renderConfigurationAssets"),
 ].join("\n"), sandbox);
 

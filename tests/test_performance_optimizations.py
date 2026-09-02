@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -452,3 +453,77 @@ def test_clearing_on_disk_empties_the_folder(analysis_workspace) -> None:
     assert list(scoring._analysis_cache_dir().glob("*.json"))
     scoring.clear_analysis_cache(on_disk=True)
     assert not list(scoring._analysis_cache_dir().glob("*.json"))
+
+
+def test_a_file_added_in_the_same_mtime_tick_is_still_noticed(tmp_path: Path) -> None:
+    """The manifest must not report itself current while missing a file.
+
+    Writing the manifest into the submission root changes that directory's
+    mtime, so a freshly written manifest would be stale immediately; the
+    directory mtimes are therefore re-stamped after the write. A file that
+    arrives between the scan and that re-stamp -- or, far more often, within the
+    same coarse mtime tick -- had its directory's new mtime recorded without the
+    file ever being scanned, and the manifest then claimed to be current.
+
+    This was reachable in ordinary use: a methods document copied into the
+    folder right after upload was invisible until something else changed. It
+    showed up first as a test that failed about one run in three.
+    """
+    from osipi_pipeline.ingestion import manifest as manifest_mod
+
+    root = tmp_path / "sub"
+    root.mkdir()
+    (root / "Ktrans_map.nii").write_bytes(b"fake")
+    first = manifest_mod.refresh_manifest(root, submission_id="sub", challenge_type="dce")
+    assert first["file_count"] == 1
+
+    # Pin every recorded mtime, so mtime alone cannot possibly detect the
+    # addition. This is the same situation a coarse filesystem clock produces.
+    added = root / "methods.txt"
+    added.write_text("our method\n", encoding="utf-8")
+    for entry in first["directories"]:
+        target = root / str(entry["relative_path"]) if entry["relative_path"] not in ("", ".") else root
+        os.utime(target, ns=(int(entry["mtime_ns"]), int(entry["mtime_ns"])))
+
+    assert manifest_mod._manifest_is_current(root, first) is False, (
+        "the manifest reports itself current while missing a file"
+    )
+    refreshed = manifest_mod.load_manifest(root, refresh_if_stale=True)
+    assert refreshed["file_count"] == 2
+    names = {Path(str(item["relative_path"])).name for item in refreshed["files"]}
+    assert "methods.txt" in names
+
+
+def test_the_entry_count_is_one_listing_per_directory_not_per_file(tmp_path: Path) -> None:
+    """The cheap half of the fix, which is why it is a count and not a rescan.
+
+    load_manifest runs on every request against submissions of five hundred
+    files, and a separate test forbids it from walking the tree. The cost here
+    is bounded by the number of directories.
+    """
+    from osipi_pipeline.ingestion import manifest as manifest_mod
+
+    root = tmp_path / "sub"
+    (root / "a" / "b").mkdir(parents=True)
+    for index in range(20):
+        (root / "a" / "b" / f"map_{index}.nii").write_bytes(b"x")
+    data = manifest_mod.refresh_manifest(root, submission_id="sub", challenge_type="dce")
+
+    counted = {"calls": 0}
+    real_scandir = os.scandir
+
+    def counting_scandir(*args, **kwargs):
+        counted["calls"] += 1
+        return real_scandir(*args, **kwargs)
+
+    manifest_mod.os.scandir = counting_scandir
+    try:
+        assert manifest_mod._manifest_is_current(root, data) is True
+    finally:
+        manifest_mod.os.scandir = real_scandir
+
+    directories = len(data["directories"])
+    assert counted["calls"] == directories, (
+        f"{counted['calls']} listings for {directories} directories"
+    )
+    assert directories < 20, "the cost must not scale with the file count"

@@ -143,8 +143,11 @@ check("an empty provider list hides the expander instead of showing an empty one
    instance after an activation fails and resets the provider back to none. */
 console.log("\nThe button always does something");
 check("the button is wired even when nothing is configured",
-  /if \(btnAll && !isConfigured\)/.test(appJs),
+  /function _wireRunButton\(\{[^}]*live[^}]*\}\)[\s\S]{0,600}if \(!live\) \{[\s\S]{0,200}addEventListener\("click"/.test(appJs),
   "an unconfigured card leaves the button dead");
+check("the wiring is the only path, so no branch can forget it",
+  (appJs.match(/_wireRunButton\(/g) || []).length === 2,
+  "there is more than one way to wire the run button");
 check("an unconfigured click is told apart from having no submissions",
   /tally\.unconfigured/.test(appJs), "the two cases share one message");
 check("it says the comparison does not need a provider",
@@ -157,6 +160,63 @@ check("it says the comparison does not need a provider",
   check("the unconfigured message is a warning, not a success",
     run.tone === "warn", `tone was ${run.tone}`);
 }
+
+/* ── A comparison against ground truth is not a scoring provider ───────────
+   The two were conflated, so a reviewer with the organisers' reference maps
+   and masks loaded pressed Run Analysis and was told there was nothing to
+   run. There was: bias, RMSE, error CoV and the ROI tables all come from the
+   comparison and need no provider at all. */
+console.log("\nNo provider is not the same as nothing to run");
+{
+  const ran = sandbox._runOutcomeText(
+    { scored: 0, skipped: 0, failed: 0, reference: 6, total: 6, unconfigured: true }, false);
+  check("a comparison that ran is reported as a success", ran.tone === "ok", ran.tone);
+  check("it says how many were compared",
+    ran.text.includes("6 of 6 compared against the reference data"), ran.text);
+  check("it names what the comparison produced",
+    /bias/i.test(ran.text) && /RMSE/.test(ran.text) && /ROI/.test(ran.text), ran.text);
+  check("it does not report the absent provider as a failure",
+    !/failed/i.test(ran.text), ran.text);
+  check("the missing provider is still mentioned, as optional",
+    /separate, optional step/.test(ran.text), ran.text);
+
+  const partial = sandbox._runOutcomeText(
+    { scored: 0, skipped: 0, failed: 2, reference: 4, total: 6, unconfigured: true }, false);
+  check("a comparison with failures is an error, not a success",
+    partial.tone === "err", partial.tone);
+  check("both counts are given", partial.text.includes("4 of 6") && partial.text.includes("2 failed"),
+    partial.text);
+
+  const why = sandbox._runOutcomeText(
+    { scored: 0, skipped: 0, failed: 0, reference: 0, total: 0, unconfigured: true,
+      reason: "no reference maps for this challenge were found in the reference data folder" }, false);
+  check("with nothing to compare it says why, not just what still works",
+    why.text.includes("no reference maps for this challenge"), why.text);
+  check("and that is still a warning", why.tone === "warn", why.tone);
+}
+
+console.log("\nThe Score step runs on reference data alone");
+check("reference readiness is computed from the status payloads",
+  /function _referenceComparisonSummary\(/.test(appJs),
+  "nothing works out whether a comparison is possible");
+check("a comparison having run makes the button live",
+  /const canCompare = !isConfigured && !!\(reference && reference\.possible\)/.test(appJs),
+  "the button is still gated on a provider");
+check("the run loop counts comparisons rather than calling them skipped",
+  /_REFERENCE_COMPARED_STATUSES\.has\(_referenceStatusFor\(sid\)\)\) tally\.reference/.test(appJs),
+  "a completed comparison would be tallied as nothing configured");
+check("only a genuine comparison status counts",
+  /_REFERENCE_COMPARED_STATUSES = new Set\(\["available", "partial_reference_scoring"\]\)/.test(appJs),
+  "some other status could be mistaken for a completed comparison");
+check("a compared row is not labelled as needing setup",
+  /badgeTxt = referenceCompared \? "Compared to reference" : "Needs setup"/.test(appJs),
+  "a finished comparison still reads as unconfigured");
+check("a compared row can be exported",
+  /if \(referenceCompared\) \{[\s\S]{0,300}_enableScoringExport\(\)/.test(appJs),
+  "results exist but cannot leave the page");
+check("an empty Score step says why rather than only what still works",
+  /No comparison is possible: \$\{reason\}/.test(appJs),
+  "the reviewer is told what works, never what does not");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);

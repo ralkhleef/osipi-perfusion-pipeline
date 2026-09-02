@@ -162,14 +162,18 @@ challenges:
     - vp
     - ve
     - kep
-    # "methods" stays required deliberately. The challenge lead's synthetic
-    # submission does not contain one, so it is reported as missing, and that
-    # is the pipeline doing its job rather than failing. Whether the real
-    # challenge should demand a methods document is her decision, not an
-    # assumption to bake in here by quietly relaxing the rule.
+    # "methods" was required here until the challenge leads said it is not
+    # needed for the internal runs the challenge is doing now. That is their
+    # call to make, so the requirement is relaxed rather than argued with, and
+    # this is the one line to change when it becomes a real requirement again:
+    # add `- methods` back to the list below.
+    #
+    # Relaxed is not ignored. The upload form asks whether a methods document
+    # is included, the answer is recorded with the submission and shown in the
+    # report, and a submitter who says yes and sends none still gets an error.
+    # So dropping it here removes the blanket demand, not the accounting.
     required_artifacts:
     - modelled_st
-    - methods
     analysis:
       roi_descriptive:
         enabled: true

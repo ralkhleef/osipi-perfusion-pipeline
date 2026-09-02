@@ -499,14 +499,38 @@ def _map_units(summaries: Sequence[Mapping[str, Any]], map_type: str) -> str:
     return "map units"
 
 
+#: Below this, a fixed-decimal format has nothing left to show and the value
+#: is rendered in scientific notation instead.
+_SMALL_VALUE = 5e-4
+
+
 def _fmt(value: Any, digits: int = 3) -> str:
+    """Format a number for a report table without rounding it out of existence.
+
+    Fixed decimals suit the quantities most of this pipeline reports, and
+    destroy the one that matters most in DCE. Ktrans is of order 1e-4, so a
+    real bias of 5.5e-05 printed to three decimals is "0", and a real bias of
+    -2e-05 is "-0". A reviewer reading that column sees a submission that
+    matched the ground truth perfectly, when what they are actually looking at
+    is the formatter.
+
+    Anything smaller than the smallest value three decimals can distinguish is
+    therefore shown in scientific notation. Zero stays "0", because zero is a
+    measurement and not a rounding artifact.
+    """
     if value is None or value == "":
         return "Not available"
     if isinstance(value, bool):
         return "Yes" if value else "No"
     if isinstance(value, (int, float)):
         if isinstance(value, float):
-            return (f"{value:.{digits}f}").rstrip("0").rstrip(".")
+            if value != value or value in (float("inf"), float("-inf")):
+                return "Not available"
+            if value != 0 and abs(value) < _SMALL_VALUE:
+                # Two significant figures: enough to compare magnitudes and to
+                # see a sign, without implying precision the fit does not have.
+                return f"{value:.2e}"
+            return (f"{value:.{digits}f}").rstrip("0").rstrip(".") or "0"
         return str(value)
     return str(value)
 
@@ -605,6 +629,31 @@ def _overlap_notes(overlaps: Sequence[Mapping[str, Any]]) -> list[str]:
                 f"measurements."
             )
     return notes
+
+
+def _methods_document_status(summaries: Sequence[Mapping[str, Any]]) -> str:
+    """What the submitters said about their methods documents.
+
+    A methods document is not required, so its absence is not a finding. It is
+    still worth stating, because "no methods document" and "nobody recorded
+    whether there is one" are different things and a blank line reads as
+    either. The declaration is what is reported: a blank template the pipeline
+    inserted itself is a file, not a document, and validation has already
+    excluded it by content.
+    """
+    labels: list[str] = []
+    for summary in summaries or ():
+        if not isinstance(summary, Mapping):
+            continue
+        record = summary.get("methods_document")
+        label = str((record or {}).get("label") or "").strip() if isinstance(record, Mapping) else ""
+        if label and label not in labels:
+            labels.append(label)
+    if not labels:
+        return "Not recorded"
+    if len(labels) == 1:
+        return labels[0]
+    return "; ".join(labels)
 
 
 def _first_icc_status(summaries: Sequence[Mapping[str, Any]]) -> str:
@@ -1055,8 +1104,21 @@ def _reference_by_region_model(
     cancellation is visible rather than inferred.
     """
     rows: list[list[str]] = []
+    # Columns are added only when they would tell two rows apart. A "Scan"
+    # column on a single-scan submission is noise; on this one it is the
+    # difference between 480 readable rows and 480 identical ones.
+    scan_labels_available = any(
+        isinstance(entry, Mapping) and entry.get("scan_label")
+        for item in summaries
+        if isinstance(item.get("nifti_analysis"), Mapping)
+        for entry in (((item.get("nifti_analysis") or {}).get("reference_scoring") or {}).get("maps") or [])
+    )
+    challenge_names = {str(item.get("challenge_type") or "").strip().upper()
+                       for item in summaries if str(item.get("challenge_type") or "").strip()}
+    mixed_challenges = len(challenge_names) > 1
     for index, summary in enumerate(summaries, start=1):
         label = _submission_label(summary, index, blinded=blinded)
+        challenge_label = str(summary.get("challenge_type") or "").upper() or "Not recorded"
         analysis = summary.get("nifti_analysis")
         analysis = analysis if isinstance(analysis, Mapping) else {}
         scoring = analysis.get("reference_scoring")
@@ -1076,9 +1138,13 @@ def _reference_by_region_model(
                         str(mask.get("mask_label") or mask.get("mask_name") or "ROI"),
                         metrics,
                     ))
+            scan = str(row.get("scan_label") or "Not identified")
             for region, metrics in regions:
                 rows.append([
-                    label, map_type, region,
+                    label,
+                    *([challenge_label] if mixed_challenges else []),
+                    *([scan] if scan_labels_available else []),
+                    map_type, region,
                     _fmt(metrics.get("bias")),
                     _fmt(metrics.get("mae")),
                     _fmt(metrics.get("rmse")),
@@ -1088,7 +1154,10 @@ def _reference_by_region_model(
                 ])
     return {
         "reference_region_headers": [
-            "Submission", "Map", "Region", "Bias", "MAE", "RMSE",
+            "Submission",
+            *(["Challenge"] if mixed_challenges else []),
+            *(["Scan"] if scan_labels_available else []),
+            "Map", "Region", "Bias", "MAE", "RMSE",
             "Error CoV", "Corr.", "Voxels",
         ],
         "reference_region_rows": rows,
@@ -1255,6 +1324,7 @@ def _build_report_model(
             if map_count else "No readable parameter maps were available."
         )],
         ["Analysis", analysis_finding],
+        ["Methods document", _methods_document_status(summaries)],
         ["Review items", (
             f"{errors} blocking error{'s' if errors != 1 else ''}; "
             f"{warnings} warning{'s' if warnings != 1 else ''}."
@@ -1263,6 +1333,16 @@ def _build_report_model(
     ]
 
     main_map_metric_rows: list[list[str]] = []
+    # A column that would be the same word on every row is noise; one that
+    # tells two otherwise identical rows apart is the point. Both are decided
+    # from the data rather than assumed.
+    scan_labels_available = any(
+        isinstance(item, Mapping) and item.get("scan_label")
+        for summary in summaries
+        for item in ((summary.get("nifti_analysis") or {}).get("maps") or [])
+        if isinstance(summary.get("nifti_analysis"), Mapping)
+    )
+    mixed_challenges = is_mixed_challenge
     for idx, summary in enumerate(summaries, start=1):
         af = _analysis_fields(summary)
         reference_rows = af.get("reference_metric_rows") or []
@@ -1273,7 +1353,17 @@ def _build_report_model(
         for item in maps:
             if not isinstance(item, Mapping):
                 continue
-            map_type = str(item.get("detected_map_type") or item.get("parameter_label") or "Unknown")
+            # A 4-D fitted curve is not a parameter map, so detection declines
+            # to name one and the row used to read "Unknown" with every
+            # reference metric "Not available" -- which reads as a failure
+            # rather than as a file that was never a parameter map.
+            map_type = str(
+                item.get("detected_map_type")
+                or item.get("parameter_label")
+                or ""
+            ).strip()
+            if not map_type or map_type.lower() == "unknown":
+                map_type = str(item.get("role_label") or "Not a parameter map")
             stats = item.get("stats") if isinstance(item.get("stats"), Mapping) else {}
             whole = next((
                 row for row in reference_rows
@@ -1284,6 +1374,12 @@ def _build_report_model(
             row = []
             if len(summaries) > 1:
                 row.append(_submission_label(summary, idx, blinded=blinded))
+            if mixed_challenges:
+                row.append(str(summary.get("challenge_type") or "").upper() or "Not recorded")
+            # Which scan. Without it the DCE layout prints one hundred and
+            # eighty rows that differ only in their numbers.
+            if scan_labels_available:
+                row.append(str(item.get("scan_label") or "Not identified"))
             row.extend([
                 map_type,
                 str(item.get("units") or "Not provided"),
@@ -1490,12 +1586,17 @@ def _build_report_model(
             "official_ranking": False,
         },
         "submission_type": submission_type,
+        "methods_document": _methods_document_status(summaries),
         "reviewer_summary": reviewer_summary,
         "review_statuses": {
             "Validation": validation_review_status,
             "Execution": execution_review_status,
             "QC": qc_review_status,
             "Reference comparison": reference_status,
+            # Stated even though nothing requires one, because a blank line
+            # here reads as "there was none" and as "nobody recorded it"
+            # equally well, and those are different facts.
+            "Methods document": _methods_document_status(summaries),
         },
         "executive_metrics": {
             "Maps": map_count,
@@ -1507,6 +1608,8 @@ def _build_report_model(
         },
         "main_map_metric_headers": (
             (["Submission"] if len(summaries) > 1 else [])
+            + (["Challenge"] if mixed_challenges else [])
+            + (["Scan"] if scan_labels_available else [])
             + ["Map", "Units", "Finite", "Negative", "Mean"]
             + (["RMSE", "MAE", "Bias", "Corr."] if reference_available else [])
         ),

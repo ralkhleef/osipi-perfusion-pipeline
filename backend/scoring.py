@@ -1723,11 +1723,21 @@ def _reference_masks(root: Path) -> list[dict]:
     return masks
 
 
-def _scan_identity(path: Path, root: Optional[Path] = None) -> tuple:
+def _scan_identity(
+    path: Path,
+    root: Optional[Path] = None,
+    challenge: Optional[str] = None,
+) -> tuple:
     """(dataset, participant, repeat, site) implied by a file's location.
 
     Resolved from the path relative to ``root`` when one is given, so the
     submission root or reference root is not itself mistaken for identity.
+
+    ``challenge`` unlocks that challenge's ``filename_identity_patterns``. It is
+    optional because the original caller -- matching a submitted map to its
+    reference -- works from directory structure alone; a layout that encodes the
+    scan in the filename instead (``Synthetic_P001_Visit1_Site1``) resolves to
+    nothing without it.
     """
     from osipi_pipeline.ingestion.identity_parser import resolve_identity
 
@@ -1737,11 +1747,40 @@ def _scan_identity(path: Path, root: Optional[Path] = None) -> tuple:
             relative = path.relative_to(root)
         except ValueError:
             relative = path
-    resolved, _conflicts = resolve_identity(str(relative).replace(os.sep, "/"))
+    resolved, _conflicts = resolve_identity(
+        str(relative).replace(os.sep, "/"), challenge=challenge)
     return (
         resolved.get("dataset"), resolved.get("participant"),
         resolved.get("repeat"), resolved.get("site"),
     )
+
+
+def _scan_label(dataset, participant, repeat, site) -> Optional[str]:
+    """A short human name for one scan, or None when nothing identifies it.
+
+    The DCE-2026 layout gives every scan the same filenames by design, so a
+    table keyed on the filename repeats "Ktrans.nii.gz" sixty times and tells a
+    reader nothing about which scan a row belongs to. The identity is already
+    resolved during ingestion; this turns it into something printable so it can
+    travel with the numbers into reports and CSVs.
+
+    Parts that are unknown are left out rather than filled in with a
+    placeholder: "P01 - Site 2" is honest about a missing repeat in a way that
+    "P01 - Site 2 - Repeat ?" is not.
+    """
+    parts = []
+    if participant:
+        parts.append(f"P{participant}" if str(participant).isdigit() else str(participant))
+    if site:
+        parts.append(f"Site {site}")
+    if repeat:
+        parts.append(f"Repeat {repeat}")
+    if not parts:
+        return None
+    label = " \u00b7 ".join(parts)
+    if dataset:
+        label = f"{dataset} {label}" if len(parts) < 3 else label
+    return label
 
 
 def _choose_reference_match(
@@ -2104,9 +2143,18 @@ def _score_reference_maps(
             submission_root=EXTRACTED_DIR / submission_id,
             reference_root=selected_root,
         )
+        # Which scan this map came from. Without it every row in the table
+        # below is labelled with the same filename as every other row.
+        _dataset, _participant, _repeat, _site = _scan_identity(
+            submitted_path, EXTRACTED_DIR / submission_id, challenge=challenge_type)
         row = {
             "submitted_file": submitted.get("file_name"),
             "submitted_path": str(submitted_path),
+            "dataset": _dataset,
+            "participant": _participant,
+            "repeat": _repeat,
+            "site": _site,
+            "scan_label": _scan_label(_dataset, _participant, _repeat, _site),
             "detected_map_type": map_type,
             "parameter_label": submitted.get("parameter_label"),
             "units": submitted.get("units") or "units not provided",
@@ -2366,6 +2414,7 @@ def _write_reference_scoring_artifacts(artifact_dir: Path, reference_scoring: di
     csv_path = artifact_dir / "reference_scoring.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fp:
         writer = csv.DictWriter(fp, fieldnames=[
+            "scan_label", "dataset", "participant", "site", "repeat",
             "submitted_file", "reference_file", "detected_map_type", "scope", "mask_name",
             "status", "voxel_count", "total_voxel_count", "finite_voxel_percent",
             "negative_voxel_percent", "bias", "mae", "rmse", "standard_deviation_error",
@@ -2375,6 +2424,11 @@ def _write_reference_scoring_artifacts(artifact_dir: Path, reference_scoring: di
         for item in reference_scoring.get("maps") or []:
             whole = item.get("whole_map") or {}
             writer.writerow({
+                "scan_label": item.get("scan_label"),
+                "dataset": item.get("dataset"),
+                "participant": item.get("participant"),
+                "site": item.get("site"),
+                "repeat": item.get("repeat"),
                 "submitted_file": item.get("submitted_file"),
                 "reference_file": item.get("reference_file"),
                 "detected_map_type": item.get("detected_map_type"),
@@ -2396,6 +2450,11 @@ def _write_reference_scoring_artifacts(artifact_dir: Path, reference_scoring: di
             for mask in item.get("masks") or []:
                 metrics = mask.get("metrics") or {}
                 writer.writerow({
+                    "scan_label": item.get("scan_label"),
+                    "dataset": item.get("dataset"),
+                    "participant": item.get("participant"),
+                    "site": item.get("site"),
+                    "repeat": item.get("repeat"),
                     "submitted_file": item.get("submitted_file"),
                     "reference_file": item.get("reference_file"),
                     "detected_map_type": item.get("detected_map_type"),
@@ -2686,6 +2745,62 @@ def _write_cached_analysis(path: Path, result: dict, submission_id: str) -> None
                 pass
 
 
+def _attach_scan_identity(maps: list[dict], submission_id: str, challenge_type: str) -> None:
+    """Say which scan each analysed file came from, and what it is.
+
+    The DCE-2026 layout reuses one set of filenames in every scan directory by
+    design, so a QC table keyed on the map type prints "Ktrans" sixty times and
+    a reader cannot tell one row from another -- nor which of them, on a mixed
+    upload, belongs to which challenge.
+
+    ``role_label`` exists for the same reason. A 4-D fitted concentration curve
+    is not a parameter map, so map detection correctly declines to name one and
+    the row read "Unknown" with every reference metric "Not available" -- which
+    looks like a failure rather than a file that was never a parameter map.
+    """
+    root = EXTRACTED_DIR / submission_id
+    challenge = (challenge_type or "").strip().lower()
+    roles_by_path: dict[str, str] = {}
+    try:
+        for artifact in submission_artifacts(submission_id):
+            label = _artifact_role_label(artifact)
+            if label:
+                roles_by_path[str(Path(str(artifact.path)).name).lower()] = label
+    except Exception:
+        _LOGGER.exception("Could not read artifact roles for %s", submission_id)
+
+    for item in maps:
+        path = Path(str(item.get("path") or ""))
+        dataset, participant, repeat, site = _scan_identity(path, root, challenge=challenge)
+        item.setdefault("dataset", dataset)
+        item.setdefault("participant", participant)
+        item.setdefault("repeat", repeat)
+        item.setdefault("site", site)
+        item["scan_label"] = _scan_label(dataset, participant, repeat, site)
+        item["challenge_type"] = challenge
+        detected = str(item.get("detected_map_type") or "").strip()
+        if not detected or detected.lower() == "unknown":
+            item["role_label"] = roles_by_path.get(path.name.lower())
+
+
+def _artifact_role_label(artifact) -> Optional[str]:
+    """A readable name for a file that is not a parameter map."""
+    artifact_type = str(getattr(artifact, "artifact_type", "") or "").strip().lower()
+    role = str(getattr(artifact, "role", "") or "").strip().lower()
+    known = {
+        "modelled_st": "Fitted signal (4-D)",
+        "measured_st": "Measured signal (4-D)",
+        "methods": "Methods document",
+    }
+    if artifact_type in known:
+        return known[artifact_type]
+    if role == "fitted_signal":
+        return "Fitted signal (4-D)"
+    if role == "measured_signal":
+        return "Measured signal (4-D)"
+    return None
+
+
 def analyze_submission_niftis(
     submission_id: str,
     challenge_type: str,
@@ -2727,6 +2842,7 @@ def analyze_submission_niftis(
                 return on_disk
 
     maps = [_analyse_nifti_file(path) for path in files]
+    _attach_scan_identity(maps, submission_id, challenge_type)
     reference_scoring = _score_reference_maps(submission_id, challenge_type, maps, artifact_dir)
     # ROI descriptive statistics are computed exactly once, here, using the
     # masks the reference scoring just discovered. Every downstream consumer

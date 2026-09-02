@@ -244,7 +244,8 @@ checkContains("Upload local source gates on file selection", appJs, "return !!st
 checkContains("Upload Zenodo source gates on input", appJs, 'source === "zenodo"');
 checkContains("Upload GitHub source gates on input", appJs, 'source === "github"');
 checkContains("Upload CTA disabled until ready", appJs, "submitBtn.disabled = !canUpload");
-checkContains("Challenge type tooltip text", html, "Select a challenge defined by the active pipeline configuration.");
+checkContains("Challenge type tooltip text", html,
+  "controls which maps are required, which validation rules apply");
 checkContains("Parameter map type tooltip text", html, "Use this only when automatic detection needs a hint.");
 checkNotContains("Duplicate global Start New wrapper removed", html, "global-start-new");
 checkNotContains("Global Start New styling removed", css, "global-new-btn");
@@ -745,7 +746,15 @@ checkContains("Capabilities details modal", html, 'id="config-modal-capabilities
 checkContains("Versions details modal", html, 'id="config-modal-versions"');
 checkContains("Modal open behavior", appJs, "function _openConfigurationModal");
 checkContains("Modal close behavior", appJs, "function _closeConfigurationModal");
-checkContains("Modal close does not save", html, "Saving creates an inactive version; activation remains a separate explicit action.");
+/* The guarantee is that closing a section is not saving and saving is not
+   activating. It used to be a three-line grey paragraph on the page; it is now
+   one line plus the "?" the rest of the app uses for detail. */
+checkContains("Closing a section is not saving", html,
+  "Closing a section keeps its draft values");
+checkContains("and saving is not activating", html,
+  "activating it is a separate, explicit step");
+checkContains("The short form says the part that matters most", html,
+  "Saving does not activate anything.");
 checkContains("Responsive modal width", css, ".config-manager-modal-dialog-wide { width: min(1040px, 100%); }");
 checkContains("Modal body vertical scroll", css, "overflow-y: auto;");
 checkContains("Configuration values wrap", css, ".config-manager dd { overflow-wrap: anywhere; }");
@@ -859,6 +868,104 @@ checkContains("Reusable list summary strip CSS", css, ".list-summary-strip");
 checkContains("Filter menu CSS", css, ".filter-menu");
 checkContains("Filter pill CSS", css, ".filter-pill");
 
+/* ── Step headers say less ────────────────────────────────────────────────
+   Every step opened with a grey sentence explaining itself, above content that
+   then explained itself again. The sentences are still there, one hover away,
+   behind the same "?" the rest of the app uses. */
+/* ── Tooltips are not clipped by the card they sit in ─────────────────────
+   Every "?" opens its bubble with CSS alone, absolutely positioned against
+   the button. Every card in this interface sets `overflow: hidden` to clip
+   children to its rounded corners, so near the top of a card the bubble was
+   cut off entirely: a help affordance that shows nothing when pressed.
+
+   `position: fixed` escapes overflow but not a transformed ancestor, which
+   becomes the containing block for fixed descendants -- that put one bubble
+   ninety pixels below the fold while its inline `top` read 477. Moving the
+   bubble to <body> while it is open removes every ancestor at once. */
+/* ── A way out to the guide ───────────────────────────────────────────────
+   "What does Error CoV mean" and "what is this compared against" had no
+   answer anywhere on screen. The guide is one page on the documentation site;
+   the link sits on the two steps where the numbers appear and where they
+   leave the app. */
+/* ── Filtering the ROI table ──────────────────────────────────────────────
+   Sixty scans contribute a row per map per region. The table is correct and
+   too long to read, so the filter narrows the view -- and only the view. */
+console.log("\n[ ROI filter ]");
+{
+  const roiSection = section("step-score");
+  checkContains("The ROI table has a filter", roiSection, 'id="roi-descriptive-search"');
+  checkContains("It says what can be typed into it",
+    roiSection, "Filter by participant, site, repeat, map or region");
+  checkContains("It is labelled for screen readers", roiSection, "Filter ROI statistics");
+  checkContains("It starts hidden, and appears only when there is enough to filter",
+    roiSection, 'id="roi-descriptive-filter" hidden');
+  checkContains("An empty result says so", roiSection, 'id="roi-descriptive-nomatch"');
+  checkContains("and points out that the export is unaffected",
+    roiSection, "The CSV export still contains every row.");
+  checkContains("How many of how many is announced",
+    roiSection, 'id="roi-descriptive-shown" role="status"');
+  checkContains("Escape clears the box", appJs,
+    'if (event.key === "Escape" && event.target && event.target.id === "roi-descriptive-search")');
+  checkContains("The threshold is named, not scattered", appJs, "_ROI_FILTER_THRESHOLD");
+  checkContains("The filter is styled", css, ".roi-filter-field input");
+}
+
+console.log("\n[ Reading-results guide ]");
+{
+  checkEqual("The guide is linked from exactly the two steps that show numbers",
+    countOccurrences(html, 'class="step-guide-link"'), 2);
+  checkContains("from QC & Preview", section("step-score"), "step-guide-link");
+  checkContains("and from Export", section("step-export"), "step-guide-link");
+  checkContains("It asks the reader's question, not ours",
+    html, "What do these numbers mean?");
+  checkContains("It opens in a new tab, so a review in progress is not lost",
+    html, 'href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank"');
+  checkContains("and safely", html, 'rel="noopener"');
+  checkContains("The link is styled rather than default-blue", css, ".step-guide-link");
+}
+
+console.log("\n[ Tooltips ]");
+{
+  checkContains("An open bubble is re-parented out of its card",
+    appJs, "document.body.appendChild(bubble)");
+  checkContains("and put back where it came from on hide",
+    appJs, "home.parent.insertBefore(bubble, home.next)");
+  checkContains("Its original position is remembered, not guessed",
+    appJs, "_tooltipHome.set(host,");
+  checkContains("Both vertical edges are cleared before either is set",
+    appJs, 'bubble.style.bottom = "auto"');
+  checkContains("It is kept inside the viewport horizontally",
+    appJs, "room.width - box.width - _TOOLTIP_EDGE");
+  checkContains("and vertically, at both ends",
+    appJs, "Math.min(Math.max(_TOOLTIP_EDGE, top), lowest)");
+  checkContains("Outside the host, visibility is driven directly",
+    appJs, 'bubble.style.visibility = "visible"');
+  checkContains("Keyboard users get the same bubble", appJs, 'addEventListener("focusin"');
+  checkContains("Escape closes it", appJs, '_hideEveryTooltip();');
+  checkContains("A scroll releases it, since it is pinned to the viewport",
+    appJs, 'window.addEventListener("scroll", _hideEveryTooltip, true)');
+  /* The CSS placement stays as the fallback for a page where the script has
+     not run, so removing it would silently break tooltips there. */
+  checkContains("The CSS-only placement remains the fallback",
+    css, ".help-tooltip:hover .tooltip-text");
+}
+
+console.log("\n[ Step headers ]");
+{
+  checkEqual("No step header carries a description line",
+    countOccurrences(html, 'class="card-desc"'), 0);
+  checkEqual("Every one of the six steps kept its explanation behind a ?",
+    countOccurrences(html, 'class="help-tooltip title-help"'), 6);
+  checkContains("The explanation is still the real sentence, not a stub",
+    html, "Existing result maps go straight to review");
+  checkContains("A header tooltip hangs below the title, which is at the top of the page",
+    css, ".title-help .tooltip-text {\n  top: calc(100% + 9px);");
+  checkContains("and it is reachable by keyboard, like every other tooltip",
+    css, ".help-tooltip:focus-within .tooltip-text");
+  checkContains("A title with nothing under it does not keep the gap",
+    css, ".heading-text > .card-title:last-child");
+}
+
 console.log("\n[ Score & Preview panel ]");
 const scoreSection = section("step-score");
 const scorePreviewBlock = appJs.slice(
@@ -866,8 +973,17 @@ const scorePreviewBlock = appJs.slice(
   appJs.indexOf("// Direct \"Continue to Export\"")
 );
 checkContains("Step 5 label is QC & Preview", scoreSection, "Step 5 of 6: QC &amp; Preview");
-checkContains("Step 5 title is QC & Preview", scoreSection, '<h1 class="card-title" id="score-step-title">QC &amp; Preview</h1>');
+checkContains("Step 5 title is QC & Preview", scoreSection, '<h1 class="card-title" id="score-step-title">QC &amp; Preview');
 checkContains("Step 5 generic QC wording", scoreSection, "QC and previews are available for readable maps");
+/* The wording moved into the "?" the app already uses for detail. Setting
+   textContent on the heading would delete that button, so the runtime helper
+   must rewrite only the heading's own text node. */
+checkContains("Step 5 wording lives in the tooltip, not a line under the title",
+  scoreSection, '<span class="tooltip-text" id="score-step-desc">');
+checkContains("Rewriting the title does not delete the help button",
+  appJs, "titleEl.firstChild.nodeValue");
+checkNotContains("The step title is not overwritten wholesale",
+  appJs, 'titleEl.textContent = "QC & Preview"');
 checkContains("Dynamic official scoring title helper", appJs, "function _setScoreStepCopy");
 checkContains("Step 5 preview panel mount exists", scoreSection, 'id="score-preview-panel"');
 checkContains("Score preview renderer exists", appJs, "function renderScorePreviewPanel");
@@ -1163,6 +1279,54 @@ checkNotContains("Wizard state stores no files", wizardSaveBlock, "pendingLocalF
 checkNotContains("Wizard state stores no validation payloads", wizardSaveBlock, "validationData");
 checkNotContains("Wizard state stores no score results", wizardSaveBlock, "_scoreCache");
 
+/* ── The methods document is asked about, not demanded ────────────────────
+   It used to block a DCE upload outright. The challenge leads said it is not
+   needed for the runs being done now, so the question replaced the rule: the
+   answer is recorded, no answer blocks anything, and saying no offers a blank
+   template rather than a dead end. */
+console.log("\n[ Methods document ]");
+{
+  const uploadSection = section("step-upload");
+  checkContains("The upload form asks about a methods document",
+    uploadSection, 'name="methods_document"');
+  checkContains("Yes is one of the answers", uploadSection, 'value="yes"');
+  checkContains("So is no", uploadSection, 'value="no"');
+  checkContains("It is marked optional, because nothing requires one",
+    uploadSection, "Not required.");
+  checkContains("A blank template is offered",
+    uploadSection, 'href="/api/methods-template"');
+  checkContains("and it reads as a control, not a link inside a paragraph",
+    uploadSection, 'class="ghost-download"');
+  checkContains("and the template does not claim to be the requirement",
+    uploadSection, "challenge leads' decision");
+  checkContains("The question is labelled for screen readers",
+    uploadSection, 'aria-labelledby="methods-doc-label"');
+  /* The question is the whole interaction: two pills and an optional
+     download. Anything explaining what each answer does was prose nobody
+     needed twice, so it is gone rather than merely shortened. */
+  checkNotContains("Answering does not print an explanation of the answer",
+    appJs, "_METHODS_ANSWER_NOTES");
+  checkNotContains("and there is no note element left behind",
+    uploadSection, "methods-doc-note");
+  /* An earlier version inserted a blank template into any submission that
+     declared no document. Withdrawn: a team with their own document, or with
+     none, has to move through the pipeline untouched. */
+  checkNotContains("No template is inserted into anyone's submission",
+    appJs, "A blank template is added to the submission");
+  /* The Score card said what running produces and that a provider is a
+     separate step. Both true, neither news on every render. */
+  checkContains("The reference card states the fact and stops",
+    appJs, "`Ground truth is loaded${masks}.`");
+  checkNotContains("It does not re-explain what an analysis produces",
+    appJs, "Running produces bias, RMSE, error CoV");
+  /* Sending "no" for a question nobody answered would put words in the
+     submitter's mouth; sending "yes" would raise an error they never earned. */
+  checkContains("The answer is only sent when one was given",
+    appJs, 'if (methodsAnswer) fd.append("methods_document", methodsAnswer);');
+  checkNotContains("No default answer is invented",
+    appJs, 'fd.append("methods_document", methodsAnswer || "no")');
+}
+
 console.log("\n[ Export step ]");
 const exportSection = section("step-export");
 const mainExportStart = appJs.indexOf("function _renderExportRows");
@@ -1203,6 +1367,111 @@ checkNotContains("Main copy avoids external evaluation wording", mainExportOptio
 checkNotContains("Main copy avoids internal organizer wording", mainExportOptions, "internal organizer");
 checkContains("Main copy explains identifier visibility", mainExportOptions, "original submission identifiers");
 checkContains("Main report button label", mainExportOptions, ">Open Report</button>");
+
+/* The Export step used to look untouched however much work had been done.
+   `_renderExportRows` decides each row's availability from the submissions and
+   analyses that exist at the moment it runs, and it ran exactly once, at page
+   load, when there were none of either. Every row was therefore stamped
+   "Nothing has been reviewed yet" and stayed that way for the whole session.
+   Redrawing on the way in is the fix; re-attaching the handlers afterwards is
+   what stops the fix from leaving six dead buttons behind. */
+const syncExportBlock = appJs.slice(
+  appJs.indexOf("function _syncExportStep"),
+  appJs.indexOf("// ── Batch validation export"),
+);
+checkContains("Entering Export redraws the rows", syncExportBlock, "_renderExportRows();");
+checkContains("Availability is read at render time, not captured at load",
+  mainExportOptions, "const have = _exportAvailability();");
+checkContains("A redraw re-attaches the download handlers",
+  mainExportOptions, "_wireExportRows();");
+checkContains("The handlers are in a function so they can be re-attached",
+  appJs, "function _wireExportRows()");
+checkContains("The unavailable rows still say what is missing",
+  mainExportOptions, "Nothing has been reviewed yet.");
+
+/* The checks above pin the wiring. This one runs the renderer, because the bug
+   was not a missing string but a value read at the wrong moment, and only
+   executing it twice against different state can show the difference. */
+{
+  const vm = require("vm");
+  const extract = (name, kind = "function") => {
+    const start = appJs.indexOf(`${kind} ${name}${kind === "function" ? "(" : " ="}`);
+    if (start < 0) throw new Error(`not found: ${name}`);
+    let depth = 0, seen = false;
+    for (let i = start; i < appJs.length; i += 1) {
+      if (appJs[i] === "{") { depth += 1; seen = true; }
+      else if (appJs[i] === "}") { depth -= 1; if (seen && depth === 0) return appJs.slice(start, i + 1); }
+    }
+    throw new Error(`unbalanced braces in ${name}`);
+  };
+
+  const host = { innerHTML: "" };
+  const sandbox = {
+    console,
+    batchState: { validationData: null, selectedIds: new Set() },
+    state: { submissionId: null },
+    _scoreCache: {},
+    el: (id) => (id === "export-main-list" ? host : null),
+    getChallengeType: () => "dce",
+    defaultChallengeType: () => "dce",
+    getSubmissionDisplayName: (_r, fallback) => fallback,
+    // Rendering the row chrome is another module's job; this test is about
+    // which rows come back enabled.
+    renderFileRow: (o) => `<row>${o.metaHtml}${o.actionsHtml}</row>`,
+    _wireExportRows: () => {},
+  };
+  vm.createContext(sandbox);
+  [
+    extract("escapeHtml"),
+    extract("_niftiAnalysisEntries"),
+    extract("_roiDescriptivePayload"),
+    extract("_getKnownSubmissions"),
+    extract("_exportAvailability"),
+    extract("_renderExportRows"),
+  ].forEach((src) => vm.runInContext(src, sandbox));
+
+  // 1. Page load: nothing has happened yet, and the rows say so.
+  sandbox._renderExportRows();
+  const atLoad = host.innerHTML;
+  checkCondition("At load every export row is disabled",
+    (atLoad.match(/<button disabled/g) || []).length === 6,
+    `${(atLoad.match(/<button disabled/g) || []).length} of 6 disabled`);
+  checkCondition("and says why", atLoad.includes("Nothing has been reviewed yet."));
+
+  // 2. A submission has been validated and ROI statistics exist. This is the
+  //    state the user was in when the step still claimed nothing had happened.
+  sandbox.batchState.validationData = {
+    results: [{ submission_id: "sub-1", challenge_type: "dce" }],
+  };
+  sandbox._scoreCache["sub-1"] = {
+    niftiAnalysis: {
+      reference_scoring: {
+        status: "available",
+        maps: [{ status: "compared" }],
+        roi_descriptive_statistics: [{ map_type: "ktrans", roi_label: "gray matter" }],
+      },
+    },
+  };
+  sandbox._renderExportRows();
+  const afterWork = host.innerHTML;
+  checkCondition("After a review the rows are enabled",
+    !afterWork.includes("<button disabled"),
+    "a row is still disabled after work was done");
+  checkCondition("and the stale message is gone",
+    !afterWork.includes("Nothing has been reviewed yet."),
+    "the step still claims nothing has been reviewed");
+  checkCondition("the render actually changed", atLoad !== afterWork);
+
+  // 3. Submissions but no ROI rows: that one row is disabled, on its own terms.
+  delete sandbox._scoreCache["sub-1"];
+  sandbox._renderExportRows();
+  const noRoi = host.innerHTML;
+  checkCondition("A missing ROI table disables only that row",
+    (noRoi.match(/<button disabled/g) || []).length === 1,
+    `${(noRoi.match(/<button disabled/g) || []).length} rows disabled`);
+  checkCondition("and explains what it needs",
+    noRoi.includes("compatible ROI masks"));
+}
 checkContains("Main PDF report button label", mainExportOptions, ">Download PDF</button>");
 checkContains("Main JSON button label", mainExportOptions, ">Download JSON</button>");
 checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 3);
@@ -1539,6 +1808,47 @@ checkNotContains("Central renderer does not re-trigger scoring",
 
 // Empty renders must clear stale rows, not just hide the table.
 checkContains("Empty render clears the table body", appJs, 'if (body) body.innerHTML = "";');
+
+
+/* ── One accent colour ────────────────────────────────────────────────────
+   The Run step had a dark green primary button and a blue progress panel
+   while every other primary action in the app is purple. Three accent
+   families is not a palette, and green already means something here: it is
+   the colour of a passed check, so a green "Run processing" button read as a
+   result rather than as the thing you press to get one. */
+console.log("\n[ Accent colour ]");
+{
+  /* The LAST rule for a selector is the one that applies. Reading the first
+     would have passed against the original green while the override sat
+     unread further down the file -- which is exactly what this check exists
+     to catch. */
+  const solidFill = (selector) => {
+    const at = css.lastIndexOf(selector + " {");
+    if (at < 0) return null;
+    const body = css.slice(at, css.indexOf("}", at));
+    const m = body.match(/background(?:-color)?\s*:\s*([^;]+)/);
+    return m ? m[1].trim() : null;
+  };
+
+  checkEqual("The Run button is the app's accent, not green",
+    solidFill(".run-settings-card .run-model-btn.idle"), "var(--purple)");
+  checkEqual("So is the progress bar", solidFill(".run-prog-fill"), "var(--purple)");
+  checkEqual("and the working dot", solidFill(".proc-dot"), "var(--purple)");
+  checkContains("and the panel behind them", css,
+    ".run-progress-panel {\n  background: var(--purple-faint);");
+
+  /* Green keeps exactly one job. Removing these would be the opposite
+     mistake: a finished run that never says it finished. */
+  checkContains("Green still marks a finished run", css,
+    ".run-progress-panel.state-done .run-prog-fill { background: #38a169; }");
+  checkContains("and a passed check", css, ".vs-pass");
+
+  /* An empty list was a tall grey band with a grey sentence floating in it,
+     which reads as a rendering failure rather than as "nothing here yet". */
+  checkContains("An empty list is a bordered block, not a grey void",
+    css, ".vr-empty {");
+  checkContains("on white", /\.vr-empty \{[^}]*background: #fff/.test(css) ? "yes" : "", "yes");
+}
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);

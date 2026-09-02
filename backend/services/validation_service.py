@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 
 from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR
 from services.ingest_service import detect_submission_metadata, make_safe_id
+from services.methods_declaration_service import summary as methods_declaration_summary
 from osipi_pipeline.ingestion.manifest import (
     load_manifest,
     manifest_files,
@@ -600,6 +601,28 @@ def validate_submission(
         else:
             warnings.append(issue)
 
+    # ---- Methods document --------------------------------------------------
+    #
+    # The blanket requirement is gone: the challenge leads said a methods
+    # document is not needed for the runs being done now, so `methods` is no
+    # longer in any challenge's `required_artifacts`. What replaces it is
+    # narrower and, unlike a blanket rule, cannot be wrong about their policy:
+    # a submitter who told the upload form they had included one, and did not,
+    # gets an error. Saying no, or not being asked, produces nothing at all.
+    methods_files = [
+        artifact.path for artifact in submission_artifacts(folder, normalized_challenge)
+        if getattr(artifact, "artifact_type", None) == "methods"
+    ]
+    methods_document = methods_declaration_summary(submission_id, methods_files)
+    if methods_document["status"] == "declared_but_missing":
+        errors.append(_err(
+            "METHODS_DOCUMENT_DECLARED_BUT_MISSING",
+            "The upload form said this submission includes a methods document, "
+            "but no methods document was found in it. Either add the document "
+            "and re-upload, or re-upload saying it is not included.",
+            str(folder),
+        ))
+
     blocking_errors = [e for e in errors if e["code"] != "UNKNOWN_CHALLENGE_TYPE"]
     runnable = has_run_instructions and len(blocking_errors) == 0
 
@@ -626,6 +649,7 @@ def validate_submission(
         nifti_summary=nifti_summary,
         has_result_maps=has_result_maps,
         counts=counts,
+        methods_document=methods_document,
     )
     result["job_id"] = job_id
     result["qc_mode"] = "quick" if quick_qc else "deep"
@@ -656,6 +680,7 @@ def _finish(
     nifti_summary: Optional[List[Dict]] = None,
     has_result_maps: bool = False,
     counts: Optional[Dict] = None,
+    methods_document: Optional[Dict] = None,
 ) -> Dict:
     now = datetime.now(timezone.utc).isoformat()
     result: Dict = {
@@ -684,6 +709,10 @@ def _finish(
         "total_files": total_files,
         "has_dockerfile": has_dockerfile,
         "nifti_summary": nifti_summary or [],
+        # The declaration alongside what was actually found. The early-exit
+        # paths pass nothing, so they report the declaration on its own.
+        "methods_document": methods_document
+            or methods_declaration_summary(submission_id, []),
     }
     _save_result(submission_id, result)
     return result

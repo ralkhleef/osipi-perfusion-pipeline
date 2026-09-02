@@ -79,17 +79,34 @@ function makeDom() {
   return nodes;
 }
 
-function run(records, status, nodes) {
-  const sandbox = { el: (id) => nodes[id] || null, console };
+/* The module registers its filter listeners at load time, so the sandbox needs
+   somewhere to register them. */
+function makeDocumentStub() {
+  const handlers = {};
+  return {
+    handlers,
+    addEventListener(type, fn) { (handlers[type] = handlers[type] || []).push(fn); },
+  };
+}
+
+function run(records, status, nodes, extraNodes = {}) {
+  const sandbox = {
+    document: { addEventListener() {} },
+    el: (id) => (id in extraNodes ? extraNodes[id] : nodes[id] || null),
+    console,
+    document: makeDocumentStub(),
+  };
   vm.createContext(sandbox);
   vm.runInContext(`${escapeSrc}\n${roiSrc}\n`, sandbox);
   sandbox.renderRoiDescriptiveStatistics(records, status);
+  nodes.__sandbox = sandbox;
   return nodes;
 }
 
 function rowCount(nodes) {
+  // Rows carry the text the filter searches, so the opening tag has attributes.
   const html = nodes["roi-descriptive-body"].innerHTML;
-  return (html.match(/<tr>/g) || []).length;
+  return (html.match(/<tr[\s>]/g) || []).length;
 }
 
 // ── Fixtures matching the real canonical record shape ────────────────────
@@ -346,6 +363,144 @@ console.log("\n=== Canonical payload helper ===\n");
         nodes["roi-descriptive-body"].innerHTML.includes("44.72%"));
   checkEqual("payload -> renderer produces one row", rowCount(nodes), 1);
 }
+
+
+
+/* ── Finding one row in a table of hundreds ───────────────────────────────
+   One participant of the DCE set is six scans; ten across three sites is
+   sixty, each contributing a row per map per region. The table is correct and
+   unreadable. The filter narrows what is on screen and nothing else -- the
+   count chip keeps stating the real total and the CSV is built from the
+   records, so a filtered view can never become a partial export. */
+console.log("\n=== ROI filter ===\n");
+
+function makeFilterDom(records) {
+  const rows = [];
+  const body = {
+    innerHTML: "",
+    style: { display: "" },
+    querySelectorAll: () => rows,
+  };
+  const nodes = makeDom();
+  nodes["roi-descriptive-body"] = body;
+  const extra = {
+    "roi-descriptive-filter": { hidden: true },
+    "roi-descriptive-search": { value: "" },
+    "roi-descriptive-shown": { textContent: "" },
+    "roi-descriptive-nomatch": { hidden: true },
+  };
+  const sandbox = {
+    el: (id) => (id in extra ? extra[id] : nodes[id] || null),
+    console,
+    document: makeDocumentStub(),
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`${escapeSrc}\n${roiSrc}\n`, sandbox);
+  // The rows the filter walks, built from the same records the renderer uses.
+  records.forEach((record) => {
+    rows.push({ hidden: false, dataset: { roiSearch: sandbox._roiSearchText(record) } });
+  });
+  return { sandbox, extra, rows, nodes };
+}
+
+function scanRecords(count) {
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    out.push({
+      ...AVAILABLE,
+      participant: String((i % 10) + 1),
+      site: String((i % 3) + 1),
+      repeat: String((i % 2) + 1),
+      map_type: "ktrans",
+      roi_label: i % 2 ? "gray matter" : "white matter",
+    });
+  }
+  return out;
+}
+
+{
+  const { sandbox } = makeFilterDom([]);
+  const text = sandbox._roiSearchText({
+    ...AVAILABLE, participant: "7", site: "2", repeat: "1",
+    map_type: "ktrans", roi_label: "gray matter",
+  });
+  check("the row is searchable by what the table shows", text.includes("gray matter"));
+  check("and by the map type", text.includes("ktrans"));
+  /* The table prints a participant as "7", but somebody looking for it types
+     "P7", so both are in the haystack. */
+  checkEqual("participant is findable as typed", Number(text.includes("p7")), 1);
+  check("so is a site", text.includes("site 2"));
+  check("so is a repeat", text.includes("repeat 1"));
+  check("everything is lower case, so the search can be too",
+    text === text.toLowerCase());
+}
+
+{
+  const { sandbox, extra, rows } = makeFilterDom(scanRecords(60));
+  sandbox._syncRoiFilter();
+  check("a long table offers a filter", extra["roi-descriptive-filter"].hidden === false);
+  checkEqual("nothing is hidden before anything is typed",
+    rows.filter((r) => r.hidden).length, 0);
+  check("and the count states the real total",
+    extra["roi-descriptive-shown"].textContent === "60 rows",
+    extra["roi-descriptive-shown"].textContent);
+
+  extra["roi-descriptive-search"].value = "site 2";
+  sandbox._applyRoiFilter();
+  const shown = rows.filter((r) => !r.hidden).length;
+  checkEqual("filtering hides the rest", shown, 20);
+  check("and says how many of how many",
+    extra["roi-descriptive-shown"].textContent === "20 of 60 rows",
+    extra["roi-descriptive-shown"].textContent);
+  check("a match is not an empty state", extra["roi-descriptive-nomatch"].hidden === true);
+
+  extra["roi-descriptive-search"].value = "GRAY MATTER";
+  sandbox._applyRoiFilter();
+  check("the search is case insensitive",
+    rows.filter((r) => !r.hidden).length === 30,
+    String(rows.filter((r) => !r.hidden).length));
+
+  extra["roi-descriptive-search"].value = "p3";
+  sandbox._applyRoiFilter();
+  check("a participant is findable the way a reader writes it",
+    rows.filter((r) => !r.hidden).length === 6,
+    String(rows.filter((r) => !r.hidden).length));
+
+  extra["roi-descriptive-search"].value = "lesion";
+  sandbox._applyRoiFilter();
+  checkEqual("no match hides every row", rows.filter((r) => !r.hidden).length, 0);
+  check("and says so rather than showing an empty table",
+    extra["roi-descriptive-nomatch"].hidden === false);
+
+  extra["roi-descriptive-search"].value = "";
+  sandbox._applyRoiFilter();
+  checkEqual("clearing the box brings every row back",
+    rows.filter((r) => r.hidden).length, 0);
+  check("and the empty message goes with it",
+    extra["roi-descriptive-nomatch"].hidden === true);
+}
+
+{
+  const { sandbox, extra } = makeFilterDom(scanRecords(4));
+  sandbox._syncRoiFilter();
+  check("a short table is left alone", extra["roi-descriptive-filter"].hidden === true);
+}
+
+{
+  /* A filter that survived a re-render would silently hide rows of the next
+     submission. Hiding the control clears it. */
+  const { sandbox, extra } = makeFilterDom(scanRecords(4));
+  extra["roi-descriptive-search"].value = "site 2";
+  sandbox._syncRoiFilter();
+  check("hiding the filter clears what was typed in it",
+    extra["roi-descriptive-search"].value === "");
+}
+
+console.log("\nThe filter changes the view and nothing else");
+check("the export reads records, not the visible rows",
+  !/roi-descriptive-body[\s\S]{0,200}export-roi-descriptive/.test(appJs));
+check("the count chip is set from the records",
+  /count\.textContent = String\(rows\.length\)/.test(appJs));
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);

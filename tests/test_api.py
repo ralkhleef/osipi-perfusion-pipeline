@@ -1623,8 +1623,21 @@ def test_compose_only_package_is_not_advertised_as_executable(client: TestClient
 
 
 def test_dockerfile_does_not_override_missing_dce_artifacts(client: TestClient) -> None:
-    """Execution instructions cannot bypass configured completeness errors."""
-    data, fname = _make_reproducible_zip()
+    """Execution instructions cannot bypass configured completeness errors.
+
+    The missing artifact used to be the methods document, which is no longer
+    required of anyone. So the submission below is missing a fitted signal
+    instead: still a configured per-scan requirement, and still not something a
+    Dockerfile is allowed to excuse.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("Dockerfile", "FROM python:3.11-slim\nCMD [\"python3\", \"run.py\"]\n")
+        zf.writestr("run.py", "print('hello')\n")
+        zf.writestr("README.md", "# Reproducible submission\n")
+        # One complete-looking scan whose modelled_st never arrived.
+        zf.writestr("Synthetic/Participant001/Site1/Repeat1/Ktrans.nii", _tiny_nifti_bytes())
+    data, fname = buf.getvalue(), "team_repro_incomplete.zip"
     sid = _upload_and_get_id(client, data, fname)
     r = client.post("/api/validate", json={"submission_id": sid, "challenge_type": "dce", "mode": "reproducible"})
     assert r.status_code == 200, r.text
@@ -2569,35 +2582,44 @@ def test_dce_missing_ktrans_blocks_the_gate(client: TestClient) -> None:
     assert result["passed"] is False
 
 
-def test_dce_missing_methods_blocks_the_gate(client: TestClient) -> None:
+def test_dce_passes_without_a_methods_document(client: TestClient) -> None:
+    """It used to fail. The challenge leads said a methods document is not
+    needed for the runs being done now, so an otherwise complete submission
+    without one is complete."""
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     result = _validate_dce(client, entries, "dce_no_methods.zip")
-    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
-    assert result["passed"] is False
+    assert "REQUIRED_ARTIFACT_MISSING" not in _error_codes(result)
+    # The stub NIfTIs in this fixture are not readable, so the run still has
+    # errors; what matters is that none of them is about a methods document.
+    assert not any("METHODS" in code or "ARTIFACT" in code
+                   for code in _error_codes(result)), _error_codes(result)
 
 
-def test_dce_readme_alone_does_not_satisfy_methods(client: TestClient) -> None:
+def test_a_readme_is_still_not_a_methods_document(client: TestClient) -> None:
+    """Worth keeping now that nothing is required: when the leads do ask for
+    one, or a submitter declares one, a README must not be counted as it."""
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     entries["README.md"] = b"# submission"
     result = _validate_dce(client, entries, "dce_readme_only.zip")
-    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
+    assert result["counts"]["methods_documents"] == 0
 
 
-def test_dce_notes_txt_does_not_satisfy_methods(client: TestClient) -> None:
+def test_loose_notes_are_still_not_a_methods_document(client: TestClient) -> None:
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     entries["notes.txt"] = b"some notes"
     result = _validate_dce(client, entries, "dce_notes.zip")
-    assert "REQUIRED_ARTIFACT_MISSING" in _error_codes(result)
+    assert result["counts"]["methods_documents"] == 0
 
 
-def test_dce_methodology_docx_satisfies_methods(client: TestClient) -> None:
+def test_a_methodology_docx_is_recognised_as_one(client: TestClient) -> None:
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     entries["methodology.docx"] = b"PK\x03\x04 fake docx"
     result = _validate_dce(client, entries, "dce_methodology.zip")
+    assert result["counts"]["methods_documents"] == 1
     assert "REQUIRED_ARTIFACT_MISSING" not in _error_codes(result)
 
 

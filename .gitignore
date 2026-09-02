@@ -78,3 +78,12 @@ test-results/
 
 # Personal meeting prep. Not for publication.
 /MEETING_NOTES.md
+
+# Generated manifest caches. These are rebuilt from the files they describe,
+# and one was committed by accident because it sits under a data folder.
+.osipi_manifest.json
+
+# Generated reports written to the project root while testing.
+/osipi_*_report.pdf
+/osipi_*_report.html
+/submission_with_methods.zip

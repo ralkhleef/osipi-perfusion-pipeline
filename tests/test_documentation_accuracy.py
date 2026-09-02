@@ -127,6 +127,12 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
                 | rules._ARTIFACT_TYPE_KEYS
                 | rules._DATASET_KEYS
                 | rules._ROI_DESCRIPTIVE_KEYS
+                # Advisory thresholds. `warn_above` is a real key an organiser
+                # sets; the docs name it because setting one is the answer to
+                # "can the pipeline flag a CoV over 15%".
+                | rules._THRESHOLD_KEYS
+                | rules._GROUPED_KEYS
+                | rules._ICC_KEYS
             | set(rules.validation_rules().get("artifact_types", {}))
             | set(rules.validation_rules().get("map_types", {}))
             | set(rules.validation_rules().get("challenges", {}))
@@ -1174,3 +1180,85 @@ def test_the_cache_busting_the_docs_rely_on_actually_exists() -> None:
     assert first and first == backend_main._asset_fingerprint("app.js")
     # Different files must not share a version, or one could mask the other.
     assert first != backend_main._asset_fingerprint("styles.css")
+
+
+# ── The reading-results guide ──────────────────────────────────────────────
+#
+# "What does Error CoV mean" and "what is this compared against" had no answer
+# anywhere. The guide answers them in one page. Its danger is the opposite of
+# its purpose: a page explaining the numbers is the easiest place in the
+# project to accidentally state a criterion the challenge leads never set.
+
+GUIDE = ROOT / "docs" / "reading-results.html"
+
+
+def _guide_text() -> str:
+    return GUIDE.read_text(encoding="utf-8")
+
+
+def test_the_guide_exists_and_is_in_the_navigation() -> None:
+    """A page nobody can navigate to is a page nobody reads."""
+    assert GUIDE.exists()
+    nav = (ROOT / "docs" / "assets" / "scripts" / "nav.js").read_text(encoding="utf-8")
+    assert 'file: "reading-results.html"' in nav
+    assert 'tab: "Reading results"' in nav
+
+
+def test_the_guide_states_that_nothing_is_passed_failed_or_ranked() -> None:
+    """The one sentence that has to survive every future edit."""
+    text = _guide_text()
+    assert "does not pass, fail, score or rank anything" in text
+
+
+def test_the_guide_does_not_turn_the_15_percent_remark_into_a_rule() -> None:
+    """A challenge lead described 15% as a rough personal guide, in the same
+    conversation that ruled out pass/fail. A page that quoted the number
+    without the second half would quietly make it the criterion."""
+    text = _guide_text()
+    assert "15%" in text, "the figure people ask about is not addressed"
+    assert "rough threshold" in text
+    assert "No shipped challenge configures any threshold" in text
+    assert "never a verdict" in text
+
+
+def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
+    """Checked against the configuration, not against memory of it."""
+    pytest.importorskip("yaml")
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT / "src"))
+    from osipi_pipeline.config.rules import thresholds_by_challenge, grouped_statistics_by_challenge
+
+    text = _guide_text()
+
+    configured = thresholds_by_challenge()
+    assert configured, "no challenges are configured"
+    if any(spec for spec in configured.values()):
+        raise AssertionError(
+            "a threshold is now shipped, so the guide's claim that none is "
+            "configured has become false"
+        )
+
+    for challenge, grouped in sorted(grouped_statistics_by_challenge().items()):
+        model = ((grouped or {}).get("icc") or {}).get("model", "none")
+        assert model == "none", (
+            f"{challenge} now ships ICC model {model!r}, so the guide's "
+            "claim that ICC is unconfigured has become false"
+        )
+    assert "not configured" in text
+
+
+def test_the_guide_warns_that_the_supplied_masks_overlap() -> None:
+    """Every hippocampus voxel also lies inside the grey matter mask, so those
+    two rows are not independent. Reading them as independent is the mistake
+    the page exists to prevent."""
+    text = _guide_text()
+    assert "not independent" in text
+    assert "hippocampus voxel also lies inside the grey" in text
+
+
+def test_the_guide_distinguishes_the_two_things_called_cov() -> None:
+    """Error CoV and within-scan CoV are different quantities with one name."""
+    text = _guide_text()
+    assert "spread-of-error ratio" in text
+    assert "not</strong> a repeatability" in text or "not a repeatability" in text
+    assert "Within-scan CoV" in text

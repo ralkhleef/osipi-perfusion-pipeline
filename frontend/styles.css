@@ -12639,3 +12639,747 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .sdc-fold > summary.sdc-head::after,
   .qc-fold > summary::after { transition: none; }
 }
+
+/* ============================================================
+   Upload form: rhythm and density
+   ------------------------------------------------------------
+   The upload card had accumulated three competing definitions of
+   `.form-section` and two of `.section-heading`, each added to fix a symptom
+   of the last, and the result read as a stack of unrelated slabs: a heading
+   and an intro that looked alike, a question label that looked like both, and
+   large unexplained gaps where empty error rows were holding space open.
+
+   This block is the single place the upload form's spacing is decided. It is
+   last in the file deliberately, so it settles the earlier disagreements
+   rather than joining them.
+   ============================================================ */
+
+/* An error slot that has no error in it should take no room. Two empty ones sat
+   under Team Name and Contact Email, which is where the dead space under the
+   first section came from. */
+.field-error:empty {
+  min-height: 0;
+  margin-top: 0;
+}
+
+.upload-form-card .form-section {
+  padding: 20px 28px 22px;
+}
+
+/* Heading, intro, controls: three sizes, so the eye has an order to follow.
+   Before, all three were within a hair of each other. */
+.upload-form-card .section-heading {
+  margin: 0 0 3px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  color: var(--text) !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.005em !important;
+  text-transform: none !important;
+}
+
+/* The card is already only 720px wide, so it bounds the line length on its
+   own. A 60ch cap on top of that broke every intro onto a second line with a
+   one-word orphan, which is most of what made the page look unfinished. */
+.upload-form-card .section-intro {
+  margin: 0 0 16px;
+  max-width: none;
+  color: var(--muted);
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+
+/* Label on the left, the optional action on the right. */
+.upload-form-card .field-label-row--split {
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.field-label-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* A labelled control and its answer belong together, and apart from the next
+   one. One rule instead of a style="margin-top:8px" on each. */
+.upload-form-card .answer-group > .field-label-row + .pill-row,
+.upload-form-card .answer-group > .field-label-row + .map-pill-row {
+  margin-top: 9px;
+}
+
+.upload-form-card .field-label-row .label {
+  margin-bottom: 0;
+}
+
+.upload-form-card .form-group:last-child {
+  margin-bottom: 0;
+}
+
+/* Field labels sit a step below section headings, not level with them. */
+.upload-form-card .label {
+  font-size: 0.8rem !important;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Advanced disclosure ───────────────────────────────────────────────────
+   It carried a full-width rule above it, which read as the end of the section
+   rather than an optional extra inside it. */
+.upload-form-card .advanced-options {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.upload-form-card .advanced-options > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 600;
+  list-style: none;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.upload-form-card .advanced-options > summary::-webkit-details-marker { display: none; }
+
+.upload-form-card .advanced-options > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .15s ease;
+}
+
+.upload-form-card .advanced-options[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.upload-form-card .advanced-options > summary:hover {
+  border-color: var(--purple);
+  background: var(--purple-faint);
+  color: var(--purple);
+}
+
+.upload-form-card .advanced-options[open] > summary {
+  margin-bottom: 12px;
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+/* The body is inset so an open disclosure reads as nested rather than as a
+   new section that happens to start lower down. */
+.upload-form-card .advanced-options-body {
+  padding: 12px 14px;
+  border: 1px solid var(--divider);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.upload-form-card .advanced-options-body > .field-hint {
+  margin: 0 0 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-form-card .advanced-options > summary,
+  .upload-form-card .advanced-options > summary::before { transition: none; }
+}
+
+/* ── A quiet download that is still obviously a control ────────────────────
+   The template used to be a link buried mid-sentence in a three-line grey
+   paragraph, which is where a reader's eye goes last. */
+.ghost-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color .15s, color .15s, background .15s;
+}
+
+.ghost-download:hover,
+.ghost-download:focus-visible {
+  border-color: var(--purple);
+  background: var(--purple-faint);
+  color: var(--purple);
+}
+
+.ghost-download svg { flex: none; opacity: .8; }
+
+
+/* Same reasoning as the empty error slots: a label with no filename in it was
+   holding a row open under the drop zone. */
+.file-label:empty {
+  display: none;
+}
+
+/* The header description broke to a second line carrying three words. Modern
+   engines balance it; older ones keep the current wrap, which is no worse. */
+.upload-form-card .card-desc,
+.upload-form-card .section-intro {
+  text-wrap: pretty;
+}
+
+/* The answer is the last thing in its group; the section padding below is
+   enough separation on its own. */
+.upload-form-card .answer-group > .pill-row:last-child {
+  margin-bottom: 2px;
+}
+
+@media (max-width: 640px) {
+  .upload-form-card .form-section { padding: 16px 18px 18px; }
+  .upload-form-card .section-heading { font-size: 0.9rem !important; }
+  /* Stacked, the download would sit directly under the answers again, so it
+     goes above them instead of beside them. */
+  .upload-form-card .field-label-row--split { flex-direction: column; align-items: flex-start; }
+}
+
+/* ============================================================
+   Step headers: the title, and a "?" for the rest
+   ------------------------------------------------------------
+   Every step opened with a sentence explaining itself, in grey, above content
+   that then explained itself again. Six of them, one per step, none of which a
+   returning reviewer ever needed to read. The sentence now lives behind the
+   "?" the app already uses everywhere else, so it is one hover away for
+   somebody who wants it and out of the way for everybody who does not.
+   ============================================================ */
+
+/* The heading's own source newline already renders as one space, so the margin
+   only has to add a hair on top of it. */
+.title-help {
+  position: relative;
+  top: -1px;
+  margin-left: 1px;
+  vertical-align: middle;
+}
+
+/* Wider than a field tooltip, because a step description is a sentence rather
+   than a phrase, and it hangs below the title so a header at the top of the
+   page does not push it off-screen. */
+.title-help .tooltip-text {
+  top: calc(100% + 9px);
+  bottom: auto;
+  width: 300px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* A header with no description under it no longer needs the space that
+   description used to occupy. */
+.heading-text > .card-title:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  /* Near the right edge a centred tooltip would overflow the viewport. */
+  .title-help .tooltip-text {
+    left: 0;
+    width: min(300px, calc(100vw - 48px));
+    transform: none;
+  }
+}
+
+/* The header padding was sized around a three-line block: label, title and a
+   description. With the description behind the "?" the block is two lines, and
+   the old padding left the title floating in the middle of a tall empty band. */
+.upload-form-card .form-header,
+.step-shell-header {
+  padding-top: 16px !important;
+  padding-bottom: 15px !important;
+}
+
+/* A heading sits 3px above its intro, which is right when there is one. Where
+   the intro moved into the "?" the heading would otherwise land straight on
+   top of the first control. No :has() needed: the adjacent sibling is only a
+   control when no intro came between them. */
+.upload-form-card .section-heading + .form-group,
+.upload-form-card .section-heading + .pill-row,
+.upload-form-card .section-heading + .field-label-row {
+  margin-top: 14px;
+}
+
+/* ============================================================
+   Organiser assets: 180 files with three names between them
+   ------------------------------------------------------------
+   The DCE reference set is one hundred and eighty files whose names repeat
+   once per scan, and the panel listed them flat under sixty printed folder
+   paths. Neither half answered the only question a reader has, which is which
+   scan a file belongs to. The folder is now stated once, the files are grouped
+   by the scan their folder names, and anything unreadable is called out where
+   it cannot be scrolled past.
+   ============================================================ */
+
+.cfg-asset-search {
+  display: block;
+  margin: 10px 0 8px;
+}
+
+.cfg-asset-search input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.cfg-asset-search input:focus {
+  border-color: var(--purple);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(94, 66, 166, .10);
+}
+
+.cfg-asset-scans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cfg-asset-scan > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.79rem;
+}
+
+.cfg-asset-scan > summary::-webkit-details-marker { display: none; }
+
+.cfg-asset-scan > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 4px solid var(--muted);
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .15s ease;
+}
+
+.cfg-asset-scan[open] > summary::before { transform: rotate(90deg); }
+.cfg-asset-scan > summary:hover { background: var(--purple-faint); }
+
+.cfg-asset-scan-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cfg-asset-scan-count {
+  margin-left: auto;
+  color: var(--subtle);
+  font-size: 0.74rem;
+}
+
+.cfg-asset-scan .cfg-asset-files {
+  margin: 2px 0 8px;
+  padding-left: 18px;
+}
+
+.cfg-asset-file {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 4px 0;
+  font-size: 0.78rem;
+}
+
+.cfg-asset-file-bad .cfg-asset-name { font-weight: 600; }
+
+.cfg-asset-nomatch {
+  margin: 6px 0;
+  color: var(--subtle);
+  font-size: 0.78rem;
+}
+
+.cfg-asset-nomatch[hidden] { display: none; }
+
+/* Screen-reader-only label for the search box. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cfg-asset-scan > summary::before { transition: none; }
+}
+
+/* ============================================================
+   Less grey
+   ------------------------------------------------------------
+   The organiser panels had tinted fills nested three deep: a lilac
+   Configuration Manager holding white cards holding a lilac review bar, all of
+   it inside a white step card. Every level was a slightly different
+   near-white, so nothing read as foreground and the whole region looked
+   unfinished rather than calm.
+
+   One rule instead: white surfaces, hairline borders, and colour reserved for
+   state and for the thing you are meant to press. A tint here now means
+   something -- it is a hover, or an active item -- rather than being the
+   default background of anything that happens to be a container.
+   ============================================================ */
+
+.config-manager,
+.config-manager-review-bar {
+  background: #fff;
+}
+
+.config-manager {
+  border-color: var(--line-soft, #e8eaed);
+}
+
+/* The four "Open →" cards are the only controls in this region, so they are
+   the only things that lift under the cursor. */
+.config-manager-card {
+  border-color: var(--line-soft, #e8eaed);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.config-manager-card:hover {
+  border-color: var(--purple);
+  box-shadow: 0 1px 4px rgba(94, 66, 166, .10);
+}
+
+/* The draft bar is the end of the panel, so it is separated by a rule rather
+   than by a fill, and the numbered buttons carry the emphasis on their own. */
+.config-manager-review-bar {
+  margin-top: 20px;
+  padding: 14px 0 2px;
+  border: 0;
+  border-top: 1px solid var(--line-soft, #e8eaed);
+  border-radius: 0;
+}
+
+.config-manager-review-copy strong {
+  font-size: 0.84rem !important;
+  font-weight: 700;
+}
+
+.config-manager-review-copy p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+/* Reviewer settings: a section header, not a floating grey pill.
+   Inside a step shell the panel is deliberately full-bleed with no border, so
+   a rounded tinted summary sat in the middle of it with nothing to belong to. */
+.step-shell .scoring-admin-summary,
+.step-shell .scoring-admin-panel[open] > .scoring-admin-summary {
+  background: transparent;
+  border-radius: 0;
+}
+
+.step-shell .scoring-admin-summary:hover {
+  background: transparent;
+  color: var(--purple);
+}
+
+.step-shell .scoring-admin-panel[open] > .scoring-admin-summary {
+  border-bottom: 1px solid var(--line-soft, #e8eaed);
+}
+
+.step-shell .scoring-admin-summary {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.scoring-admin-desc {
+  color: var(--muted);
+}
+
+/* A way out to the guide, from the two steps where the numbers appear and
+   where they leave the app. Quiet enough not to compete with the step title,
+   present enough that "what does Error CoV mean" has an answer on screen. */
+.step-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--purple);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.step-guide-link::after {
+  content: "↗";
+  font-size: 0.9em;
+  opacity: .7;
+}
+
+.step-guide-link:hover,
+.step-guide-link:focus-visible {
+  text-decoration: underline;
+}
+
+/* ── Filtering the ROI table ───────────────────────────────────────────────
+   Sixty scans contribute a row per map per region, so the table is hundreds
+   of rows long and correct. The filter narrows what is on screen and nothing
+   else: the count chip still states the real total, and the CSV export is
+   built from the records rather than from the visible rows. */
+.roi-filter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 8px;
+}
+
+.roi-filter[hidden] { display: none; }
+
+.roi-filter-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.roi-filter-field input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.roi-filter-field input:focus {
+  border-color: var(--purple);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(94, 66, 166, .10);
+}
+
+.roi-filter-count {
+  flex: none;
+  color: var(--subtle);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.roi-filter-empty {
+  margin: 6px 0 10px;
+  color: var(--muted);
+  font-size: 0.79rem;
+}
+
+.roi-filter-empty[hidden] { display: none; }
+
+@media (max-width: 640px) {
+  .roi-filter { flex-direction: column; align-items: stretch; gap: 6px; }
+  .roi-filter-count { text-align: right; }
+}
+
+/* Small values are printed in scientific notation, and "5.50e-5" broken across
+   two lines reads as two numbers. Numeric cells stay on one line and align on
+   the digits. */
+.roi-table td.num,
+.roi-table th.num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   One accent colour
+   ------------------------------------------------------------
+   The Run step had a dark green primary button and a blue progress panel,
+   while every other primary action in the app is purple. Three accent
+   families is not a palette, and green in particular already means something
+   here: it is the colour of a passed check. A green "Run processing" button
+   reads as a result rather than as the thing you press to get one.
+
+   Purple is the accent. Green and red stay for state -- passed, failed --
+   which is the only job they should have.
+   ============================================================ */
+
+.run-settings-card .run-model-btn.idle {
+  background: var(--purple);
+}
+
+.run-settings-card .run-model-btn.idle:hover {
+  background: var(--purple-hover);
+  box-shadow: 0 4px 14px rgba(94, 66, 166, .28);
+}
+
+/* Work in progress is the accent; completion is the only thing that turns
+   green, and it turns green because it has finished, not because it is a
+   progress bar. */
+.run-progress-panel {
+  background: var(--purple-faint);
+  border-color: #ded7f2;
+}
+
+.run-progress-label { color: var(--purple); }
+/* The counts inside the progress panel belong to it, so they take its border
+   rather than keeping the blue one from when the panel was blue. */
+.run-stat-cell { border-color: #ded7f2; }
+.run-prog-track { background: #ded7f2; }
+.run-prog-fill { background: var(--purple); }
+/* The pulsing "still working" dot travels with the bar it belongs to. */
+.proc-dot { background: var(--purple); }
+
+/* Green is left doing the one job it should: saying a thing finished or
+   passed. `state-done` keeps it, and so do the readiness dots. */
+
+/* ============================================================
+   Empty states that look deliberate
+   ------------------------------------------------------------
+   An empty list was a tall grey band with one grey sentence floating in the
+   middle of it, and on the Validate step two sentences that said nearly the
+   same thing. It read as a rendering failure rather than as "there is nothing
+   here yet".
+   ============================================================ */
+
+/* `.vr-empty` is the one an empty list actually uses; it is toggled with an
+   inline `display`, so the layout rules go on the element rather than on a
+   `display` this file would fight. */
+.vr-empty {
+  margin: 8px 0;
+  padding: 26px 20px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.step-shell .step-body > #run-empty-state {
+  background: #fff !important;
+}
+
+/* ============================================================
+   Capabilities: state first, detail second
+   ------------------------------------------------------------
+   Eight rows per challenge, five of them reading "Not configured" in the same
+   grey as the rows that said something. The one question the panel answers --
+   what can this challenge actually do right now -- took reading twenty-four
+   lines of near-identical text to answer.
+   ============================================================ */
+
+.config-capability-card {
+  background: #fff;
+  border-color: var(--line-soft, #e8eaed);
+  padding: 14px 15px;
+}
+
+.cap-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.config-capability-card .cap-head h5 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.cap-tally {
+  color: var(--subtle);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cap-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Name, state, detail. The state column is a fixed width so the words line up
+   down the card and the pattern is visible without reading any of them. */
+.cap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line-soft, #eef0f2);
+}
+
+.cap-row:first-child { border-top: 0; }
+
+.cap-name {
+  color: var(--text);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.cap-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cap-state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cap-on  .cap-state { color: #276749; }
+.cap-off .cap-state { color: var(--subtle); }
+
+/* The qualifying clause, under the name and only when there is one. */
+.cap-detail {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.cap-detail:empty { display: none; }
+
+/* An odd number of challenges left the last card alone on a row at half
+   width, which read as a missing fourth card. */
+.config-capability-grid > .config-capability-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .cap-row { grid-template-columns: minmax(0, 1fr); }
+  .cap-state { justify-content: flex-start; }
+}

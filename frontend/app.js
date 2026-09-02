@@ -131,6 +131,137 @@ function getRadio(name) {
   return checked ? checked.value : null;
 }
 
+/* ── Tooltips that are not clipped by the card they sit in ────────────────
+
+   Every "?" in the app opens its bubble with CSS alone: absolutely positioned
+   against the button. That works until the button is inside something with
+   `overflow: hidden`, which is every card in this interface, because each one
+   clips its children to its own rounded corners. The bubble is then cut off at
+   the card edge, and near the top of a card it is cut off entirely -- a help
+   affordance that shows nothing when pressed, which is worse than none.
+
+   Raising z-index does not help: an ancestor's overflow clips regardless of
+   stacking. The only fix that is not "remove overflow from sixty containers
+   and accept whatever else leaks out" is to take the bubble out of the
+   document flow entirely while it is open. `position: fixed` is measured
+   against the viewport, so no ancestor can clip it.
+
+   The CSS placement is left alone and remains the fallback: if this script
+   never runs, tooltips behave exactly as they did before.
+*/
+
+const _TOOLTIP_GAP = 9;
+const _TOOLTIP_EDGE = 12;
+const _tooltipHome = new WeakMap();
+
+/* While a bubble is open it is moved to <body>.
+
+   `position: fixed` alone is not enough. It escapes `overflow: hidden`, but any
+   ancestor carrying a `transform`, `filter` or `will-change` becomes the
+   containing block for fixed descendants, and this interface has several
+   (hover lifts, the progress rail). A bubble inside one is positioned against
+   that element rather than the viewport, which is how one of them ended up
+   ninety pixels below the fold while its inline `top` said 477.
+
+   Re-parenting to <body> removes every ancestor at once. The bubble is put
+   back where it came from on hide, so the markup a reader inspects, and the
+   CSS-only fallback if this script never runs, are both unchanged. */
+function _showTooltip(host) {
+  const bubble = host.querySelector(".tooltip-text")
+    || _tooltipHome.get(host)?.node;
+  if (!bubble) return;
+
+  if (!_tooltipHome.has(host)) {
+    _tooltipHome.set(host, { node: bubble, parent: bubble.parentNode, next: bubble.nextSibling });
+  }
+  if (bubble.parentNode !== document.body) document.body.appendChild(bubble);
+
+  // Measured at the width the stylesheet gives it, before anything is pinned.
+  bubble.style.position = "fixed";
+  bubble.style.left = "0px";
+  bubble.style.top = "0px";
+  // The stylesheet places most bubbles with `bottom`. Left set, it would fight
+  // the `top` below, so both edges are cleared before either is used.
+  bubble.style.bottom = "auto";
+  bubble.style.right = "auto";
+  bubble.style.transform = "none";
+  bubble.style.maxWidth = "";
+  // Outside the host, `:hover .tooltip-text` no longer matches, so visibility
+  // is driven directly.
+  bubble.style.opacity = "1";
+  bubble.style.visibility = "visible";
+  bubble.style.pointerEvents = "none";
+
+  const anchor = host.getBoundingClientRect();
+  const room = { width: window.innerWidth, height: window.innerHeight };
+  bubble.style.maxWidth = `${Math.min(bubble.offsetWidth, room.width - _TOOLTIP_EDGE * 2)}px`;
+  const box = bubble.getBoundingClientRect();
+
+  // Below by default. Above only when below would run off the bottom and there
+  // is genuinely more room up top, so a bubble never covers the control it
+  // explains unless it has to.
+  const below = anchor.bottom + _TOOLTIP_GAP;
+  const above = anchor.top - _TOOLTIP_GAP - box.height;
+  const fitsBelow = below + box.height <= room.height - _TOOLTIP_EDGE;
+  let top = fitsBelow || above < _TOOLTIP_EDGE ? below : above;
+  const lowest = Math.max(_TOOLTIP_EDGE, room.height - box.height - _TOOLTIP_EDGE);
+  top = Math.min(Math.max(_TOOLTIP_EDGE, top), lowest);
+
+  let left = anchor.left + anchor.width / 2 - box.width / 2;
+  left = Math.max(_TOOLTIP_EDGE, Math.min(left, room.width - box.width - _TOOLTIP_EDGE));
+
+  bubble.style.left = `${Math.round(left)}px`;
+  bubble.style.top = `${Math.round(top)}px`;
+}
+
+function _hideTooltip(host) {
+  const home = _tooltipHome.get(host);
+  if (!home) return;
+  const bubble = home.node;
+  // Placement handed back to the stylesheet, so nothing is left pinned to a
+  // coordinate that the next scroll or re-render invalidates.
+  ["position", "left", "top", "bottom", "right", "transform", "maxWidth",
+   "opacity", "visibility", "pointerEvents"].forEach((prop) => {
+    bubble.style[prop] = "";
+  });
+  if (bubble.parentNode !== home.parent) {
+    home.parent.insertBefore(bubble, home.next);
+  }
+}
+
+function _tooltipHost(target) {
+  return target && target.closest ? target.closest(".help-tooltip") : null;
+}
+
+function _hideEveryTooltip() {
+  document.querySelectorAll(".help-tooltip").forEach(_hideTooltip);
+}
+
+document.addEventListener("pointerover", (event) => {
+  const host = _tooltipHost(event.target);
+  if (host) _showTooltip(host);
+});
+document.addEventListener("pointerout", (event) => {
+  const host = _tooltipHost(event.target);
+  if (host && !host.contains(event.relatedTarget)) _hideTooltip(host);
+});
+// Keyboard users get the same bubble in the same place.
+document.addEventListener("focusin", (event) => {
+  const host = _tooltipHost(event.target);
+  if (host) _showTooltip(host);
+});
+document.addEventListener("focusout", (event) => {
+  const host = _tooltipHost(event.target);
+  if (host) _hideTooltip(host);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") _hideEveryTooltip();
+});
+// A pinned bubble is measured against the viewport, so it lets go when the
+// viewport moves under it.
+window.addEventListener("scroll", _hideEveryTooltip, true);
+window.addEventListener("resize", _hideEveryTooltip);
+
 function defaultChallengeType() {
   return String(_appConfig.defaults?.challenge_type || getRadio("challenge_type") || "").toLowerCase();
 }
@@ -1300,6 +1431,29 @@ function _advanceWizardStep(step) {
   goToStep(cfg.next);
 }
 
+/* Two primary-looking buttons share this footer: Run Analysis and Continue to
+   Export. Nothing said which came first, and Continue is the one that reads as
+   the next step, so it was pressed first and the export described a run that
+   had not happened. The line below names the order, stops saying it once the
+   run has happened, and does not demand a run that has nothing to do. */
+let _scoreRunIsLive = false;
+
+function _scoreAlreadyRan() {
+  return Object.values(_scoreCache).some((entry) =>
+    entry.status === "scored"
+    || _REFERENCE_COMPARED_STATUSES.has(
+      String(((entry.niftiAnalysis || {}).reference_scoring || {}).status || "")));
+}
+
+function _scoreStepGuidance() {
+  if (!_scoreRunIsLive) {
+    return "Nothing here needs running. Continue to Export for QC, previews and the report.";
+  }
+  return _scoreAlreadyRan()
+    ? "Analysis has run. Next: choose reviewer or organiser outputs."
+    : "Run Analysis first, then Continue to Export.";
+}
+
 function _syncStepActionRow(step) {
   _syncInactiveStepActions(step);
   if (step === "upload") return;
@@ -1350,7 +1504,7 @@ function _syncStepActionRow(step) {
     index: "Next: validate the selected submission files.",
     validate: "Next: confirm whether processing is required.",
     run: "Next: review QC and available analyses.",
-    score: "Next: choose reviewer or organiser outputs.",
+    score: _scoreStepGuidance(),
     export: "This clears the current local review and returns to Upload.",
   };
   if (guidance) {
@@ -2522,6 +2676,11 @@ async function uploadLocalFiles() {
   };
 
   const fd = new FormData();
+  /* Sent only when the submitter actually answered. An unanswered question is
+     recorded as unanswered; defaulting it to "no" would put words in their
+     mouth, and defaulting it to "yes" would raise an error they never earned. */
+  const methodsAnswer = getRadio("methods_document");
+  if (methodsAnswer) fd.append("methods_document", methodsAnswer);
   if (isSingleZip) {
     fd.append("file", files[0]);
     return _xhrUpload(`${API}/api/upload-batch`, fd, onProgress);
@@ -5672,6 +5831,10 @@ document.addEventListener("click", (e) => {
 // ── Step 6: Export ────────────────────────────────────────────────────────────
 
 function _syncExportStep() {
+  /* Redraw first. Availability is worked out from the current submissions and
+     analyses, and at load time there were none of either, so a row rendered
+     once at startup is frozen at "Nothing has been reviewed yet". */
+  _renderExportRows();
   // Show single or batch validation export buttons based on mode
   const batchValWrap  = el("batch-export-val-wrap");
   const singleValWrap = el("single-export-val");
@@ -5922,7 +6085,11 @@ function _setScoreStepCopy({ official = false, providerName = "" } = {}) {
   const titleEl = el("score-step-title");
   const descEl = el("score-step-desc");
   if (labelEl) labelEl.textContent = "Step 5 of 6: QC & Preview";
-  if (titleEl) titleEl.textContent = "QC & Preview";
+  /* Only the text node is rewritten. The title now carries a "?" button as a
+     child, and setting textContent on the heading would delete it. */
+  if (titleEl && titleEl.firstChild) titleEl.firstChild.nodeValue = "QC & Preview\n            ";
+  // The description moved into that button's tooltip; it is still the same
+  // sentence, just no longer occupying a line under every step header.
   if (descEl) descEl.textContent = official
     ? `QC and previews are available for readable maps. Results from ${providerName || "the configured provider"} appear when its required data are available.`
     : "QC and previews are available for readable maps. Other analyses appear when compatible data are available.";
@@ -6893,6 +7060,71 @@ function _clearRunOutcome() {
   host.className = "score-run-outcome";
 }
 
+/* ── A comparison against ground truth is not a scoring provider ─────
+
+   These are two different things and only one of them needs configuring. A
+   challenge that has the organisers' reference maps and masks in place can
+   already produce bias, RMSE, error CoV and the ROI descriptive tables with no
+   provider at all, which is the state every challenge is in before a provider
+   exists.
+
+   Treating "no provider" as "nothing to run" hid that behind a dead button: a
+   reviewer with ground truth loaded pressed Run Analysis and was told there
+   was nothing for it to do, which was false. The helpers below let the Score
+   step tell the two apart, and say which one is missing. */
+
+const _REFERENCE_COMPARED_STATUSES = new Set(["available", "partial_reference_scoring"]);
+
+function _referenceScoringOf(data) {
+  if (!data) return {};
+  return data.reference_scoring
+    || (_scorePayload(data) || {}).reference_scoring
+    || (data.nifti_analysis || {}).reference_scoring
+    || {};
+}
+
+function _referenceStatusFor(sid) {
+  const analysis = _scoreCache[sid] && _scoreCache[sid].niftiAnalysis;
+  const ref = (analysis && analysis.reference_scoring) || {};
+  return String(ref.status || "");
+}
+
+/* Why nothing was compared, in the reviewer's words rather than the status
+   string's. An empty Score step that does not say why reads as a broken one. */
+const _REFERENCE_REASONS = {
+  reference_not_available:
+    "no reference maps for this challenge were found in the reference data folder",
+  scoring_error:
+    "reference maps were found but could not be compared — see the per-map status in the table below",
+  not_compared:
+    "the submitted maps and the reference maps could not be paired",
+};
+
+function _referenceReasonText(status) {
+  if (_REFERENCE_REASONS[status]) return _REFERENCE_REASONS[status];
+  if (!status) return "the comparison did not report a status";
+  return `the comparison reported "${status}"`;
+}
+
+/* Summarise reference readiness across the submissions on screen. Called with
+   the /api/scoring-status payloads, which already carry the comparison result,
+   so the card knows what is runnable before anything is pressed. */
+function _referenceComparisonSummary(payloads) {
+  const summary = { compared: 0, unavailable: 0, total: 0, masks: 0, reasons: [] };
+  (payloads || []).forEach((data) => {
+    const ref = _referenceScoringOf(data);
+    summary.total += 1;
+    summary.masks = Math.max(summary.masks, Number(ref.mask_count) || 0);
+    const status = String(ref.status || "");
+    if (_REFERENCE_COMPARED_STATUSES.has(status)) { summary.compared += 1; return; }
+    summary.unavailable += 1;
+    const reason = _referenceReasonText(status);
+    if (!summary.reasons.includes(reason)) summary.reasons.push(reason);
+  });
+  summary.possible = summary.compared > 0;
+  return summary;
+}
+
 /* One sentence describing what a run did. Counts are spelled out rather than
    reduced to "done", because "analysed 3 of 5" and "analysed 5 of 5" are very
    different results and a reviewer needs to notice the difference. */
@@ -6901,10 +7133,26 @@ function _runOutcomeText(tally, isOfficial) {
   /* Distinguished from "no submissions", because the two have different
      remedies and telling someone to upload a submission they have already
      uploaded is how a person concludes the button is broken. */
+  const compared = tally.reference || 0;
+
+  /* No provider, but the comparison against ground truth ran. That is a real
+     result and reporting it as "nothing happened" is how a reviewer concludes
+     the button is broken while it is in fact working. */
+  if (tally.unconfigured && compared) {
+    const done = [`${compared} of ${tally.total} compared against the reference data`];
+    if (tally.failed) done.push(`${tally.failed} failed`);
+    return {
+      tone: tally.failed ? "err" : "ok",
+      text: `Comparison complete: ${done.join(", ")}. Bias, RMSE, error CoV and the ROI `
+        + `tables are in the table below and in the report. No scoring provider is `
+        + `configured, so there are no provider metrics; that is a separate, optional step.`,
+    };
+  }
   if (tally.unconfigured) {
+    const why = tally.reason ? ` Nothing could be compared: ${tally.reason}.` : "";
     return {
       tone: "warn",
-      text: `No analysis provider is configured, so there is nothing for this button to run. `
+      text: `No analysis provider is configured, so there is nothing for this button to run.${why} `
         + `QC, ROI statistics and the comparison against ground truth do not need one and are already below.`,
     };
   }
@@ -6939,17 +7187,20 @@ function _showRunOutcome(tally, isOfficial) {
 }
 
 // packageName: display name of active custom package, or null
-function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial = false) {
+function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial = false, reference = null) {
   const titleEl = el("score-status-title");
   const subEl   = el("score-status-sub");
   const badgeEl = el("score-status-badge");
   const hintEl  = el("score-status-hint");
-  const btnAll  = el("btn-score-all");
   const previewEl = el("score-metric-preview");
 
   const isConfigured = !!(activeMode && activeMode !== "none");
   const isOfficial = activeOfficial === true;
   const actionText = isOfficial ? "Run Official Scoring" : "Run Analysis";
+  /* Reference data alone is enough to run. A provider is a separate thing and
+     most challenges will not have one for a long time. */
+  const canCompare = !isConfigured && !!(reference && reference.possible);
+  const reason = reference && reference.reasons.length ? reference.reasons.join("; ") : "";
 
   if (isConfigured) {
     const existingPreview = _scoreMetricPreviewHtml();
@@ -6969,71 +7220,115 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
         : `${scorerName} is active for configured analysis. These are not official OSIPI scores.`;
     if (subEl)   subEl.textContent  = pkgLabel;
 
-    const badgeTxt = "Ready";
-    if (badgeEl) { badgeEl.textContent = badgeTxt; badgeEl.className = "smc-badge smc-badge--ready"; }
+    if (badgeEl) { badgeEl.textContent = "Ready"; badgeEl.className = "smc-badge smc-badge--ready"; }
     if (hintEl)  hintEl.textContent   = "";
-    if (btnAll)  btnAll.disabled      = false;
+  } else if (canCompare) {
+    const existingPreview = _scoreMetricPreviewHtml();
+    if (titleEl) titleEl.textContent = existingPreview
+      ? "Comparison against reference data complete"
+      : "Comparison against reference data is ready";
+    if (previewEl) {
+      previewEl.innerHTML = existingPreview;
+      previewEl.style.display = existingPreview ? "" : "none";
+    }
+    /* One line. What running produces, and that a provider is a separate
+       thing, are true but they are not news every time the card renders. */
+    const masks = reference.masks
+      ? ` · ${reference.masks} region mask${reference.masks === 1 ? "" : "s"}`
+      : "";
+    if (subEl) subEl.textContent = `Ground truth is loaded${masks}.`;
+    if (badgeEl) { badgeEl.textContent = "Reference data"; badgeEl.className = "smc-badge smc-badge--ready"; }
+    /* Partial coverage is stated rather than silently averaged away. */
+    if (hintEl) hintEl.textContent = reference.unavailable
+      ? `${reference.unavailable} of ${reference.total} submissions have no reference match: ${reason}.`
+      : "";
   } else {
-    if (btnAll)  btnAll.disabled      = true;
+    if (titleEl) titleEl.textContent = "Nothing to run yet";
+    if (previewEl) { previewEl.innerHTML = ""; previewEl.style.display = "none"; }
+    /* The old copy said only that QC and previews were available, which told a
+       reviewer what still worked but never why the rest did not. */
+    if (subEl) subEl.textContent = reason
+      ? `No comparison is possible: ${reason}. No scoring provider is configured either. `
+        + `QC and previews need neither and are available below.`
+      : `No scoring provider is configured and no reference data was found for this `
+        + `challenge. QC and previews need neither and are available below.`;
+    if (badgeEl) { badgeEl.textContent = "Not set up"; badgeEl.className = "smc-badge"; }
+    if (hintEl)  hintEl.textContent = "";
   }
 
-  /* A visible button with no click listener is the worst outcome available:
-     it looks pressable, it presses, and nothing happens, forever, with no
-     explanation. That is reachable whenever the card is on screen while
-     nothing is configured, which happens if the active configuration changes
-     under a page that is already open, for instance after an activation
-     fails and resets the provider to none.
+  _scoreRunIsLive = isConfigured || canCompare;
+  _wireRunButton({ isOfficial, actionText, live: _scoreRunIsLive,
+                   unconfigured: !isConfigured, reason });
+  _refreshWizardFooter();
+}
 
-     So the button is always wired. When there is nothing to run it says so
-     rather than absorbing the click in silence. */
-  if (btnAll && !isConfigured) {
-    const fresh = btnAll.cloneNode(true);
-    fresh.disabled = false;
-    fresh.textContent = actionText;
-    btnAll.replaceWith(fresh);
+/* A visible button with no click listener is the worst outcome available: it
+   looks pressable, it presses, and nothing happens, forever, with no
+   explanation. That is reachable whenever the card is on screen while nothing
+   is configured, which happens if the active configuration changes under a
+   page that is already open, for instance after an activation fails and resets
+   the provider to none.
+
+   So the button is always wired. `live` decides whether pressing it runs the
+   submissions or explains why there is nothing to run; either way the press is
+   answered. Cloning first clears any handler left by a previous render. */
+function _wireRunButton({ isOfficial, actionText, live, unconfigured, reason }) {
+  const btnAll = el("btn-score-all");
+  if (!btnAll) return;
+  const fresh = btnAll.cloneNode(true);
+  fresh.disabled = false;
+  fresh.textContent = actionText;
+  btnAll.replaceWith(fresh);
+
+  if (!live) {
     fresh.addEventListener("click", () => {
-      _showRunOutcome({ scored: 0, skipped: 0, failed: 0, total: 0, unconfigured: true }, isOfficial);
+      _showRunOutcome(
+        { scored: 0, skipped: 0, failed: 0, reference: 0, total: 0, unconfigured: true, reason },
+        isOfficial,
+      );
     });
+    return;
   }
 
-  // Re-wire the configured analysis action (clone clears old listeners)
-  if (btnAll && isConfigured) {
-    const fresh = btnAll.cloneNode(true);
-    fresh.disabled    = false;
-    fresh.textContent = actionText;
-    btnAll.replaceWith(fresh);
-    fresh.addEventListener("click", async () => {
-      const subs = _getKnownSubmissions();
-      // Ensure table is visible
-      const tc = el("score-table-card");
-      if (tc) tc.style.display = "";
-      if (!subs.length) {
-        _showRunOutcome({ scored: 0, skipped: 0, failed: 0, total: 0 }, isOfficial);
-        return;
-      }
-      setLoading(fresh, true, isOfficial ? "Scoring" : "Checking");
-      _clearRunOutcome();
-      _initScoreProgress(subs.length);
-      const tally = { scored: 0, skipped: 0, failed: 0, total: subs.length };
-      try {
-        for (const sub of subs) {
-          const sid       = sub.submission_id || sub;
-          const challenge = sub.challenge_type || _getSessionChallengeType() || defaultChallengeType();
-          const mapType   = defaultScoringMapType();
-          const status    = await _runSingleScore(null, sid, challenge, mapType);
-          if (status === "scored") tally.scored += 1;
-          else if (status === "not_configured") tally.skipped += 1;
-          else tally.failed += 1;
+  fresh.addEventListener("click", async () => {
+    const subs = _getKnownSubmissions();
+    // Ensure table is visible
+    const tc = el("score-table-card");
+    if (tc) tc.style.display = "";
+    if (!subs.length) {
+      _showRunOutcome({ scored: 0, skipped: 0, failed: 0, reference: 0, total: 0, unconfigured, reason }, isOfficial);
+      return;
+    }
+    setLoading(fresh, true, isOfficial ? "Scoring" : "Checking");
+    _clearRunOutcome();
+    _initScoreProgress(subs.length);
+    const tally = {
+      scored: 0, skipped: 0, failed: 0, reference: 0,
+      total: subs.length, unconfigured, reason,
+    };
+    try {
+      for (const sub of subs) {
+        const sid       = sub.submission_id || sub;
+        const challenge = sub.challenge_type || _getSessionChallengeType() || defaultChallengeType();
+        const mapType   = defaultScoringMapType();
+        const status    = await _runSingleScore(null, sid, challenge, mapType);
+        if (status === "scored") tally.scored += 1;
+        else if (status === "not_configured") {
+          /* With no provider the run still compares against ground truth. Read
+             what that produced rather than assuming it produced nothing. */
+          if (_REFERENCE_COMPARED_STATUSES.has(_referenceStatusFor(sid))) tally.reference += 1;
+          else tally.skipped += 1;
         }
-      } finally {
-        setLoading(fresh, false, actionText);
-        _syncCompactProgress();
-        // Always report, including after a throw: a run that died halfway
-        // must not look the same as one that never started.
-        _showRunOutcome(tally, isOfficial);
+        else tally.failed += 1;
       }
-    });
-  }
+    } finally {
+      setLoading(fresh, false, actionText);
+      _syncCompactProgress();
+      // Always report, including after a throw: a run that died halfway
+      // must not look the same as one that never started.
+      _showRunOutcome(tally, isOfficial);
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -7508,6 +7803,68 @@ const ASSET_KINDS = [
    "The measured curve, compared against a submitted modelled curve."],
 ];
 
+/* Which scan a reference file belongs to, read off the folder it sits in.
+
+   The DCE reference set is one hundred and eighty files with three distinct
+   names between them: Ct, Ktrans and vp, repeated once per scan. Listed flat
+   they are sixty identical-looking triples, and the panel printed sixty folder
+   paths above them to compensate, which is a wall rather than an answer. */
+function _assetScanLabel(folder, name = "") {
+  // Folders are matched a whole segment at a time, so a directory called
+  // "preview" cannot be read as participant review.
+  const parts = String(folder || "").split("/").filter(Boolean);
+  const fromFolder = (pattern) => {
+    for (const part of parts) {
+      const match = part.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  };
+  /* Masks put the site in the file name rather than the path
+     (site_1_GM_mask.nii.gz), so the name is searched too -- but only at a
+     token boundary, or "composite_1.nii" would report site 1. */
+  const fromName = (word) => {
+    const match = String(name || "").match(
+      new RegExp(`(?:^|[_\\-. ])${word}[_\\-. ]?0*(\\d+)(?![0-9])`, "i"));
+    return match ? match[1] : null;
+  };
+  const participant = fromFolder(/^p0*(\d+)$/i) || fromName("p(?:articipant)?");
+  const site = fromFolder(/^site[_-]?0*(\d+)$/i) || fromName("site");
+  const scan = fromFolder(/^(?:scan|repeat|visit)[_-]?0*(\d+)$/i)
+    || fromName("(?:scan|repeat|visit)");
+  const pieces = [];
+  if (participant) pieces.push(`P${participant}`);
+  if (site) pieces.push(`Site ${site}`);
+  if (scan) pieces.push(`Repeat ${scan}`);
+  return pieces.length ? pieces.join(" · ") : null;
+}
+
+/* The folder every one of these files is under, rather than each of them.
+   Sixty sibling paths share a root; printing the root once says the same
+   thing in one line. */
+function _assetCommonRoot(folders) {
+  const lists = folders.filter(Boolean).map((folder) => String(folder).split("/").filter(Boolean));
+  if (!lists.length) return "";
+  const shortest = Math.min(...lists.map((parts) => parts.length));
+  const common = [];
+  for (let i = 0; i < shortest; i += 1) {
+    const segment = lists[0][i];
+    if (lists.every((parts) => parts[i] === segment)) common.push(segment);
+    else break;
+  }
+  return common.length ? `${common.join("/")}/` : "";
+}
+
+function _assetFileRow(item) {
+  const status = item.readable ? "Readable" : "Cannot be read";
+  const shape = item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : "";
+  return `
+    <li class="cfg-asset-file${item.readable ? "" : " cfg-asset-file-bad"}">
+      <span class="cfg-asset-name">${escapeHtml(item.name)}</span>
+      <span class="cfg-asset-meta${item.readable ? "" : " cfg-asset-bad"}">${status}${shape}</span>
+    </li>`;
+}
+
 function _renderConfigurationAssets(assets) {
   const target = el("config-manager-assets-status");
   if (!target) return;
@@ -7516,62 +7873,180 @@ function _renderConfigurationAssets(assets) {
   // placeholder keeps the path readable as a template; interpolating an empty
   // string produced data/reference_data//maps/, which someone would copy.
   const challenge = String(assets.challenge_type || "").toLowerCase() || "<challenge>";
-
   const uploadFolders = assets.upload_folders || {};
 
   const groups = ASSET_KINDS.map(([kind, title, folder, purpose]) => {
     const mine = items.filter((item) => item.kind === kind);
-    // Name the folder these files are really in. A file found in the flat
-    // layout used to be described as living in the challenge-scoped one,
-    // which sent anyone looking for it to an empty directory.
-    const found = Array.from(new Set(mine.map((item) => item.folder).filter(Boolean)));
-    const paths = found.length
-      ? found
-      : [uploadFolders[kind] || `data/reference_data/${challenge}/${folder}/`];
-    const body = mine.length
-      ? `<ul class="cfg-asset-files">${mine.map((item) => `
-          <li>
-            <span class="cfg-asset-name">${escapeHtml(item.name)}</span>
-            <span class="cfg-asset-meta${item.readable ? "" : " cfg-asset-bad"}">
-              ${item.readable ? "Readable" : "Cannot be read"}${
-                item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : ""}
-            </span>
-          </li>`).join("")}</ul>`
-      : `<p class="cfg-asset-empty">None yet. Add one below, or copy files
-           straight into this folder.</p>`;
+    const root = _assetCommonRoot(mine.map((item) => item.folder))
+      || uploadFolders[kind] || `data/reference_data/${challenge}/${folder}/`;
+
+    // Grouped by scan when the folders say which scan; otherwise one list, as
+    // before. Unreadable files lead, because they are the only rows anybody
+    // has to act on.
+    const byScan = new Map();
+    mine.forEach((item) => {
+      const label = _assetScanLabel(item.folder, item.name) || "";
+      if (!byScan.has(label)) byScan.set(label, []);
+      byScan.get(label).push(item);
+    });
+    const unreadable = mine.filter((item) => !item.readable);
+    const scanned = [...byScan.keys()].some(Boolean);
+
+    let body;
+    if (!mine.length) {
+      body = `<p class="cfg-asset-empty">None yet. Add one below, or copy files
+              straight into this folder.</p>`;
+    } else if (scanned) {
+      body = `<div class="cfg-asset-scans">${[...byScan.entries()]
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true }))
+        .map(([label, files]) => {
+          const bad = files.filter((item) => !item.readable).length;
+          return `
+            <details class="cfg-asset-scan" data-asset-search="${escapeHtml(
+              `${label} ${files.map((f) => f.name).join(" ")}`.toLowerCase())}">
+              <summary>
+                <span class="cfg-asset-scan-name">${escapeHtml(label || "Not identified")}</span>
+                <span class="cfg-asset-scan-count">${files.length} file${files.length === 1 ? "" : "s"}</span>
+                ${bad ? `<span class="cfg-asset-bad">${bad} unreadable</span>` : ""}
+              </summary>
+              <ul class="cfg-asset-files">${files.map(_assetFileRow).join("")}</ul>
+            </details>`;
+        }).join("")}</div>`;
+    } else {
+      body = `<ul class="cfg-asset-files">${mine.map((item) => `
+        <li class="cfg-asset-file" data-asset-search="${escapeHtml(String(item.name).toLowerCase())}">
+          <span class="cfg-asset-name">${escapeHtml(item.name)}</span>
+          <span class="cfg-asset-meta${item.readable ? "" : " cfg-asset-bad"}">
+            ${item.readable ? "Readable" : "Cannot be read"}${
+              item.shape ? ` · ${escapeHtml(item.shape.join(" × "))}` : ""}
+          </span>
+        </li>`).join("")}</ul>`;
+    }
+
+    /* The same controls on every kind. Reference maps, masks and measured
+       signals are the same kind of thing -- organiser files, grouped by the
+       scan they belong to -- and giving one of them a search box and grouping
+       while the others got a flat list made them look like three unrelated
+       panels. A search on nine files is not needed; a panel that behaves
+       differently from the one above it is worse. */
+    const search = mine.length
+      ? `<label class="cfg-asset-search">
+           <span class="visually-hidden">Search ${escapeHtml(title)}</span>
+           <input type="search" placeholder="Filter by scan or file name"
+                  data-asset-filter="${escapeHtml(kind)}" />
+         </label>`
+      : "";
+
+    /* A long list starts closed: the count is in the header, so the section
+       answers "how many masks are loaded" without being opened at all. Short
+       ones stay open, because collapsing three files hides nothing and costs
+       a click. */
+    const startOpen = mine.length > 0 && mine.length <= _ASSET_COLLAPSE_ABOVE;
     return `
-      <section class="cfg-asset-group" data-asset-kind="${escapeHtml(kind)}">
-        <header class="cfg-asset-head">
+      <details class="cfg-asset-group" data-asset-kind="${escapeHtml(kind)}"${startOpen ? " open" : ""}>
+        <summary class="cfg-asset-head">
           <h5>${escapeHtml(title)}</h5>
           <span class="cfg-asset-count${mine.length ? " cfg-asset-count-has" : ""}">${mine.length}</span>
-        </header>
-        <p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>
-        <p class="cfg-asset-path">${paths.map((one) =>
-          `<code>${escapeHtml(one)}</code>`).join(" ")}</p>
-        ${body}
-      </section>`;
+          ${unreadable.length
+            ? `<span class="cfg-asset-bad">${unreadable.length} unreadable</span>` : ""}
+        </summary>
+        <div class="cfg-asset-body">
+          <p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>
+          <p class="cfg-asset-path"><code>${escapeHtml(root)}</code></p>
+          ${search}
+          <p class="cfg-asset-nomatch" hidden>Nothing matches that.</p>
+          ${body}
+        </div>
+      </details>`;
   }).join("");
 
   target.innerHTML = `<div class="cfg-asset-groups">${groups}</div>`;
 }
 
+/* Filtering is delegated, so it survives the panel being re-rendered. */
+document.addEventListener("input", (event) => {
+  const input = event.target;
+  if (!input || !input.matches || !input.matches("[data-asset-filter]")) return;
+  const group = input.closest(".cfg-asset-group");
+  if (!group) return;
+  const needle = String(input.value || "").trim().toLowerCase();
+  const rows = group.querySelectorAll("[data-asset-search]");
+  let shown = 0;
+  rows.forEach((row) => {
+    const hit = !needle || (row.dataset.assetSearch || "").includes(needle);
+    row.hidden = !hit;
+    if (hit) shown += 1;
+    // A search that matched inside a collapsed scan should show what it found.
+    if (hit && needle && row.tagName === "DETAILS") row.open = true;
+    if (!needle && row.tagName === "DETAILS") row.open = false;
+  });
+  const empty = group.querySelector(".cfg-asset-nomatch");
+  if (empty) empty.hidden = shown !== 0;
+  // Searching inside a section that is closed would show nothing at all.
+  if (needle && group.tagName === "DETAILS") group.open = true;
+});
+
+/* Availability, read from the sentence the backend already writes.
+
+   The backend's wording is the source of truth and is not duplicated here:
+   anything that opens with "Not configured" is off, everything else is on.
+   Guessing from keywords would drift the moment the backend rephrases. */
+function _capabilityIsOn(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return text !== "" && !text.startsWith("not configured") && !text.startsWith("not available");
+}
+
+/* What is left once the state has been said separately. "Available for
+   readable maps" becomes "for readable maps"; a bare "Available" leaves
+   nothing, which is correct -- there was nothing more to say. */
+function _capabilityDetail(value, on) {
+  let text = String(value ?? "").trim();
+  if (!on) {
+    const extra = text.replace(/^not configured[:.\s-]*/i, "").trim();
+    return extra;
+  }
+  text = text.replace(/^available\s*/i, "").trim();
+  return text;
+}
+
 function _renderConfigurationCapabilities(rows) {
   const target = el("config-manager-capabilities");
   if (!target) return;
-  target.innerHTML = `<div class="config-capability-grid">${rows.map((row) => `
+  /* Eight rows per challenge, most of them reading "Not configured" in the
+     same grey as the ones that say something. The state is the answer here,
+     so it leads: a dot and a word tell you availability at a glance, and the
+     detail sits behind it for the rows where there is detail. */
+  const CAPABILITIES = [
+    ["QC & previews", "map_qc"],
+    ["ROI statistics", "roi_statistics"],
+    ["Reference comparison", "reference_comparison"],
+    ["Difference maps", "difference_maps"],
+    ["RSS", "rss"],
+    ["Provider analysis", "provider_analysis"],
+    ["ICC", "icc"],
+    ["Official ranking", "official_ranking"],
+  ];
+  target.innerHTML = `<div class="config-capability-grid">${rows.map((row) => {
+    const available = CAPABILITIES.filter(([, key]) => _capabilityIsOn(row[key])).length;
+    return `
     <article class="config-capability-card">
-      <h5>${escapeHtml(row.label)}</h5>
-      <dl class="config-capability-list">
-        <dt>QC &amp; previews</dt><dd>${escapeHtml(row.map_qc)}</dd>
-        <dt>ROI statistics</dt><dd>${escapeHtml(row.roi_statistics)}</dd>
-        <dt>Reference comparison</dt><dd>${escapeHtml(row.reference_comparison)}</dd>
-        <dt>Difference maps</dt><dd>${escapeHtml(row.difference_maps)}</dd>
-        <dt>RSS</dt><dd>${escapeHtml(row.rss)}</dd>
-        <dt>Provider analysis</dt><dd>${escapeHtml(row.provider_analysis)}</dd>
-        <dt>ICC</dt><dd>${escapeHtml(row.icc)}</dd>
-        <dt>Official ranking</dt><dd>${escapeHtml(row.official_ranking)}</dd>
-      </dl>
-    </article>`).join("")}</div>`;
+      <header class="cap-head">
+        <h5>${escapeHtml(row.label)}</h5>
+        <span class="cap-tally">${available} of ${CAPABILITIES.length} available</span>
+      </header>
+      <ul class="cap-list">
+        ${CAPABILITIES.map(([label, key]) => {
+          const value = String(row[key] ?? "");
+          const on = _capabilityIsOn(value);
+          return `<li class="cap-row${on ? " cap-on" : " cap-off"}">
+            <span class="cap-name">${escapeHtml(label)}</span>
+            <span class="cap-state">${on ? "Available" : "Not configured"}</span>
+            <span class="cap-detail">${escapeHtml(_capabilityDetail(value, on))}</span>
+          </li>`;
+        }).join("")}
+      </ul>
+    </article>`;
+  }).join("")}</div>`;
 }
 
 function _openConfigurationModal(section, opener) {
@@ -8439,29 +8914,52 @@ async function renderScoreStep() {
     providerName: activeIsOfficial ? (activePackageName || "Official Scoring & Preview") : "",
   });
 
+  /* No provider configured. That used to end the step here, with the card and
+     the table hidden and the button dead — which is wrong whenever the
+     organisers' reference data is present, because the comparison against
+     ground truth needs no provider. Ask the submissions what the comparison
+     actually produced, then decide. */
+  let referenceSummary = null;
+  /* Every status fetch re-runs the comparison for that submission, which on a
+     cold cache is the expensive part of this step. The rows below are filled
+     from what was already fetched here rather than asking again. */
+  const prefetchedStatus = new Map();
   if (activeMode === "none") {
-    // No visible not-configured card; QC/export fallback still runs below.
     if (notConfiguredCard) {
       notConfiguredCard.hidden = true;
       notConfiguredCard.style.display = "none";
     }
-    if (statusCard)        statusCard.style.display        = "none";
-    if (tableCard)         tableCard.style.display         = "none";
     const subs = _getKnownSubmissions();
-    await Promise.all(subs.map(async (sub) => {
+    const payloads = await Promise.all(subs.map(async (sub) => {
       const sid = sub.submission_id || sub;
       const ct  = sub.challenge_type || getChallengeType() || defaultChallengeType();
       try {
         const r = await fetch(`${API}/api/scoring-status?submission_id=${encodeURIComponent(sid)}&challenge_type=${encodeURIComponent(ct)}&map_type=${encodeURIComponent(defaultScoringMapType())}`);
         const d = await r.json();
+        prefetchedStatus.set(sid, d);
         _applyScoreStatus(sid, d);
+        return d;
       } catch (_) { /* Summary can still render validation/export state. */ }
+      return null;
     }));
-    renderScorePreviewPanel();
-    saveSessionState();
-    _syncCompactProgress();
-    _refreshWizardFooter();
-    return;
+    referenceSummary = _referenceComparisonSummary(payloads.filter(Boolean));
+
+    if (!referenceSummary.possible) {
+      /* Nothing to compare against either. The card is shown rather than
+         hidden so the step says why it is empty; hiding it left "QC and
+         previews are available" as the only thing on screen, which answers a
+         question nobody asked. */
+      if (statusCard) statusCard.style.display = "";
+      if (tableCard)  tableCard.style.display  = "none";
+      _updateScoreStatusCard([], "none", null, false, referenceSummary);
+      renderScorePreviewPanel();
+      saveSessionState();
+      _syncCompactProgress();
+      _refreshWizardFooter();
+      return;
+    }
+    /* Reference data is present, so fall through to the ordinary path: the
+       card, the submission table and a live Run Analysis button. */
   }
 
   // ── 2. Scoring is configured, show ready card ───────────────────────────────
@@ -8484,7 +8982,7 @@ async function renderScoreStep() {
     provs   = d.providers || [];
   } catch (_) { /* ignore */ }
 
-  _updateScoreStatusCard(provs, activeMode, activePackageName, activeIsOfficial);
+  _updateScoreStatusCard(provs, activeMode, activePackageName, activeIsOfficial, referenceSummary);
 
   if (grid) {
     grid.innerHTML = provs.map(_renderProviderCard).join("");
@@ -8523,7 +9021,9 @@ async function renderScoreStep() {
   for (const sub of subs) {
     const sid = sub.submission_id || sub;
     const ct  = sub.challenge_type || getChallengeType() || defaultChallengeType();
-    _fetchAndUpdateScoreStatus(sid, ct);
+    const already = prefetchedStatus.get(sid);
+    if (already) _applyScoreStatus(sid, already);
+    else _fetchAndUpdateScoreStatus(sid, ct);
   }
   renderScorePreviewPanel();
   _refreshWizardFooter();
@@ -8585,12 +9085,22 @@ function _applyScoreStatus(sid, data) {
   const isOfficial = _scorePayload(data).official === true;
   row.dataset.scoreStatus = status;
 
+  /* "not_configured" describes the provider, not the run. With reference data
+     loaded the comparison against ground truth has already happened, and
+     labelling that row "Needs setup" hides a completed result behind a
+     complaint about an unrelated, optional step. */
+  const referenceCompared = _REFERENCE_COMPARED_STATUSES.has(
+    String(_referenceScoringOf(data).status || ""));
+
   let badgeCls, badgeTxt;
   switch (status) {
     case "ready":          badgeCls = "ss-ready";    badgeTxt = isOfficial ? "Ready for official scoring" : "Ready for analysis"; break;
     case "scored":         badgeCls = "ss-scored";   badgeTxt = isOfficial ? "Official scoring complete" : "Analysis complete"; break;
     case "failed":         badgeCls = "ss-failed";   badgeTxt = isOfficial ? "Official scoring failed" : "Analysis failed"; break;
-    case "not_configured": badgeCls = "ss-not-conf"; badgeTxt = "Needs setup"; break;
+    case "not_configured":
+      badgeCls = referenceCompared ? "ss-scored" : "ss-not-conf";
+      badgeTxt = referenceCompared ? "Compared to reference" : "Needs setup";
+      break;
     case "not_ready":      badgeCls = "ss-not-conf"; badgeTxt = "Incomplete"; break;
     default:               badgeCls = "ss-not-conf"; badgeTxt = "—"; break;
   }
@@ -8601,7 +9111,16 @@ function _applyScoreStatus(sid, data) {
   // Enable Score button only when ready or retry
   const scoreBtn = row.querySelector(".sc-score-btn");
   if (scoreBtn) {
-    scoreBtn.disabled = !(status === "ready" || status === "scored" || status === "failed");
+    scoreBtn.disabled = !(status === "ready" || status === "scored"
+      || status === "failed" || referenceCompared);
+  }
+
+  /* A completed comparison is a result: show the table that holds it and let
+     it be exported, exactly as a provider run would. */
+  if (referenceCompared) {
+    const refTable = el("score-table-card");
+    if (refTable) refTable.style.display = "";
+    _enableScoringExport();
   }
 
   // If already scored, populate metrics and cache for summary step
@@ -8634,6 +9153,13 @@ function _applyScoreStatus(sid, data) {
           + `<ul class="sc-missing-list">${missing.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul></details>`
         : "";
       detail.innerHTML = msg ? `<p style="font-size:0.73rem;margin:0 0 4px">${escapeHtml(msg)}</p>${misHtml}` : misHtml;
+      if (detailRow) detailRow.style.display = "";
+    } else if (referenceCompared) {
+      /* Say what did run, so an empty metrics cell is not read as a failure. */
+      detail.innerHTML = `<p style="font-size:0.73rem;margin:0">`
+        + `Compared against the reference data. Bias, RMSE, error CoV and the ROI `
+        + `tables are in the report and the CSV exports. No scoring provider is `
+        + `configured, so there are no provider metrics.</p>`;
       if (detailRow) detailRow.style.display = "";
     } else if (status === "not_ready" && missing.length > 0) {
       // Show missing prereqs collapsed
@@ -9308,89 +9834,99 @@ function _renderExportRows() {
       </div>
       <div class="worklist export-output-list">${renderRows(rows.slice(5))}</div>
     </section>`;
+  _wireExportRows();
 }
 _renderExportRows();
 
-// ROI descriptive CSV. Reads records already computed during scoring, the
-// download never triggers a recalculation.
-const roiCsvBtn = el("export-roi-descriptive-btn");
-if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
-  const statusEl = el("export-combined-status");
-  const q = _sessionExportQuery();
-  if (!q) {
-    if (statusEl) {
-      statusEl.style.display = "";
-      statusEl.className = "submit-status status-error";
-      statusEl.textContent = "No submission or batch to export. Validate first.";
+/* Wiring lives in a function because the rows it wires are rebuilt.
+   These handlers used to be attached once at load, to buttons rendered once
+   at load, when no submission existed yet. Every row therefore said "Nothing
+   has been reviewed yet" for the rest of the session, however much work had
+   since been done. The rows are now re-rendered whenever the Export step is
+   opened, which replaces the elements, so the handlers must go back on. */
+function _wireExportRows() {
+  // ROI descriptive CSV. Reads records already computed during scoring, the
+  // download never triggers a recalculation.
+  const roiCsvBtn = el("export-roi-descriptive-btn");
+  if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
+    const statusEl = el("export-combined-status");
+    const q = _sessionExportQuery();
+    if (!q) {
+      if (statusEl) {
+        statusEl.style.display = "";
+        statusEl.className = "submit-status status-error";
+        statusEl.textContent = "No submission or batch to export. Validate first.";
+      }
+      return;
     }
-    return;
-  }
-  const label = roiCsvBtn.textContent.trim() || "Download CSV";
-  setLoading(roiCsvBtn, true, label);
-  if (statusEl) statusEl.style.display = "none";
-  try {
-    const res = await fetch(`${API}/api/export-roi-descriptive?${q}`);
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      throw new Error(d.detail || "Export failed.");
+    const label = roiCsvBtn.textContent.trim() || "Download CSV";
+    setLoading(roiCsvBtn, true, label);
+    if (statusEl) statusEl.style.display = "none";
+    try {
+      const res = await fetch(`${API}/api/export-roi-descriptive?${q}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.detail || "Export failed.");
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      // A header-only CSV is a valid response when no ROI rows exist.
+      const fname = cd.match(/filename="([^"]+)"/)?.[1]
+        || "roi_descriptive_statistics.csv";
+      triggerDownload(blob, fname);
+    } catch (err) {
+      if (statusEl) {
+        statusEl.style.display = "";
+        statusEl.className = "submit-status status-error";
+        statusEl.textContent = err.message || "Export failed.";
+      }
+    } finally {
+      setLoading(roiCsvBtn, false, label);
     }
-    const blob = await res.blob();
-    const cd = res.headers.get("Content-Disposition") || "";
-    // A header-only CSV is a valid response when no ROI rows exist.
-    const fname = cd.match(/filename="([^"]+)"/)?.[1]
-      || "roi_descriptive_statistics.csv";
-    triggerDownload(blob, fname);
-  } catch (err) {
-    if (statusEl) {
-      statusEl.style.display = "";
-      statusEl.className = "submit-status status-error";
-      statusEl.textContent = err.message || "Export failed.";
+  });
+
+  _makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
+  _makeCombinedExportHandler(el("export-combined-csv-btn"), true);
+  _makeCombinedJsonExportHandler(el("export-combined-json-btn"), true);
+
+  const reportBtn = el("export-report-btn");
+  if (reportBtn) reportBtn.addEventListener("click", () => {
+    const statusEl = el("export-combined-status");
+    const q = _sessionExportQuery();
+    if (!q) {
+      if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to report on. Validate first."; }
+      return;
     }
-  } finally {
-    setLoading(roiCsvBtn, false, label);
-  }
-});
+    // Blinded HTML report is safe to share; open in a new tab.
+    window.open(`${API}/api/report?${q}&blinded=true`, "_blank", "noopener");
+  });
 
-_makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
-_makeCombinedExportHandler(el("export-combined-csv-btn"), true);
-_makeCombinedJsonExportHandler(el("export-combined-json-btn"), true);
+  const pdfReportBtn = el("export-pdf-report-btn");
+  if (pdfReportBtn) pdfReportBtn.addEventListener("click", async () => {
+    const statusEl = el("export-combined-status");
+    const q = _sessionExportQuery();
+    const label = pdfReportBtn.textContent.trim() || "Download PDF";
+    if (!q) {
+      if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to report on. Validate first."; }
+      return;
+    }
+    setLoading(pdfReportBtn, true, label);
+    if (statusEl) statusEl.style.display = "none";
+    try {
+      const res = await fetch(`${API}/api/export/report/pdf?${q}&blinded=true`);
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "PDF report failed."); }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const fname = cd.match(/filename="([^"]+)"/)?.[1] || "osipi_report.pdf";
+      triggerDownload(blob, fname);
+    } catch (err) {
+      if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "PDF report failed."; }
+    } finally {
+      setLoading(pdfReportBtn, false, label);
+    }
+  });
 
-const reportBtn = el("export-report-btn");
-if (reportBtn) reportBtn.addEventListener("click", () => {
-  const statusEl = el("export-combined-status");
-  const q = _sessionExportQuery();
-  if (!q) {
-    if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to report on. Validate first."; }
-    return;
-  }
-  // Blinded HTML report is safe to share; open in a new tab.
-  window.open(`${API}/api/report?${q}&blinded=true`, "_blank", "noopener");
-});
-
-const pdfReportBtn = el("export-pdf-report-btn");
-if (pdfReportBtn) pdfReportBtn.addEventListener("click", async () => {
-  const statusEl = el("export-combined-status");
-  const q = _sessionExportQuery();
-  const label = pdfReportBtn.textContent.trim() || "Download PDF";
-  if (!q) {
-    if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = "No submission or batch to report on. Validate first."; }
-    return;
-  }
-  setLoading(pdfReportBtn, true, label);
-  if (statusEl) statusEl.style.display = "none";
-  try {
-    const res = await fetch(`${API}/api/export/report/pdf?${q}&blinded=true`);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "PDF report failed."); }
-    const blob = await res.blob();
-    const cd = res.headers.get("Content-Disposition") || "";
-    const fname = cd.match(/filename="([^"]+)"/)?.[1] || "osipi_report.pdf";
-    triggerDownload(blob, fname);
-  } catch (err) {
-    if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.message || "PDF report failed."; }
-  } finally {
-    setLoading(pdfReportBtn, false, label);
-  }
-});
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 
@@ -9566,6 +10102,94 @@ function _setRoiIdentityColumns(varying) {
   });
 }
 
+/* ── Finding one row in a table of hundreds ───────────────────────────────
+
+   One participant of the DCE set is six scans; ten participants across three
+   sites is sixty, and every scan contributes a row per map per region. Nothing
+   is wrong with that table except that a reviewer looking for "site 2, grey
+   matter" has to scroll it.
+
+   This filters the rows already on screen. It is deliberately not a query
+   against the data: the records, the counts and every CSV export are untouched,
+   so a filtered view can never turn into a partial export. */
+
+/* Enough rows that scrolling is worse than typing. Below this a filter is one
+   more control to ignore. */
+const _ROI_FILTER_THRESHOLD = 12;
+
+/* Above this many files a group is worth collapsing; at or below it, opening
+   is the click nobody wanted to make. */
+const _ASSET_COLLAPSE_ABOVE = 24;
+
+function _roiSearchText(record) {
+  // Written the way a reader would type it. The table shows a participant as
+  // "1", but somebody looking for it types "P1", so both are in the haystack.
+  const participant = _roiIdentity(record.participant);
+  const site = _roiIdentity(record.site);
+  const repeat = _roiIdentity(record.repeat);
+  const parts = [
+    record.dataset, record.map_type, record.roi_label, record.roi_id,
+    record.status, record.unavailable_reason,
+    participant, site, repeat,
+    participant !== "—" ? `p${participant}` : "",
+    site !== "—" ? `site ${site}` : "",
+    repeat !== "—" ? `repeat ${repeat}` : "",
+  ];
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
+function _syncRoiFilter() {
+  const wrap = el("roi-descriptive-filter");
+  const body = el("roi-descriptive-body");
+  if (!wrap || !body) return;
+  const total = body.querySelectorAll("tr").length;
+  wrap.hidden = total < _ROI_FILTER_THRESHOLD;
+  if (wrap.hidden) {
+    const input = el("roi-descriptive-search");
+    if (input) input.value = "";
+  }
+  _applyRoiFilter();
+}
+
+function _applyRoiFilter() {
+  const body = el("roi-descriptive-body");
+  if (!body) return;
+  const input = el("roi-descriptive-search");
+  const needle = String(input && input.value || "").trim().toLowerCase();
+  const rows = [...body.querySelectorAll("tr")];
+  let shown = 0;
+  rows.forEach((row) => {
+    const hit = !needle || (row.dataset.roiSearch || "").includes(needle);
+    row.hidden = !hit;
+    if (hit) shown += 1;
+  });
+
+  const nomatch = el("roi-descriptive-nomatch");
+  if (nomatch) nomatch.hidden = !(needle && shown === 0);
+  const table = el("roi-descriptive-table");
+  if (table) table.style.display = needle && shown === 0 ? "none" : "";
+
+  // The count chip keeps saying how many rows exist; the filter says how many
+  // of them you are looking at. Conflating the two would make a filtered view
+  // look like a smaller result.
+  const label = el("roi-descriptive-shown");
+  if (label) {
+    label.textContent = needle
+      ? `${shown} of ${rows.length} rows`
+      : `${rows.length} row${rows.length === 1 ? "" : "s"}`;
+  }
+}
+
+document.addEventListener("input", (event) => {
+  if (event.target && event.target.id === "roi-descriptive-search") _applyRoiFilter();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && event.target && event.target.id === "roi-descriptive-search") {
+    event.target.value = "";
+    _applyRoiFilter();
+  }
+});
+
 function renderRoiDescriptiveStatistics(records, status) {
   const card = el("roi-descriptive-card");
   if (!card) return;
@@ -9639,7 +10263,7 @@ function renderRoiDescriptiveStatistics(records, status) {
         .filter(([key]) => varying.has(key))
         .map(([, , read]) => `<td>${escapeHtml(read(r))}</td>`)
         .join("");
-      return `<tr>
+      return `<tr data-roi-search="${escapeHtml(_roiSearchText(r))}">
         ${identity}
         <td>${escapeHtml(_roiIdentity(r.map_type).toUpperCase())}</td>
         <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
@@ -9653,6 +10277,8 @@ function renderRoiDescriptiveStatistics(records, status) {
       </tr>`;
     }).join("");
   }
+
+  _syncRoiFilter();
 
   if (method) {
     method.textContent =

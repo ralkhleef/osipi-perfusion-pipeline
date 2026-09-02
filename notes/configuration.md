@@ -349,21 +349,33 @@ these fields is not affected at all.
 observed scan must carry each `required_maps` entry and each scan-level
 `required_artifacts` entry (`modelled_st`).
 
-**Submission level** — the methods document is required once for the whole
-submission, regardless of scan count, and needs no scan identity.
+**Submission level** — an artifact supplied once for the whole submission,
+regardless of scan count, and needing no scan identity. The methods document is
+the only one, and no shipped challenge requires it: the challenge leads said it
+is not needed for the runs being done now. Listing `methods` under a challenge's
+`required_artifacts` restores the blocking error, and nothing else has to change.
+
+What replaces the requirement is a declaration rather than a rule. The upload
+form asks whether a methods document is included; the answer is stored beside
+the submission (not inside it, so a manifest rebuild cannot lose it) and stated
+in every report. Nothing is written into the submission: a blank template is
+offered as a download on the upload screen, and a team that has their own
+document, or none, moves through the pipeline untouched either way.
 
 | Situation | Result |
 |---|---|
 | Required map missing for a scan | `REQUIRED_MAP_MISSING` — error |
 | Scan-level artifact missing | `REQUIRED_ARTIFACT_MISSING` — error |
-| Methods document missing | `REQUIRED_ARTIFACT_MISSING` — error |
+| Methods document missing, and not required | **nothing** — neutral |
+| Methods document missing, and listed in `required_artifacts` | `REQUIRED_ARTIFACT_MISSING` — error |
+| Submitter declared one at upload and sent none | `METHODS_DOCUMENT_DECLARED_BUT_MISSING` — error |
 | Optional map absent | **nothing** — neutral, not a warning |
 | Optional map present but malformed | validated exactly like a required map |
 | Wrong dimensionality | `MAP_DIMENSION_MISMATCH` / `ARTIFACT_DIMENSION_MISMATCH` — error |
 | Unreadable header | no dimension issue; the NIfTI validator reports it once |
 | Two maps of one type in one scan | `DUPLICATE_PARAMETER_MAP` — error |
 | Two `modelled_st` in one scan | `DUPLICATE_REQUIRED_ARTIFACT` — error |
-| Several methods documents | `DUPLICATE_METHODS_DOCUMENT` — warning |
+| Several methods documents | `DUPLICATE_METHODS_DOCUMENT` — warning, whether or not one is required |
 | Directory/filename identity disagree | `IDENTITY_CONFLICT` — error |
 | Scan identity incomplete | `INCOMPLETE_ARTIFACT_IDENTITY` — error |
 | Dataset not configured | `UNKNOWN_DATASET` — error |

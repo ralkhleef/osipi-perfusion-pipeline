@@ -22,6 +22,10 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import logging
+
+from osipi_pipeline.ingestion.manifest import refresh_manifest
+from services import methods_declaration_service as methods_declaration
 from services.github_service import import_github_repo
 from services.ingest_service import (
     EXTRACT_MAX_BYTES,
@@ -158,6 +162,8 @@ async def lifespan(app):
         directory.mkdir(parents=True, exist_ok=True)
     yield
 
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="OSIPI Pipeline", lifespan=lifespan)
 
@@ -454,11 +460,18 @@ def regroup_submissions_endpoint(req: RegroupRequest):
 
 
 @app.post("/api/upload-submission")
-async def upload_submission(file: UploadFile = File(...)):
+async def upload_submission(
+    file: UploadFile = File(...),
+    methods_document: Optional[str] = Form(None),
+):
     """Accept a ZIP, save it, extract it, and return a submission_id.
 
     Streams the upload to disk in 64 KB chunks to avoid loading the entire
     file into RAM.  The size limit is enforced while streaming.
+
+    ``methods_document`` is the submitter's answer to "does this submission
+    include a methods document": ``"yes"``, ``"no"``, or absent when they were
+    not asked. Absent is recorded as absent rather than guessed either way.
     """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
@@ -491,6 +504,16 @@ async def upload_submission(file: UploadFile = File(...)):
             result = save_and_extract_batch_from_path(final_path, file.filename)
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+        # The flattened records are copies for a single-submission result, so
+        # the flags are copied back: the response says what happened to the
+        # submission the caller just uploaded.
+        applied = _apply_methods_declaration(
+            _flatten_upload_result(result, file.filename), methods_document)
+        # The flattened records are copies for a single-submission result, so
+        # the answer is copied back onto the response the caller reads.
+        if not result.get("batch") and applied:
+            result.update({key: value for key, value in applied[0].items()
+                           if key.startswith("methods_")})
         return result
     except HTTPException:
         raise
@@ -502,6 +525,51 @@ async def upload_submission(file: UploadFile = File(...)):
                 Path(tmp_name).unlink()
             except OSError:
                 pass
+
+
+@app.get("/api/methods-template")
+def methods_template():
+    """The blank methods template, for a submitter to fill in.
+
+    Offered on the upload screen so that "no methods document" has an obvious
+    next step rather than being a dead end. The prompts in it are a starting
+    point; what a methods document must contain is the challenge leads' to
+    decide, and the template says so in its own text.
+    """
+    try:
+        body = methods_declaration.template_text()
+    except OSError:
+        raise HTTPException(status_code=404, detail="The methods template is not installed.")
+    return Response(
+        content=body,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="methods_template.txt"'},
+    )
+
+
+def _apply_methods_declaration(records: List[dict], declared) -> List[dict]:
+    """Record what the submitter said about their methods document.
+
+    A methods document is no longer required outright -- the challenge leads
+    said it is not needed for the runs being done now. The upload form asks
+    whether one is included instead, and the answer is kept so that validation
+    can catch a submitter who said yes and sent none, and so that every report
+    can state which it was rather than leaving a silence that reads as either.
+
+    Nothing is written into the submission. An earlier version dropped a blank
+    template into any submission that declared no document; it was withdrawn
+    because a team that has no methods document, or has their own, must move
+    through the pipeline untouched. The template is a download on the upload
+    screen and nothing more.
+    """
+    normalized = methods_declaration.normalize(declared)
+    for record in records:
+        sid = record.get("submission_id")
+        if not sid:
+            continue
+        methods_declaration.record(sid, normalized)
+        record["methods_document_declared"] = normalized
+    return records
 
 
 def _flatten_upload_result(result: dict, fallback_filename: str) -> List[dict]:
@@ -526,7 +594,10 @@ def _flatten_upload_result(result: dict, fallback_filename: str) -> List[dict]:
 
 
 @app.post("/api/upload-submissions")
-async def upload_submissions(files: List[UploadFile] = File(...)):
+async def upload_submissions(
+    files: List[UploadFile] = File(...),
+    methods_document: Optional[str] = Form(None),
+):
     """Accept several ZIPs at once and merge them into one batch.
 
     Each ZIP is extracted independently (single- or multi-submission), then all
@@ -589,6 +660,7 @@ async def upload_submissions(files: List[UploadFile] = File(...)):
                 if sid:
                     seen_ids.add(sid)
                 record["source_archive"] = name
+                _apply_methods_declaration([record], methods_document)
                 submissions.append(record)
         except HTTPException:
             raise
@@ -663,7 +735,10 @@ async def upload_folder_submission(files: List[UploadFile] = File(...)):
 
 
 @app.post("/api/upload-folder-batch")
-async def upload_folder_batch(files: List[UploadFile] = File(...)):
+async def upload_folder_batch(
+    files: List[UploadFile] = File(...),
+    methods_document: Optional[str] = Form(None),
+):
     """Accept browser folder-upload and auto-detect single vs. batch submissions.
 
     Preserves ``webkitRelativePath`` relative paths so the backend can detect
@@ -706,6 +781,8 @@ async def upload_folder_batch(files: List[UploadFile] = File(...)):
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Folder upload failed."))
 
+    _apply_methods_declaration(
+        _flatten_upload_result(result, "folder upload"), methods_document)
     return result
 
 
@@ -1150,7 +1227,10 @@ def get_rankings():
 
 
 @app.post("/api/upload-batch")
-async def upload_batch(file: UploadFile = File(...)):
+async def upload_batch(
+    file: UploadFile = File(...),
+    methods_document: Optional[str] = Form(None),
+):
     """Accept a ZIP that may contain multiple team submissions.
 
     Streams the upload to disk in 64 KB chunks, the full file is never held
@@ -1189,6 +1269,16 @@ async def upload_batch(file: UploadFile = File(...)):
             result = save_and_extract_batch_from_path(final_path, file.filename)
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
+        # The flattened records are copies for a single-submission result, so
+        # the flags are copied back: the response says what happened to the
+        # submission the caller just uploaded.
+        applied = _apply_methods_declaration(
+            _flatten_upload_result(result, file.filename), methods_document)
+        # The flattened records are copies for a single-submission result, so
+        # the answer is copied back onto the response the caller reads.
+        if not result.get("batch") and applied:
+            result.update({key: value for key, value in applied[0].items()
+                           if key.startswith("methods_")})
         return result
     except HTTPException:
         raise
@@ -2608,6 +2698,12 @@ def _analysis_summary_fields(analysis: dict) -> dict:
         _wv, _wt = whole.get("voxel_count"), whole.get("total_voxel_count")
         _wex = (_wt - _wv) if isinstance(_wt, (int, float)) and isinstance(_wv, (int, float)) else None
         reference_rows.append({
+            # Which scan. The DCE layout reuses one set of filenames in every
+            # scan directory, so without this every row reads identically.
+            "scan_label": item.get("scan_label") or "",
+            "participant": item.get("participant") or "",
+            "site": item.get("site") or "",
+            "repeat": item.get("repeat") or "",
             "submitted_file": item.get("submitted_file", ""),
             "reference_file": item.get("reference_file", ""),
             "detected_map_type": item.get("detected_map_type", ""),
@@ -2629,6 +2725,10 @@ def _analysis_summary_fields(analysis: dict) -> dict:
                 continue
             metrics = mask.get("metrics") if isinstance(mask.get("metrics"), dict) else {}
             reference_rows.append({
+                "scan_label": item.get("scan_label") or "",
+                "participant": item.get("participant") or "",
+                "site": item.get("site") or "",
+                "repeat": item.get("repeat") or "",
                 "submitted_file": item.get("submitted_file", ""),
                 "reference_file": item.get("reference_file", ""),
                 "detected_map_type": item.get("detected_map_type", ""),
@@ -2718,6 +2818,10 @@ def _gather_summary(sid: str) -> dict:
         "analysis_fields": analysis_fields,
         "has_validation":  val is not None,
         "has_scoring":     score is not None,
+        # What the submitter said about a methods document. Carried through
+        # rather than recomputed, so the report states the same thing the
+        # validation run recorded.
+        "methods_document": (val or {}).get("methods_document") or {},
     }
 
 
@@ -3302,6 +3406,7 @@ def export_report(
             reference_comparison_rows_html.append(
                 "<tr>"
                 f"<td>{_esc(submission_label)}</td>"
+                f"<td>{_esc(reference_row.get('scan_label') or 'not identified')}</td>"
                 f"<td>{_esc(reference_row.get('detected_map_type', ''))}</td>"
                 f"<td>{_esc(reference_row.get('scope', ''))}</td>"
                 f"<td>{_esc(_fmt_report_cell(reference_row.get('rmse')))}</td>"
@@ -3328,7 +3433,10 @@ def export_report(
     )
     reference_comparison_html = (
         '<div class="table-wrap"><table><thead><tr>'
-        '<th>Submission</th><th>Map</th><th>ROI</th><th>RMSE</th>'
+        # "Scan" earns its place here: this table has one row per map per
+        # region per scan, and the DCE layout gives every scan the same
+        # filenames, so without it a hundred rows are indistinguishable.
+        '<th>Submission</th><th>Scan</th><th>Map</th><th>ROI</th><th>RMSE</th>'
         '<th>MAE</th><th>Bias</th><th>Error CoV</th><th>Corr.</th><th>Valid voxels</th>'
         '</tr></thead><tbody>'
         + "".join(reference_comparison_rows_html)

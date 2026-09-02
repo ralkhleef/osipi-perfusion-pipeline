@@ -549,3 +549,62 @@ def test_disjoint_regions_add_no_note() -> None:
         cov_reported=True, mask_overlaps=[],
     )
     assert not any("overlap" in i.lower() for i in items)
+
+
+# ── Small numbers must survive the formatter ──────────────────────────────
+#
+# Ktrans is of order 1e-4. Printed to three decimal places, a real bias of
+# 5.5e-05 becomes "0" and a real bias of -2e-05 becomes "-0". A reviewer
+# reading that column would see a submission that matched the ground truth
+# perfectly, when what they were actually looking at was the rounding. This
+# was live in the DCE report until it was caught by eye.
+
+def test_a_small_bias_is_not_rounded_to_zero() -> None:
+    from services.pdf_report_service import _fmt
+
+    assert _fmt(5.5e-05) == "5.50e-05"
+    assert _fmt(-2e-05) == "-2.00e-05"
+    assert _fmt(1.5e-04) == "1.50e-04"
+
+
+def test_the_sign_of_a_small_number_survives() -> None:
+    """"-0" is worse than useless: it hides the direction of the error."""
+    from services.pdf_report_service import _fmt
+
+    assert _fmt(-2e-05).startswith("-")
+    assert "-0" != _fmt(-2e-05)
+
+
+def test_zero_is_still_zero() -> None:
+    """Zero is a measurement, not a rounding artifact, and must read as one."""
+    from services.pdf_report_service import _fmt
+
+    assert _fmt(0.0) == "0"
+    assert _fmt(0) == "0"
+
+
+def test_ordinary_numbers_are_unchanged() -> None:
+    """The fix must not restyle every number in every report."""
+    from services.pdf_report_service import _fmt
+
+    assert _fmt(3.182) == "3.182"
+    assert _fmt(-0.002) == "-0.002"
+    assert _fmt(0.05) == "0.05"
+    assert _fmt(1596595) == "1596595"
+    assert _fmt(12.0) == "12"
+
+
+def test_unusable_numbers_read_as_unavailable() -> None:
+    from services.pdf_report_service import _fmt
+
+    assert _fmt(float("nan")) == "Not available"
+    assert _fmt(float("inf")) == "Not available"
+    assert _fmt(None) == "Not available"
+
+
+def test_the_threshold_sits_where_three_decimals_give_up() -> None:
+    """Just above the boundary keeps decimals; just below switches notation."""
+    from services.pdf_report_service import _fmt
+
+    assert "e-" not in _fmt(0.001)
+    assert "e-" in _fmt(0.0001)

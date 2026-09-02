@@ -547,22 +547,40 @@ def _scan_requirement_issues(complete, required_maps, required_artifacts) -> lis
 
 
 def _submission_artifact_issues(artifacts, required_artifacts) -> list[dict]:
-    """Artifacts required once per submission, currently the methods document."""
+    """Artifacts supplied once per submission, such as the methods document.
+
+    Missing and duplicated are checked over different sets, deliberately. Only
+    a required artifact can be missing. But *any* submission-level artifact can
+    arrive twice, and which of two documents describes the submission is not a
+    question the pipeline can answer -- so the duplicate warning does not wait
+    for the artifact to be required. It used to, which meant that relaxing the
+    methods-document requirement silently took the duplicate warning with it.
+    """
     issues: list[dict] = []
     specs = artifact_type_specs()
+
+    def _is_submission_level(artifact_id: str) -> bool:
+        return (specs.get(artifact_id) or {}).get("role") in _SUBMISSION_LEVEL_ROLES
+
     for artifact_id in required_artifacts:
-        role = (specs.get(artifact_id) or {}).get("role")
-        if role not in _SUBMISSION_LEVEL_ROLES:
+        if not _is_submission_level(artifact_id):
             continue
-        matching = [a for a in artifacts if a.artifact_type == artifact_id]
-        if not matching:
+        if not [a for a in artifacts if a.artifact_type == artifact_id]:
             issues.append(_issue(
                 "error", REQUIRED_ARTIFACT_MISSING,
                 f"A {_artifact_label(artifact_id)} is required but was not found "
                 f"in the submission.",
                 artifact_type=artifact_id,
             ))
-        elif len(matching) > 1:
+
+    seen: set[str] = set()
+    for artifact in artifacts:
+        artifact_id = artifact.artifact_type
+        if not artifact_id or artifact_id in seen or not _is_submission_level(artifact_id):
+            continue
+        seen.add(artifact_id)
+        matching = [a for a in artifacts if a.artifact_type == artifact_id]
+        if len(matching) > 1:
             # Warning, not blocking: a later phase may pick one
             # deterministically, but the duplication must stay visible.
             issues.append(_issue(

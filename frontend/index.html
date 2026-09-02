@@ -70,8 +70,11 @@
           <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
           <div class="heading-text">
             <span class="step-label">Step 1 of 6: Upload</span>
-            <h1 class="card-title">Start a new submission review</h1>
-            <p class="card-desc">Enter team details, choose the challenge type, then upload a ZIP, folder, GitHub repository, or Zenodo record.</p>
+            <h1 class="card-title">Start a new submission review
+              <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+                <span class="tooltip-text">Enter team details, choose the challenge type, then upload a ZIP, folder, GitHub repository or Zenodo record.</span>
+              </button>
+            </h1>
           </div>
         </header>
 
@@ -105,16 +108,15 @@
         <!-- Challenge Details -->
         <div class="form-section">
           <h2 class="section-heading">Challenge details</h2>
-          <p class="section-intro">The selected challenge controls required maps, validation rules, and available analyses.</p>
 
-          <div class="form-group">
+          <div class="form-group answer-group">
             <div class="field-label-row">
-              <label class="label" style="margin-bottom:0">Challenge Type <span class="req">*</span></label>
+              <label class="label">Challenge Type <span class="req">*</span></label>
               <button type="button" class="help-tooltip" aria-label="Challenge type help">?
-                <span class="tooltip-text">Select a challenge defined by the active pipeline configuration.</span>
+                <span class="tooltip-text">The challenge you pick controls which maps are required, which validation rules apply, and which analyses are available. The list comes from the active pipeline configuration.</span>
               </button>
             </div>
-            <div class="pill-row" role="radiogroup" aria-label="Challenge type" style="margin-top:8px">
+            <div class="pill-row" role="radiogroup" aria-label="Challenge type">
               <span class="config-placeholder">Configured challenges will appear here.</span>
             </div>
             <div id="challenge-type-error" class="field-error"></div>
@@ -123,15 +125,15 @@
             <summary>Advanced: provide a parameter-map hint</summary>
             <div class="advanced-options-body">
               <p class="field-hint">Optional. Leave this unset to let the pipeline detect map types from filenames and metadata.</p>
-              <div class="form-group" style="margin-bottom:0">
+              <div class="form-group answer-group" style="margin-bottom:0">
                 <div class="field-label-row">
-                  <label class="label" style="margin-bottom:0">Parameter map type</label>
+                  <label class="label">Parameter map type</label>
                   <span class="optional-tag">Optional</span>
                   <button type="button" class="help-tooltip" aria-label="Parameter map type help">?
                     <span class="tooltip-text">Use this only when automatic detection needs a hint.</span>
                   </button>
                 </div>
-                <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type" style="margin-top:8px">
+                <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type">
                   <!-- populated by JS -->
                 </div>
                 <div id="map-type-other-wrap" style="display:none; margin-top:8px;">
@@ -140,6 +142,49 @@
               </div>
             </div>
           </details>
+        </div>
+
+        <!-- Methods document.
+             The challenge leads said a methods document is not needed for the
+             runs being done now, so nothing here blocks an upload. The question
+             is asked so that "no document" is recorded as an answer rather than
+             left as a silence a reader has to interpret, and so that a
+             submitter who says yes and sends none is told. -->
+        <div class="form-section">
+          <h2 class="section-heading">Methods document</h2>
+          <p class="section-intro">Not required. Your answer is recorded with the submission and shown in the report.</p>
+
+          <div class="form-group answer-group">
+            <!-- The download sits on the question's own line. Under the answers
+                 it read as a third option in the same group of pills. -->
+            <div class="field-label-row field-label-row--split">
+              <span class="field-label-lead">
+                <label class="label" id="methods-doc-label">Does this submission include one?</label>
+                <button type="button" class="help-tooltip" aria-label="Methods document help">?
+                  <span class="tooltip-text">A short description of the software, model and settings used. Saying no blocks nothing. What a methods document must contain is the challenge leads' decision.</span>
+                </button>
+              </span>
+              <a class="ghost-download" href="/api/methods-template"
+                 download="methods_template.txt" id="methods-template-link">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Blank template
+              </a>
+            </div>
+            <div class="pill-row" role="radiogroup" aria-labelledby="methods-doc-label">
+              <label class="pill">
+                <input type="radio" name="methods_document" value="yes" />
+                <span>Yes</span>
+              </label>
+              <label class="pill">
+                <input type="radio" name="methods_document" value="no" />
+                <span>No</span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- Upload Submission -->
@@ -230,8 +275,11 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 2 of 6: Review</span>
-          <h1 class="card-title">Review detected submission</h1>
-          <p class="card-desc">Confirm the detected challenge, maps, and submission type before validation.</p>
+          <h1 class="card-title">Review detected submission
+            <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+              <span class="tooltip-text">Confirm the detected challenge, maps and submission type before validation runs.</span>
+            </button>
+          </h1>
         </div>
       </header>
 
@@ -296,8 +344,11 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 3 of 6: Validate</span>
-          <h1 class="card-title">Validate submission files</h1>
-          <p class="card-desc">Check required maps, readable files, dimensions, and challenge-specific rules.</p>
+          <h1 class="card-title">Validate submission files
+            <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+              <span class="tooltip-text">Checks required maps, readable files, dimensions and the rules configured for this challenge.</span>
+            </button>
+          </h1>
         </div>
       </header>
 
@@ -366,8 +417,11 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 4 of 6: Run</span>
-          <h1 class="card-title">Prepare submission maps</h1>
-          <p class="card-desc">Existing result maps go directly to review; participant code runs only when needed.</p>
+          <h1 class="card-title">Prepare submission maps
+            <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+              <span class="tooltip-text">Existing result maps go straight to review. Participant code is run only when there are no maps yet.</span>
+            </button>
+          </h1>
         </div>
       </header>
 
@@ -473,8 +527,14 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label" id="score-step-label">Step 5 of 6: QC &amp; Preview</span>
-          <h1 class="card-title" id="score-step-title">QC &amp; Preview</h1>
-          <p class="card-desc" id="score-step-desc">QC and previews are available for readable maps. ROI, reference, and provider analyses appear when compatible data are available.</p>
+          <h1 class="card-title" id="score-step-title">QC &amp; Preview
+            <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+              <span class="tooltip-text" id="score-step-desc">QC and previews are available for readable maps. ROI, reference, and provider analyses appear when compatible data are available.</span>
+            </button>
+          </h1>
+          <a class="step-guide-link" href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank" rel="noopener">
+            What do these numbers mean?
+          </a>
         </div>
       </header>
 
@@ -539,7 +599,6 @@
       <!-- ── Reviewer / Admin: Scoring Setup (collapsed by default) ── -->
       <details class="scoring-admin-panel" id="scoring-admin-panel">
         <summary class="scoring-admin-summary">
-          <span class="scoring-admin-icon">Settings</span>
           Reviewer settings
           <span class="scoring-admin-badge" id="scoring-admin-badge">Not configured</span>
         </summary>
@@ -663,9 +722,12 @@
 
               <div class="config-manager-review-bar">
                 <div class="config-manager-review-copy">
-                  <span>Review this draft</span>
-                  <strong>Test, preview, then save an inactive version.</strong>
-                  <p>Closing a section keeps its draft values. Saving creates an inactive version; activation remains a separate explicit action.</p>
+                  <strong>Test, preview, then save
+                    <button type="button" class="help-tooltip" aria-label="About saving a draft">?
+                      <span class="tooltip-text">Closing a section keeps its draft values. Saving creates an inactive version; activating it is a separate, explicit step.</span>
+                    </button>
+                  </strong>
+                  <p>Saving does not activate anything.</p>
                 </div>
                 <div class="config-manager-actions" aria-label="Configuration workflow">
                   <button type="button" id="config-manager-test" class="btn btn-secondary btn-sm">1. Test Configuration</button>
@@ -974,6 +1036,20 @@
         <!-- Identity shared by every row, so it is not repeated down the table.
              Filled by _renderRoiScope(). -->
         <div id="roi-descriptive-scope" class="roi-scope" hidden></div>
+        <!-- A filter, not a second source of truth: it hides rows in this
+             table and changes nothing about the records or the CSV export.
+             Shown only when there are enough rows to be worth searching. -->
+        <div class="roi-filter" id="roi-descriptive-filter" hidden>
+          <label class="roi-filter-field">
+            <span class="visually-hidden">Filter ROI statistics</span>
+            <input type="search" id="roi-descriptive-search"
+                   placeholder="Filter by participant, site, repeat, map or region" />
+          </label>
+          <span class="roi-filter-count" id="roi-descriptive-shown" role="status" aria-live="polite"></span>
+        </div>
+        <p class="roi-filter-empty" id="roi-descriptive-nomatch" hidden>
+          No rows match that. The CSV export still contains every row.
+        </p>
         <div class="roi-table-wrap">
           <table class="sc-table roi-table" id="roi-descriptive-table" style="display:none">
             <thead>
@@ -1045,8 +1121,14 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 6 of 6: Export</span>
-          <h1 class="card-title">Export review package</h1>
-          <p class="card-desc">Choose blinded reviewer outputs or the organiser-only CSV for the current review.</p>
+          <h1 class="card-title">Export review package
+            <button type="button" class="help-tooltip title-help" aria-label="About this step">?
+              <span class="tooltip-text">Blinded reviewer outputs remove team name, contact and original identifiers. The organiser-only CSV keeps them.</span>
+            </button>
+          </h1>
+          <a class="step-guide-link" href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank" rel="noopener">
+            What do these numbers mean?
+          </a>
         </div>
       </header>
 

@@ -152,9 +152,31 @@ def test_modelled_st_is_required_per_scan_not_once() -> None:
     assert len(missing) == 5
 
 
-def test_missing_methods_blocks() -> None:
-    artifacts = _synthetic_participant("1")
-    issues = _run(artifacts)
+def test_a_missing_methods_document_no_longer_blocks() -> None:
+    """It used to. The challenge leads said it is not needed for the runs
+    being done now, so `methods` is no longer in any challenge's
+    `required_artifacts` and a submission without one is complete.
+
+    The accounting did not go with it: the upload form asks whether a methods
+    document is included, the answer is recorded, and a submitter who says yes
+    and sends none is still told. That lives in
+    ``tests/test_methods_declaration.py``.
+    """
+    issues = _run(_synthetic_participant("1"))
+    assert not any(i.get("artifact_type") == "methods" for i in issues)
+
+
+def test_the_requirement_still_works_if_the_leads_put_it_back(monkeypatch) -> None:
+    """Relaxed, not removed. Naming `methods` in `required_artifacts` must
+    restore the blocking error, or the one line of configuration this decision
+    hangs on would be a line that does nothing."""
+    from osipi_pipeline.validation import completeness
+
+    monkeypatch.setattr(
+        completeness, "required_artifacts_by_challenge",
+        lambda: {"dce": ("modelled_st", "methods")},
+    )
+    issues = _run(_synthetic_participant("1"))
     assert any(i["code"] == "REQUIRED_ARTIFACT_MISSING"
                and i.get("artifact_type") == "methods" for i in issues)
 
@@ -313,10 +335,22 @@ def test_duplicate_modelled_st_fails() -> None:
 
 
 def test_multiple_methods_documents_warn_but_do_not_block() -> None:
+    """Two documents, and no way for the pipeline to know which describes the
+    submission. It says so and lets a person decide.
+
+    This warning does not depend on the methods document being required, and
+    the check below is why: it briefly did, so relaxing the requirement took
+    the warning with it silently.
+    """
     artifacts = _complete_synthetic() + [_methods("extra/methodology.txt")]
     issues = _run(artifacts)
     assert "DUPLICATE_METHODS_DOCUMENT" in _codes(issues, "warning")
     assert _codes(issues, "error") == []
+
+    from osipi_pipeline.config.rules import required_artifacts_by_challenge
+    assert "methods" not in required_artifacts_by_challenge().get("dce", ()), (
+        "this test no longer proves the warning is independent of the requirement"
+    )
 
 
 # ── Identity conflicts ────────────────────────────────────────────────────

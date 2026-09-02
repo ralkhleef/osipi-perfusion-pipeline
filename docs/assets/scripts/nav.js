@@ -44,6 +44,20 @@
       ],
     },
     {
+      id: "reading-results",
+      file: "reading-results.html",
+      tab: "Reading results",
+      links: [
+        ["#in-one-minute", "In one minute"],
+        ["#compared-against", "What it compares"],
+        ["#columns", "What the columns mean"],
+        ["#fifteen-percent", "The 15% question"],
+        ["#which-scan", "Which scan is which"],
+        ["#not-decided", "What is not decided here"],
+        ["#more", "More detail"],
+      ],
+    },
+    {
       id: "examples",
       file: "examples.html",
       tab: "Examples",
