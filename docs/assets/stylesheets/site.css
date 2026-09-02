@@ -593,23 +593,3 @@ h3:hover .docs-anchor,
   color: var(--docs-muted);
   white-space: nowrap;
 }
-
-/* Definition list used on the Reading-results page: a term and what it means,
-   which is the shape that page is almost entirely made of. */
-.docs-deflist {
-  margin: 0;
-}
-
-.docs-deflist dt {
-  margin-top: 1.1rem;
-  font-weight: 700;
-  color: var(--docs-heading, #1f2933);
-}
-
-.docs-deflist dt:first-child { margin-top: 0; }
-
-.docs-deflist dd {
-  margin: 0.25rem 0 0;
-  padding-left: 0;
-  color: var(--docs-body, #3e4c59);
-}
