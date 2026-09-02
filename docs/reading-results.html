@@ -57,7 +57,7 @@
         <section>
           <h2 id="in-one-minute" data-toc-title="In one minute">In one minute</h2>
 
-          <p class="lead">Every number in a report is one submitted map compared, voxel by voxel,
+          <p>Every number in a report is one submitted map compared, voxel by voxel,
             against the organisers' ground truth map for the same scan, inside a region mask.
             That is the whole idea. The rest of this page is what the column names mean.</p>
 
@@ -79,7 +79,7 @@
               <tbody>
                 <tr>
                   <td>Parameter maps (Ktrans, vp, CBF, ATT&nbsp;…)</td>
-                  <td>The ground truth map for the <em>same scan</em> &mdash; same participant, site and repeat</td>
+                  <td>The ground truth map for the <em>same scan</em>: same participant, site and repeat</td>
                   <td>Voxel by voxel, whole image and inside each region mask</td>
                 </tr>
                 <tr>
@@ -89,7 +89,7 @@
                 </tr>
                 <tr>
                   <td>ROI statistics</td>
-                  <td>Nothing &mdash; these describe the submitted map itself</td>
+                  <td>Nothing. These describe the submitted map itself</td>
                   <td>Inside each region mask, one row per scan</td>
                 </tr>
                 <tr>
@@ -109,41 +109,20 @@
         <section>
           <h2 id="columns" data-toc-title="What the columns mean">What the columns mean</h2>
 
-          <dl class="docs-deflist">
-            <dt>Bias</dt>
-            <dd>Mean of (submitted &minus; reference) across the voxels compared. Signed: positive
-              means the submission reads high on average. Bias near zero does not mean the map is
-              accurate &mdash; equal and opposite errors cancel, which is exactly why the regional
-              rows are reported separately from the whole image.</dd>
-
-            <dt>MAE</dt>
-            <dd>Mean absolute error. The average size of the disagreement, ignoring direction.
-              Unlike bias, errors cannot cancel.</dd>
-
-            <dt>RMSE</dt>
-            <dd>Root mean squared error. Like MAE but large errors count for more, so it is the one
-              that moves when a few voxels are badly wrong.</dd>
-
-            <dt>Error CoV</dt>
-            <dd>The spread of the voxelwise errors divided by the reference mean. It is a
-              spread-of-error ratio, <strong>not</strong> a repeatability coefficient of variation,
-              and the two are easy to confuse because both get called &ldquo;CoV&rdquo;. Whole-image
-              values in the hundreds of percent are normal: most of a whole-image volume is
-              background where the reference mean is near zero.</dd>
-
-            <dt>Corr.</dt>
-            <dd>Pearson correlation between submitted and reference voxels. High correlation with
-              large bias means the pattern is right and the scale is not.</dd>
-
-            <dt>Within-scan CoV (ROI tables)</dt>
-            <dd>Standard deviation divided by mean <em>inside one region of one scan</em>. This
-              describes how variable the map is within a region. It is not a comparison against
-              ground truth and it is not a repeatability measure.</dd>
-
-            <dt>Voxels</dt>
-            <dd>How many voxels the number was actually computed from, after non-finite values were
-              excluded. A small count is a reason to treat the row with caution.</dd>
-          </dl>
+          <div class="docs-table-wrap">
+            <table>
+              <thead><tr><th>Column</th><th>What it means</th></tr></thead>
+              <tbody>
+                <tr><td>Bias</td><td>Mean of (submitted &minus; reference) across the voxels compared. Signed: positive means the submission reads high on average. Bias near zero does not mean the map is accurate, because equal and opposite errors cancel. That is exactly why the regional rows are reported separately from the whole image.</td></tr>
+                <tr><td>MAE</td><td>Mean absolute error. The average size of the disagreement, ignoring direction. Unlike bias, errors cannot cancel.</td></tr>
+                <tr><td>RMSE</td><td>Root mean squared error. Like MAE but large errors count for more, so it is the one that moves when a few voxels are badly wrong.</td></tr>
+                <tr><td>Error CoV</td><td>The spread of the voxelwise errors divided by the reference mean. It is a spread-of-error ratio, <strong>not</strong> a repeatability coefficient of variation, and the two are easy to confuse because both get called &ldquo;CoV&rdquo;. Whole-image values in the hundreds of percent are normal: most of a whole-image volume is background where the reference mean is near zero.</td></tr>
+                <tr><td>Corr.</td><td>Pearson correlation between submitted and reference voxels. High correlation with large bias means the pattern is right and the scale is not.</td></tr>
+                <tr><td>Within-scan CoV (ROI tables)</td><td>Standard deviation divided by mean <em>inside one region of one scan</em>. This describes how variable the map is within a region. It is not a comparison against ground truth and it is not a repeatability measure.</td></tr>
+                <tr><td>Voxels</td><td>How many voxels the number was actually computed from, after non-finite values were excluded. A small count is a reason to treat the row with caution.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section>
@@ -173,8 +152,8 @@
         <section>
           <h2 id="which-scan" data-toc-title="Which scan is which">Telling one row from another</h2>
 
-          <p>The DCE-2026 layout gives every scan the same filenames &mdash; <code>Ktrans.nii.gz</code>
-            appears once in each of sixty scan folders &mdash; so a table keyed on the file name is
+          <p>The DCE-2026 layout gives every scan the same filenames. <code>Ktrans.nii.gz</code>
+            appears once in each of sixty scan folders, so a table keyed on the file name is
             sixty identical-looking rows.</p>
 
           <p>Every table and CSV therefore carries the scan as its own column, written as
