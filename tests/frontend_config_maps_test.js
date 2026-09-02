@@ -223,5 +223,68 @@ check("no maps renders a message, not an empty box",
 check("no artifacts renders a message",
   sandbox._configurationArtifactsMarkup([]).includes("No artifact types are configured"));
 
+
+
+/* ── Capabilities: state first, detail second ─────────────────────────────
+   Eight rows per challenge, five of them reading "Not configured" in the same
+   grey as the rows that said something. The one question the panel answers --
+   what can this challenge do right now -- took reading twenty-four lines of
+   near-identical text. */
+console.log("\nCapabilities read at a glance");
+{
+  const capSandbox = { console, el: () => capHost };
+  var capHost = { innerHTML: "" };
+  vm.createContext(capSandbox);
+  [
+    extractFunction("escapeHtml"),
+    extractFunction("_capabilityIsOn"),
+    extractFunction("_capabilityDetail"),
+    extractFunction("_renderConfigurationCapabilities"),
+  ].forEach((code) => vm.runInContext(code, capSandbox));
+
+  const on = capSandbox._capabilityIsOn;
+  check("a sentence that starts with Available is on", on("Available for readable maps"));
+  check("a bare Available is on", on("Available"));
+  check("Not configured is off", on("Not configured") === false);
+  check("Not available is off", on("Not available") === false);
+  check("an empty value is off, not on by default", on("") === false);
+  check("and so is a missing one", on(undefined) === false);
+  /* The backend's wording is the source of truth. Guessing from keywords
+     would drift the moment it rephrases, so anything that is not explicitly
+     negative counts as available. */
+  check("a configured provider is on", on("Configured: ASL example scoring package"));
+
+  const detail = capSandbox._capabilityDetail;
+  checkEqual("the state word is not repeated in the detail",
+    detail("Available for readable maps", true), "for readable maps");
+  checkEqual("a bare Available leaves no detail, correctly",
+    detail("Available", true), "");
+  checkEqual("an off row with nothing more to say leaves nothing",
+    detail("Not configured", false), "");
+
+  capSandbox._renderConfigurationCapabilities([
+    { label: "DCE", map_qc: "Available for readable maps",
+      roi_statistics: "Descriptive statistics for Ktrans when compatible masks are available",
+      reference_comparison: "Available when compatible reference maps are available",
+      difference_maps: "Available with compatible reference comparisons",
+      rss: "Available for compatible paired curves",
+      provider_analysis: "Not configured", icc: "Not configured",
+      official_ranking: "Not configured" },
+  ]);
+  const html = capHost.innerHTML;
+  check("each row states its availability", html.includes('<span class="cap-state">Available</span>'));
+  check("and the unavailable ones say so", html.includes("Not configured</span>"));
+  check("the card totals them, so the card can be read without the rows",
+    html.includes("5 of 8 available"), html.slice(0, 200));
+  check("available and unavailable rows are distinguishable by class",
+    html.includes("cap-row cap-on") && html.includes("cap-row cap-off"));
+  check("the qualifying clause is kept", html.includes("for readable maps"));
+  checkNotContains2("but not the state word twice", html, "Available</span>\n            <span class=\"cap-detail\">Available");
+}
+
+function checkNotContains2(desc, haystack, needle) {
+  check(desc, !haystack.includes(needle));
+}
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);

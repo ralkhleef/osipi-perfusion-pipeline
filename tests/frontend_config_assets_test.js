@@ -57,6 +57,11 @@ vm.runInContext([
   extractConst("ASSET_KINDS"),
   // The renderer now groups files by the scan their folder names and prints
   // the shared root once instead of sixty sibling paths, so it leans on these.
+  // The renderer decides its own open state from this threshold.
+  (() => {
+    const start = appJs.indexOf("const _ASSET_COLLAPSE_ABOVE =");
+    return appJs.slice(start, appJs.indexOf(";", start) + 1);
+  })(),
   extractFunction("_assetScanLabel"),
   extractFunction("_assetCommonRoot"),
   extractFunction("_assetFileRow"),
@@ -104,7 +109,7 @@ const filled = render({
 });
 const groupFor = (kind) => {
   const start = filled.indexOf(`data-asset-kind="${kind}"`);
-  const next = filled.indexOf("<section class=\"cfg-asset-group\"", start + 10);
+  const next = filled.indexOf('<details class="cfg-asset-group"', start + 10);
   return filled.slice(start, next === -1 ? undefined : next);
 };
 check("a mask appears under masks", groupFor("mask").includes("gm_mask.nii.gz"));
@@ -134,11 +139,12 @@ check("an unknown kind does not break the render",
     .includes("Reference maps"));
 // Counted on the opening tag, not the class name: cfg-asset-groups is the
 // wrapper and contains cfg-asset-group as a substring, so a loose count says
-// four and is wrong for a reason that is invisible.
+// four and is wrong for a reason that is invisible. Each kind is a <details>
+// so that a long list can be collapsed to its count.
 const noPayload = render({});
 check("no payload at all still renders the three groups",
-  (noPayload.match(/<section class="cfg-asset-group"/g) || []).length === 3,
-  String((noPayload.match(/<section class="cfg-asset-group"/g) || []).length));
+  (noPayload.match(/<details class="cfg-asset-group"/g) || []).length === 3,
+  String((noPayload.match(/<details class="cfg-asset-group"/g) || []).length));
 check("a missing challenge reads as a template, not a broken path",
   noPayload.includes("data/reference_data/&lt;challenge&gt;/maps/")
   && !noPayload.includes("reference_data//"),

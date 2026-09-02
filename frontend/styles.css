@@ -13383,3 +13383,59 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cap-row { grid-template-columns: minmax(0, 1fr); }
   .cap-state { justify-content: flex-start; }
 }
+
+/* ── Each kind of organiser file collapses ─────────────────────────────────
+   Reference maps, ROI masks and measured signals are the same kind of thing,
+   so they get the same treatment: a header that states the count, a body that
+   can be folded away, grouping by the scan each file belongs to, and a filter.
+   A long list starts closed -- the count answers "how many are loaded"
+   without opening anything -- and a short one stays open, because collapsing
+   nine files hides nothing and costs a click. */
+.cfg-asset-group > .cfg-asset-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 7px;
+}
+
+.cfg-asset-group > .cfg-asset-head::-webkit-details-marker { display: none; }
+
+.cfg-asset-group > .cfg-asset-head::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform .15s ease;
+}
+
+.cfg-asset-group[open] > .cfg-asset-head::before { transform: rotate(90deg); }
+.cfg-asset-group > .cfg-asset-head:hover { background: var(--purple-faint); }
+
+.cfg-asset-group > .cfg-asset-head h5 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* The count sits with the title; anything unreadable is pushed to the right
+   where an empty space is conspicuous. */
+.cfg-asset-group > .cfg-asset-head .cfg-asset-bad { margin-left: auto; }
+
+.cfg-asset-body {
+  padding: 2px 2px 14px 15px;
+}
+
+.cfg-asset-group + .cfg-asset-group {
+  border-top: 1px solid var(--line-soft, #eef0f2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cfg-asset-group > .cfg-asset-head::before { transition: none; }
+}

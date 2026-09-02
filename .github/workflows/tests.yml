@@ -78,6 +78,16 @@ jobs:
             echo "── $suite"
             # Keep going after a failure so one broken suite does not hide the
             # state of the others.
-            node "$suite" || failed=1
+            output=$(node "$suite" 2>&1) || failed=1
+            echo "$output"
+            # A suite that ends without printing its tally has not run its
+            # checks, however it exited. That has happened twice: once when a
+            # suite threw before reaching the end, and once when new checks
+            # were appended below the tally, so they printed but were never
+            # counted and could never fail the run. Both looked like a pass.
+            if ! grep -qE '^=== Results: [0-9]+ passed, [0-9]+ failed ===$' <<<"$output"; then
+              echo "::error file=$suite::No results line. The suite did not finish, so its checks did not run."
+              failed=1
+            fi
           done
           exit $failed
