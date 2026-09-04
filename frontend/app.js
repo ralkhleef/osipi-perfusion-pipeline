@@ -5481,6 +5481,14 @@ function _leaderboardReferenceStatus(entry) {
     || (entry.reference_based_scoring_available ? "scored" : "");
 }
 
+function _analysisComplete(data) {
+  const result = _scorePayload(data);
+  const analysis = result.nifti_analysis || data?.nifti_analysis;
+  return data?.analysis_complete === true || result.status === "scored"
+    || Boolean(analysis?.maps?.length && !analysis.errors?.length
+      && !analysis.maps.some((map) => map.error));
+}
+
 function _leaderboardChallenge(entry) {
   return String(entry.challenge_type || entry.challenge || entry.metrics?.challenge_type || "Not provided").toUpperCase();
 }
@@ -5554,7 +5562,7 @@ function _filteredLeaderboardEntries() {
     if (q && !_leaderboardEntryText(entry).includes(q)) return false;
     if (f.status !== "all") {
       const matchesStatus =
-        (f.status === "scored" && status === "scored") ||
+        (f.status === "scored" && _analysisComplete(entry)) ||
         (f.status === "passed" && status === "scored") ||
         (f.status === "ready" && (status === "ready" || status === "not_ready")) ||
         (f.status === "failed" && status === "failed") ||
@@ -5582,7 +5590,7 @@ function _leaderboardStatusBadge(status) {
 
 function _leaderboardSummary(entries) {
   const rows = entries || [];
-  const scored = rows.filter((e) => e.status === "scored").length;
+  const scored = rows.filter(_analysisComplete).length;
   const failed = rows.filter((e) => e.status === "failed").length;
   const partial = rows.filter((e) => _leaderboardReferenceStatus(e) === "partial_reference_scoring").length;
   const unavailable = rows.filter((e) => _leaderboardReferenceStatus(e) === "reference_not_available").length;
@@ -5599,12 +5607,12 @@ function _leaderboardSummary(entries) {
 
 function _leaderboardSummaryLine(entries) {
   const rows = entries || [];
-  const scored = rows.filter((e) => e.status === "scored").length;
+  const scored = rows.filter(_analysisComplete).length;
   const unavailable = rows.filter((e) => _leaderboardReferenceStatus(e) === "reference_not_available").length;
   const parts = [
     `${rows.length} submission${rows.length === 1 ? "" : "s"}`,
     scored ? `${scored} analysis complete` : "Analysis pending",
-    unavailable ? "Reference unavailable" : "Reference status ready",
+    unavailable ? "Reference unavailable" : "See individual reference results",
   ];
   return parts.join(" · ");
 }
@@ -5633,7 +5641,7 @@ function _renderLeaderboardEntry(entry) {
   const artifactCount = Number(entry.artifact_count || 0);
   const exportReady = status === "scored" || artifactCount > 0;
   const mapLabel = mapTypes.length ? mapTypes.join(", ") : "Map type not provided";
-  const mapCount = mapTypes.length || artifactCount || 0;
+  const mapCount = Number.isInteger(entry.map_count) ? entry.map_count : "Unknown";
   const refScored = refStatus === "available" || refStatus === "compared" || refStatus === "partial_reference_scoring";
   // Compact single meta line, same shape as Review: challenge · maps · state · N maps.
   const metaHtml = `${escapeHtml(challenge)} · ${escapeHtml(mapLabel)} · ${refScored ? "Reference comparison available" : "QC only"} · ${mapCount} map${mapCount === 1 ? "" : "s"}`;
@@ -6107,7 +6115,9 @@ function _scorePayload(data) {
 function _cacheScoreStatus(sid, data, row) {
   const result = _scorePayload(data);
   const status = data?.status || result.status || "not_configured";
-  const analysis = result.nifti_analysis || data?.nifti_analysis || null;
+  // Status responses may contain an older saved provider result alongside
+  // fresh QC for the active configuration. Prefer the current analysis.
+  const analysis = data?.nifti_analysis || result.nifti_analysis || null;
   if (!(status === "scored" || status === "failed" || analysis)) return;
   _scoreCache[sid] = {
     status,
@@ -6152,6 +6162,32 @@ function _niftiAnalysisEntries() {
   return Object.values(_scoreCache)
     .map((entry) => entry.niftiAnalysis)
     .filter((analysis) => analysis && typeof analysis === "object");
+}
+
+function _iccRowsHtml(analyses) {
+  return analyses.flatMap((analysis, index) => (analysis.reference_scoring?.icc_statistics || []).map((row) => {
+    const fixed = Object.entries(row.held_fixed || {}).filter(([, v]) => v != null)
+      .map(([key, value]) => `${key}=${value}`).join(", ");
+    const scope = [`Submission ${index + 1}`, row.challenge, row.dataset, row.map_type, row.axis, fixed]
+      .filter(Boolean).join(" / ");
+    const number = (value) => typeof value === "number" && Number.isFinite(value) ? _fmtMetricVal(value) : "Not available";
+    const interval = row.confidence_low != null && row.confidence_high != null
+      ? `${number(row.confidence_low)} to ${number(row.confidence_high)} (${number(row.confidence_level * 100)}%)`
+      : "Not available";
+    const cells = [scope, row.roi_label || row.roi_id || "—",
+      (row.model_description || row.model || "Not configured").split(":")[0], number(row.value), interval,
+      row.target_count ?? 0, row.session_count ?? 0,
+      row.status_label || row.unavailable_reason || row.status || "Not available"];
+    return `<tr>${cells.map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join("")}</tr>`;
+  })).join("");
+}
+
+function renderIccStatistics(analyses) {
+  const card = el("icc-results-card");
+  const body = el("icc-results-body");
+  if (!card || !body) return;
+  body.innerHTML = _iccRowsHtml(analyses);
+  card.style.display = body.innerHTML ? "" : "none";
 }
 
 function _aggregateNiftiAnalyses(analyses) {
@@ -9267,7 +9303,7 @@ async function _runSingleScore(btn, subId, challenge, mapType) {
     });
     const data = await resp.json();
     _updateScoreRow(subId, data);
-    _tickScoreProgress(data.status === "scored", data.status === "not_configured");
+    _tickScoreProgress(_scoreOfficialMode ? data.status === "scored" : _analysisComplete(data), data.status === "not_configured");
     // Returned so a caller running several submissions can say what happened.
     // Without this the loop finished silently and the button simply went back
     // to reading "Run Analysis", which looks identical to never having run.
@@ -9395,6 +9431,7 @@ function renderScorePreviewPanel() {
   // step navigation, and session restore, so the section updates without a
   // page reload and without a second request.
   renderRoiDescriptiveStatistics(..._roiDescriptivePayload());
+  renderIccStatistics(_niftiAnalysisEntries());
 
   const container = el("score-preview-panel");
   if (!container) return;

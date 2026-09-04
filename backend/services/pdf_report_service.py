@@ -50,6 +50,10 @@ ICC_NOT_CONFIGURED_NOTE = (
 
 def _repeatability_note(icc_status: str = "") -> str:
     """The accurate reason ICC and repeatability CoV are blank."""
+    if str(icc_status) == "available":
+        return "ICC results and unavailable-table reasons are reported separately by model. Repeatability CoV is not computed; no pass/fail threshold is applied."
+    if str(icc_status) == "no_groups":
+        return "ICC models require repeated scans. ICC could not be computed for these tables; see each model's status and data requirements. Repeatability CoV is not computed."
     if str(icc_status) == "not_configured":
         return (
             "Repeatability CoV is unavailable: it requires repeated "
@@ -367,11 +371,29 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
     """Pre-format provisional grouped ROI and conditional DCE RSS records."""
     grouped: list[dict] = []
     rss_records: list[dict] = []
-    for summary in summaries:
+    icc_rows = []
+    for submission_index, summary in enumerate(summaries, 1):
         analysis = summary.get("nifti_analysis")
         analysis = analysis if isinstance(analysis, Mapping) else {}
         scoring = analysis.get("reference_scoring")
         scoring = scoring if isinstance(scoring, Mapping) else {}
+        for row in scoring.get("icc_statistics") or ():
+            fixed = ", ".join(f"{k}={v}" for k, v in (row.get("held_fixed") or {}).items() if v is not None)
+            label = str(row.get("model_description") or row.get("model") or "Not configured").split(":", 1)[0]
+            scope = " / ".join(str(v) for v in (
+                f"Submission {submission_index}", row.get("challenge"), row.get("dataset"),
+                row.get("map_type"), row.get("axis"), fixed,
+            ) if v)
+            interval = (
+                f"{_roi_number(row.get('confidence_low'))} to {_roi_number(row.get('confidence_high'))} "
+                f"({_roi_percent(row.get('confidence_level'))})"
+                if row.get("confidence_low") is not None and row.get("confidence_high") is not None
+                else "Not available"
+            )
+            icc_rows.append([scope, str(row.get("roi_label") or row.get("roi_id") or "—"),
+                label, _roi_number(row.get("value")), interval,
+                str(row.get("target_count", 0)), str(row.get("session_count", 0)),
+                str(row.get("status_label") or row.get("unavailable_reason") or row.get("status") or "Not available")])
         grouped.extend(
             dict(row) for row in scoring.get("grouped_roi_statistics") or ()
             if isinstance(row, Mapping)
@@ -419,6 +441,8 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
                 str(values.get("status") or record.get("status") or "Not available").replace("_", " "),
             ])
     return {
+        "icc_headers": ["Scope", "ROI", "Model", "ICC", "Interval", "Targets", "Sessions", "Status"],
+        "icc_rows": icc_rows,
         "grouped_roi_headers": ["Axis", "Held fixed", "ROI", "Map", "Scans", "Mean", "SD", "CoV", "Pair Δ", "Status"],
         "grouped_roi_rows": grouped_rows,
         "dce_rss_headers": ["Dataset", "Participant", "Repeat", "Site", "Region", "RSS median", "RSS mean", "RSS SD", "Voxels", "Status"],
@@ -657,22 +681,20 @@ def _methods_document_status(summaries: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _first_icc_status(summaries: Sequence[Mapping[str, Any]]) -> str:
-    """The ICC status of the run, from the first summary that states one.
-
-    A batch shares one configuration, so one status describes it; a per-report
-    caveat is not the place to enumerate submissions.
-    """
+    """Do not call ICC wholly unavailable when any submission computed it."""
+    statuses = []
     for summary in summaries or ():
         if not isinstance(summary, Mapping):
             continue
-        fields = summary.get("analysis_fields")
-        if not isinstance(fields, Mapping):
-            continue
-        scoring = fields.get("reference_scoring")
+        analysis = summary.get("nifti_analysis") or {}
+        fields = summary.get("analysis_fields") or {}
+        scoring = analysis.get("reference_scoring") or fields.get("reference_scoring")
         status = scoring.get("icc_status") if isinstance(scoring, Mapping) else None
         if status:
-            return str(status)
-    return ""
+            statuses.append(str(status))
+    if "available" in statuses:
+        return "available"
+    return statuses[0] if statuses else ""
 
 
 def build_limitations(
@@ -1365,12 +1387,29 @@ def _build_report_model(
             if not map_type or map_type.lower() == "unknown":
                 map_type = str(item.get("role_label") or "Not a parameter map")
             stats = item.get("stats") if isinstance(item.get("stats"), Mapping) else {}
-            whole = next((
+            candidates = [
                 row for row in reference_rows
                 if isinstance(row, Mapping)
                 and str(row.get("detected_map_type") or "").lower() == map_type.lower()
                 and str(row.get("scope") or "").lower() in {"whole image", "whole map", "whole"}
-            ), None)
+            ]
+            # Basenames repeat between scans. Prefer the source path, then
+            # scan identity for older summaries; never reuse another scan.
+            path_matches = [r for r in candidates if item.get("path") and r.get("submitted_path") == item.get("path")]
+            # Raw analysis already carries the path. Keep that private join
+            # key out of the shared fields serialized into CSV/JSON exports.
+            raw_matches = [r for r in ((analysis.get("reference_scoring") or {}).get("maps") or [])
+                           if isinstance(r, Mapping) and item.get("path")
+                           and r.get("submitted_path") == item.get("path")]
+            if len(raw_matches) == 1:
+                path_matches = [raw_matches[0].get("whole_map") or {}]
+            scan_matches = [r for r in candidates if item.get("scan_label") and r.get("scan_label") == item.get("scan_label")]
+            matches = path_matches or scan_matches
+            if not matches and len(candidates) == 1:
+                candidate = candidates[0]
+                if not candidate.get("submitted_path") and not candidate.get("scan_label"):
+                    matches = candidates
+            whole = matches[0] if len(matches) == 1 else None
             row = []
             if len(summaries) > 1:
                 row.append(_submission_label(summary, idx, blinded=blinded))
@@ -1718,6 +1757,9 @@ def _report_lines(model: Mapping[str, Any]) -> list[str]:
         for item in model["previews"]:
             lines.append(f"- {item['submission']} | {item['map']} | {item['file']}")
     lines.extend(["", "Per-submission results"])
+    if model.get("icc_rows"):
+        lines.extend(["ICC results", " | ".join(model["icc_headers"])])
+        lines.extend(" | ".join(str(cell) for cell in row) for row in model["icc_rows"])
     lines.append(" | ".join(str(h) for h in model["table_headers"]))
     for row in model["rows"]:
         lines.append(" | ".join(str(cell) for cell in row))
@@ -2521,6 +2563,11 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ]))
         story.append(preview_table)
 
+    icc_rows = model.get("icc_rows") or []
+    if icc_rows:
+        story.append(section("ICC results"))
+        story.append(data_table(model["icc_headers"], icc_rows, num_cols=[3, 5, 6]))
+        story.append(caption("Models are reported separately. No pass/fail threshold is applied."))
     grouped_rows = model.get("grouped_roi_rows") or []
     rss_rows = model.get("dce_rss_rows") or []
     if grouped_rows or rss_rows:

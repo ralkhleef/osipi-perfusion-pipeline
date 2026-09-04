@@ -189,6 +189,7 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
     # the ground-truth 4-D ASL signal. The analysis was always generic; only
     # the configuration block is new.
     assert cfg.analysis_by_challenge()["asl"] == {
+        "thresholds": {},
         "roi_descriptive": {
             "enabled": True,
             "map_types": ["cbf", "att"],
@@ -208,6 +209,7 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
     # leads, unlike accuracy, deviance or a pass threshold, so they are set
     # provisionally rather than leaving DSC reporting nothing.
     assert cfg.analysis_by_challenge()["dsc"] == {
+        "thresholds": {},
         "roi_descriptive": {
             "enabled": True,
             "map_types": ["cbv", "cbf", "mtt"],

@@ -73,6 +73,24 @@ def _reference_result() -> dict:
     return scoring.analyze_submission_niftis("sub-001", "asl")["reference_scoring"]
 
 
+def test_repeated_basenames_have_distinct_correct_difference_volumes(scoring_workspace):
+    import nibabel as nib
+    import numpy as np
+    root=scoring_workspace
+    for i in (1, 2):
+        name=f"P01/site_1/scan_{i}/cbf.nii.gz"
+        _write_submitted(root, [float(i)] * 4, name=name)
+        _write_reference(root, [0.0] * 4, name=name)
+    artifact_dir=root/"artifacts"
+    analysis=scoring.analyze_submission_niftis("sub-001", "asl", artifact_dir=artifact_dir)
+    rows=analysis["reference_scoring"]["maps"]
+    assert len(rows)==2
+    assert len({r["difference_map"] for r in rows})==2
+    for row in rows:
+        diff=np.asanyarray(nib.load(artifact_dir/row["difference_map"]).dataobj)
+        assert np.all(diff==float(row["repeat"]))
+
+
 def _map_row(result: dict, map_type: str) -> dict:
     for row in result["maps"]:
         if row["detected_map_type"] == map_type:

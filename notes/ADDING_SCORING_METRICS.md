@@ -158,22 +158,23 @@ challenge-approved definition first:
 
 ## Things you can now turn on yourself
 
-These needed code when the list above was written. They no longer do: each is
-one configuration block in `config/validation_rules.yaml`, and each ships off
-so that turning it on is a recorded decision rather than an assumption.
+These settings are controlled by configuration blocks in
+`config/validation_rules.yaml`. ICC uses the two requested models below;
+unconfirmed thresholds remain disabled.
 
 ### ICC
 
 All six Shrout & Fleiss models are implemented with exact F-based confidence
-intervals. Choosing the model is the scientific decision, so no model is
-applied by default and ICC keeps reporting "not configured":
+intervals. The current configuration reports the two user-confirmed models
+separately for ASL, DCE and DSC. An empty `models: []` disables ICC; the legacy
+single `model` setting remains supported. Never set both fields:
 
 ```yaml
 challenges:
   asl:
     grouped_statistics:
       icc:
-        model: icc2_1        # or icc1_1, icc3_1, icc1_k, icc2_k, icc3_k
+        models: [icc2_1, icc3_1]
         axes: [inter_repeat] # inter_site for reproducibility across sites
         confidence_level: 0.95   # null to report the estimate with no interval
 ```

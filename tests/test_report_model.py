@@ -26,6 +26,34 @@ from services.report_figures import (
 )
 
 
+@pytest.mark.parametrize("use_path", [True, False])
+def test_multiscan_results_keep_their_own_metrics(use_path):
+    summary = _summary(challenge="dce")
+    summary["nifti_analysis"]["maps"] = [
+        {"file_name": "Ktrans.nii.gz", "path": f"/submission/P0{i}/Ktrans.nii.gz",
+         "scan_label": f"P0{i}", "detected_map_type": "Ktrans", "stats": {}}
+        for i in (1, 2)]
+    summary["analysis_fields"]["reference_metric_rows"] = [
+        {"submitted_file": "Ktrans.nii.gz", "scan_label": f"P0{i}",
+         "submitted_path": f"/submission/P0{i}/Ktrans.nii.gz" if use_path else "",
+         "detected_map_type": "Ktrans", "scope": "whole image",
+         "rmse": i, "mae": i, "bias": i, "correlation": 0.9}
+        for i in (1, 2)]
+    if use_path:
+        summary["nifti_analysis"]["reference_scoring"] = {"maps": [
+            {"submitted_path": f"/submission/P0{i}/Ktrans.nii.gz",
+             "whole_map": {"rmse": i, "mae": i, "bias": i, "correlation": 0.9}}
+            for i in (1, 2)]}
+        # Force path-based matching rather than allowing the scan fallback.
+        for row in summary["analysis_fields"]["reference_metric_rows"]:
+            row.pop("submitted_path")
+            row.pop("scan_label")
+    model = _build_report_model([summary], tag="regression", blinded=True)
+    column = model["main_map_metric_headers"].index("RMSE")
+    assert [row[column] for row in model["main_map_metric_rows"]] == ["1", "2"]
+
+
+
 def _scored(map_type="CBF", *, sub=58.0, ref=60.0, sd=6.0, units="ml/100g/min"):
     """A summary carrying a scored map, shaped like backend/scoring.py output."""
     metrics = {

@@ -55,9 +55,10 @@
       <div class="docs-content">
 
         <section>
-          <p>Every number in a report is one submitted map compared, voxel by voxel,
-            against the organisers' ground truth map for the same scan, inside a region mask.
-            That is the whole idea. The rest of this page is what the column names mean.</p>
+          <p>Reference comparisons measure a submitted map against the organisers' ground truth
+            for the same scan. QC and regional descriptive statistics describe the submitted map
+            itself. The current analysis does not pass, fail, score or rank anything;
+            file validation is a separate check. The rest of this page explains the columns.</p>
         </section>
 
         <section>
@@ -108,7 +109,7 @@
                 <tr><td>Bias</td><td>Mean of (submitted &minus; reference) across the voxels compared. Signed: positive means the submission reads high on average. Bias near zero does not mean the map is accurate, because equal and opposite errors cancel. That is exactly why the regional rows are reported separately from the whole image.</td></tr>
                 <tr><td>MAE</td><td>Mean absolute error. The average size of the disagreement, ignoring direction. Unlike bias, errors cannot cancel.</td></tr>
                 <tr><td>RMSE</td><td>Root mean squared error. Like MAE but large errors count for more, so it is the one that moves when a few voxels are badly wrong.</td></tr>
-                <tr><td>Error CoV</td><td>The spread of the voxelwise errors divided by the reference mean. It is a spread-of-error ratio, <strong>not</strong> a repeatability coefficient of variation, and the two are easy to confuse because both get called &ldquo;CoV&rdquo;. Whole-image values in the hundreds of percent are normal: most of a whole-image volume is background where the reference mean is near zero.</td></tr>
+                <tr><td>Error CoV</td><td>The population standard deviation of voxelwise errors divided by the absolute reference mean in the same region. It is a spread-of-error ratio, <strong>not</strong> a repeatability coefficient of variation. A near-zero reference mean makes the ratio unstable; background can strongly affect whole-image values. A large value is not automatically normal or a failure. Check the region, denominator, bias and absolute errors together. At a zero denominator this ratio is unavailable.</td></tr>
                 <tr><td>Corr.</td><td>Pearson correlation between submitted and reference voxels. High correlation with large bias means the pattern is right and the scale is not.</td></tr>
                 <tr><td>Within-scan CoV (ROI tables)</td><td>Standard deviation divided by mean <em>inside one region of one scan</em>. This describes how variable the map is within a region. It is not a comparison against ground truth and it is not a repeatability measure.</td></tr>
                 <tr><td>Voxels</td><td>How many voxels the number was actually computed from, after non-finite values were excluded. A small count is a reason to treat the row with caution.</td></tr>
@@ -159,13 +160,14 @@
         <section>
           <h2 id="not-decided" data-toc-title="What is not decided here">What the pipeline will not decide for you</h2>
 
-          <p>These are open questions for the challenge leads, and the pipeline reports them as
-            unconfigured rather than picking an answer:</p>
+          <p>These decisions belong to the challenge leads. The configured ICC models are
+            listed below; unconfirmed rules and thresholds remain unset:</p>
 
           <ul>
-            <li><strong>Which ICC model.</strong> All six Shrout &amp; Fleiss models are implemented;
-              which one applies depends on the study design, so the shipped setting is
-              <code>none</code> and ICC reads &ldquo;not configured&rdquo;.</li>
+            <li><strong>ICC study design.</strong> ICC(2,1) and ICC(3,1) are configured separately
+              for DCE, ASL and DSC, using scan-level ROI medians across repeat sessions with site
+              held fixed. Results need enough compatible repeated scans; missing values are not zero.
+              This selection does not establish an official challenge rule or threshold.</li>
             <li><strong>Any threshold</strong>, including the 15% above.</li>
             <li><strong>What a methods document must contain</strong>, and whether one is required.</li>
             <li><strong>Region definitions.</strong> The masks are the organisers' files; the

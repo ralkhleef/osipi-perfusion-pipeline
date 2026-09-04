@@ -1226,7 +1226,7 @@ def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
     pytest.importorskip("yaml")
     import sys as _sys
     _sys.path.insert(0, str(ROOT / "src"))
-    from osipi_pipeline.config.rules import thresholds_by_challenge, grouped_statistics_by_challenge
+    from osipi_pipeline.config.rules import thresholds_by_challenge, icc_settings_by_challenge
 
     text = _guide_text()
 
@@ -1238,13 +1238,9 @@ def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
             "configured has become false"
         )
 
-    for challenge, grouped in sorted(grouped_statistics_by_challenge().items()):
-        model = ((grouped or {}).get("icc") or {}).get("model", "none")
-        assert model == "none", (
-            f"{challenge} now ships ICC model {model!r}, so the guide's "
-            "claim that ICC is unconfigured has become false"
-        )
-    assert "not configured" in text
+    for challenge, spec in sorted(icc_settings_by_challenge().items()):
+        assert spec["models"] == ("icc2_1", "icc3_1")
+    assert "ICC(2,1) and ICC(3,1)" in text
 
 
 def test_the_guide_warns_that_the_supplied_masks_overlap() -> None:

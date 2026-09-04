@@ -175,6 +175,8 @@ challenges:
     required_artifacts:
     - modelled_st
     analysis:
+      # Await challenge-approved advisory limits; empty means not assessed.
+      thresholds: {}
       roi_descriptive:
         enabled: true
         map_types:
@@ -197,20 +199,13 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # ICC is implemented for all six Shrout & Fleiss models; which one
-      # applies is a scientific decision, so no model is applied by default.
-      # `none` leaves ICC reported as "not configured" exactly as before.
-      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
-      # once the challenge leads have chosen:
-      #   model 1  each participant measured by a different set of sessions
-      #   model 2  same sessions for everyone, absolute agreement, generalises
-      #   model 3  same sessions for everyone, consistency, fixed sessions
-      #   _1 / _k  reliability of one measurement, or of the mean of k
-      # `axes` picks which factor plays the session role; participants are the
-      # targets, so inter_participant is not a valid ICC axis.
-      # `confidence_level: null` reports the estimate with no interval.
+      # Report both requested single-measurement models separately.
+      # Keep the existing repeat-based grouping; site is held fixed.
+      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
-        model: none
+        models:
+        - icc2_1
+        - icc3_1
         axes:
         - inter_repeat
         confidence_level: 0.95
@@ -249,6 +244,8 @@ challenges:
     - cbf
     - att
     analysis:
+      # Await challenge-approved advisory limits; empty means not assessed.
+      thresholds: {}
       roi_descriptive:
         enabled: true
         map_types:
@@ -290,20 +287,13 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # ICC is implemented for all six Shrout & Fleiss models; which one
-      # applies is a scientific decision, so no model is applied by default.
-      # `none` leaves ICC reported as "not configured" exactly as before.
-      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
-      # once the challenge leads have chosen:
-      #   model 1  each participant measured by a different set of sessions
-      #   model 2  same sessions for everyone, absolute agreement, generalises
-      #   model 3  same sessions for everyone, consistency, fixed sessions
-      #   _1 / _k  reliability of one measurement, or of the mean of k
-      # `axes` picks which factor plays the session role; participants are the
-      # targets, so inter_participant is not a valid ICC axis.
-      # `confidence_level: null` reports the estimate with no interval.
+      # Report both requested single-measurement models separately.
+      # Keep the existing repeat-based grouping; site is held fixed.
+      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
-        model: none
+        models:
+        - icc2_1
+        - icc3_1
         axes:
         - inter_repeat
         confidence_level: 0.95
@@ -337,6 +327,8 @@ challenges:
     - cbf
     - mtt
     analysis:
+      # Await challenge-approved advisory limits; empty means not assessed.
+      thresholds: {}
       roi_descriptive:
         enabled: true
         map_types:
@@ -357,20 +349,13 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # ICC is implemented for all six Shrout & Fleiss models; which one
-      # applies is a scientific decision, so no model is applied by default.
-      # `none` leaves ICC reported as "not configured" exactly as before.
-      # Set `model` to one of icc1_1, icc2_1, icc3_1, icc1_k, icc2_k, icc3_k
-      # once the challenge leads have chosen:
-      #   model 1  each participant measured by a different set of sessions
-      #   model 2  same sessions for everyone, absolute agreement, generalises
-      #   model 3  same sessions for everyone, consistency, fixed sessions
-      #   _1 / _k  reliability of one measurement, or of the mean of k
-      # `axes` picks which factor plays the session role; participants are the
-      # targets, so inter_participant is not a valid ICC axis.
-      # `confidence_level: null` reports the estimate with no interval.
+      # Report both requested single-measurement models separately.
+      # Keep the existing repeat-based grouping; site is held fixed.
+      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
-        model: none
+        models:
+        - icc2_1
+        - icc3_1
         axes:
         - inter_repeat
         confidence_level: 0.95

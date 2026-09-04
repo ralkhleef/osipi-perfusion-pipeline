@@ -54,6 +54,26 @@ def test_manager_exposes_handoff_fields(isolated_manager: Path) -> None:
     ]
 
 
+@pytest.mark.parametrize("model", ["none", "icc1_1", "icc2_1", "icc3_1", "icc1_k", "icc2_k", "icc3_k"])
+def test_capability_matrix_uses_configured_icc_model(isolated_manager, monkeypatch, model):
+    from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS
+    monkeypatch.setattr(rules_module, "icc_settings_by_challenge", lambda: {"dce": {"model": model}})
+    rows = {row["challenge_type"]: row for row in manager.capability_matrix()}
+    if model == "none":
+        assert rows["dce"]["icc"] == "Not configured"
+    else:
+        assert MODEL_DESCRIPTIONS[model] in rows["dce"]["icc"]
+        assert "Requires compatible repeated scans" in rows["dce"]["icc"]
+    assert rows["asl"]["icc"] == "Not configured"
+
+
+def test_unconfirmed_scientific_rules_remain_empty(isolated_manager):
+    for challenge in ("asl", "dce", "dsc"):
+        spec = rules_module.validation_rules()["challenges"][challenge]
+        assert spec["analysis"]["thresholds"] == {}
+        assert spec["grouped_statistics"]["icc"]["models"] == ["icc2_1", "icc3_1"]
+
+
 @pytest.mark.parametrize("challenge", ["asl", "dsc"])
 def test_manager_does_not_offer_incompatible_builtin_provider(
     isolated_manager: Path,

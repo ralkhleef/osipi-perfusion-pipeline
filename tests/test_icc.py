@@ -208,17 +208,16 @@ def test_no_model_produces_no_rows_at_all() -> None:
     assert icc.compute_icc_for_rows(rows, model=icc.MODEL_NONE) == []
 
 
-def test_the_shipped_configuration_chooses_no_model() -> None:
-    """Adding ICC must not change what any challenge currently reports."""
+def test_the_shipped_configuration_uses_both_requested_models() -> None:
+    """Each challenge reports the two user-confirmed models separately."""
     pytest.importorskip("yaml")
     from osipi_pipeline.config.rules import icc_settings_by_challenge
 
     settings = icc_settings_by_challenge()
     assert settings, "no challenges configured"
     for challenge, spec in sorted(settings.items()):
-        assert spec["model"] == icc.MODEL_NONE, (
-            f"{challenge} applies an ICC model that nobody has approved"
-        )
+        assert spec["models"] == (icc.MODEL_2_1, icc.MODEL_3_1)
+        assert spec["axes"] == ("inter_repeat",)
 
 
 # ── Building tables from per-scan rows ─────────────────────────────────────
@@ -358,13 +357,16 @@ def test_the_result_survives_a_json_round_trip() -> None:
 # "not configured" wording exactly as it was.
 
 @pytest.fixture()
-def challenge_icc(tmp_path):
-    """Temporarily set the DCE ICC block, then put the configuration back."""
+def challenge_icc(tmp_path, monkeypatch):
+    """Test an isolated rules file without changing the running app's rules."""
     yaml = pytest.importorskip("yaml")
     from osipi_pipeline.config import rules
 
-    config_path = REPO_ROOT / "config" / "validation_rules.yaml"
-    original = config_path.read_text(encoding="utf-8")
+    original = (REPO_ROOT / "config" / "validation_rules.yaml").read_text(encoding="utf-8")
+    config_path = tmp_path / "validation_rules.yaml"
+    config_path.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(rules, "VALIDATION_RULES_PATH", config_path)
+    rules.clear_config_cache()
 
     def configure(**settings):
         data = yaml.safe_load(original)
@@ -415,10 +417,12 @@ def test_the_schema_rejects_an_impossible_confidence_level(challenge_icc) -> Non
     assert "between 0 and 1" in str(raised.value)
 
 
-def test_scoring_reports_icc_as_unconfigured_by_default() -> None:
+def test_scoring_reports_icc_as_unconfigured_when_disabled(challenge_icc) -> None:
     """The wording a reviewer sees today must not change until a model is set."""
     sys.path.insert(0, str(REPO_ROOT / "backend"))
     import scoring as backend_scoring
+
+    challenge_icc(model="none")
 
     definition = backend_scoring._icc_definition("dce")
     assert "no ICC model is configured" in definition
@@ -428,6 +432,58 @@ def test_scoring_reports_icc_as_unconfigured_by_default() -> None:
     assert result["icc_status"] == "not_configured"
     assert result["icc_statistics"] == []
     assert "grouped_statistics.icc.model" in result["icc_unavailable_reason"]
+
+
+def test_both_models_remain_distinct_through_scoring_and_reports(challenge_icc):
+    import scoring
+    from services.pdf_report_service import _prototype_analysis_model, _repeatability_note
+    challenge_icc(models=["icc2_1", "icc3_1"], axes=["inter_repeat"], confidence_level=.95)
+    rows = [_scan(str(p), str(r), value) for p, pair in enumerate(
+        [(1.0, 1.2), (2.0, 2.3), (3.0, 3.4), (4.0, 4.1)], 1)
+        for r, value in enumerate(pair, 1)]
+    result = {}
+    scoring._attach_icc(result, "dce", rows)
+    assert result["icc_models"] == ["icc2_1", "icc3_1"]
+    first, second = result["icc_statistics"]
+    assert first["model"] == "icc2_1" and second["model"] == "icc3_1"
+    assert first["value"] != second["value"]
+    report = _prototype_analysis_model([{"nifti_analysis": {"reference_scoring": result}}])
+    assert {row[2] for row in report["icc_rows"]} == {"ICC(2,1)", "ICC(3,1)"}
+    from services.pdf_report_service import _first_icc_status
+    assert _first_icc_status([{"nifti_analysis": {"reference_scoring": result}}]) == "available"
+    assert "ICC are unavailable" not in _repeatability_note("available")
+    scoring._attach_icc(result, "dce", [])
+    assert len(result["icc_statistics"]) == 2
+    assert all(row["value"] is None and row["unavailable_reason"] for row in result["icc_statistics"])
+
+
+def test_empty_model_list_explicitly_disables_icc(challenge_icc):
+    import scoring
+    challenge_icc(models=[])
+    result = {}
+    scoring._attach_icc(result, "dce", [])
+    assert result["icc_status"] == "not_configured"
+    assert result["icc_statistics"] == []
+
+
+@pytest.mark.parametrize("challenge", ["ASL", "DCE", "DSC"])
+def test_ui_uppercase_challenge_names_select_the_same_models(challenge):
+    import scoring
+    result = {}
+    scoring._attach_icc(result, challenge, [])
+    assert result["icc_models"] == ["icc2_1", "icc3_1"]
+    assert "ICC(2,1)" in scoring._icc_definition(challenge)
+
+
+@pytest.mark.parametrize("settings", [
+    {"model": "icc2_1", "models": ["icc3_1"]},
+    {"models": ["icc2_1", "icc2_1"]}, {"models": ["icc1_2"]},
+])
+def test_ambiguous_or_invalid_multi_model_settings_rejected(challenge_icc, settings):
+    from osipi_pipeline.config import rules
+    challenge_icc(**settings)
+    with pytest.raises(Exception):
+        rules.validation_rules()
 
 
 def test_scoring_computes_icc_once_a_model_is_configured(challenge_icc) -> None:

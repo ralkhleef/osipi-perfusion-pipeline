@@ -4,17 +4,23 @@ The prototype implements metrics that can be defined independently of final
 challenge decisions. Generic QC and reference comparisons are not official
 OSIPI ranking, and the pipeline does not invent missing scientific rules.
 
+The user confirmed ICC(2,1) and ICC(3,1) for DCE, ASL and DSC. Each challenge
+now uses `grouped_statistics.icc.models: [icc2_1, icc3_1]`, with separate results.
+The existing `inter_repeat` grouping and 95% confidence level are unchanged:
+participants are targets, repeat sessions are columns, and site is held fixed.
+This is not an official challenge endorsement or a pass/fail rule.
+Use `models: []` to disable ICC; legacy `model: none` also remains supported.
+Do not set both `model` and `models`. Threshold placeholders remain
+`analysis.thresholds: {}`: no advisory cutoff is applied.
+
 The following decisions still require confirmation from the challenge leads:
 
 - the exact definition of a single official DCE accuracy metric;
 - the exact statistical definition of deviance;
 - whether DCE signal-time RSS should remain raw or be normalized;
 - whether repeat/site variability should be voxelwise, ROI-median based, or both;
-- **which ICC model applies.** All six Shrout & Fleiss models are now
-  implemented with exact F-based confidence intervals; none is applied.
-  `grouped_statistics.icc.model` is `none` for every challenge, so ICC
-  is still reported as not configured. Choosing a model is now a
-  one-line configuration change, not a development task;
+- whether the current repeat-based ROI-median grouping should also include
+  site comparisons, or use another study design;
 - any formal CoV threshold, including a possible `<15%` rule;
 - confirmation that the provisional error CoV denominator should be the
   absolute mean ground-truth value within the same region;
@@ -25,6 +31,11 @@ The following decisions still require confirmation from the challenge leads:
 - the final number of synthetic participants and scans;
 - final ASL 4-D fitted-model comparison requirements;
 - the final ROI/mask set;
+- whether overlapping masks should be used as supplied or made exclusive.
+  The supplied DCE GM mask includes hippocampal voxels, whereas the example
+  answer key excludes them. Those regions produce different, valid arithmetic
+  results; the app must not silently subtract one mask from another. Confirm
+  the intended regions before treating the answer key as an acceptance test;
 - exact required sections in the methods document.
 
 ## Implemented provisional analyses
@@ -44,8 +55,8 @@ The following decisions still require confirmation from the challenge leads:
   compatible whole-image and ROI error metrics;
 - intraclass correlation for a participant x session table, in any of
   ICC(1,1), ICC(2,1), ICC(3,1), ICC(1,k), ICC(2,k) and ICC(3,k), with exact
-  F-based intervals, verified against Shrout & Fleiss (1979). Off until a
-  model is configured. A participant missing any session is excluded from the
+  F-based intervals, verified against Shrout & Fleiss (1979). The two requested
+  models are configured. A participant missing any session is excluded from the
   table and counted, never imputed.
 
 Submitted maps, private references, and masks must have compatible shape,

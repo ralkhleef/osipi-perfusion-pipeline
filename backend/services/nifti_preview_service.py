@@ -270,15 +270,16 @@ def _load_preview_volume(path: Path):
     import numpy as np  # type: ignore
 
     img = nib.load(str(path))
-    data = np.asarray(img.dataobj, dtype=np.float32)
     volume_index = None
-    if data.ndim < 3:
-        raise ValueError(f"NIfTI preview requires at least 3 dimensions; found shape {list(data.shape)}.")
-    if data.ndim > 3:
-        volume_index = int(data.shape[3] // 2)
-        data = data[:, :, :, volume_index]
-    if data.ndim != 3:
-        raise ValueError(f"Preview volume must be 3D after selection; found shape {list(data.shape)}.")
+    if len(img.shape) not in (3, 4):
+        raise ValueError(f"NIfTI preview requires a 3D or 4D image; found shape {list(img.shape)}.")
+    if len(img.shape) == 4:
+        volume_index = int(img.shape[3] // 2)
+        # Select on the lazy proxy: a DCE series can exceed a gigabyte, but
+        # its preview needs only one time point, not the entire series.
+        data = np.asarray(img.dataobj[:, :, :, volume_index], dtype=np.float32)
+    else:
+        data = np.asarray(img.dataobj, dtype=np.float32)
     finite_values = data[np.isfinite(data)]
     if finite_values.size == 0:
         raise ValueError("No finite voxels available for preview.")
@@ -468,16 +469,16 @@ def _attach_mask_overlay(
         import numpy as np  # type: ignore
 
         map_img = nib.load(str(item.get("source_path") or ""))
-        map_data = np.asarray(map_img.dataobj, dtype=np.float32)
-        if map_data.ndim != 3:
+        if len(map_img.shape) != 3:
             return item
+        map_data = np.asarray(map_img.dataobj, dtype=np.float32)
         for mask_path in mask_paths:
             mask_img = nib.load(str(mask_path))
-            mask_data = np.asarray(mask_img.dataobj, dtype=np.float32)
-            if mask_data.shape != map_data.shape:
+            if mask_img.shape != map_data.shape:
                 continue
             if not np.allclose(mask_img.affine, map_img.affine, rtol=0, atol=1e-2):
                 continue
+            mask_data = np.asarray(mask_img.dataobj, dtype=np.float32)
             map_slice = _slice_for_plane(map_data, "axial")
             mask_slice = _slice_for_plane(mask_data, "axial")
             finite = map_data[np.isfinite(map_data)]
@@ -698,5 +699,3 @@ def public_preview_manifest(manifest: dict) -> dict:
         **{key: value for key, value in manifest.items() if key != "maps"},
         "maps": [public_preview_item(item) for item in manifest.get("maps", [])],
     }
-
-

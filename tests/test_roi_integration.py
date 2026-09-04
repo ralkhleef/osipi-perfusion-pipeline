@@ -436,7 +436,8 @@ def test_disabling_grouping_does_not_remove_icc_or_thresholds(monkeypatch) -> No
     scoring._attach_threshold_flags(result, "asl")
 
     assert result["grouped_roi_status"] == "disabled"
-    assert result["icc_status"] == "not_configured"
+    assert result["icc_status"] == "no_groups"
+    assert {row["model"] for row in result["icc_statistics"]} == {"icc2_1", "icc3_1"}
     assert result["threshold_summary"]["configured"] is False
 
 

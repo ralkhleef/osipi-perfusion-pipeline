@@ -1726,9 +1726,10 @@ def test_report_separates_cbf_att_and_flags_repeatability_unavailable(
     # chosen, versus a model chosen with no repeated scans to apply it to.
     # Assert the substance rather than one sentence, so improving the wording
     # does not fail the test but dropping the caveat does.
-    assert "Repeatability CoV is unavailable" in html
-    assert "requires repeated" in html
-    assert "has not selected an ICC model" in html
+    assert "Repeatability CoV is not computed" in html
+    assert "require repeated" in html
+    assert "has not selected an ICC model" not in html
+    assert "ICC(2,1)" in html and "ICC(3,1)" in html
 
 
 def test_reference_scoring_constant_offset_expected_bias_rmse(client: TestClient, tmp_path: Path) -> None:
@@ -2364,19 +2365,20 @@ def test_long_csv_one_metric_per_row(client, tmp_path):
     _, rows = _long_csv(client, sid=sid)
     names = {r["metric_name"] for r in rows}
     assert {"rmse", "mae", "bias", "error_coefficient_of_variation", "correlation",
-            "repeatability_coefficient_of_variation", "icc"} <= names
+            "repeatability_coefficient_of_variation"} <= names
+    assert {name.split(":")[0] for name in names if name.startswith("icc[")} == {"icc[icc2_1", "icc[icc3_1"}
     assert all("," not in r["metric_name"] for r in rows)
     from collections import Counter
     # Accuracy metrics: exactly 5 rows per (map, real ROI). Repeatability/ICC are
     # emitted once per submission (submission-level), not repeated per map/ROI.
     per_map_roi = Counter(
-        (r["map_type"], r["roi"]) for r in rows if r["roi"] != "(submission-level)"
+        (r["map_type"], r["roi"]) for r in rows if r["roi"] != "(submission-level)" and not r["metric_name"].startswith("icc[")
     )
     assert per_map_roi and all(count == 5 for count in per_map_roi.values())
     sub_level = [r for r in rows if r["roi"] == "(submission-level)"]
     assert {r["metric_name"] for r in sub_level} == {
-        "repeatability_coefficient_of_variation", "icc"}
-    assert len(sub_level) == 2   # exactly one each, not repeated per map/ROI
+        "repeatability_coefficient_of_variation", "icc[icc2_1:not_available]", "icc[icc3_1:not_available]"}
+    assert len(sub_level) == 3   # repeatability plus one row per configured ICC model
 
 
 def test_long_csv_missing_metrics_are_blank_not_zero(client, tmp_path):
@@ -2392,7 +2394,7 @@ def test_long_csv_missing_metrics_are_blank_not_zero(client, tmp_path):
         assert r["metric_status"] != "computed"
     rep = [r for r in rows if r["metric_name"] == "repeatability_coefficient_of_variation"]
     assert rep and all(r["metric_value"] == "" and "unavailable" in r["metric_status"] for r in rep)
-    icc = [r for r in rows if r["metric_name"] == "icc"]
+    icc = [r for r in rows if r["metric_name"].startswith("icc[")]
     assert icc and all(r["metric_value"] == "" for r in icc)
 
 
@@ -2503,9 +2505,10 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     # chosen, versus a model chosen with no repeated scans to apply it to.
     # Assert the substance rather than one sentence, so improving the wording
     # does not fail the test but dropping the caveat does.
-    assert "Repeatability CoV is unavailable" in html
-    assert "requires repeated" in html
-    assert "has not selected an ICC model" in html
+    assert "Repeatability CoV is not computed" in html
+    assert "require repeated" in html
+    assert "has not selected an ICC model" not in html
+    assert "ICC(2,1)" in html and "ICC(3,1)" in html
     assert "CBF" in html and "ATT" in html
     # offline + no internal path leakage / decorative map-mean chart removed
     assert "<script src=\"http" not in html and "/sessions/" not in html

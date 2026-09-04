@@ -4,6 +4,7 @@ import csv
 import html
 import io
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -2121,6 +2122,10 @@ def get_leaderboard():
         for p in sorted(SCORING_OUTPUTS_DIR.glob("*_score.json")):
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
+                analysis = data.get("nifti_analysis") or {}
+                maps = analysis.get("maps") or []
+                parameter_maps = [m for m in maps if m.get("detected_map_type")
+                                  and m["detected_map_type"].lower() != "unknown"]
                 entries.append({
                     "submission_id": data.get("submission_id", p.stem.replace("_score", "")),
                     "provider_id":   data.get("provider_id"),
@@ -2129,6 +2134,12 @@ def get_leaderboard():
                     "metrics":       data.get("metrics") or {},
                     "artifact_count": data.get("artifact_count", 0),
                     "message":       data.get("message", ""),
+                    "challenge_type": analysis.get("challenge_type") or data.get("challenge_type"),
+                    "analysis_complete": bool(maps) and not analysis.get("errors")
+                        and not any(m.get("error") for m in maps),
+                    "map_types": sorted({m["detected_map_type"] for m in parameter_maps}),
+                    "map_count": len(parameter_maps),
+                    "reference_scoring_status": (analysis.get("reference_scoring") or {}).get("status"),
                 })
             except Exception:
                 continue
@@ -2587,7 +2598,12 @@ def _fmt_export_cell(value, digits: int = 3) -> str:
         return "yes" if value else "no"
     if isinstance(value, (int, float)):
         if isinstance(value, float):
-            return (f"{value:.{digits}f}").rstrip("0").rstrip(".")
+            if not math.isfinite(value):
+                return ""
+            if value != 0 and abs(value) < 0.5 * 10 ** (-digits):
+                return f"{value:.2e}"
+            text = f"{value:.{digits}f}"
+            return text.rstrip("0").rstrip(".") if "." in text else text
         return str(value)
     return str(value)
 
@@ -2638,6 +2654,9 @@ def _reference_status_label(analysis_fields: dict) -> str:
 def _research_notes(summary: dict, *, include_reference_note: bool = True) -> str:
     notes: list[str] = []
     af = summary["analysis_fields"]
+    reference_scoring = (summary.get("nifti_analysis") or {}).get("reference_scoring") or {}
+    if reference_scoring.get("icc_statistics"):
+        notes.append("ICC is reported separately by model and ROI in the detailed CSV and report; no aggregate ICC is calculated.")
     if include_reference_note and not _reference_available(af):
         notes.append(REFERENCE_UNAVAILABLE_NOTE)
     warning_count = int(summary.get("warning_count") or 0)
@@ -2877,6 +2896,7 @@ _LONG_SCIENTIFIC_COLUMNS = [
     "finite_voxel_percent", "nan_voxel_count", "inf_voxel_count",
     "negative_voxel_percent", "reference_status", "validation_status",
     "warning_codes", "pipeline_version", "configuration_version", "export_date",
+    "dataset", "participant", "repeat", "site", "map_id",
 ]
 
 # Organiser-only identity columns, prepended for the unblinded long CSV.
@@ -2957,11 +2977,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
         analysis = s.get("nifti_analysis") if isinstance(s.get("nifti_analysis"), dict) else {}
         ref = analysis.get("reference_scoring") if isinstance(analysis.get("reference_scoring"), dict) else {}
         ref_maps = ref.get("maps") or []
-        # QC per-map lookup for nan/inf/finite/negative fallback (keyed by map type).
-        qc_by_type: dict[str, dict] = {}
-        for qm in analysis.get("maps") or []:
-            if isinstance(qm, dict) and qm.get("detected_map_type"):
-                qc_by_type.setdefault(str(qm["detected_map_type"]), qm)
+        qc_maps = [qm for qm in analysis.get("maps") or [] if isinstance(qm, dict)]
 
         identity_cells = [] if blinded else [
             s.get("submission_id", ""),
@@ -2975,7 +2991,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
             (s.get("scored_at") or ""),  # submitted_at (best available timestamp)
         ]
 
-        for ref_row in ref_maps:
+        for map_index, ref_row in enumerate(ref_maps):
             if not isinstance(ref_row, dict):
                 continue
             map_type = str(ref_row.get("detected_map_type") or "Unknown")
@@ -2984,8 +3000,22 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
             if units == "units not provided":
                 units = ""
             map_ref_status = str(ref_row.get("status") or "reference_not_available")
-            subject_id = _subject_from_name(ref_row.get("submitted_file"))
-            qc = qc_by_type.get(map_type, {})
+            subject_id = ref_row.get("participant") or _subject_from_name(ref_row.get("submitted_file"))
+            scan_fields = [str(ref_row.get(key) or "") for key in ("dataset", "participant", "repeat", "site")]
+            source_path = str(ref_row.get("submitted_path") or "")
+            try:
+                source_key = Path(source_path).relative_to(EXTRACTED_DIR / sid).as_posix() if source_path else ""
+            except ValueError:
+                source_key = source_path
+            source_key = source_key or json.dumps([scan_fields, ref_row.get("submitted_file"), map_index])
+            map_id = "map-" + hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:20]
+            matches = [qm for qm in qc_maps if source_path and qm.get("path") == source_path]
+            if not matches and any(scan_fields):
+                matches = [qm for qm in qc_maps if qm.get("detected_map_type") == map_type
+                           and [str(qm.get(key) or "") for key in ("dataset", "participant", "repeat", "site")] == scan_fields]
+            if not matches and not source_path and not any(scan_fields):
+                matches = [qm for qm in qc_maps if qm.get("detected_map_type") == map_type]
+            qc = matches[0] if len(matches) == 1 else {}
             qc_meta = qc.get("metadata") or {}
             qc_stats = qc.get("stats") or {}
             nan_count = qc_meta.get("nan_count")
@@ -3011,7 +3041,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
 
                 def _emit(metric_name: str, value, status: str):
                     sci = [
-                        blinded_id, challenge, subject_id, "",  # session_or_repeat_id, no repeats yet
+                        blinded_id, challenge, subject_id, scan_fields[2],
                         map_type, display, units, roi_name,
                         metric_name,
                         _fmt_export_cell(value),
@@ -3028,6 +3058,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                         pipeline_version,
                         config_version,
                         export_date,
+                        *scan_fields, map_id,
                     ]
                     rows.append(identity_cells + sci)
 
@@ -3048,7 +3079,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
         icc_rows = ref.get("icc_statistics") if isinstance(ref, dict) else None
         emitted_icc = False
         for icc_row in icc_rows or []:
-            if not isinstance(icc_row, dict) or icc_row.get("value") is None:
+            if not isinstance(icc_row, dict):
                 continue
             emitted_icc = True
             held = icc_row.get("held_fixed") or {}
@@ -3061,16 +3092,17 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                 str(held.get("repeat") or held.get("site") or ""),
                 str(icc_row.get("map_type") or ""), "",
                 str(icc_row.get("units") or ""),
-                str(icc_row.get("roi_label") or icc_row.get("roi_id") or ""),
-                f"icc[{icc_row.get('model')}:{icc_row.get('axis')}]",
+                str(icc_row.get("roi_label") or icc_row.get("roi_id") or "(submission-level)"),
+                f"icc[{icc_row.get('model')}:{icc_row.get('axis') or 'not_available'}]",
                 _fmt_export_cell(icc_row.get("value")),
                 str(icc_row.get("status") or ""),
                 _fmt_export_cell(icc_row.get("target_count"), digits=0),
                 _fmt_export_cell(icc_row.get("excluded_target_count"), digits=0),
                 "", "", "", "",
-                interval or "not_applicable",
+                interval or str(icc_row.get("unavailable_reason") or "not_applicable"),
                 validation_status, warning_codes,
                 pipeline_version, config_version, export_date,
+                str(icc_row.get("dataset") or ""), "", str(held.get("repeat") or ""), str(held.get("site") or ""), "",
             ])
 
         # Repeatability CoV, and ICC when it could not be computed, are
@@ -3100,6 +3132,7 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                 "", "", "", "", "", "",
                 "not_applicable", validation_status, warning_codes,
                 pipeline_version, config_version, export_date,
+                "", "", "", "", "",
             ]
             rows.append(identity_cells + sci)
 
@@ -3580,8 +3613,10 @@ def export_report(
     )
 
     prototype_analysis_html = (
-        grouped_table_html + rss_table_html
-        if grouped_table_html or rss_table_html else ""
+        grouped_table_html + rss_table_html + _prototype_table(
+            report_model.get("icc_headers") or [], report_model.get("icc_rows") or [],
+            "ICC results. Each model is reported separately; no pass/fail threshold is applied."
+        )
     )
 
     # Same rows the PDF renders, from the same model key, so the two formats

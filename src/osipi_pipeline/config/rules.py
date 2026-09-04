@@ -62,7 +62,7 @@ _GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size", "icc"}
 # The ICC model is configuration, not code: six defensible models exist and
 # choosing among them is a scientific decision for the challenge leads. The
 # default is "none", under which nothing is computed.
-_ICC_KEYS = {"model", "axes", "confidence_level"}
+_ICC_KEYS = {"model", "models", "axes", "confidence_level"}
 _ANALYSIS_KEYS = {"roi_descriptive", "signal_rss", "thresholds"}
 #: One advisory threshold. `warn_above` marks a row for a reviewer to look at;
 #: it is never a pass/fail criterion, so there is no `fail_above`.
@@ -294,6 +294,16 @@ def _validate_icc_block(value: Any, path: str, errors: list[str]) -> None:
         return
     _reject_unknown_keys(block, _ICC_KEYS, path, errors)
 
+    if "models" in block:
+        models = _require_string_list(block["models"], f"{path}.models", errors, allow_empty=True)
+        if "model" in block:
+            errors.append(f"{path}: use either model or models, not both")
+        if len(models) != len(set(models)):
+            errors.append(f"{path}.models: duplicate ICC models are not allowed")
+        for model in models:
+            if model not in MODELS:
+                errors.append(f"{path}.models: unknown ICC model {model!r}")
+
     if "model" in block:
         model = _require_string(block.get("model"), f"{path}.model", errors)
         allowed = (MODEL_NONE, *MODELS)
@@ -303,7 +313,7 @@ def _validate_icc_block(value: Any, path: str, errors: list[str]) -> None:
                 f"{', '.join(allowed)}"
             )
 
-    axes = _require_string_list(block.get("axes", []), f"{path}.axes", errors)
+    axes = _require_string_list(block.get("axes", ["inter_repeat"]), f"{path}.axes", errors)
     for index, axis in enumerate(axes):
         if axis not in AXIS_SESSION_FIELD:
             errors.append(
@@ -1200,8 +1210,12 @@ def icc_settings_by_challenge() -> dict[str, dict[str, Any]]:
     for challenge, config in validation_rules().get("challenges", {}).items():
         spec = (config.get("grouped_statistics") or {}).get("icc") or {}
         level = spec.get("confidence_level", DEFAULT_CONFIDENCE_LEVEL)
+        models = tuple(spec["models"]) if "models" in spec else (
+            (str(spec["model"]),) if spec.get("model") not in (None, MODEL_NONE) else ()
+        )
         result[str(challenge).lower()] = {
-            "model": str(spec.get("model") or MODEL_NONE),
+            "model": models[0] if len(models) == 1 else (None if models else MODEL_NONE),
+            "models": models,
             "axes": tuple(spec.get("axes") or ("inter_repeat",)),
             "confidence_level": None if level is None else float(level),
         }

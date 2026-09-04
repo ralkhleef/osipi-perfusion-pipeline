@@ -672,8 +672,11 @@ def import_configuration(zip_path: Path) -> dict[str, Any]:
 
 
 def capability_matrix() -> list[dict[str, Any]]:
+    from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS, MODEL_NONE
+
     rows = []
     analysis_rules = rules_module.analysis_by_challenge()
+    icc_rules = rules_module.icc_settings_by_challenge()
     map_specs = rules_module.map_type_specs()
     artifact_specs = rules_module.artifact_type_specs()
     for challenge in rules_module.challenge_types():
@@ -681,6 +684,9 @@ def capability_matrix() -> list[dict[str, Any]]:
         counts = assets["counts"]
         active = get_active_entry(challenge)
         analysis = analysis_rules.get(challenge, {})
+        icc_spec = icc_rules.get(challenge, {})
+        icc_models = icc_spec.get("models", (icc_spec.get("model", MODEL_NONE),))
+        icc_descriptions = [MODEL_DESCRIPTIONS[m] for m in icc_models if m in MODEL_DESCRIPTIONS]
         roi = analysis.get("roi_descriptive") or {}
         roi_maps = [
             str((map_specs.get(str(map_id).lower()) or {}).get("display") or map_id)
@@ -714,7 +720,10 @@ def capability_matrix() -> list[dict[str, Any]]:
                 f"Configured: {active.get('package_name') or active.get('package_id') or active.get('mode')}"
                 if active.get("mode") != "none" else "Not configured"
             ),
-            "icc": "Not configured",
+            "icc": (
+                f"Configured: {' '.join(icc_descriptions)} Requires compatible repeated scans."
+                if icc_descriptions else "Not configured"
+            ),
             "official_ranking": "Not configured",
             "local_assets": counts,
         })

@@ -32,6 +32,7 @@ MANIFEST_FILENAME = ".osipi_manifest.json"
 
 def config_fingerprint() -> str:
     payload = {
+        "directory_tracking_version": 2,
         "rules": validation_rules(),
         "settings": app_settings(),
     }
@@ -50,8 +51,9 @@ def build_manifest(
 
     with timed("manifest.build", submission_id=submission_id):
         root = extracted_path.resolve()
-        files = sorted(path for path in root.rglob("*") if path.is_file() and path.name != MANIFEST_FILENAME)
-        directories = _directory_entries(root, files)
+        paths = list(root.rglob("*"))
+        files = sorted(path for path in paths if path.is_file() and path.name != MANIFEST_FILENAME)
+        directories = _directory_entries(root, files, (path for path in paths if path.is_dir()))
         entries = [_file_entry(path, root) for path in files]
         # Reuses the entries above rather than walking the tree again, so a
         # large synthetic submission is still traversed once.
@@ -249,9 +251,10 @@ def _file_entry(path: Path, root: Path) -> dict[str, Any]:
     }
 
 
-def _directory_entries(root: Path, files: Iterable[Path]) -> list[dict[str, object]]:
+def _directory_entries(root: Path, files: Iterable[Path], empty_directories: Iterable[Path] = ()) -> list[dict[str, object]]:
     entries: list[dict[str, object]] = []
     directories: set[Path] = {root}
+    directories.update(empty_directories)
     for file_path in files:
         current = file_path.parent
         while True:

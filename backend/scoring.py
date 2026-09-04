@@ -249,6 +249,13 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
 
     Organiser assets are excluded from both, see ``_is_organiser_asset``.
     """
+    # IDs are single directory names, never caller-supplied paths. Preserve
+    # valid underscores/case rather than silently resolving a different ID.
+    if not submission_id or submission_id in {".", ".."} or any(c in submission_id for c in ("/", "\\", "\x00")):
+        return []
+    extracted_base = EXTRACTED_DIR / submission_id
+    if not _path_is_relative_to(extracted_base, EXTRACTED_DIR):
+        return []
     exec_dir = _exec_output_dir(submission_id, challenge_type)
     if exec_dir.exists():
         niftis = [
@@ -258,7 +265,6 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
         if niftis:
             return niftis
 
-    extracted_base = EXTRACTED_DIR / submission_id
     extracted_files = manifest_files(extracted_base, refresh_if_stale=True, submission_id=submission_id)
     for subpath in output_map_subpaths():
         candidate = extracted_base / subpath if subpath else extracted_base
@@ -363,8 +369,8 @@ _FALLBACK_DTYPE_MAP: dict[int, tuple[str, str, int]] = {
 }
 
 
-def _json_float(value, ndigits: int = 6):
-    """Return a JSON-safe rounded float, or None for NaN/inf/missing values."""
+def _json_float(value, ndigits: Optional[int] = None):
+    """Preserve scientific precision; round only when explicitly requested."""
     if value is None:
         return None
     try:
@@ -373,7 +379,7 @@ def _json_float(value, ndigits: int = 6):
         return None
     if not math.isfinite(f):
         return None
-    return round(f, ndigits)
+    return round(f, ndigits) if ndigits is not None else f
 
 
 def _pct(num: int | float, den: int | float):
@@ -1507,7 +1513,7 @@ def _attach_threshold_flags(reference_scoring: dict, challenge_type: str) -> Non
         summarize,
     )
 
-    thresholds = thresholds_by_challenge().get(challenge_type, {}) or {}
+    thresholds = thresholds_by_challenge().get((challenge_type or "").strip().lower(), {}) or {}
     reference_scoring["threshold_methodology"] = dict(THRESHOLD_METHODOLOGY)
     reference_scoring["thresholds"] = dict(thresholds)
 
@@ -1530,16 +1536,14 @@ def _icc_definition(challenge_type: str) -> str:
     """
     from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS, MODEL_NONE
 
-    model = str(
-        (icc_settings_by_challenge().get(challenge_type, {}) or {}).get("model")
-        or MODEL_NONE
-    )
-    if model == MODEL_NONE:
+    settings = icc_settings_by_challenge().get((challenge_type or "").strip().lower(), {}) or {}
+    models = settings.get("models", ())
+    if not models:
         return (
             "Not computed: no ICC model is configured for this challenge. "
             "Requires repeated datasets and a challenge-approved ICC model."
         )
-    return MODEL_DESCRIPTIONS.get(model, model) + (
+    return " ".join(MODEL_DESCRIPTIONS.get(model, model) for model in models) + (
         " Computed from scan-level ROI medians across a participant x session "
         "table; blank where a submission has too few repeated scans."
     )
@@ -1549,7 +1553,7 @@ def _attach_grouped_roi_statistics(reference_scoring: dict, challenge_type: str)
     """Attach configured descriptive grouping of scan-level ROI statistics."""
     from osipi_pipeline.scoring.grouped_statistics import METHODOLOGY, compute_grouped_statistics
 
-    spec = grouped_statistics_by_challenge().get(challenge_type, {})
+    spec = grouped_statistics_by_challenge().get((challenge_type or "").strip().lower(), {})
     reference_scoring["grouped_roi_methodology"] = dict(METHODOLOGY)
     reference_scoring["grouped_roi_statistics"] = []
     if not spec.get("enabled"):
@@ -1580,20 +1584,25 @@ def _attach_icc(reference_scoring: dict, challenge_type: str, roi_rows: list) ->
         MODEL_NONE,
         REASON_NOT_CONFIGURED,
         compute_icc_for_rows,
+        IccResult,
+        MODEL_DESCRIPTIONS,
+        STATUS_LABELS,
     )
 
+    challenge_type = (challenge_type or "").strip().lower()
     settings = icc_settings_by_challenge().get(challenge_type, {})
-    model = str(settings.get("model") or MODEL_NONE)
+    models = settings.get("models", ())
     reference_scoring["icc_methodology"] = dict(ICC_METHODOLOGY)
-    reference_scoring["icc_model"] = model
+    reference_scoring["icc_model"] = models[0] if len(models) == 1 else None
+    reference_scoring["icc_models"] = list(models)
     reference_scoring["icc_statistics"] = []
 
-    if model == MODEL_NONE:
+    if not models:
         reference_scoring["icc_status"] = "not_configured"
         reference_scoring["icc_unavailable_reason"] = REASON_NOT_CONFIGURED
         return
 
-    results = compute_icc_for_rows(
+    results = [result for model in models for result in compute_icc_for_rows(
         roi_rows,
         model=model,
         axes=settings.get("axes") or ("inter_repeat",),
@@ -1602,8 +1611,18 @@ def _attach_icc(reference_scoring: dict, challenge_type: str, roi_rows: list) ->
             .get("source") or "roi_median"
         ),
         confidence_level=settings.get("confidence_level"),
-    )
-    reference_scoring["icc_statistics"] = [item.to_dict() for item in results]
+    )]
+    for model in models:
+        if not any(result.model == model for result in results):
+            results.append(IccResult(
+                model=model, model_description=MODEL_DESCRIPTIONS[model],
+                status="no_groups", unavailable_reason="Not enough compatible repeated scans.",
+                challenge=challenge_type,
+            ))
+    reference_scoring["icc_statistics"] = [
+        {**item.to_dict(), "status_label": STATUS_LABELS.get(item.status, item.status.replace("_", " "))}
+        for item in results
+    ]
     usable = [item for item in results if item.value is not None]
     reference_scoring["icc_status"] = "available" if usable else "no_groups"
     reference_scoring["icc_unavailable_reason"] = (
@@ -1789,6 +1808,7 @@ def _choose_reference_match(
     *,
     submission_root: Optional[Path] = None,
     reference_root: Optional[Path] = None,
+    challenge_type: Optional[str] = None,
 ) -> Optional[Path]:
     """The ground-truth file belonging to this scan.
 
@@ -1802,25 +1822,38 @@ def _choose_reference_match(
     numbers that look entirely reasonable, which is the worst kind of wrong.
 
     A candidate whose participant, site, repeat and dataset all match is used.
-    When identity cannot be resolved on either side, or nothing matches, the
-    filename comparison still decides, so submissions that do encode identity
-    in the filename behave exactly as before.
+    Partial identities must not conflict. Filename evidence can disambiguate
+    compatible candidates, but ties and conflicting identities return None.
     """
     if not candidates:
         return None
-    if len(candidates) == 1:
-        return candidates[0]
-
-    wanted = _scan_identity(submitted_path, submission_root)
+    wanted = _scan_identity(submitted_path, submission_root, challenge=challenge_type)
+    identities = {candidate: _scan_identity(candidate, reference_root, challenge=challenge_type)
+                  for candidate in candidates}
+    # Known conflicting identities must never be overridden by a filename.
+    candidates = [candidate for candidate in candidates
+                  if not any(a is not None and b is not None and a != b
+                             for a, b in zip(wanted, identities[candidate]))]
+    if not candidates:
+        return None
     if any(value is not None for value in wanted):
         matched = [
             candidate for candidate in candidates
-            if _scan_identity(candidate, reference_root) == wanted
+            if identities[candidate] == wanted
         ]
         if len(matched) == 1:
             return matched[0]
         if matched:
             candidates = matched
+        else:
+            partial = [candidate for candidate in candidates
+                       if any(a is not None and a == b
+                              for a, b in zip(wanted, identities[candidate]))]
+            if partial:
+                candidates = partial
+
+    if len(candidates) == 1:
+        return candidates[0]
 
     sub_tokens = _filename_tokens(submitted_path)
     best = sorted(
@@ -1828,6 +1861,10 @@ def _choose_reference_match(
         key=lambda p: (len(sub_tokens.intersection(_filename_tokens(p))), -len(str(p))),
         reverse=True,
     )
+    # Equal filename evidence is ambiguous, not permission to choose by path
+    # length or directory ordering.
+    if len(sub_tokens.intersection(_filename_tokens(best[0]))) == len(sub_tokens.intersection(_filename_tokens(best[1]))):
+        return None
     return best[0]
 
 
@@ -2142,6 +2179,7 @@ def _score_reference_maps(
             submitted_path, refs_by_type.get(map_type, []),
             submission_root=EXTRACTED_DIR / submission_id,
             reference_root=selected_root,
+            challenge_type=challenge_type,
         )
         # Which scan this map came from. Without it every row in the table
         # below is labelled with the same filename as every other row.
@@ -2262,7 +2300,12 @@ def _score_reference_maps(
                 diff_name = diff_name[:-7]
             elif diff_name.endswith(".nii"):
                 diff_name = diff_name[:-4]
-            diff_path = diff_dir / f"{diff_name}_difference.nii"
+            try:
+                source_key = submitted_path.relative_to(EXTRACTED_DIR / submission_id).as_posix()
+            except ValueError:
+                source_key = submitted_path.as_posix()
+            scan_key = hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:20]
+            diff_path = diff_dir / f"{diff_name}_{scan_key}_difference.nii"
             try:
                 diff_values = _difference_values(sub_values, ref_values)
                 _write_float32_nifti(
@@ -2677,7 +2720,8 @@ def _analysis_cache_key(
         )
     except Exception:  # noqa: BLE001 - a key we cannot build is simply no key
         return None
-    return (submission_id, challenge_type, config_fingerprint(),
+    # Invalidate cached results rounded to six decimals and old artifact names.
+    return ("multi-model-icc-v3", submission_id, challenge_type, config_fingerprint(),
             submitted, masks, references)
 
 

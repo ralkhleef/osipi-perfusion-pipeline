@@ -1075,6 +1075,17 @@
         <p class="smc-hint" id="roi-descriptive-method" style="margin-top:8px"></p>
       </details>
 
+      <details class="pg-card qc-fold" id="icc-results-card" style="margin-top:16px;display:none" open>
+        <summary class="pg-card-header"><span class="pg-card-title">ICC results</span></summary>
+        <p class="smc-hint">Each model is shown separately. No pass/fail threshold is applied.</p>
+        <div class="roi-table-wrap">
+          <table class="sc-table roi-table">
+            <thead><tr><th>Scope</th><th>ROI</th><th>Model</th><th>ICC</th><th>Interval</th><th>Participants</th><th>Sessions</th><th>Status</th></tr></thead>
+            <tbody id="icc-results-body"></tbody>
+          </table>
+        </div>
+      </details>
+
       <!-- Analysis results from previously processed submissions -->
       <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
         <div class="pg-card-header">

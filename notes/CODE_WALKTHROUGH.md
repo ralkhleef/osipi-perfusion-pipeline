@@ -118,9 +118,9 @@ per-ROI median, population SD, CoV, and voxel count.
 
 `src/osipi_pipeline/scoring/icc.py` implements all six Shrout & Fleiss models
 with exact F-based confidence intervals, from a participants x sessions table
-built out of the same per-scan ROI rows the grouping uses. No model is applied
-by default: `challenges.<id>.grouped_statistics.icc.model` is `none`, and ICC
-stays reported as not configured until the challenge leads choose. A
+built out of the same per-scan ROI rows the grouping uses. The user-confirmed
+`challenges.<id>.grouped_statistics.icc.models` list contains `icc2_1` and
+`icc3_1` for ASL, DCE and DSC. Each result is labelled by model. A
 participant missing any session is excluded and counted, never imputed.
 
 ### Generic reference comparison
@@ -176,8 +176,8 @@ The following items still need mentor decisions or private data:
 
 - final DCE accuracy and deviance definitions;
 - RSS normalisation;
-- repeatability and reproducibility method, and which of the six implemented
-  ICC models applies (`grouped_statistics.icc.model`, `none` by default);
+- repeatability and reproducibility method and any change to the current
+  repeat-based ICC grouping;
 - thresholds, pass/fail, and ranking rules;
 - final private references and masks; and
 - final ASL fitted-model comparison.

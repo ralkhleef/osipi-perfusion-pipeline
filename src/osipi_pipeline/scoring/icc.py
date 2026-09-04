@@ -55,8 +55,8 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable, Sequence
 
-#: No model chosen: ICC is not computed. The shipped default, and the state
-#: the pipeline stays in until the challenge leads pick a model.
+#: No model chosen: ICC is not computed. Used when configuration is absent
+#: or ICC has explicitly been disabled.
 MODEL_NONE = "none"
 
 MODEL_1_1 = "icc1_1"
@@ -99,6 +99,16 @@ STATUS_TOO_FEW_SESSIONS = "too_few_sessions"
 STATUS_INCOMPLETE_TABLE = "incomplete_table"
 STATUS_NO_VARIANCE = "no_variance"
 
+STATUS_LABELS = {
+    STATUS_AVAILABLE: "Available",
+    STATUS_NOT_CONFIGURED: "Not configured",
+    STATUS_TOO_FEW_TARGETS: "Not enough participants with matched sessions",
+    STATUS_TOO_FEW_SESSIONS: "Not enough sessions",
+    STATUS_INCOMPLETE_TABLE: "Incomplete participant/session table",
+    STATUS_NO_VARIANCE: "Not enough variation to calculate ICC",
+    "no_groups": "Not enough compatible repeated scans",
+}
+
 REASON_NOT_CONFIGURED = (
     "No ICC model is configured for this challenge. Set "
     "grouped_statistics.icc.model in validation_rules.yaml once the challenge "
@@ -131,7 +141,7 @@ METHODOLOGY: dict[str, str] = {
     "confidence_interval": "exact F-based interval at the configured level",
     "incomplete_targets": "a target missing any session is excluded from the "
                           "table and counted, never imputed",
-    "model_choice": "configuration; no model is applied by default",
+    "model_choice": "configuration; each selected model is reported separately",
     "status": "conventions subject to confirmation by OSIPI",
 }
 
