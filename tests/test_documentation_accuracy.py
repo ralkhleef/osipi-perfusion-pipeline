@@ -1204,10 +1204,9 @@ def test_the_guide_exists_and_is_in_the_navigation() -> None:
     assert 'tab: "Reading results"' in nav
 
 
-def test_the_guide_states_that_nothing_is_passed_failed_or_ranked() -> None:
-    """The one sentence that has to survive every future edit."""
+def test_the_guide_states_that_no_thresholds_or_ranking_rules_are_configured() -> None:
     text = _guide_text()
-    assert "does not pass, fail, score or rank anything" in text
+    assert "no\n            pass/fail thresholds or ranking rules" in text
 
 
 def test_the_guide_does_not_turn_the_15_percent_remark_into_a_rule() -> None:
@@ -1216,9 +1215,9 @@ def test_the_guide_does_not_turn_the_15_percent_remark_into_a_rule() -> None:
     without the second half would quietly make it the criterion."""
     text = _guide_text()
     assert "15%" in text, "the figure people ask about is not addressed"
-    assert "rough threshold" in text
-    assert "No shipped challenge configures any threshold" in text
-    assert "never a verdict" in text
+    assert "possible CoV guideline of 15%" in text
+    assert "No challenge currently has a threshold" in text
+    assert "does not change the value or submission order" in text
 
 
 def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
@@ -1249,7 +1248,7 @@ def test_the_guide_warns_that_the_supplied_masks_overlap() -> None:
     the page exists to prevent."""
     text = _guide_text()
     assert "not independent" in text
-    assert "hippocampus voxel also lies inside the grey" in text
+    assert "hippocampus voxels are also included in the grey matter" in text
 
 
 def test_the_guide_distinguishes_the_two_things_called_cov() -> None:

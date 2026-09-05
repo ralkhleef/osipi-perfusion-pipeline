@@ -56,13 +56,13 @@
 
         <section>
           <h2 id="prerequisites" data-toc-title="Requirements">Requirements</h2>
-          <p>Docker and Git are the only things required to run the application. Python and Node
-            are needed only to run the test suites, which run outside the container.</p>
+          <p>Docker Desktop is required. Git is optional because the repository can also be
+            downloaded as a ZIP. Python and Node are needed only for the test suites.</p>
 
           <div class="docs-cards">
             <div class="docs-card">
               <h3>To run the application</h3>
-              <p>Nothing else is required.</p>
+              <p>Install Docker Desktop and start it before running the application.</p>
               <dl>
                 <dt>Docker Desktop</dt>
                 <dd>Must be running before <code>docker build</code>. Also supplies the daemon the Run step uses.</dd>
@@ -109,9 +109,8 @@ cd osipi-perfusion-pipeline</code></pre>
           </div>
 
           <h2 id="installation" data-toc-title="Start it">Start it</h2>
-          <p>One command. It builds the image the first time, which takes a few minutes, then
-            starts the application. There is no separate install step: the image brings its own
-            Python and dependencies.</p>
+          <p>Run the command below from the project directory. It builds the Docker image and
+            starts the application. The first build may take a few minutes.</p>
 
           <div class="docs-code">
             <div class="docs-code-header"><span>Start</span><button class="docs-copy" type="button">Copy</button></div>
@@ -121,25 +120,19 @@ cd osipi-perfusion-pipeline</code></pre>
           <p>Leave it running. When you see <code>Uvicorn running on http://0.0.0.0:8000</code> the
             application is up. To stop it, press Ctrl-C in that terminal.</p>
 
-          <div class="docs-callout">
-            <p>That is the whole installation. The commands further down this page are optional:
-              one alternative way to start it, and the test suites, which only a developer changing
-              the code needs to run.</p>
-          </div>
-
           <h2 id="verify" data-toc-title="Open it">Open it</h2>
           <p>Go to <a href="http://localhost:8000">http://localhost:8000</a> in a browser. The
             interface opens on step 1 of 6, Upload.</p>
 
-          <p>To check it end to end, upload a submission and walk the six steps. Nothing is sent
-            anywhere: the application runs on your machine and the files stay there.</p>
+          <p>To test the workflow, upload a submission and complete the six steps. The application
+            runs locally and keeps the files on that machine.</p>
 
           <div class="docs-steps">
             <div class="docs-step">
               <div class="docs-step-rail"><span class="docs-step-num">1</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">Enter a team name and pick the challenge</p>
-                <p>Anything will do for a first run. The challenge decides which rules apply.</p>
+                <p>Use test details for a first run. The challenge choice controls the validation rules.</p>
               </div>
             </div>
             <div class="docs-step">
@@ -190,8 +183,7 @@ cd osipi-perfusion-pipeline</code></pre>
           </div>
 
           <h2 id="without-compose" data-toc-title="Starting it another way">Starting it another way</h2>
-          <p>You do not need this if <code>docker compose up --build</code> worked. It is here for
-            anyone without Docker Compose. It does exactly the same thing.</p>
+          <p>If Docker Compose is unavailable, use the equivalent Docker commands below.</p>
 
           <div class="docs-code">
             <div class="docs-code-header"><span>Build</span><button class="docs-copy" type="button">Copy</button></div>
@@ -273,8 +265,7 @@ node tests/footer_logic_test.js</code></pre>
           <h2 id="updating" data-toc-title="Updating your copy">Updating your copy</h2>
 
           <p>The application is served from inside the Docker image, and the browser interface is
-            copied into that image when it is built. Neither is read live from disk. So new code
-            changes nothing you can see until you rebuild the image.</p>
+            copied into that image when it is built. Rebuild the image after updating the code.</p>
 
           <p>How you get the new code depends on how you got it the first time. If you cloned the
             repository with Git, use the first block. If you downloaded a ZIP from GitHub, which
@@ -289,8 +280,7 @@ git pull
 docker compose up -d --build</code></pre>
           </div>
 
-          <p>If <code>git pull</code> reports <em>not a git repository</em>, you downloaded a ZIP
-            rather than cloning, and the steps below are the ones you want. Nothing is wrong.</p>
+          <p>If <code>git pull</code> reports <em>not a git repository</em>, use the ZIP update steps below.</p>
 
           <h3>If you downloaded a ZIP</h3>
 
@@ -318,11 +308,10 @@ cd osipi-perfusion-pipeline
 docker compose up -d --build</code></pre>
           </div>
 
-          <p>The two <code>mv</code> lines are the whole point. <code>data/</code> holds your
+          <p>The two <code>mv</code> lines preserve local files. <code>data/</code> holds your
             reference maps and ROI masks and <code>submissions/</code> holds everything that has
             been uploaded; neither is in the download, so moving them across is what keeps them.
-            The old folder is left in place until you delete it, so if a step goes wrong nothing is
-            gone.</p>
+            Keep the old folder until the updated copy has been tested.</p>
 
           <p>On Windows, do the same thing in File Explorer: rename the old folder, extract the new
             ZIP, then drag <code>data</code> and <code>submissions</code> from the old folder into
@@ -335,19 +324,14 @@ docker compose up -d --build</code></pre>
 
           <h3>Then reload the browser</h3>
 
-          <p>An ordinary refresh is enough. The page asks for its JavaScript and CSS by a version
+          <p>Use an ordinary refresh. The page asks for its JavaScript and CSS by a version
             derived from the file contents, so a changed file arrives at a new address and the
-            browser fetches it; the page itself is never cached. You do not need
-            <em>Empty Cache and Hard Reload</em>, and reaching for it first tends to hide the real
-            cause.</p>
+            browser fetches it. A hard refresh is usually not required.</p>
 
           <div class="docs-callout">
-            <p class="mb-0"><strong>If the interface looks unchanged after all that</strong>, the
-              likely causes, in order: the new code never arrived (a <code>git pull</code> that
-              failed, or a ZIP unpacked into a different folder than the one you rebuilt), the
-              image was not rebuilt, or the container was never restarted. A stale script is last
-              and rare, for the reason above. The check below distinguishes them without
-              guessing.</p>
+            <p class="mb-0"><strong>If the interface still looks unchanged</strong>, check that the
+              update completed, the correct folder was rebuilt, and the container restarted. The
+              script below checks which interface the server is using.</p>
           </div>
 
           <div class="docs-code">
@@ -387,8 +371,7 @@ docker compose up -d --build</code></pre>
 
           <h3>If you have your own edits (Git only)</h3>
 
-          <p><code>git pull</code> refuses to overwrite uncommitted work, which is a feature rather
-            than an obstacle. To see what is yours before pulling:</p>
+          <p>If <code>git pull</code> stops because of uncommitted work, review the changes first:</p>
 
           <div class="docs-code">
             <div class="docs-code-header"><span>See your changes</span><button class="docs-copy" type="button">Copy</button></div>
@@ -405,9 +388,8 @@ git pull
 git stash pop</code></pre>
           </div>
 
-          <p>Your imaging data is never at risk from any of this. Reference maps, ROI masks and
-            submissions are excluded from version control, so <code>git pull</code> and
-            <code>git stash</code> do not touch them.</p>
+          <p>Reference maps, ROI masks, and submissions are excluded from version control, so
+            <code>git pull</code> and <code>git stash</code> do not include them.</p>
 
           <h3>Confirming the update worked</h3>
 
@@ -416,11 +398,10 @@ git stash pop</code></pre>
             <pre><code>python3 scripts/preflight.py</code></pre>
           </div>
 
-          <p>This walks a generated submission through all six steps against the running
-            application and prints one line per step. It uploads nothing real and removes what it
-            creates. If every check passes and the browser still looks wrong, confirm you rebuilt
-            the same folder you are running from: with a ZIP update that is the mistake that hides
-            longest, because both folders exist and only one of them is new.</p>
+          <p>This runs a generated test submission through the six steps and prints one line per
+            step. It does not use real imaging data and removes the test files it creates. If it
+            passes but the browser still looks outdated, confirm that Docker rebuilt the folder
+            you are currently using.</p>
         </section>
 
       </div>

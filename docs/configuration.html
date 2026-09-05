@@ -56,8 +56,8 @@
 
         <section>
           <h2 id="configuration-manager" data-toc-title="In-app manager">In-app Configuration Manager</h2>
-          <p class="docs-lead">Challenge rules are configuration, not code. Almost everything on this
-            page can be changed from inside the application, by someone who does not write Python.</p>
+          <p class="docs-lead">Most challenge settings can be changed in the application. Some
+            advanced settings can also be edited in the YAML file.</p>
 
           <p>Open <span class="docs-ui">QC &amp; Preview</span> →
             <span class="docs-ui">Reviewer settings</span> →
@@ -66,7 +66,7 @@
             files, analysis providers, private assets, capabilities, or saved versions.</p>
 
           <h3>Saving a change</h3>
-          <p>Four steps, and nothing takes effect until the last one.</p>
+          <p>A change is tested and saved before it is activated.</p>
 
           <div class="docs-steps">
             <div class="docs-step">
@@ -87,7 +87,7 @@
               <div class="docs-step-rail"><span class="docs-step-num">3</span><span class="docs-step-line"></span></div>
               <div class="docs-step-body">
                 <p class="docs-step-title">Save as New Version</p>
-                <p>Stores the draft as an inactive version. Still nothing has changed.</p>
+                <p>Stores the draft as an inactive version.</p>
               </div>
             </div>
             <div class="docs-step">
@@ -100,8 +100,8 @@
           </div>
 
           <div class="docs-callout">
-            <p>Nothing activates on its own. If a test or an activation fails, the configuration
-              already in force is left exactly as it was.</p>
+            <p>Saved versions stay inactive until you select Activate. If testing or activation
+              fails, the current configuration stays active.</p>
           </div>
 
           <p>The manager also lists private reference files and exports or imports configuration as a

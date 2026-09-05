@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GSoC 2026 · Perfusion Challenge Pipeline</title>
-<meta name="description" content="A clear summary of the Google Summer of Code 2026 OSIPI Perfusion Challenge Pipeline project, its workflow, implementation and results.">
+<meta name="description" content="Summary of the Google Summer of Code 2026 OSIPI Perfusion Challenge Pipeline project.">
 <!-- The mark, not the wordmark: the lettering is illegible at 16 px. -->
 <link rel="icon" href="assets/images/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="assets/images/osipi-mark.png">
@@ -64,17 +64,15 @@
             <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the
             ISMRM Perfusion Study Group. 16 May to 18 August 2026.</p>
 
-          <p>A local web application that takes a challenge submission from an archive to a blinded
-            report: it checks the files against the rules for its challenge, runs the team's code in
-            Docker if they supplied any, computes quality control and comparison against ground
-            truth, and exports results with the team's identity removed. It supports DCE, ASL and
-            DSC, and the challenge rules are configuration rather than code.</p>
+          <p>This local web application imports challenge submissions, checks their files, runs
+            submitted code in Docker when needed, calculates QC and reference comparisons, and
+            exports blinded results. It supports DCE, ASL, and DSC.</p>
 
           <div class="docs-downloads">
             <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline" target="_blank" rel="noopener">
               <span class="docs-download-kind">CODE</span>
               <span class="docs-download-name">The repository</span>
-              <span class="docs-download-note">The full project, on main</span>
+              <span class="docs-download-note">Source code and documentation</span>
             </a>
             <a class="docs-download" href="downloads/example-report-blinded.pdf">
               <span class="docs-download-kind">PDF</span>
@@ -91,17 +89,16 @@
 
         <section>
           <h2 id="goals" data-toc-title="Goals">Goals</h2>
-          <p>Two labs given the same perfusion scan produce different parameter maps, because the
-            model, the fitting and the arterial input function all differ. OSIPI runs challenges to
-            measure how far apart those answers are, and that measurement only means something if
-            every submission is handled identically by a reviewer who cannot see whose it is.</p>
-          <p>The project set out to build the software that makes that possible:</p>
+          <p>Different analysis methods can produce different parameter maps from the same
+            perfusion scan. OSIPI challenges compare these results using the same review process
+            for each submission.</p>
+          <p>The project goals were:</p>
           <ul>
             <li>Accept a submission, whether it contains finished maps or the code that produced them.</li>
-            <li>Check it against the rules for its challenge, and say precisely what is wrong when it fails.</li>
+            <li>Check it against the rules for its challenge and report any validation issues.</li>
             <li>Run submitted code in a controlled environment.</li>
             <li>Compute quality control, and comparison against ground truth where it exists.</li>
-            <li>Produce reports that carry no trace of who submitted.</li>
+            <li>Produce blinded reports without team or contact details.</li>
             <li>Let the challenge leads change the rules without editing Python.</li>
           </ul>
         </section>
@@ -146,8 +143,7 @@
             </div>
             <div>
               <dt>Reporting</dt>
-              <dd>HTML and PDF generated from one result model, so the two cannot disagree,
-                plus CSV and JSON.</dd>
+              <dd>HTML and PDF generated from the same result model, plus CSV and JSON.</dd>
             </div>
             <div>
               <dt>Blinding</dt>
@@ -166,20 +162,18 @@
 
         <section>
           <h2 id="state" data-toc-title="Current state">Current state</h2>
-          <p>The pipeline runs end to end. I have taken real DCE and ASL data from both mentors
-            from archive to blinded report without leaving the interface.</p>
-          <p>All of the work is on <code>main</code>. The project is a new tool rather than a
-            contribution to an existing OSIPI repository, so there is no upstream to merge into.</p>
+          <p>DCE and ASL test data have been run from import through blinded report export.</p>
+          <p>The project source is on the <code>main</code> branch of this repository.</p>
 
           <div class="docs-table-wrap">
             <table>
               <thead><tr><th>Area</th><th>State</th></tr></thead>
               <tbody>
-                <tr><td>DCE</td><td>Fully configured and tested against real submissions.</td></tr>
+                <tr><td>DCE</td><td>Configured and tested with supplied submissions.</td></tr>
                 <tr><td>ASL</td><td>CBF and ATT required. Comparison and ROI statistics verified on the challenge lead's own data.</td></tr>
                 <tr><td>DSC</td><td>CBV, CBF and MTT required, with the same ROI statistics as ASL. No real reference data has been supplied yet, so DSC is verified on synthetic data only.</td></tr>
                 <tr><td>Testing</td><td>Automated tests cover upload, validation, execution, analysis, reporting, exports and blinding. Real DCE and ASL submissions were run through the application end to end.</td></tr>
-                <tr><td>Scale</td><td>Measured, not assumed. A 229 MB submission of 32 3-D maps validates in about 1.5 seconds, and peak memory stays near 54 MB whether the input is 57 MB or 229 MB, because files are read one at a time rather than held together. Ingestion reads metadata only and is flat with size. 4-D data is the harder case and is measured separately: one DCE concentration curve is 8 MB compressed but 0.93 GB in memory, so images are read in chunks along the last axis, which took peak memory for that file from 2.38 GB to 0.54 GB while producing byte-identical statistics. Peak therefore tracks one chunk of the largest single file, not the size of the submission. Run <code>scripts/benchmark_scale.py</code> to reproduce; its sweep covers both the 3-D and 4-D cases.</td></tr>
+                <tr><td>Scale</td><td>A 229 MB test submission containing 32 3-D maps validated in about 1.5 seconds with about 54 MB peak memory. In a separate 4-D test, chunked reading reduced peak memory for one DCE concentration file from 2.38 GB to 0.54 GB. Run <code>scripts/benchmark_scale.py</code> to repeat these measurements.</td></tr>
                 <tr><td>Official ranking</td><td>Not configured. Comparison against reference data is a general capability and does not constitute official OSIPI scoring.</td></tr>
               </tbody>
             </table>
@@ -188,17 +182,15 @@
 
         <section>
           <h2 id="left" data-toc-title="What is left">What is left</h2>
-          <p>Each item below needs a decision from the challenge leads rather than development time.
-            The pipeline reports a value it cannot compute as unavailable, and does not present
-            anything as an official result before its definition exists.</p>
+          <p>These items still need confirmation from the challenge leads. Results that cannot be
+            calculated are shown as unavailable.</p>
           <ul>
             <li><strong>Metric definitions.</strong> Accuracy and deviance need formulas; accuracy
               could mean signed bias, RMSE, or absolute or percentage error. Whether the
-              signal-time residual sum of squares stays raw or is normalised is open, as is whether
-              a formal ICC is required and which model.</li>
-            <li><strong>Variability across repeats, sites and participants.</strong> Implemented and
-              switched off, pending two conventions: aggregate ROI medians or pooled voxels, and
-              whether repeats and sites are paired within a participant first.</li>
+              signal-time residual sum of squares stays raw or is normalised is open.</li>
+            <li><strong>Variability across repeats, sites and participants.</strong> ICC(2,1) and
+              ICC(3,1) are reported using ROI medians across repeats. The final grouping convention
+              still needs confirmation.</li>
             <li><strong>Dataset grids for ASL and DSC.</strong> Whether either has one cohort or
               several, and the counts. The required maps are configured; the grid is not.</li>
             <li><strong>Thresholds and ranking.</strong> Pass and fail rules, the final ROI and mask
@@ -241,7 +233,7 @@
             <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/notes/CODE_WALKTHROUGH.md" target="_blank" rel="noopener">
               <span class="docs-download-kind">MD</span>
               <span class="docs-download-name">Code walkthrough</span>
-              <span class="docs-download-note">The seven defects, with reproduction</span>
+              <span class="docs-download-note">Maintainer overview of the code</span>
             </a>
             <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/notes/SCIENTIFIC_REQUIREMENTS_PENDING.md" target="_blank" rel="noopener">
               <span class="docs-download-kind">MD</span>

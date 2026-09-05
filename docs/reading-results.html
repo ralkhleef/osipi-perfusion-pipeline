@@ -55,10 +55,10 @@
       <div class="docs-content">
 
         <section>
-          <p>Reference comparisons measure a submitted map against the organisers' ground truth
-            for the same scan. QC and regional descriptive statistics describe the submitted map
-            itself. The current analysis does not pass, fail, score or rank anything;
-            file validation is a separate check. The rest of this page explains the columns.</p>
+          <p>This page explains the values in the results. Reference metrics compare a submitted
+            map with the matching reference map. QC and regional statistics describe the submitted
+            map. Validation results are reported separately. The current configuration has no
+            pass/fail thresholds or ranking rules.</p>
         </section>
 
         <section>
@@ -94,9 +94,8 @@
             </table>
           </div>
 
-          <p>A row that says <strong>Not available</strong> means the comparison could not be made,
-            not that it came out badly. The usual reasons are that no ground truth map matched that
-            scan, or that the file was not a parameter map in the first place.</p>
+          <p><strong>Not available</strong> means the value was not calculated. Common reasons are
+            a missing matching reference map or a file that is not a parameter map.</p>
         </section>
 
         <section>
@@ -106,13 +105,13 @@
             <table>
               <thead><tr><th>Column</th><th>What it means</th></tr></thead>
               <tbody>
-                <tr><td>Bias</td><td>Mean of (submitted &minus; reference) across the voxels compared. Signed: positive means the submission reads high on average. Bias near zero does not mean the map is accurate, because equal and opposite errors cancel. That is exactly why the regional rows are reported separately from the whole image.</td></tr>
-                <tr><td>MAE</td><td>Mean absolute error. The average size of the disagreement, ignoring direction. Unlike bias, errors cannot cancel.</td></tr>
-                <tr><td>RMSE</td><td>Root mean squared error. Like MAE but large errors count for more, so it is the one that moves when a few voxels are badly wrong.</td></tr>
+                <tr><td>Bias</td><td>Mean of (submitted &minus; reference) across the voxels compared. A positive value means the submitted value is higher on average. Opposite errors can cancel, so check the regional rows as well as the whole-image row.</td></tr>
+                <tr><td>MAE</td><td>Mean absolute error. The average size of the difference, without its direction.</td></tr>
+                <tr><td>RMSE</td><td>Root mean squared error. This gives more weight to larger differences than MAE.</td></tr>
                 <tr><td>Error CoV</td><td>The population standard deviation of voxelwise errors divided by the absolute reference mean in the same region. It is a spread-of-error ratio, <strong>not</strong> a repeatability coefficient of variation. A near-zero reference mean makes the ratio unstable; background can strongly affect whole-image values. A large value is not automatically normal or a failure. Check the region, denominator, bias and absolute errors together. At a zero denominator this ratio is unavailable.</td></tr>
-                <tr><td>Corr.</td><td>Pearson correlation between submitted and reference voxels. High correlation with large bias means the pattern is right and the scale is not.</td></tr>
+                <tr><td>Corr.</td><td>Pearson correlation between submitted and reference voxels. Review it together with bias and the error measures.</td></tr>
                 <tr><td>Within-scan CoV (ROI tables)</td><td>Standard deviation divided by mean <em>inside one region of one scan</em>. This describes how variable the map is within a region. It is not a comparison against ground truth and it is not a repeatability measure.</td></tr>
-                <tr><td>Voxels</td><td>How many voxels the number was actually computed from, after non-finite values were excluded. A small count is a reason to treat the row with caution.</td></tr>
+                <tr><td>Voxels</td><td>Number of voxels used after non-finite values were excluded.</td></tr>
               </tbody>
             </table>
           </div>
@@ -121,33 +120,24 @@
         <section>
           <h2 id="fifteen-percent" data-toc-title="The 15% question">About the 15% figure</h2>
 
-          <p>A challenge lead once described <em>&ldquo;a rough threshold of acceptable performance
-            as having a CoV below 15%&rdquo;</em>, in the same conversation that ruled out pass/fail
-            and ranking for these challenges.</p>
-
-          <p>Both halves of that matter, so the pipeline treats it as follows:</p>
+          <p>A possible CoV guideline of 15% was discussed, but it was not confirmed as a formal
+            threshold. The current configuration handles it as follows:</p>
 
           <ul>
-            <li>No shipped challenge configures any threshold. Out of the box nothing is flagged,
-              and every report says &ldquo;not assessed&rdquo; rather than leaving an ambiguous
-              blank.</li>
-            <li>The mechanism exists. Organisers can set <code>warn_above</code> for a metric in
-              <code>config/validation_rules.yaml</code>, and rows past it are marked for a reviewer
-              to look at.</li>
-            <li>A flag is an annotation and never a verdict. It cannot fail, exclude or reorder a
-              submission, and the underlying value is never rewritten.</li>
+            <li>No challenge currently has a threshold. Reports show &ldquo;not assessed&rdquo;.</li>
+            <li>Organisers can set <code>warn_above</code> for a metric in
+              <code>config/validation_rules.yaml</code>. Values above it are marked for review.</li>
+            <li>A flag marks a row for review. It does not change the value or submission order.</li>
           </ul>
 
-          <p>So if you are looking at a 15% figure and wondering whether the pipeline enforced it:
-            it did not, unless somebody put it in the configuration deliberately.</p>
+          <p>The pipeline applies the 15% figure only if it is added to the configuration.</p>
         </section>
 
         <section>
           <h2 id="which-scan" data-toc-title="Which scan is which">Telling one row from another</h2>
 
-          <p>The DCE-2026 layout gives every scan the same filenames. <code>Ktrans.nii.gz</code>
-            appears once in each of sixty scan folders, so a table keyed on the file name is
-            sixty identical-looking rows.</p>
+          <p>In the DCE-2026 layout, <code>Ktrans.nii.gz</code> appears in each scan folder. The file
+            name alone does not identify the scan.</p>
 
           <p>Every table and CSV therefore carries the scan as its own column, written as
             <code>P1 &middot; Site 2 &middot; Repeat 1</code>, and the CSV exports lead with separate
@@ -158,30 +148,27 @@
         </section>
 
         <section>
-          <h2 id="not-decided" data-toc-title="What is not decided here">What the pipeline will not decide for you</h2>
+          <h2 id="not-decided" data-toc-title="Items to confirm">Items still to confirm</h2>
 
-          <p>These decisions belong to the challenge leads. The configured ICC models are
-            listed below; unconfirmed rules and thresholds remain unset:</p>
+          <p>The configured ICC models are listed below. Other rules and thresholds still need
+            confirmation from the challenge leads.</p>
 
           <ul>
             <li><strong>ICC study design.</strong> ICC(2,1) and ICC(3,1) are configured separately
               for DCE, ASL and DSC, using scan-level ROI medians across repeat sessions with site
-              held fixed. Results need enough compatible repeated scans; missing values are not zero.
-              This selection does not establish an official challenge rule or threshold.</li>
-            <li><strong>Any threshold</strong>, including the 15% above.</li>
-            <li><strong>What a methods document must contain</strong>, and whether one is required.</li>
-            <li><strong>Region definitions.</strong> The masks are the organisers' files; the
-              pipeline reports what is inside them and does not draw them.</li>
+              held fixed. These settings still need final approval.</li>
+            <li><strong>Thresholds.</strong> This includes the possible 15% guideline above.</li>
+            <li><strong>Methods document.</strong> Its required sections and whether it is required.</li>
+            <li><strong>Region definitions.</strong> These come from the organiser-provided masks.</li>
           </ul>
 
-          <p>Where two of the supplied masks overlap, statistics inside them are not independent.
-            The DCE mask set is nested this way: every hippocampus voxel also lies inside the grey
-            matter mask, so a grey matter figure includes the hippocampus voxels unless the
-            organisers supply a disjoint mask.</p>
+          <p>The supplied DCE masks overlap: hippocampus voxels are also included in the grey matter
+            mask. The regional statistics follow those masks as provided, so those two results are
+            not independent.</p>
         </section>
 
         <section>
-          <h2 id="more" data-toc-title="More detail">If you need more than this</h2>
+          <h2 id="more" data-toc-title="Related pages">Related pages</h2>
           <p><a href="how-it-works.html">How it works</a> walks the six steps.
             <a href="configuration.html">Configuration</a> covers the rules file, including how to
             set a threshold or choose an ICC model.</p>

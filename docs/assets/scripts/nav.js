@@ -52,8 +52,8 @@
         ["#columns", "What the columns mean"],
         ["#fifteen-percent", "The 15% question"],
         ["#which-scan", "Which scan is which"],
-        ["#not-decided", "What is not decided here"],
-        ["#more", "More detail"],
+        ["#not-decided", "Items to confirm"],
+        ["#more", "Related pages"],
       ],
     },
     {

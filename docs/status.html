@@ -75,21 +75,14 @@
           <ul>
             <li>The exact formula for a single official accuracy metric and for deviance.</li>
             <li>Whether RSS should remain raw or be normalized.</li>
-            <li>Whether final repeat/site variability should be ROI-median based, voxelwise, or both, and which ICC model to use if ICC is required.</li>
+            <li>Whether final repeat/site variability should be ROI-median based, voxelwise, or both. ICC(2,1) and ICC(3,1) are currently reported separately.</li>
             <li>Formal thresholds, pass/fail rules, participant ranking, final ASL 4-D comparison requirements, and the final ROI/mask set.</li>
           </ul>
 
-          <div class="docs-callout">
-            <p>The prototype implements independently definable metrics now. Final challenge-specific
-              formulas, thresholds and ranking rules will be added only after confirmation by the challenge leads.
-              See <a href="gsoc.html#left">What is left to do</a>.</p>
-          </div>
-          <div class="docs-callout">
-            <p>QC and previews are available for readable maps. DCE Ktrans ROI descriptive statistics
-              can appear when compatible ROI masks are available, generic reference comparisons when
-              compatible reference maps are available, and provider-specific analysis or scoring when
-              configured. Official OSIPI challenge ranking is not currently configured.</p>
-          </div>
+          <p>Final formulas, thresholds, and ranking rules still need confirmation. See
+            <a href="gsoc.html#left">What is left to do</a>.</p>
+          <p>QC and previews are available for readable maps. Additional results depend on the
+            masks, reference maps, or analysis package configured by the organiser.</p>
         </section>
 
       </div>
