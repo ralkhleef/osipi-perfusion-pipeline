@@ -37,9 +37,11 @@ reference-dataset version and analysis date. Set a stable
 `reference_dataset_version` when organiser assets are released internally;
 reports store the label, not private paths.
 
-For future scoring-package development, copy
-`examples/scoring-package-template/`. Its deterministic file-count example
-demonstrates the package contract but is not a scientific score.
+For future analysis-package development, copy
+`examples/scoring-package-template/`, or generate a working ASL, DCE, or DSC
+example with `scripts/make_example_scoring_package.py`. The generator reads the
+required maps from this configuration and calculates descriptive values from
+the supplied NIfTI files. It does not add a score or acceptance limit.
 
 ## 1. Changing Challenge Requirements
 

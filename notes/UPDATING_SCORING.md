@@ -106,8 +106,10 @@ in its results.
 
 Use a new versioned `package_id` for each release. Only trusted people should
 upload packages because a package is a program that runs on the server. The
-tracked `examples/demo-scoring-package/` directory is a safe
-demo source that can be zipped locally for practice.
+tracked `examples/demo-scoring-package/` directory is a small DCE example that
+calculates descriptive values from its input maps. It does not invent a score.
+`scripts/make_example_scoring_package.py` creates the same kind of package for
+any challenge listed in `config/validation_rules.yaml`.
 
 ---
 

@@ -40,7 +40,7 @@ Windows launchers for reviewers who prefer not to type Docker commands.
 | Change the web interface | `frontend/` |
 | Add or update tests | `tests/` |
 | Change the GitHub Pages site | `docs/` |
-| Work with a custom scoring package | `examples/scoring-package-template/` |
+| Work with a custom analysis package | `examples/README.md` |
 | Review pending scientific decisions | `notes/SCIENTIFIC_REQUIREMENTS_PENDING.md` |
 
 The [code walkthrough](notes/CODE_WALKTHROUGH.md) explains how these areas connect.
@@ -69,9 +69,20 @@ OSIPI_REQUIRE_FULL_TESTS=1 PYTHONPATH=.:backend:src .venv/bin/pytest -q
 for suite in tests/*_test.js; do node "$suite"; done
 ```
 
-The trusted scoring-package example is in `examples/demo-scoring-package/`; test inputs
-are in `tests/fixtures/`. Generated outputs, uploaded submissions, private
-reference assets, and installed scoring packages are ignored by Git.
+The tracked DCE example in `examples/demo-scoring-package/` calculates simple
+map summaries from its input files. To make the same ready-to-upload example
+for any configured challenge, run:
+
+```bash
+python3 scripts/make_example_scoring_package.py --challenge asl
+python3 scripts/make_example_scoring_package.py --challenge dce
+python3 scripts/make_example_scoring_package.py --challenge dsc
+```
+
+The generator reads required map names from `config/validation_rules.yaml`.
+These examples do not contain an overall score, ranking, or acceptance limit.
+Test inputs are in `tests/fixtures/`. Generated outputs, uploaded submissions,
+private reference assets, and installed scoring packages are ignored by Git.
 
 ## More information
 

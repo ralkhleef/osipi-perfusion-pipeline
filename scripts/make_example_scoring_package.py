@@ -12,6 +12,7 @@ the script emits: the metric names come from one list used to write both.
 
     python3 scripts/make_example_scoring_package.py --challenge asl
     python3 scripts/make_example_scoring_package.py --challenge dce --with-masks
+    python3 scripts/make_example_scoring_package.py --challenge dsc
     python3 scripts/make_example_scoring_package.py --challenge asl --out my.zip
 
 The generated package computes real numbers from the submitted maps, and with
@@ -238,11 +239,15 @@ def build(challenge: str, use_masks: bool, out: Path) -> Path:
     package_id = f"{challenge}_example{suffix}"
     title = f"{challenge.upper()} example scoring package"
 
-    try:
-        from osipi_pipeline.config.rules import required_maps_by_challenge
-        required = list(required_maps_by_challenge().get(challenge, ()))
-    except Exception:
-        required = []
+    from osipi_pipeline.config.rules import required_maps_by_challenge
+
+    configured_maps = required_maps_by_challenge()
+    if challenge not in configured_maps:
+        available = ", ".join(sorted(configured_maps))
+        raise ValueError(
+            f"Unknown challenge {challenge!r}. Configured challenges: {available}"
+        )
+    required = list(configured_maps[challenge])
 
     manifest = {
         "package_id": package_id,
@@ -288,7 +293,10 @@ def main(argv: list[str] | None = None) -> int:
     suffix = "_masks" if args.with_masks else ""
     out = args.out or (REPO_ROOT / "data" / "scoring" / "examples"
                        / f"{challenge}_example{suffix}.zip")
-    build(challenge, args.with_masks, out)
+    try:
+        build(challenge, args.with_masks, out)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     metrics = list(SUMMARY_METRICS) + (list(MASK_METRICS) if args.with_masks else [])
     print(f"\n  {out}")
