@@ -76,8 +76,7 @@ filename structure; they are not a complete validator for the full BIDS
 specification.
 
 See [Scientific requirements pending](SCIENTIFIC_REQUIREMENTS_PENDING.md) for the
-full handoff list and [Mentor meeting guide](MENTOR_MEETING_GUIDE.md) for the
-current functions, outputs, and recommended decisions.
+full handoff list.
 
 ## Testing
 

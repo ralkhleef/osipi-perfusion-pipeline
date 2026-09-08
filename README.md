@@ -42,8 +42,6 @@ Windows launchers for reviewers who prefer not to type Docker commands.
 | Change the GitHub Pages site | `docs/` |
 | Work with a custom analysis package | `examples/README.md` |
 | Review pending scientific decisions | `notes/SCIENTIFIC_REQUIREMENTS_PENDING.md` |
-| Prepare for a mentor review | `notes/MENTOR_MEETING_GUIDE.md` |
-| Prepare for a DCE mentor meeting | `notes/DCE_MEETING_BRIEF.md` |
 
 The [code walkthrough](notes/CODE_WALKTHROUGH.md) explains how these areas connect.
 More focused maintainer notes are available for
