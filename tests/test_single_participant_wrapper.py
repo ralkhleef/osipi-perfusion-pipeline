@@ -31,7 +31,9 @@ def _tree(root: Path, sites=("site_1", "site_2"), scans=("scan_1", "scan_2")):
             (d / "Ktrans.nii.gz").write_bytes(b"placeholder")
 
 
-@pytest.mark.parametrize("name", ["P01", "sub-01", "Participant3", "site_2", "scan_1"])
+@pytest.mark.parametrize(
+    "name", ["Synthetic", "P01", "sub-01", "Participant3", "site_2", "scan_1"]
+)
 def test_a_folder_naming_an_identity_level_is_not_unwrapped(tmp_path, name) -> None:
     from services.ingest_service import _redundant_wrapper
     staged = tmp_path / "staged"
@@ -122,3 +124,30 @@ def test_the_participant_can_still_be_resolved_afterwards(tmp_path, monkeypatch)
     sample = next(folder.rglob("Ktrans.nii.gz"))
     identity = parse_directory_identity(sample.relative_to(folder).parts)
     assert identity.get("participant") == "1", identity
+
+
+@pytest.mark.parametrize("uploader", ["save_uploaded_folder", "save_folder_as_batch"])
+def test_browser_folder_upload_keeps_participant_root(tmp_path, monkeypatch, uploader) -> None:
+    """webkitRelativePath starts with the selected folder, which may be identity."""
+    from services import ingest_service, path_config
+    from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
+
+    extracted = tmp_path / "extracted"
+    extracted.mkdir()
+    monkeypatch.setattr(path_config, "EXTRACTED_DIR", extracted, raising=False)
+    monkeypatch.setattr(ingest_service, "EXTRACTED_DIR", extracted, raising=False)
+
+    files = []
+    for site in ("site_1", "site_2", "site_3"):
+        for scan in ("scan_1", "scan_2"):
+            files.append((f"P05/{site}/{scan}/Ktrans.nii.gz", b"placeholder"))
+
+    result = getattr(ingest_service, uploader)(files)
+    assert result.get("success"), result
+    folder = extracted / result["submission_id"]
+    sample = folder / "P05" / "site_1" / "scan_1" / "Ktrans.nii.gz"
+    assert sample.is_file()
+    relative = sample.relative_to(folder)
+    assert relative.parts[0] == "P05", relative
+    identity = parse_directory_identity(relative.parts)
+    assert identity == {"participant": "5", "site": "1", "repeat": "1"}

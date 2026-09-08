@@ -68,6 +68,7 @@ from osipi_pipeline.config.rules import (
     required_maps_by_challenge,
     tuple_setting,
 )
+from osipi_pipeline.ingestion.manifest import load_manifest, refresh_manifest
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 
@@ -676,6 +677,55 @@ def check_package_ready(
 # Custom package scoring
 # ---------------------------------------------------------------------------
 
+
+def _required_input_paths(root: Path, manifest: dict) -> list[tuple[Path, Path]]:
+    """Return ``(source, relative path)`` pairs declared by required_inputs.
+
+    Validation has already classified every submitted file as a configured map
+    or artifact. Reusing that manifest prevents a package that requests only a
+    3-D map such as Ktrans from accidentally loading large 4-D fitted signals.
+    """
+    required = {
+        str(value).strip().lower()
+        for value in manifest.get("required_inputs") or []
+        if str(value).strip()
+    }
+    if not required:
+        return []
+    challenge = str(manifest.get("challenge_type") or "").strip().lower()
+    # A configuration may have changed since this process first classified a
+    # file. Ensure the refreshed manifest uses the active map/artifact rules.
+    from osipi_pipeline.ingestion.artifact_classifier import clear_classifier_caches
+
+    clear_classifier_caches()
+    refresh_manifest(root, submission_id=root.name, challenge_type=challenge)
+    stored = load_manifest(root, refresh_if_stale=False) or {}
+    selected: list[tuple[Path, Path]] = []
+    for item in stored.get("artifacts") or []:
+        if not isinstance(item, dict):
+            continue
+        input_id = str(item.get("map_type") or item.get("artifact_type") or "").lower()
+        if input_id not in required:
+            continue
+        relative = Path(str(item.get("path") or ""))
+        source = root / relative
+        if relative.is_absolute() or ".." in relative.parts or not source.is_file():
+            continue
+        selected.append((source, relative))
+    return selected
+
+
+def _stage_required_inputs(root: Path, manifest: dict) -> tuple[tempfile.TemporaryDirectory, Path, int]:
+    """Make an isolated, structure-preserving view for a standard package."""
+    selected = _required_input_paths(root, manifest)
+    staging = tempfile.TemporaryDirectory(prefix="osipi-package-input-")
+    staged_root = Path(staging.name)
+    for source, relative in selected:
+        destination = staged_root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.symlink_to(source.resolve())
+    return staging, staged_root, len(selected)
+
 def run_package_scoring(
     package_id: str,
     submission_id: str,
@@ -742,6 +792,7 @@ def run_package_scoring(
 
     scored_at = datetime.now(timezone.utc).isoformat()
 
+    staged_inputs = None
     try:
         if call_mode == "osipi_cwd":
             cmd = [sys.executable, str(entry_point)]
@@ -752,9 +803,27 @@ def run_package_scoring(
             )
         else:
             # Standard interface
+            staged_inputs, package_input_dir, input_count = _stage_required_inputs(
+                exec_output_dir, manifest
+            )
+            if input_count == 0:
+                required = ", ".join(manifest.get("required_inputs") or [])
+                return {
+                    "success": False,
+                    "submission_id": submission_id,
+                    "package_id": package_id,
+                    "package_name": manifest.get("name"),
+                    "package_version": manifest.get("version"),
+                    "status": "not_ready",
+                    "scored_at": scored_at,
+                    "message": f"Required submission inputs were not found: {required}.",
+                    "metrics": {},
+                    "artifacts": [],
+                    "artifact_count": 0,
+                }
             cmd = [
                 sys.executable, str(entry_point),
-                "--submission-dir", str(exec_output_dir),
+                "--submission-dir", str(package_input_dir),
                 "--output-dir",    str(score_output_dir),
             ]
             if ref_dir:
@@ -868,6 +937,9 @@ def run_package_scoring(
             "artifacts":      [],
             "artifact_count": 0,
         }
+    finally:
+        if staged_inputs is not None:
+            staged_inputs.cleanup()
 
 
 # ---------------------------------------------------------------------------

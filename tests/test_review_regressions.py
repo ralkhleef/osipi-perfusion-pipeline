@@ -127,6 +127,22 @@ def test_output_discovery_rejects_symlink_escape(tmp_path, monkeypatch):
     assert not (outside / ".osipi_manifest.json").exists()
 
 
+def test_output_discovery_excludes_fitted_signals(tmp_path, monkeypatch):
+    """Map QC must not load a large 4-D fitted signal as a parameter map."""
+    root = tmp_path / "extracted"
+    submission = root / "demo"
+    scan = submission / "P01" / "site_1" / "scan_1"
+    scan.mkdir(parents=True)
+    (scan / "Ktrans.nii.gz").write_bytes(b"map")
+    (scan / "Ct.nii.gz").write_bytes(b"signal")
+    refresh_manifest(submission, submission_id="demo", challenge_type="dce")
+    monkeypatch.setattr(scoring, "EXTRACTED_DIR", root)
+    monkeypatch.setattr(scoring, "OUTPUTS_DIR", tmp_path / "outputs")
+
+    found = scoring._find_output_niftis("demo", "dce")
+    assert [path.name for path in found] == ["Ktrans.nii.gz"]
+
+
 def test_scientific_values_keep_sub_micro_precision():
     value = 1.5846222574425252e-7
     assert scoring._json_float(value) == value

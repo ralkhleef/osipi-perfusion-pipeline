@@ -132,13 +132,16 @@ def save_uploaded_folder(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dic
                 common_root = None
                 break
 
+    preserve_common_root = bool(
+        common_root and _names_an_identity_level(Path(common_root))
+    )
     first_part = common_root or first_path.stem
     submission_id = _safe_id(first_part or "folder_submission")
     extracted_dir = _reset_submission_dir(submission_id)
 
     saved = 0
     for rel_path, contents in safe_files:
-        if common_root and len(rel_path.parts) > 1:
+        if common_root and not preserve_common_root and len(rel_path.parts) > 1:
             rel_path = Path(*rel_path.parts[1:])
         dest = extracted_dir / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -210,9 +213,16 @@ def save_folder_as_batch(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dic
     temp_id = f"_folder_temp_{batch_stem}"
     temp_dir = _reset_submission_dir(temp_id)
 
+    preserve_common_root = bool(
+        common_root and _names_an_identity_level(Path(common_root))
+    )
     saved = 0
     for rel_path, contents in safe_files:
-        rel_stored = Path(*rel_path.parts[1:]) if common_root and len(rel_path.parts) > 1 else rel_path
+        rel_stored = (
+            Path(*rel_path.parts[1:])
+            if common_root and not preserve_common_root and len(rel_path.parts) > 1
+            else rel_path
+        )
         dest = temp_dir / rel_stored
         dest.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(contents, Path):
@@ -812,7 +822,7 @@ def _names_an_identity_level(directory: Path) -> bool:
     from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
 
     identity = parse_directory_identity((directory.name, "_"))
-    return bool({"participant", "site", "repeat"} & set(identity))
+    return bool({"dataset", "participant", "site", "repeat"} & set(identity))
 
 
 def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:

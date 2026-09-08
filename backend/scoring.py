@@ -263,7 +263,7 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
             if _is_nifti_path(f) and not _is_organiser_asset(f)
         ]
         if niftis:
-            return niftis
+            return _parameter_map_files(exec_dir, niftis)
 
     extracted_files = manifest_files(extracted_base, refresh_if_stale=True, submission_id=submission_id)
     for subpath in output_map_subpaths():
@@ -276,9 +276,38 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
                 and not _is_organiser_asset(f)
             ]
             if niftis:
-                return niftis
+                return _parameter_map_files(extracted_base, niftis)
 
     return []
+
+
+def _parameter_map_files(root: Path, files: list[Path]) -> list[Path]:
+    """Keep submitted parameter maps and exclude fitted/measured 4-D signals.
+
+    The manifest is the canonical classification already used by validation.
+    If an older output directory has no artifact records, retain the previous
+    all-NIfTI behaviour rather than making its results disappear.
+    """
+    from osipi_pipeline.ingestion.manifest import load_manifest
+
+    manifest = load_manifest(root, refresh_if_stale=False) or {}
+    artifacts = manifest.get("artifacts") or []
+    parameter_paths = {
+        str(Path(str(item.get("path") or item.get("relative_path") or "")))
+        for item in artifacts
+        if isinstance(item, dict) and item.get("role") == "parameter_map"
+    }
+    if not parameter_paths:
+        return files
+    selected = []
+    for path in files:
+        try:
+            relative = str(path.relative_to(root))
+        except ValueError:
+            continue
+        if relative in parameter_paths:
+            selected.append(path)
+    return selected
 
 
 def _path_is_relative_to(path: Path, root: Path) -> bool:
