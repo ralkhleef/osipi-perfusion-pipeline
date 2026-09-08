@@ -772,7 +772,7 @@ checkContains("Private asset file chooser is visible", html, "Choose NIfTI file"
 checkContains("Private asset filename feedback", html, 'id="config-manager-asset-file-name"');
 checkContains("Long private asset filenames wrap", css, ".config-manager-selected-file {");
 checkContains("Configuration Manager API", appJs, "/api/configuration-manager");
-checkContains("Official ranking capability disclaimer", html, "Official OSIPI challenge ranking is not currently configured.");
+checkContains("Official ranking is a capability row", appJs, '["Official ranking", "official_ranking"]');
 checkContains("Built-in compatibility comes from provider registry", appJs, "function _builtinProviderForChallenge");
 checkContains("Configuration Manager reads compatible built-ins", appJs, "state.builtin_providers");
 checkContains("Incompatible built-in option is disabled", appJs, "builtinOption.disabled = !builtin");
@@ -1722,7 +1722,7 @@ check("ROI card present", "roi-descriptive-card");
 check("ROI table present", "roi-descriptive-table");
 check("ROI table body present", "roi-descriptive-body");
 check("ROI empty-state element present", "roi-descriptive-empty");
-checkContains("ROI section titled correctly", html, "ROI Parameter-map Statistics");
+checkContains("ROI section titled correctly", html, "ROI statistics");
 checkContains("ROI table has a Map column", html, "<th>Map</th>");
 checkContains("ROI table has a Mean column", html, '<th class="num">Mean</th>');
 checkContains("ROI table has a Median column", html, '<th class="num">Median</th>');
@@ -1743,8 +1743,8 @@ checkContains("Empty-state message for calculation failure", appJs, "could not b
 checkContains("Neutral fallback when status is unknown", appJs, "No ROI parameter-map statistics are available.");
 checkContains("Empty-state text is actually looked up by status", appJs,
   "ROI_UNAVAILABLE_MESSAGES[status]");
-checkContains("Methodology text present", appJs, "SD uses the population definition");
-checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio in exports");
+checkContains("Methodology text present", appJs, "population SD");
+checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio");
 
 // Safety: every dynamic field escaped. The identity cells are emitted through
 // one shared reader now that they can be dropped per submission, so that path

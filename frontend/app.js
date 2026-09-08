@@ -8566,7 +8566,7 @@ async function _loadScoringSetup() {
       ? _providerDisplayName(builtin)
       : `No compatible built-in provider for ${ct.toUpperCase()}`;
     if (builtinDescription) builtinDescription.textContent = builtin
-      ? `${builtin.description || "Built-in provider analysis."} This does not configure an overall OSIPI challenge ranking.`
+      ? (builtin.description || "Built-in provider analysis.")
       : "Use no provider analysis or select a compatible trusted custom package.";
 
     // Set radio
@@ -8612,7 +8612,7 @@ function _renderScoringProviderSummary(mode, entry, packages) {
   if (mode === "builtin") {
     title.textContent = entry.provider_name || "Built-in provider unavailable";
     detail.textContent = entry.provider_name
-      ? `${challenge} provider analysis is active. Readiness details are available under Configure provider. Official OSIPI challenge ranking is not currently configured.`
+      ? `${challenge} provider analysis is active. Open Configure provider for details.`
       : `${challenge} has no compatible built-in provider. Select no provider analysis or a trusted custom package.`;
     return;
   }
@@ -8625,7 +8625,7 @@ function _renderScoringProviderSummary(mode, entry, packages) {
     return;
   }
   title.textContent = "No provider analysis configured";
-  detail.textContent = `${challenge} still has generic QC and compatible generic reference comparisons. Official OSIPI ranking is not configured.`;
+  detail.textContent = `${challenge} can still use QC and compatible reference maps.`;
 }
 
 // Show/hide the custom package section based on selected mode.
@@ -10165,7 +10165,7 @@ function _roiSearchText(record) {
   const site = _roiIdentity(record.site);
   const repeat = _roiIdentity(record.repeat);
   const parts = [
-    record.dataset, record.map_type, record.roi_label, record.roi_id,
+    record.dataset, record.map_type, record.units, record.roi_label, record.roi_id,
     record.status, record.unavailable_reason,
     participant, site, repeat,
     participant !== "—" ? `p${participant}` : "",
@@ -10300,9 +10300,13 @@ function renderRoiDescriptiveStatistics(records, status) {
         .filter(([key]) => varying.has(key))
         .map(([, , read]) => `<td>${escapeHtml(read(r))}</td>`)
         .join("");
+      const mapLabel = [
+        _roiIdentity(r.map_type).toUpperCase(),
+        r.units,
+      ].filter(Boolean).join(" · ");
       return `<tr data-roi-search="${escapeHtml(_roiSearchText(r))}">
         ${identity}
-        <td>${escapeHtml(_roiIdentity(r.map_type).toUpperCase())}</td>
+        <td>${escapeHtml(mapLabel)}</td>
         <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
         <td class="num">${escapeHtml(_roiNumber(r.roi_mean))}</td>
         <td class="num">${escapeHtml(_roiNumber(r.roi_median))}</td>
@@ -10319,8 +10323,7 @@ function renderRoiDescriptiveStatistics(records, status) {
 
   if (method) {
     method.textContent =
-      "Statistics are calculated from finite parameter-map voxels within each configured ROI. "
-      + "SD uses the population definition. CoV is SD divided by the absolute arithmetic mean. "
-      + "CoV is shown as a percentage in this table but stored as a ratio in exports.";
+      "Finite voxels inside each ROI; population SD; CoV = SD / |mean| "
+      + "(shown as %, stored as a ratio).";
   }
 }

@@ -854,7 +854,6 @@
                   </div>
                   <div class="config-manager-modal-body">
                     <div id="config-manager-capabilities"></div>
-                    <p class="config-manager-note"><strong>Official OSIPI challenge ranking is not currently configured.</strong></p>
                   </div>
                 </div>
               </div>
@@ -1028,8 +1027,8 @@
       <details class="pg-card qc-fold" id="roi-descriptive-card" open style="margin-top:16px;display:none">
         <summary class="pg-card-header">
           <div>
-            <div class="pg-card-title">ROI Parameter-map Statistics <span class="collapsible-count section-count" id="roi-descriptive-count">0</span></div>
-            <div class="pg-card-sub" id="roi-descriptive-sub">Within-scan values for each configured ROI</div>
+            <div class="pg-card-title">ROI statistics <span class="collapsible-count section-count" id="roi-descriptive-count">0</span></div>
+            <div class="pg-card-sub" id="roi-descriptive-sub">Values calculated inside each configured ROI</div>
           </div>
         </summary>
         <div id="roi-descriptive-empty" class="smc-hint" style="display:none"></div>
@@ -1077,7 +1076,7 @@
 
       <details class="pg-card qc-fold" id="icc-results-card" style="margin-top:16px;display:none" open>
         <summary class="pg-card-header"><span class="pg-card-title">ICC results</span></summary>
-        <p class="smc-hint">Each model is shown separately. No pass/fail threshold is applied.</p>
+        <p class="smc-hint">Each configured ICC model is shown separately.</p>
         <div class="roi-table-wrap">
           <table class="sc-table roi-table">
             <thead><tr><th>Scope</th><th>ROI</th><th>Model</th><th>ICC</th><th>Interval</th><th>Participants</th><th>Sessions</th><th>Status</th></tr></thead>
@@ -1094,7 +1093,7 @@
             <span class="section-actions"></span>
           </div>
           <div class="leaderboard-header-copy">
-            <div class="pg-card-sub" id="leaderboard-sub">Review QC, configured analysis results, reference status, and export readiness.</div>
+            <div class="pg-card-sub" id="leaderboard-sub">Review results and export readiness.</div>
           </div>
           <button type="button" id="leaderboard-refresh-btn" class="btn btn-secondary btn-sm">Refresh</button>
         </div>

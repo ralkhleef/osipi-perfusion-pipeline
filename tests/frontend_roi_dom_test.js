@@ -158,9 +158,11 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   checkEqual("table visible", nodes["roi-descriptive-table"].style.display, "");
   checkEqual("row count shown", nodes["roi-descriptive-count"].textContent, "1");
   check("methodology text present",
-        nodes["roi-descriptive-method"].textContent.includes("population definition"));
+        nodes["roi-descriptive-method"].textContent.includes("population SD"));
   check("methodology states CoV storage",
         nodes["roi-descriptive-method"].textContent.includes("stored as a ratio"));
+  check("map units shown with the map",
+        nodes["roi-descriptive-body"].innerHTML.includes("KTRANS · min^-1"));
 }
 
 // ── Implicit clinical site ───────────────────────────────────────────────
@@ -272,7 +274,7 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   const html = nodes["roi-descriptive-body"].innerHTML;
   check("no card markup per scan", !html.includes("pg-card"));
   checkEqual("methodology written once",
-             (nodes["roi-descriptive-method"].textContent.match(/population definition/g) || []).length, 1);
+             (nodes["roi-descriptive-method"].textContent.match(/population SD/g) || []).length, 1);
 }
 
 // ── Voxel counts ─────────────────────────────────────────────────────────

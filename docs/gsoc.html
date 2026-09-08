@@ -60,7 +60,7 @@
           <p class="docs-lead">A Python pipeline for evaluating OSIPI perfusion imaging challenge
             submissions.</p>
 
-          <p>Ranya Al-khleef, mentored by Lena Václavů and Olivia Jones, for
+          <p>Ranya Al-khleef, mentored by Lena Václavů, Olivia Jones, and Puneet Kumar, for
             <a href="https://osipi.ismrm.org/" target="_blank" rel="noopener">OSIPI</a> and the
             ISMRM Perfusion Study Group. 16 May to 18 August 2026.</p>
 
@@ -121,8 +121,8 @@
             </div>
             <div>
               <dt>Validation</dt>
-              <dd>NIfTI readability, dimensionality and values, plus structural completeness
-                against the challenge rules, with eleven issue codes.</dd>
+              <dd>NIfTI readability, dimensions and values, challenge completeness, and
+                optional BIDS structure checks.</dd>
             </div>
             <div>
               <dt>Execution</dt>
@@ -131,9 +131,8 @@
             </div>
             <div>
               <dt>Analysis</dt>
-              <dd>Quality control per map. Against ground truth: RMSE, mean absolute error,
-                bias and correlation, both voxelwise and within each ROI mask. Per region:
-                median, mean, standard deviation, range and coefficient of variation.</dd>
+              <dd>Map QC, ROI statistics, reference comparison, DCE signal RSS, and
+                configured ICC models. Results appear only when their inputs are available.</dd>
             </div>
             <div>
               <dt>Header checks</dt>
@@ -162,7 +161,8 @@
 
         <section>
           <h2 id="state" data-toc-title="Current state">Current state</h2>
-          <p>DCE and ASL test data have been run from import through blinded report export.</p>
+          <p>DCE and ASL test data have been run from import through blinded report export.
+            The DSC example package has also been run on synthetic CBV, CBF and MTT maps.</p>
           <p>The project source is on the <code>main</code> branch of this repository.</p>
 
           <div class="docs-table-wrap">
@@ -172,7 +172,8 @@
                 <tr><td>DCE</td><td>Configured and tested with supplied submissions.</td></tr>
                 <tr><td>ASL</td><td>CBF and ATT required. Comparison and ROI statistics verified on the challenge lead's own data.</td></tr>
                 <tr><td>DSC</td><td>CBV, CBF and MTT required, with the same ROI statistics as ASL. No real reference data has been supplied yet, so DSC is verified on synthetic data only.</td></tr>
-                <tr><td>Testing</td><td>Automated tests cover upload, validation, execution, analysis, reporting, exports and blinding. Real DCE and ASL submissions were run through the application end to end.</td></tr>
+                <tr><td>Testing</td><td>Automated tests cover upload, validation, execution, analysis, reporting, exports and blinding. Real DCE and ASL submissions were run end to end, and the DSC package was run on synthetic maps.</td></tr>
+                <tr><td>BIDS checks</td><td>Optional structural warnings cover the main dataset, subject, session and filename layout. This is not full BIDS validation.</td></tr>
                 <tr><td>Scale</td><td>A 229 MB test submission containing 32 3-D maps validated in about 1.5 seconds; peak memory stays near 54 MB in this test. In a separate 4-D test, chunked reading reduced peak memory for one DCE concentration file from 2.38 GB to 0.54 GB. Run <code>scripts/benchmark_scale.py</code> to repeat these measurements.</td></tr>
                 <tr><td>Official ranking</td><td>Not configured. Comparison against reference data is a general capability and does not constitute official OSIPI scoring.</td></tr>
               </tbody>
@@ -202,7 +203,8 @@
               specification is not covered, and a submission passing these checks should be
               called structurally consistent rather than BIDS valid.</li>
           </ul>
-          <p>Everything except the metric formulas is configuration. See
+          <p>Most challenge requirements are configuration. New scientific formulas require
+            tested code or a versioned analysis package. See
             <a href="configuration.html">Configuration</a>.</p>
         </section>
 
@@ -239,6 +241,11 @@
               <span class="docs-download-kind">MD</span>
               <span class="docs-download-name">Pending requirements</span>
               <span class="docs-download-note">The open decisions, per challenge</span>
+            </a>
+            <a class="docs-download" href="https://github.com/ralkhleef/osipi-perfusion-pipeline/blob/main/notes/MENTOR_MEETING_GUIDE.md" target="_blank" rel="noopener">
+              <span class="docs-download-kind">MD</span>
+              <span class="docs-download-name">Mentor meeting guide</span>
+              <span class="docs-download-note">Functions, outputs, and decisions</span>
             </a>
           </div>
         </section>
