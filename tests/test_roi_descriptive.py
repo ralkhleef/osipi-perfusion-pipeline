@@ -273,6 +273,31 @@ def test_scans_remain_separate() -> None:
     assert by_repeat == {"1": 1.0, "2": 9.0}
 
 
+def test_site_scoped_masks_only_apply_to_the_matching_site() -> None:
+    table = {
+        "site_1/Ktrans.nii.gz": _vol([1.0, 2.0, 3.0, 4.0]),
+        "site_2/Ktrans.nii.gz": _vol([10.0, 20.0, 30.0, 40.0]),
+        "masks/site_1/GM_mask.nii.gz": _vol([1, 1, 0, 0]),
+        "masks/site_2/GM_mask.nii.gz": _vol([0, 0, 1, 1]),
+    }
+    rois = roi_definitions_from_masks([
+        {"name": "GM_mask.nii.gz", "label": "gray matter",
+         "path": "masks/site_1/GM_mask.nii.gz", "site": "1"},
+        {"name": "GM_mask.nii.gz", "label": "gray matter",
+         "path": "masks/site_2/GM_mask.nii.gz", "site": "2"},
+    ])
+    results = _compute([
+        _artifact(site="1", path="site_1/Ktrans.nii.gz"),
+        _artifact(site="2", path="site_2/Ktrans.nii.gz"),
+    ], rois, table)
+
+    assert len(results) == 2
+    assert {result.site: result.roi_mean for result in results} == {
+        "1": pytest.approx(1.5),
+        "2": pytest.approx(35.0),
+    }
+
+
 def test_synthetic_site_identity_is_retained() -> None:
     table = {"Ktrans.nii.gz": _vol([1.0, 1.0, 0.0, 0.0]),
              "tumour.nii.gz": _vol([1, 1, 0, 0])}

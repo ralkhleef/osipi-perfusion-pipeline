@@ -48,10 +48,14 @@ def roi_definitions_from_masks(masks: Iterable[Mapping[str, Any]]) -> list[RoiDe
         if not name:
             continue
         definitions.append(RoiDefinition(
-            roi_id=_roi_id(name),
+            roi_id=str(mask.get("roi_id") or _roi_id(name)),
             label=str(mask.get("label") or name),
             mask_path=str(mask.get("path") or ""),
             source="reference",
+            dataset=mask.get("dataset"),
+            participant=mask.get("participant"),
+            repeat=mask.get("repeat"),
+            site=mask.get("site"),
         ))
     return definitions
 
@@ -135,6 +139,11 @@ def compute_roi_descriptive_statistics(
     results: list[RoiDescriptiveResult] = []
 
     for artifact in selected:
+        applicable_rois = [
+            roi for roi in roi_definitions if _roi_applies_to_artifact(roi, artifact)
+        ]
+        if not applicable_rois:
+            continue
         units = _units_for(getattr(artifact, "map_type", None))
         map_path = Path(root or ".") / str(getattr(artifact, "path", ""))
         try:
@@ -145,11 +154,11 @@ def compute_roi_descriptive_statistics(
             results.extend(
                 unavailable_result(artifact=artifact, roi=roi,
                                    status=STATUS_MAP_UNREADABLE, units=units)
-                for roi in roi_definitions
+                for roi in applicable_rois
             )
             continue
 
-        for roi in roi_definitions:
+        for roi in applicable_rois:
             # Identity sentinel, not equality: the cached payloads hold NumPy
             # arrays, and `payload == "__missing__"` on one raises rather than
             # returning False.
@@ -198,6 +207,20 @@ def compute_roi_descriptive_statistics(
                 stats, artifact=artifact, roi=roi, units=units))
 
     return tuple(results)
+
+
+def _roi_applies_to_artifact(roi: RoiDefinition, artifact: Any) -> bool:
+    """Whether a scoped mask belongs to this scan.
+
+    A mask without identity is shared. When its path supplies an identity
+    (for example ``site_2/GM_mask.nii.gz``), every supplied field must match
+    the submitted artifact. Missing identity is never guessed from geometry.
+    """
+    for field in ("dataset", "participant", "repeat", "site"):
+        expected = getattr(roi, field, None)
+        if expected is not None and str(getattr(artifact, field, None)) != str(expected):
+            return False
+    return True
 
 
 def _physical_grids_compatible(

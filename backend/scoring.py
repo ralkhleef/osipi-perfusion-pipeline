@@ -1495,6 +1495,8 @@ def _score_signal_rss(
             record["whole_image"] = summarize_rss(rss).to_dict()
             spatial_shape = tuple(measured_meta["shape"][:3])
             for mask in masks:
+                if not _mask_applies_to_identity(mask, identity):
+                    continue
                 roi = {"mask_name": mask["name"], "roi_label": mask["label"]}
                 try:
                     mask_data = _load_nifti_values(mask["path"])
@@ -1713,18 +1715,30 @@ def attach_roi_descriptive_statistics(
 
 
 def masks_for_submission(submission_id: str, challenge_type: str) -> list[dict]:
-    """Every ROI mask visible to this submission, from every reference root.
+    """ROI masks visible to this submission.
 
-    The one place mask discovery happens. Four call sites used to re-derive
-    masks from ``reference_root`` alone, which silently limited them to the
-    root that happened to hold the ground-truth maps.
+    Submission-specific and challenge-specific masks take priority over the
+    legacy shared roots. This prevents, for example, generic ASL masks from
+    being applied to DCE maps while retaining shared masks as a fallback for
+    existing installations.
     """
-    return _reference_masks_across_roots(
-        _reference_roots(submission_id, challenge_type)
-    )
+    roots = _reference_roots(submission_id, challenge_type)
+    challenge = challenge_type.lower().strip()
+    generic = {
+        canonical_path_key(REFERENCE_DATA_DIR),
+        canonical_path_key(REFERENCE_DATA_DIR / "reference"),
+        canonical_path_key(SCORING_DIR / "reference"),
+    }
+    specific = [root for root in roots if canonical_path_key(root) not in generic]
+    scoped_masks = _reference_masks_across_roots(specific, challenge=challenge)
+    if scoped_masks:
+        return scoped_masks
+    return _reference_masks_across_roots(roots, challenge=challenge)
 
 
-def _reference_masks_across_roots(roots: Sequence[Path]) -> list[dict]:
+def _reference_masks_across_roots(
+    roots: Sequence[Path], *, challenge: Optional[str] = None
+) -> list[dict]:
     """ROI masks from *every* reference root, once per physical file.
 
     Masks and ground-truth maps are independent assets and organisers do not
@@ -1742,7 +1756,7 @@ def _reference_masks_across_roots(roots: Sequence[Path]) -> list[dict]:
     seen: set = set()
     masks: list[dict] = []
     for root in roots:
-        for mask in _reference_masks(root):
+        for mask in _reference_masks(root, challenge=challenge):
             key = canonical_path_key(Path(mask["path"]))
             if key in seen:
                 continue
@@ -1751,7 +1765,7 @@ def _reference_masks_across_roots(roots: Sequence[Path]) -> list[dict]:
     return masks
 
 
-def _reference_masks(root: Path) -> list[dict]:
+def _reference_masks(root: Path, *, challenge: Optional[str] = None) -> list[dict]:
     """Find ROI masks under one reference root, once per physical file."""
     mask_dirs = _dedupe_paths([root / "masks", root / "Masks"])
     paths: list[Path] = []
@@ -1763,12 +1777,31 @@ def _reference_masks(root: Path) -> list[dict]:
     masks = []
     for path in _dedupe_paths(paths):
         name = path.name
-        masks.append({
+        dataset, participant, repeat, site = _scan_identity(
+            path, root, challenge=challenge
+        )
+        mask = {
             "name": name,
             "label": _mask_label_for_name(name),
             "path": path,
-        })
+        }
+        for field, value in (
+            ("dataset", dataset), ("participant", participant),
+            ("repeat", repeat), ("site", site),
+        ):
+            if value is not None:
+                mask[field] = value
+        masks.append(mask)
     return masks
+
+
+def _mask_applies_to_identity(mask: dict, identity: tuple) -> bool:
+    """Return True for shared masks or masks scoped to this scan identity."""
+    for index, field in enumerate(("dataset", "participant", "repeat", "site")):
+        expected = mask.get(field)
+        if expected is not None and str(identity[index]) != str(expected):
+            return False
+    return True
 
 
 def _scan_identity(
@@ -2188,9 +2221,9 @@ def _score_reference_maps(
 
     selected_root = next((root for root in roots if _reference_maps_by_type(root)), roots[0])
     refs_by_type = _reference_maps_by_type(selected_root)
-    # Maps come from one root; masks come from all of them. See
-    # _reference_masks_across_roots for why the two differ.
-    masks = _reference_masks_across_roots(roots)
+    # Maps come from one root. Masks use the canonical discovery path, which
+    # prefers challenge-specific masks and falls back to shared masks.
+    masks = masks_for_submission(submission_id, challenge_type)
     result["reference_root"] = str(selected_root)
     result["mask_roots"] = sorted({str(Path(m["path"]).parent) for m in masks})
     result["mask_overlaps"] = _mask_overlaps(masks)
@@ -2344,7 +2377,10 @@ def _score_reference_maps(
             except Exception as exc:
                 row["difference_map_error"] = str(exc)
 
+        identity = (_dataset, _participant, _repeat, _site)
         for mask in masks:
+            if not _mask_applies_to_identity(mask, identity):
+                continue
             mask_row = {
                 "mask_name": mask["name"],
                 "mask_label": mask["label"],

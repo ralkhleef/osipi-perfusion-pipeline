@@ -93,6 +93,10 @@ class RoiDefinition:
     label: str
     mask_path: str
     source: str = "reference"
+    dataset: str | None = None
+    participant: str | None = None
+    repeat: str | None = None
+    site: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

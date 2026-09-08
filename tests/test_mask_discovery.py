@@ -111,6 +111,20 @@ def test_masks_from_several_roots_are_combined(organiser) -> None:
     assert names == {"gm_mask.nii.gz", "wm_mask.nii.gz", "lesion_roi.nii.gz"}
 
 
+def test_challenge_masks_take_priority_over_legacy_shared_masks(organiser) -> None:
+    """A mask for another modality must not leak into this challenge."""
+    write(organiser["REFERENCE_DATA_DIR"] / "masks" / "asl_mask.nii.gz", gm_mask())
+    write(
+        organiser["REFERENCE_DATA_DIR"] / "dce" / "masks" / "site_1" / "GM_mask.nii.gz",
+        gm_mask(),
+    )
+
+    masks = scoring.masks_for_submission("s", "dce")
+
+    assert [mask["name"] for mask in masks] == ["GM_mask.nii.gz"]
+    assert masks[0]["site"] == "1"
+
+
 def test_a_mask_shipped_inside_the_submission_is_found(organiser) -> None:
     """Reviewers testing locally often drop a mask in the submission itself."""
     root = organiser["EXTRACTED_DIR"] / "sub-1"
