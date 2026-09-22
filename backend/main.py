@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 import hashlib
 import re
 import uuid
@@ -166,7 +167,33 @@ async def lifespan(app):
 
 logger = logging.getLogger(__name__)
 
+
+class ConfiguredMultipartRoute(APIRoute):
+    """Apply the pipeline's configured file limit before FastAPI parses forms.
+
+    Starlette otherwise applies its independent 1,000-file default while the
+    pipeline advertises and enforces ``EXTRACT_MAX_FILES`` (10,000 by default).
+    Pre-parsing on the same request caches the form for FastAPI's dependency
+    layer, so there is one parser and one source of truth for the limit.
+    """
+
+    def get_route_handler(self):
+        original = super().get_route_handler()
+
+        async def configured_multipart_handler(request: Request):
+            content_type = request.headers.get("content-type", "").lower()
+            if content_type.startswith("multipart/form-data"):
+                await request.form(
+                    max_files=EXTRACT_MAX_FILES,
+                    max_fields=EXTRACT_MAX_FILES,
+                )
+            return await original(request)
+
+        return configured_multipart_handler
+
+
 app = FastAPI(title="OSIPI Pipeline", lifespan=lifespan)
+app.router.route_class = ConfiguredMultipartRoute
 
 app.add_middleware(
     CORSMiddleware,
@@ -1977,7 +2004,7 @@ class ScoreBatchRequest(BaseModel):
 _PRIVATE_SCORING_FIELDS = {
     "path", "reference_root", "reference_path", "mask_path", "submitted_path", "source_path",
     # Where the organiser keeps their masks is as private as the masks.
-    "mask_roots",
+    "mask_roots", "excluded_mask_paths",
 }
 
 
@@ -2185,8 +2212,14 @@ async def scoring_package_upload(file: UploadFile = File(...)):
                 if not chunk:
                     break
                 total_bytes += len(chunk)
-                if total_bytes > 500 * 1024 * 1024:  # 500 MB limit
-                    raise HTTPException(status_code=413, detail="Scoring package ZIP exceeds 500 MB limit.")
+                if total_bytes > ZIP_MAX_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            "Scoring package ZIP is too large "
+                            f"(limit: {ZIP_MAX_BYTES // (1024 * 1024)} MB)."
+                        ),
+                    )
                 fout.write(chunk)
 
         result = install_package(tmp_path)

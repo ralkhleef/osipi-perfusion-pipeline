@@ -135,9 +135,12 @@
             Ktrans, and DSC for CBV, CBF and MTT. Which columns appear in a report is set by
             <code>report_metrics</code>: mean, median, SD, range and CoV.</p>
 
-          <p>DCE can also compute a residual sum of squares when matching measured and modelled
-            4-D signals are present. That figure is descriptive and is deliberately not labelled
-            deviance, which has no agreed definition yet.</p>
+          <p>DCE also computes residual sum of squares when a submitted 4-D
+            <code>Ct.nii.gz</code> curve has a private reference curve with matching participant,
+            site and repeat identity. Each 3-D mask selects a voxel-by-time concentration matrix;
+            RSS is summed across time for each voxel and summarized by region. The figure is
+            descriptive and is deliberately not labelled deviance, which has no agreed definition
+            yet. The confirmed grey-matter region excludes hippocampus.</p>
 
           <div class="docs-callout">
             <p>YAML controls requirements and enables analyses. Scientific formulas stay in tested code

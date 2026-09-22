@@ -36,8 +36,9 @@ submission data, private reference maps, and masks on the reviewer's machine.
   correlation, error spread, overlap count, and difference NIfTI files.
 - Calculate raw DCE signal RSS and summaries when measured and modelled 4-D
   signals are available.
-- Calculate ICC(2,1) and ICC(3,1) separately from repeated ROI measurements,
-  with confidence intervals and no missing-value imputation.
+- Calculate configurable ICC models from repeated ROI measurements, with
+  confidence intervals and no missing-value imputation. DCE uses the selected
+  ICC(3,1) option; ASL and DSC currently retain ICC(2,1) and ICC(3,1).
 - Check the main BIDS dataset, subject, session, and filename structure when a
   challenge enables BIDS checks.
 - Support built-in and trusted custom analysis packages without treating them as
@@ -52,6 +53,9 @@ submission data, private reference maps, and masks on the reviewer's machine.
 The six-step workflow works locally for DCE, ASL, and DSC submissions. QC and
 previews are available for readable maps. ROI statistics, reference comparison,
 RSS, and provider analysis appear only when their required inputs are available.
+For DCE, hidden `Ct.nii.gz` curves are matched to submitted curves by
+participant, site, and repeat; 3-D masks select voxel-by-time matrices for RSS.
+Gray-matter results use GM minus hippocampus, as confirmed by the challenge lead.
 
 Official OSIPI challenge ranking is not currently configured. Missing scientific
 definitions are reported as unavailable instead of being replaced with guessed
@@ -66,7 +70,8 @@ The following items need decisions or private challenge data from the OSIPI team
 - whether repeat/site variability should use ROI medians, voxelwise values, or
   both, and whether site comparisons should be added to the ICC grouping;
 - pass/fail thresholds and participant ranking rules;
-- final private reference maps and ROI masks;
+- final private reference maps and any ROI masks beyond the confirmed
+  site-specific GM-minus-hippocampus, hippocampus, and WM regions;
 - the final ASL fitted-model comparison; and
 - final ASL and DSC participant, repeat, and site grids.
 

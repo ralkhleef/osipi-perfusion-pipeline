@@ -89,7 +89,10 @@ def import_github_repo(repo_url: str, branch: Optional[str] = None) -> Dict:
 
             result = save_and_extract_batch_from_path(final_path, safe_filename)
             if result.get("success"):
-                result.setdefault("source_type", "github")
+                # The shared ZIP ingester correctly describes its own transport
+                # as local. At this boundary the source is the public repository,
+                # so provenance must override that internal implementation detail.
+                result["source_type"] = "github"
                 fc = result.get("file_count") or result.get("submission_count", "?")
                 result["message"] = f"Imported from GitHub ({owner}/{repo}, {fc} file(s))."
             return result

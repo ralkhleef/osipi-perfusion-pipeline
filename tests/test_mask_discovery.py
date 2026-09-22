@@ -71,6 +71,14 @@ def organiser(tmp_path, monkeypatch):
     for name, value in roots.items():
         monkeypatch.setattr(scoring, name, value)
         value.mkdir(parents=True, exist_ok=True)
+    # An active package in a developer's real workspace may provide its own
+    # reference masks. Keep this fixture isolated from that persisted state so
+    # these tests exercise only the roots created above.
+    monkeypatch.setattr(
+        scoring,
+        "get_active_entry",
+        lambda _challenge: {"mode": "none", "package_id": None},
+    )
     return roots
 
 
@@ -123,6 +131,26 @@ def test_challenge_masks_take_priority_over_legacy_shared_masks(organiser) -> No
 
     assert [mask["name"] for mask in masks] == ["GM_mask.nii.gz"]
     assert masks[0]["site"] == "1"
+
+
+def test_dce_gray_matter_excludes_same_site_hippocampus(organiser) -> None:
+    """Confirmed DCE policy: effective GM is the supplied GM minus Hipp."""
+    root = organiser["REFERENCE_DATA_DIR"] / "dce" / "masks" / "site_1"
+    gm = np.zeros(SHAPE, dtype=np.float32)
+    gm[1:4, 1:4, :] = 1
+    hipp = np.zeros(SHAPE, dtype=np.float32)
+    hipp[1, 1, :] = 1
+    write(root / "GM_mask.nii.gz", gm)
+    write(root / "Hipp_mask.nii.gz", hipp)
+    write(root / "WM_mask.nii.gz", np.zeros(SHAPE, dtype=np.float32))
+
+    masks = scoring.masks_for_submission("s", "dce")
+    gray = next(mask for mask in masks if mask["label"] == "gray matter")
+    effective = scoring._load_effective_mask(gray)
+
+    assert gray["exclusive_of"] == ["hippocampus"]
+    assert int(np.asarray(effective["values"], dtype=bool).sum()) == int(gm.sum() - hipp.sum())
+    assert scoring._mask_overlaps(masks) == []
 
 
 def test_a_mask_shipped_inside_the_submission_is_found(organiser) -> None:

@@ -17,12 +17,14 @@ from services.path_config import EXTRACTED_DIR, OUTPUTS_DIR, REFERENCE_DATA_DIR
 from scoring import _detect_map_type, _safe_name
 from osipi_pipeline.ingestion.manifest import config_fingerprint, manifest_files
 from osipi_pipeline.config.rules import (
+    artifact_type_specs,
     challenge_types,
     mask_name_patterns,
     output_map_subpaths,
     private_path_parts,
     tuple_setting,
 )
+from osipi_pipeline.ingestion.artifact_classifier import detect_artifact_type
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 PREVIEW_PLANES = ("axial", "coronal", "sagittal")
@@ -575,23 +577,31 @@ def _classify_preview_role(item: dict) -> dict:
     """Tag a preview item with its role so galleries can show only 3-D parameter maps.
 
     A file is a scored parameter map when it is exactly 3-D and has a recognized
-    configured map type (CBF/Perfmap, ATT, …). 4-D files are ASL/model/time-series
-    data (kept for download, never scored as a parameter map); anything else is
-    an unrecognized submitted file. This is display metadata only, it does not
-    change ingestion, validation, or scoring.
+    configured map type (CBF/Perfmap, ATT, …). Configured non-map artifacts use
+    their configured role and label. Other 4-D files receive a challenge-neutral
+    signal-data label; they are kept for download but never scored as parameter
+    maps. This is display metadata only and does not change validation or scoring.
     """
     shape = [d for d in (item.get("shape") or []) if d]
     ndim = len(shape)
     map_type = str(item.get("detected_map_type") or "").strip()
     recognized = map_type.lower() not in _UNRECOGNIZED_MAP_TYPES
+    filename = str(item.get("file_name") or Path(str(item.get("source_path") or "")).name)
+    artifact = detect_artifact_type(filename)
     if ndim == 3 and recognized:
         item["file_role"] = "parameter_map"
         item["is_parameter_map"] = True
         item["role_label"] = map_type
-    elif ndim >= 4:
-        item["file_role"] = "fitted_model"
+    elif artifact is not None:
+        artifact_id, role = artifact
+        spec = artifact_type_specs().get(artifact_id) or {}
+        item["file_role"] = role
         item["is_parameter_map"] = False
-        item["role_label"] = "4D ASL data"
+        item["role_label"] = str(spec.get("label") or role.replace("_", " ").title())
+    elif ndim >= 4:
+        item["file_role"] = "signal_data"
+        item["is_parameter_map"] = False
+        item["role_label"] = f"{ndim}D signal data"
     else:
         item["file_role"] = "unknown"
         item["is_parameter_map"] = False

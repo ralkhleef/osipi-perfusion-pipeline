@@ -228,6 +228,22 @@ def test_non_binary_mask_values_count_as_inside() -> None:
     assert result.roi_median == 2.0
 
 
+def test_excluded_nested_mask_is_removed_from_outer_roi() -> None:
+    table = {
+        "Ktrans.nii.gz": _vol([10.0, 20.0, 100.0, 200.0]),
+        "GM_mask.nii.gz": _vol([1, 1, 1, 0]),
+        "Hipp_mask.nii.gz": _vol([0, 0, 1, 0]),
+    }
+    (gray,) = _compute([_artifact()], [RoiDefinition(
+        roi_id="gm", label="gray matter", mask_path="GM_mask.nii.gz",
+        excluded_mask_paths=("Hipp_mask.nii.gz",),
+        exclusive_of=("hippocampus",),
+    )], table)
+
+    assert gray.voxel_count == 2
+    assert gray.roi_mean == pytest.approx(15.0)
+
+
 def test_empty_mask_yields_unavailable() -> None:
     table = {
         "Ktrans.nii.gz": _vol([1.0, 2.0, 3.0, 4.0]),

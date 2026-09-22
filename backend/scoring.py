@@ -68,6 +68,7 @@ from services.scoring_package_service import (
 from osipi_pipeline.config.rules import (
     analysis_by_challenge,
     artifact_type_specs,
+    default_challenge_type,
     grouped_statistics_by_challenge,
     icc_settings_by_challenge,
     performance_settings,
@@ -1224,20 +1225,11 @@ def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
 
 
 def _mask_overlaps(masks: list[dict]) -> list[dict]:
-    """Pairs of ROI masks that share voxels, with how many.
+    """Pairs of *effective* ROI masks that still share voxels, with how many.
 
-    The DCE challenge ships nested regions: every one of the 262 hippocampus
-    voxels is also grey matter. That is a perfectly reasonable way to define
-    ROIs, and it means the per-region statistics are not independent, which a
-    reader has no way to see from a table of one row per region. The
-    challenge's own answer key uses disjoint regions, so its grey-matter bias
-    is computed over 4698 voxels while the pipeline reports the 4960-voxel
-    mask as supplied, and the two differ for a reason nothing on the page
-    explains.
-
-    Nothing here changes a number. Making the regions exclusive would be a
-    scientific decision about what "grey matter" means in this challenge, and
-    that belongs to the organisers. This only says what overlaps.
+    Configured exclusions are applied first. This means the confirmed DCE
+    gray-matter-minus-hippocampus policy no longer produces an overlap warning,
+    while an unrelated partial overlap is still disclosed to the reviewer.
     """
     try:
         import numpy as np  # noqa: PLC0415
@@ -1247,7 +1239,7 @@ def _mask_overlaps(masks: list[dict]) -> list[dict]:
     loaded: list[tuple[str, Any]] = []
     for mask in masks:
         try:
-            data = _load_nifti_values(Path(mask["path"]))
+            data = _load_effective_mask(mask)
             selector = np.asarray(_mask_selector(data["values"]), dtype=bool)
         except Exception:
             continue
@@ -1355,20 +1347,31 @@ def _artifact_identity(artifact) -> tuple:
     )
 
 
-def _unique_signal_match(model_path: Path, candidates: list[Path]) -> Optional[Path]:
-    """Return a reference signal only when filename/path tokens identify it clearly."""
-    if len(candidates) == 1:
-        return candidates[0]
-    model_tokens = _filename_tokens(model_path)
-    ranked = sorted(
-        ((len(model_tokens.intersection(_filename_tokens(path))), path) for path in candidates),
-        key=lambda item: (item[0], str(item[1])), reverse=True,
-    )
-    if not ranked or ranked[0][0] == 0:
-        return None
-    if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
-        return None
-    return ranked[0][1]
+def _reference_signal_patterns(challenge_type: str) -> tuple[str, ...]:
+    """Configured basenames that identify private measured reference curves."""
+    analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
+    rss_config = analysis.get("signal_rss") or {}
+    measured_artifact = str(rss_config.get("measured_artifact") or "").strip().lower()
+    measured_spec = artifact_type_specs().get(measured_artifact) or {}
+    values = [
+        *(measured_spec.get("patterns") or ()),
+        *(rss_config.get("reference_patterns") or ()),
+    ]
+    return tuple(dict.fromkeys(
+        str(value).strip().lower() for value in values if str(value).strip()
+    ))
+
+
+def _reference_signal_files(root: Path, challenge_type: str) -> list[Path]:
+    """Private 4-D reference candidates named by the challenge configuration."""
+    patterns = _reference_signal_patterns(challenge_type)
+    if not patterns:
+        return []
+    return [
+        path for path in _nifti_file_list(root)
+        if any(pattern in path.name.lower() for pattern in patterns)
+        and not _is_mask_like(path)
+    ]
 
 
 def _score_signal_rss(
@@ -1432,13 +1435,10 @@ def _score_signal_rss(
     root = EXTRACTED_DIR / submission_id
     reference_root = reference_scoring.get("reference_root")
     masks = masks_for_submission(submission_id, challenge_type)
-    measured_spec = artifact_type_specs().get(measured_artifact) or {}
-    measured_patterns = tuple(str(value).lower() for value in measured_spec.get("patterns") or ())
-    reference_measured = [
-        path for path in (_nifti_file_list(Path(reference_root)) if reference_root else [])
-        if any(pattern in path.name.lower() for pattern in measured_patterns)
-        and not _is_mask_like(path)
-    ]
+    reference_measured = (
+        _reference_signal_files(Path(reference_root), challenge_type)
+        if reference_root else []
+    )
     if not measured and not reference_measured:
         return
 
@@ -1448,9 +1448,17 @@ def _score_signal_rss(
         if not measured_items and len(model_items) == 1 and reference_measured:
             from types import SimpleNamespace
             model_path_for_match = root / str(model_items[0].path)
-            matched = _unique_signal_match(model_path_for_match, reference_measured)
+            # Reuse the identity-aware reference-map matcher. Every DCE curve
+            # is named Ct.nii.gz, so filename-only matching ties all 60 files.
+            matched = _choose_reference_match(
+                model_path_for_match,
+                reference_measured,
+                submission_root=root,
+                reference_root=Path(reference_root) if reference_root else None,
+                challenge_type=challenge_type,
+            )
             if matched is not None:
-                measured_items = [SimpleNamespace(path=str(matched))]
+                measured_items = [SimpleNamespace(path=str(matched), organiser_reference=True)]
         record = {
             "dataset": identity[0], "participant": identity[1],
             "repeat": identity[2], "site": identity[3],
@@ -1468,9 +1476,18 @@ def _score_signal_rss(
 
         model_artifact, measured_artifact = model_items[0], measured_items[0]
         model_path = root / str(model_artifact.path)
-        measured_path = root / str(measured_artifact.path)
+        measured_path = Path(str(measured_artifact.path))
+        if not measured_path.is_absolute():
+            measured_path = root / measured_path
         record["modelled_file"] = str(model_artifact.path)
-        record["measured_file"] = str(measured_artifact.path)
+        # Do not serialize the organiser's private server path. Scan identity
+        # already identifies the pair; the basename is sufficient context.
+        record["measured_file"] = measured_path.name
+        record["measured_source"] = (
+            "organiser_reference"
+            if getattr(measured_artifact, "organiser_reference", False)
+            else "submission"
+        )
         try:
             # Headers and array proxies only. A real DCE concentration curve is
             # 1 GB as float32 and 2 GB as float64, so materialising the measured
@@ -1494,18 +1511,37 @@ def _score_signal_rss(
             )
             record["whole_image"] = summarize_rss(rss).to_dict()
             spatial_shape = tuple(measured_meta["shape"][:3])
+            time_point_count = int(measured_meta["shape"][3])
+            record["time_point_count"] = time_point_count
+            record["whole_image"]["concentration_time_matrix_shape"] = [
+                int(record["whole_image"].get("voxel_count") or 0),
+                time_point_count,
+            ]
             for mask in masks:
                 if not _mask_applies_to_identity(mask, identity):
                     continue
                 roi = {"mask_name": mask["name"], "roi_label": mask["label"]}
                 try:
-                    mask_data = _load_nifti_values(mask["path"])
+                    mask_data = _load_effective_mask(mask)
                     if tuple(mask_data["shape"]) != spatial_shape:
                         raise ValueError(
                             f"Mask shape {mask_data['shape']} does not match RSS shape {spatial_shape}"
                         )
-                    selector = _mask_selector(mask_data["values"])
+                    # RSS is a 3-D array while the canonical NIfTI loader
+                    # exposes flat values. Restore the spatial shape before
+                    # NumPy boolean indexing; leaving this flat made every
+                    # real ROI RSS row unavailable despite matching geometry.
+                    import numpy as np  # noqa: PLC0415
+
+                    selector = np.asarray(
+                        _mask_selector(mask_data["values"]), dtype=bool
+                    ).reshape(spatial_shape)
                     roi.update(summarize_rss(rss, selector).to_dict())
+                    roi["concentration_time_matrix_shape"] = [
+                        int(roi.get("voxel_count") or 0), time_point_count
+                    ]
+                    if mask.get("exclusive_of"):
+                        roi["exclusive_of"] = list(mask["exclusive_of"])
                 except Exception as exc:
                     roi.update({"status": "unavailable", "error": str(exc)})
                 record["rois"].append(roi)
@@ -1667,7 +1703,7 @@ def _reference_scoring_result_keys_probe() -> dict:
     Calls the real builder with no maps, so the asserted key set is the one
     production actually produces rather than a copy that could drift.
     """
-    return _score_reference_maps("__probe__", "dce", [])
+    return _score_reference_maps("__probe__", default_challenge_type(), [])
 
 
 def _roi_methodology() -> dict:
@@ -1732,8 +1768,82 @@ def masks_for_submission(submission_id: str, challenge_type: str) -> list[dict]:
     specific = [root for root in roots if canonical_path_key(root) not in generic]
     scoped_masks = _reference_masks_across_roots(specific, challenge=challenge)
     if scoped_masks:
-        return scoped_masks
-    return _reference_masks_across_roots(roots, challenge=challenge)
+        return _apply_mask_exclusion_policy(scoped_masks, challenge)
+    return _apply_mask_exclusion_policy(
+        _reference_masks_across_roots(roots, challenge=challenge), challenge
+    )
+
+
+def _mask_scope(mask: dict) -> tuple:
+    """Identity fields that make one organiser mask belong to one scan/site."""
+    return tuple(mask.get(field) for field in ("dataset", "participant", "repeat", "site"))
+
+
+def _apply_mask_exclusion_policy(masks: list[dict], challenge_type: str) -> list[dict]:
+    """Annotate outer masks with configured, same-scope regions to subtract.
+
+    Source NIfTIs are never modified. The effective selector is created only
+    while calculating an analysis, keeping the private source assets intact
+    and making the scientific rule explicit in configuration.
+    """
+    analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
+    configured = analysis.get("mask_exclusions") or {}
+    policy = {
+        str(outer).strip().lower(): {
+            str(inner).strip().lower() for inner in inners or () if str(inner).strip()
+        }
+        for outer, inners in configured.items()
+    } if isinstance(configured, dict) else {}
+    if not policy:
+        return masks
+
+    annotated: list[dict] = []
+    for original in masks:
+        mask = dict(original)
+        excluded_labels = policy.get(str(mask.get("label") or "").strip().lower(), set())
+        excluded = [
+            candidate for candidate in masks
+            if candidate is not original
+            and _mask_scope(candidate) == _mask_scope(original)
+            and str(candidate.get("label") or "").strip().lower() in excluded_labels
+        ]
+        if excluded:
+            mask["excluded_mask_paths"] = [str(item["path"]) for item in excluded]
+            mask["exclusive_of"] = [str(item["label"]) for item in excluded]
+        annotated.append(mask)
+    return annotated
+
+
+def _load_effective_mask(mask: dict, *, load_values=None) -> dict:
+    """Load one mask and subtract every configured nested region from it."""
+    import numpy as np  # noqa: PLC0415
+
+    loader = load_values or _load_nifti_values
+    base = loader(Path(mask["path"]))
+    result = dict(base)
+    shape = tuple(int(value) for value in base.get("shape") or ())
+    # Keep the canonical loader contract: values are flat and shape is carried
+    # separately. ROI consumers and the pure-Python NIfTI fallback both rely
+    # on that representation.
+    selector = np.asarray(_mask_selector(base.get("values")), dtype=bool).reshape(-1)
+    for excluded_path in mask.get("excluded_mask_paths") or ():
+        excluded = loader(Path(excluded_path))
+        excluded_shape = tuple(int(value) for value in excluded.get("shape") or ())
+        if excluded_shape != shape:
+            raise ValueError(
+                f"Excluded mask shape {excluded_shape} does not match outer mask shape {shape}"
+            )
+        if _grids_compatible(base, excluded) is False:
+            raise ValueError("Excluded and outer ROI masks use different spatial grids")
+        excluded_selector = np.asarray(
+            _mask_selector(excluded.get("values")), dtype=bool
+        ).reshape(-1)
+        if excluded_selector.size != selector.size:
+            raise ValueError("Excluded and outer ROI masks have different voxel counts")
+        selector &= ~excluded_selector
+    result["values"] = selector
+    result["exclusive_of"] = list(mask.get("exclusive_of") or ())
+    return result
 
 
 def _reference_masks_across_roots(
@@ -2226,6 +2336,18 @@ def _score_reference_maps(
     masks = masks_for_submission(submission_id, challenge_type)
     result["reference_root"] = str(selected_root)
     result["mask_roots"] = sorted({str(Path(m["path"]).parent) for m in masks})
+    result["mask_exclusions"] = [
+        {
+            "region": str(mask.get("label") or mask.get("name")),
+            "exclusive_of": list(mask.get("exclusive_of") or ()),
+            **{
+                field: mask[field]
+                for field in ("dataset", "participant", "repeat", "site")
+                if mask.get(field) is not None
+            },
+        }
+        for mask in masks if mask.get("exclusive_of")
+    ]
     result["mask_overlaps"] = _mask_overlaps(masks)
     result["masks_available"] = bool(masks)
     result["mask_count"] = len(masks)
@@ -2389,7 +2511,7 @@ def _score_reference_maps(
                 "metrics": None,
             }
             try:
-                mask_data = _load_nifti_values(mask["path"])
+                mask_data = _load_effective_mask(mask)
             except Exception as exc:
                 mask_row["status"] = "mask_unreadable"
                 mask_row["error"] = str(exc)
@@ -2413,6 +2535,8 @@ def _score_reference_maps(
                 mask_row["grid_check"] = "unverified_no_affine"
             selector = _mask_selector(mask_data["values"])
             mask_row["metrics"] = _comparison_metrics(sub_values, ref_values, selector)
+            if mask.get("exclusive_of"):
+                mask_row["exclusive_of"] = list(mask["exclusive_of"])
             mask_row["status"] = mask_row["metrics"].get("status", "compared")
             row["masks"].append(mask_row)
 
@@ -2783,11 +2907,21 @@ def _analysis_cache_key(
             for paths in _reference_maps_by_type(root).values()
             for path in paths
         )
+        # Ct reference curves are not parameter maps and therefore are absent
+        # from ``_reference_maps_by_type``. They still determine RSS and must
+        # invalidate a saved analysis when replaced.
+        reference_signals = stamp(
+            path for root in roots
+            for path in _reference_signal_files(root, challenge_type)
+        )
     except Exception:  # noqa: BLE001 - a key we cannot build is simply no key
         return None
-    # Invalidate cached results rounded to six decimals and old artifact names.
-    return ("multi-model-icc-v3", submission_id, challenge_type, config_fingerprint(),
-            submitted, masks, references)
+    # The schema label invalidates results from older analysis-input semantics,
+    # even if the configuration timestamp survives an in-place upgrade. It is
+    # deliberately challenge-neutral: the cache covers every configured
+    # challenge, not only the one that first introduced reference signals.
+    return ("analysis-inputs-v2", submission_id, challenge_type,
+            config_fingerprint(), submitted, masks, references, reference_signals)
 
 
 #: Where memoised analyses live between runs, beside the validation results
@@ -2896,17 +3030,13 @@ def _artifact_role_label(artifact) -> Optional[str]:
     """A readable name for a file that is not a parameter map."""
     artifact_type = str(getattr(artifact, "artifact_type", "") or "").strip().lower()
     role = str(getattr(artifact, "role", "") or "").strip().lower()
-    known = {
-        "modelled_st": "Fitted signal (4-D)",
-        "measured_st": "Measured signal (4-D)",
-        "methods": "Methods document",
-    }
-    if artifact_type in known:
-        return known[artifact_type]
-    if role == "fitted_signal":
-        return "Fitted signal (4-D)"
-    if role == "measured_signal":
-        return "Measured signal (4-D)"
+    specs = artifact_type_specs()
+    if artifact_type in specs:
+        spec = specs[artifact_type]
+        return str(spec.get("label") or role.replace("_", " ").title() or artifact_type)
+    for spec in specs.values():
+        if role and str(spec.get("role") or "").strip().lower() == role:
+            return str(spec.get("label") or role.replace("_", " ").title())
     return None
 
 

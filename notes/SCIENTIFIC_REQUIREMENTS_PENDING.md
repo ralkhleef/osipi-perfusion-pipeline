@@ -4,10 +4,11 @@ The prototype implements metrics that can be defined independently of final
 challenge decisions. Generic QC and reference comparisons are not official
 OSIPI ranking, and the pipeline does not invent missing scientific rules.
 
-The user confirmed ICC(2,1) and ICC(3,1) for DCE, ASL and DSC. Each challenge
-now uses `grouped_statistics.icc.models: [icc2_1, icc3_1]`, with separate results.
-The existing `inter_repeat` grouping and 95% confidence level are unchanged:
-participants are targets, repeat sessions are columns, and site is held fixed.
+The user selected the second DCE ICC option, ICC(3,1). DCE now uses
+`grouped_statistics.icc.models: [icc3_1]`; ASL and DSC retain ICC(2,1) and
+ICC(3,1). The existing `inter_repeat` grouping and 95% confidence level are
+unchanged: participants are targets, repeat sessions are columns, and site is
+held fixed.
 This is not an official challenge endorsement or a pass/fail rule.
 Use `models: []` to disable ICC; legacy `model: none` also remains supported.
 Do not set both `model` and `models`. Threshold placeholders remain
@@ -31,11 +32,6 @@ The following decisions still require confirmation from the challenge leads:
 - the final number of synthetic participants and scans;
 - final ASL 4-D fitted-model comparison requirements;
 - the final ROI/mask set;
-- whether overlapping masks should be used as supplied or made exclusive.
-  The supplied DCE GM mask includes hippocampal voxels, whereas the example
-  answer key excludes them. Those regions produce different, valid arithmetic
-  results; the app must not silently subtract one mask from another. Confirm
-  the intended regions before treating the answer key as an acceptance test;
 - exact required sections in the methods document.
 
 ## Implemented provisional analyses
@@ -47,7 +43,14 @@ The following decisions still require confirmation from the challenge leads:
   compatible ROIs;
 - conditional DCE **Residual Sum of Squares (RSS)** when one measured and one
   modelled 4-D signal can be matched to the same scan, summarized by median,
-  mean, population SD, and voxel count for the whole image and compatible ROIs;
+  mean, population SD, and voxel count for the whole image and compatible ROIs.
+  Private reference files named `Ct.nii.gz` are matched by participant, site,
+  and repeat. Each 3-D mask selects a voxel-by-time concentration matrix before
+  RSS is calculated across every time point in that scan. In the supplied P01
+  data this is 157 at site 1, 60 at site 2, and 90 at site 3;
+- DCE gray matter is an exclusive region: hippocampus is subtracted from the
+  matching site's supplied GM mask for reference metrics, ROI descriptions,
+  and signal RSS. The private source NIfTI masks are not modified;
 - descriptive participant/repeat/site grouping of scan-level ROI medians with
   mean, population SD, CoV, and a signed paired difference for exactly two
   clearly matched repeats or sites;
@@ -55,9 +58,9 @@ The following decisions still require confirmation from the challenge leads:
   compatible whole-image and ROI error metrics;
 - intraclass correlation for a participant x session table, in any of
   ICC(1,1), ICC(2,1), ICC(3,1), ICC(1,k), ICC(2,k) and ICC(3,k), with exact
-  F-based intervals, verified against Shrout & Fleiss (1979). The two requested
-  models are configured. A participant missing any session is excluded from the
-  table and counted, never imputed.
+  F-based intervals, verified against Shrout & Fleiss (1979). DCE configures
+  ICC(3,1) with a 95% interval. A participant missing any session is excluded
+  from the table and counted, never imputed.
 
 Submitted maps, private references, and masks must have compatible shape,
 voxel size, and affine/orientation before voxelwise comparison or masking.
@@ -67,7 +70,8 @@ and their server paths, are never exposed by browser NIfTI or scoring
 endpoints. Report descriptive columns can be selected per challenge with
 `analysis.roi_descriptive.report_metrics`.
 
-The currently implemented CoV conventions are therefore explicit but
+The challenge lead confirmed that hippocampus must be exclusive from gray
+matter. The currently implemented CoV conventions are still explicit but
 provisional: error CoV is `population SD(submitted - ground truth) /
 abs(mean(ground truth))` within the scored region, and spatial CoV is
 `population SD(submitted ROI values) / abs(mean(submitted ROI values))`.

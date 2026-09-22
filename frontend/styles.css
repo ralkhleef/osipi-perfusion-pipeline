@@ -2430,6 +2430,81 @@ body {
   }
 }
 
+/* Export hierarchy: keep the three files people use most visible, while
+   keeping reports and detailed tables available without making the page tall. */
+#step-export .export-output-group--primary {
+  gap: 8px;
+}
+
+#step-export .export-output-group--additional {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--divider);
+}
+
+#step-export .export-output-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+#step-export .export-output-summary::-webkit-details-marker {
+  display: none;
+}
+
+#step-export .export-output-summary > span:first-child {
+  min-width: 0;
+}
+
+#step-export .export-output-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  color: var(--purple, #5b3fa3);
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+#step-export .export-output-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+#step-export .export-output-summary:hover .export-output-summary-icon,
+#step-export .export-output-summary:focus-visible .export-output-summary-icon {
+  background: var(--surface-strong);
+}
+
+#step-export .export-output-group--additional[open] .export-output-summary-icon {
+  transform: rotate(180deg);
+}
+
+#step-export .export-output-summary:focus-visible {
+  outline: 2px solid var(--purple, #5b3fa3);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+@media (max-width: 560px) {
+  #step-export .export-output-summary-icon {
+    flex-basis: 24px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
 .optional-tag,
 .field-hint,
 .drop-hint,
@@ -13438,4 +13513,132 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 
 @media (prefers-reduced-motion: reduce) {
   .cfg-asset-group > .cfg-asset-head::before { transition: none; }
+}
+
+/* ============================================================
+   Upload step: compact, consistent shell
+   ============================================================ */
+
+/* Match the remaining workflow steps and keep the primary action visible in
+   a standard desktop viewport. */
+@media (min-width: 641px) {
+  .upload-form-card {
+    width: min(100%, var(--card-w));
+    max-width: var(--card-w);
+  }
+
+  .upload-form-card .form-section {
+    padding: 18px 28px 20px;
+  }
+
+  .upload-form-card .section-intro {
+    margin-bottom: 12px;
+  }
+
+  .upload-form-card .methods-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 28px;
+    align-items: center;
+  }
+
+  .methods-section .section-heading {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
+  }
+
+  .methods-section .section-intro {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    margin-bottom: 0;
+  }
+
+  .methods-section .answer-group {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .methods-section .field-label-row--split {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  .upload-form-card .methods-section .answer-group > .pill-row {
+    margin: 0;
+  }
+
+  .upload-form-card .drop-zone {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 14px;
+    padding: 14px 16px !important;
+    text-align: left;
+  }
+
+  .upload-form-card .drop-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    margin: 0;
+  }
+
+  .upload-form-card .drop-primary {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: end;
+    margin: 0;
+  }
+
+  .upload-form-card .drop-hint {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: start;
+    margin: 2px 0 0;
+  }
+
+  .upload-form-card .choose-wrap {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+
+/* Keep the logo and step title together on narrow screens. */
+@media (max-width: 600px) {
+  .upload-form-card .form-header {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+  }
+
+  .upload-form-card .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .upload-form-card .heading-text,
+  .upload-form-card .card-title {
+    max-width: none;
+  }
+
+  .upload-restore-notice > span {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .upload-restore-notice .upload-restore-link {
+    flex: 0 0 auto;
+    width: auto;
+    padding-inline: 10px;
+  }
+
+  .upload-restore-notice .upload-restore-dismiss {
+    flex: 0 0 36px;
+    width: 36px;
+  }
 }

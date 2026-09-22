@@ -1064,6 +1064,22 @@ def test_scoring_package_upload_invalid_zip(client: TestClient) -> None:
     assert r.status_code in (400, 422, 500)
 
 
+def test_scoring_package_upload_uses_the_configured_zip_limit(
+    client: TestClient, monkeypatch
+) -> None:
+    """Package upload must not carry an independent hardcoded 500 MB cap."""
+    import backend.main as app_module
+
+    monkeypatch.setattr(app_module, "ZIP_MAX_BYTES", 32)
+    response = client.post(
+        "/api/scoring/packages/upload",
+        files={"file": ("package.zip", b"x" * 33, "application/zip")},
+    )
+
+    assert response.status_code == 413
+    assert "limit" in response.json()["detail"].lower()
+
+
 def test_scoring_package_upload_no_manifest(client: TestClient) -> None:
     """POST /api/scoring/packages/upload rejects ZIP without manifest.json."""
     r = client.post(

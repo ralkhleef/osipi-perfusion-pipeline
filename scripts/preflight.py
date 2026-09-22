@@ -10,13 +10,16 @@ rather than in front of an audience.
     python3 scripts/preflight.py --url http://...   # somewhere else
     python3 scripts/preflight.py --keep             # leave the submission
 
-Everything it uploads is generated here and thrown away afterwards. No real
-or private data is involved.
+Everything it uploads is generated here. Runs against the local Compose app
+are removed afterwards unless ``--keep`` is used; remote servers retain the
+generated submission because the application has no deletion API. No real or
+private data is involved.
 """
 
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -75,11 +78,53 @@ def build_submission(destination: Path) -> bool:
     return result.returncode == 0
 
 
+def cleanup_local_submission(base: str, submission_id: str, archive_name: str) -> bool:
+    """Remove artifacts made by this script against the local Compose app.
+
+    The application has no submission-deletion API. Keep cleanup deliberately
+    narrow: it is available only for the repository's local server and only
+    for the unique ``preflight_asl_*`` identifier created below.
+    """
+    if base not in {"http://localhost:8000", "http://127.0.0.1:8000"}:
+        return False
+    if not submission_id.startswith("preflight_asl_") or not all(
+        char.isalnum() or char in "-_" for char in submission_id
+    ):
+        return False
+
+    score_id = "-".join(
+        part for part in "".join(
+            char.lower() if char.isalnum() else "-" for char in submission_id
+        ).split("-") if part
+    )
+    paths = (
+        REPO_ROOT / "submissions" / "incoming" / archive_name,
+        REPO_ROOT / "submissions" / "extracted" / submission_id,
+        REPO_ROOT / "data" / "outputs" / "declarations" / f"{submission_id}.json",
+        REPO_ROOT / "data" / "outputs" / "validation" / f"{submission_id}_validation.json",
+        REPO_ROOT / "data" / "outputs" / "previews" / submission_id,
+        REPO_ROOT / "data" / "outputs" / "scoring" / score_id,
+        REPO_ROOT / "data" / "outputs" / "scoring" / f"{score_id}_score.json",
+    )
+    try:
+        for path in paths:
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+        cache_dir = REPO_ROOT / "data" / "outputs" / "analysis_cache"
+        for path in cache_dir.glob(f"{score_id}.*.json"):
+            path.unlink()
+    except OSError:
+        return False
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", default="http://localhost:8000")
     parser.add_argument("--keep", action="store_true",
-                        help="Leave the demo submission in place afterwards")
+                        help="Leave local demo artifacts in place afterwards")
     args = parser.parse_args(argv)
     base = args.url.rstrip("/")
 
@@ -115,14 +160,15 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── A real submission through all six steps ───────────────────────────
     with tempfile.TemporaryDirectory() as tmp:
-        archive = Path(tmp) / "preflight_asl.zip"
+        archive_name = f"preflight_asl_{uuid.uuid4().hex[:8]}.zip"
+        archive = Path(tmp) / archive_name
         if not build_submission(archive):
             record("Build a demo submission", BAD, "",
                    "Check scripts/make_minimal_submission.py runs")
             return 1
         record("Build a demo submission", OK, f"{archive.stat().st_size} bytes")
 
-        body, content_type = multipart("preflight_asl.zip", archive.read_bytes())
+        body, content_type = multipart(archive_name, archive.read_bytes())
         status, raw = request(f"{base}/api/upload-submission", data=body,
                               headers={"Content-Type": content_type})
         if status != 200:
@@ -164,7 +210,12 @@ def main(argv: list[str] | None = None) -> int:
                    f"{len(raw)} bytes" if status == 200 else f"HTTP {status}")
 
         if not args.keep:
-            request(f"{base}/api/submission/{sid}", data=b"", headers={})
+            cleaned = cleanup_local_submission(base, sid, archive_name)
+            record(
+                "Remove demo submission",
+                OK if cleaned else WARN,
+                "local artifacts removed" if cleaned else "not available for this server",
+            )
 
     failed = [c for c in checks if c.status == BAD]
     print()

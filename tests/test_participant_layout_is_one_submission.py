@@ -24,6 +24,7 @@ pin both directions.
 from __future__ import annotations
 
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,10 @@ def _dirs(tmp_path: Path, names: list[str]) -> list[Path]:
     ["sub-01", "sub-02"],
     ["Participant1", "Participant2"],
     ["subject_1", "subject_2"],
+    # Reference data is an internal part of the same submission, not another
+    # team. This is the layout used by the repeated-measures ASL ICC fixture.
+    ["Participant1", "Participant2", "reference"],
+    ["P01", "P02", "masks"],
 ])
 def test_participant_directories_are_one_submission(tmp_path, names) -> None:
     from services.ingest_service import _is_participant_layout
@@ -116,6 +121,18 @@ def test_a_wrapper_around_participants_is_also_one_submission(tmp_path) -> None:
     assert detect_batch_boundaries(root) is None
 
 
+def test_a_wrapper_with_participants_and_reference_is_one_submission(tmp_path) -> None:
+    """The full ASL ICC layout must not turn reference/ into another team."""
+    from services.ingest_service import detect_batch_boundaries
+    root = tmp_path / "extracted"
+    wrapped = root / "ASL_ICC"
+    _submission_tree(wrapped, ["Participant1", "Participant2", "Participant3"])
+    reference = wrapped / "reference" / "masks"
+    reference.mkdir(parents=True)
+    (reference / "brain_mask.nii.gz").write_bytes(b"placeholder")
+    assert detect_batch_boundaries(root) is None
+
+
 def test_one_participants_folder_uploaded_alone(tmp_path) -> None:
     """Uploading P01 on its own, to avoid waiting for all sixty scans.
 
@@ -145,3 +162,55 @@ def test_a_genuine_batch_is_still_split(tmp_path) -> None:
         (d / "ktrans.nii.gz").write_bytes(b"placeholder")
     found = detect_batch_boundaries(root)
     assert found is not None and len(found) == 3, found
+
+
+def _asl_icc_files() -> list[tuple[str, bytes]]:
+    files: list[tuple[str, bytes]] = []
+    for participant in ("Participant1", "Participant2", "Participant3"):
+        for repeat in ("scan_1", "scan_2"):
+            files.extend([
+                (f"ASL_ICC/{participant}/{repeat}/CBF.nii.gz", b"placeholder"),
+                (f"ASL_ICC/{participant}/{repeat}/ATT.nii.gz", b"placeholder"),
+            ])
+    files.append(("ASL_ICC/reference/masks/brain_mask.nii.gz", b"placeholder"))
+    return files
+
+
+def _isolate_extraction(tmp_path: Path, monkeypatch):
+    from services import ingest_service, path_config
+
+    extracted = tmp_path / "extracted"
+    extracted.mkdir()
+    monkeypatch.setattr(path_config, "EXTRACTED_DIR", extracted, raising=False)
+    monkeypatch.setattr(ingest_service, "EXTRACTED_DIR", extracted, raising=False)
+    return ingest_service, extracted
+
+
+def test_asl_icc_zip_stays_one_submission(tmp_path, monkeypatch) -> None:
+    """Exercise the real ZIP extraction/finalisation path, not just its helper."""
+    ingest_service, extracted = _isolate_extraction(tmp_path, monkeypatch)
+    archive = tmp_path / "ASL_ICC.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for name, contents in _asl_icc_files():
+            zf.writestr(name, contents)
+
+    result = ingest_service.save_and_extract_batch_from_path(archive, archive.name)
+
+    assert result.get("success") is True, result
+    assert result.get("batch") is False, result
+    final = extracted / result["submission_id"]
+    assert (final / "Participant1" / "scan_1" / "CBF.nii.gz").is_file()
+    assert (final / "reference" / "masks" / "brain_mask.nii.gz").is_file()
+
+
+def test_asl_icc_browser_folder_stays_one_submission(tmp_path, monkeypatch) -> None:
+    """Exercise browser folder upload, whose common root is stripped first."""
+    ingest_service, extracted = _isolate_extraction(tmp_path, monkeypatch)
+
+    result = ingest_service.save_folder_as_batch(_asl_icc_files())
+
+    assert result.get("success") is True, result
+    assert result.get("batch") is False, result
+    final = extracted / result["submission_id"]
+    assert (final / "Participant3" / "scan_2" / "ATT.nii.gz").is_file()
+    assert (final / "reference" / "masks" / "brain_mask.nii.gz").is_file()

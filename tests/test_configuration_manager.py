@@ -71,7 +71,8 @@ def test_unconfirmed_scientific_rules_remain_empty(isolated_manager):
     for challenge in ("asl", "dce", "dsc"):
         spec = rules_module.validation_rules()["challenges"][challenge]
         assert spec["analysis"]["thresholds"] == {}
-        assert spec["grouped_statistics"]["icc"]["models"] == ["icc2_1", "icc3_1"]
+        expected = ["icc3_1"] if challenge == "dce" else ["icc2_1", "icc3_1"]
+        assert spec["grouped_statistics"]["icc"]["models"] == expected
 
 
 @pytest.mark.parametrize("challenge", ["asl", "dsc"])

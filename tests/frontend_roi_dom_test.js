@@ -56,7 +56,7 @@ function extractFunction(name) {
 }
 
 const escapeSrc = extractFunction("escapeHtml");
-const roiSrc = sliceFrom("/* ── ROI Ktrans statistics");
+const roiSrc = sliceFrom("/* ── ROI statistics");
 
 // Minimal DOM stub.
 function makeElement(id) {

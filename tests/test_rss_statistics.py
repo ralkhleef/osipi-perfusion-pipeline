@@ -113,6 +113,100 @@ def test_rss_accepts_a_clearly_matched_organiser_reference_signal(monkeypatch, t
     assert target["signal_rss"]["records"][0]["whole_image"]["mean"] == pytest.approx(14.0)
 
 
+def test_rss_matches_hidden_ct_by_participant_site_and_repeat(monkeypatch, tmp_path) -> None:
+    """Sixty private Ct basenames are disambiguated by scan identity."""
+    monkeypatch.setattr(scoring, "EXTRACTED_DIR", tmp_path / "extracted")
+    model = SimpleNamespace(
+        artifact_type="modelled_st",
+        path="P02/site_2/scan_1/Ct.nii.gz",
+        dataset=None, participant="2", repeat="1", site="2",
+    )
+    monkeypatch.setattr(scoring, "submission_artifacts", lambda sid: [model])
+    reference_root = tmp_path / "reference"
+    candidates = [
+        reference_root / "maps" / "P01" / "site_1" / "scan_1" / "Ct.nii.gz",
+        reference_root / "maps" / "P02" / "site_2" / "scan_1" / "Ct.nii.gz",
+        reference_root / "maps" / "P02" / "site_2" / "scan_2" / "Ct.nii.gz",
+    ]
+    monkeypatch.setattr(scoring, "_nifti_file_list", lambda root: candidates)
+    monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: [])
+
+    selected = []
+
+    def geometry(path):
+        path = Path(path)
+        if str(path).startswith(str(reference_root)):
+            selected.append(path)
+            values = [2, 4, 6]
+        else:
+            values = [1, 2, 3]
+        return {
+            "shape": [1, 1, 1, 3],
+            "dataobj": np.asarray(values, dtype=float).reshape(1, 1, 1, 3),
+            "affine": None, "voxel_size": None,
+        }
+
+    monkeypatch.setattr(scoring, "_nifti_geometry", geometry)
+    target = {"reference_root": str(reference_root)}
+    scoring._score_signal_rss(target, "sub-1", "dce")
+
+    record = target["signal_rss"]["records"][0]
+    assert target["signal_rss"]["status"] == "available"
+    assert selected == [candidates[1]]
+    assert record["measured_file"] == "Ct.nii.gz"
+    assert record["measured_source"] == "organiser_reference"
+    assert record["time_point_count"] == 3
+
+
+def test_rss_reports_masked_voxel_by_time_matrix_and_exclusive_roi(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(scoring, "EXTRACTED_DIR", tmp_path)
+    monkeypatch.setattr(scoring, "submission_artifacts", lambda sid: [
+        _artifact("modelled_st", "modelled_st.nii.gz"),
+        _artifact("measured_st", "measured_st.nii.gz"),
+    ])
+    masks = [{
+        "name": "GM_mask.nii.gz", "label": "gray matter",
+        "path": "GM_mask.nii.gz",
+        "excluded_mask_paths": ["Hipp_mask.nii.gz"],
+        "exclusive_of": ["hippocampus"],
+    }]
+    monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: masks)
+
+    def geometry(path):
+        values = np.ones((2, 2, 1, 3), dtype=float)
+        if "measured" in str(path):
+            values *= 2
+        return {"shape": [2, 2, 1, 3], "dataobj": values,
+                "affine": None, "voxel_size": None}
+
+    volumes = {
+        "GM_mask.nii.gz": {"shape": [2, 2, 1], "values": [1, 1, 1, 1]},
+        "Hipp_mask.nii.gz": {"shape": [2, 2, 1], "values": [0, 0, 0, 1]},
+    }
+    monkeypatch.setattr(scoring, "_nifti_geometry", geometry)
+    monkeypatch.setattr(scoring, "_load_nifti_values", lambda path: volumes[Path(path).name])
+
+    target = {}
+    scoring._score_signal_rss(target, "sub-1", "dce")
+    record = target["signal_rss"]["records"][0]
+    gray = record["rois"][0]
+
+    assert record["whole_image"]["concentration_time_matrix_shape"] == [4, 3]
+    assert gray["concentration_time_matrix_shape"] == [3, 3]
+    assert gray["voxel_count"] == 3
+    assert gray["exclusive_of"] == ["hippocampus"]
+    assert gray["mean"] == pytest.approx(3.0)
+
+    from services.pdf_report_service import _prototype_analysis_model
+
+    report = _prototype_analysis_model([{
+        "nifti_analysis": {"reference_scoring": target}
+    }])
+    assert "Time points" in report["dce_rss_headers"]
+    assert len(report["dce_rss_rows"]) == 2  # whole image plus gray matter
+    assert {row[5] for row in report["dce_rss_rows"]} == {"3"}
+
+
 # ── Streaming a 4-D pair must equal reading it whole ───────────────────────
 #
 # The in-memory path materialised the measured volume, the modelled volume and

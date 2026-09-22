@@ -56,6 +56,12 @@ def roi_definitions_from_masks(masks: Iterable[Mapping[str, Any]]) -> list[RoiDe
             participant=mask.get("participant"),
             repeat=mask.get("repeat"),
             site=mask.get("site"),
+            excluded_mask_paths=tuple(
+                str(path) for path in mask.get("excluded_mask_paths") or ()
+            ),
+            exclusive_of=tuple(
+                str(label) for label in mask.get("exclusive_of") or ()
+            ),
         ))
     return definitions
 
@@ -135,7 +141,7 @@ def compute_roi_descriptive_statistics(
     if load_values is None:
         from scoring import _load_nifti_values as load_values  # local import
 
-    mask_cache: dict[str, Any] = {}
+    mask_cache: dict[tuple[str, tuple[str, ...]], Any] = {}
     results: list[RoiDescriptiveResult] = []
 
     for artifact in selected:
@@ -162,15 +168,22 @@ def compute_roi_descriptive_statistics(
             # Identity sentinel, not equality: the cached payloads hold NumPy
             # arrays, and `payload == "__missing__"` on one raises rather than
             # returning False.
-            mask_data = mask_cache.get(roi.mask_path, _MISSING)
+            mask_key = (roi.mask_path, tuple(roi.excluded_mask_paths))
+            mask_data = mask_cache.get(mask_key, _MISSING)
             if mask_data is _MISSING:
                 try:
-                    mask_data = load_values(Path(roi.mask_path))
+                    from scoring import _load_effective_mask  # local import
+
+                    mask_data = _load_effective_mask({
+                        "path": roi.mask_path,
+                        "excluded_mask_paths": list(roi.excluded_mask_paths),
+                        "exclusive_of": list(roi.exclusive_of),
+                    }, load_values=load_values)
                 except Exception:
                     logger.debug("ROI statistics: unreadable mask %s",
                                  roi.mask_path, exc_info=True)
                     mask_data = None
-                mask_cache[roi.mask_path] = mask_data
+                mask_cache[mask_key] = mask_data
             if mask_data is None:
                 results.append(unavailable_result(
                     artifact=artifact, roi=roi,

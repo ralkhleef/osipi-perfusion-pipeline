@@ -216,7 +216,8 @@ checkContains("Preview gallery filters to parameter maps", appJs, "function _isP
 checkContains("Preview section renamed to Parameter Map Previews", appJs, "<h3>Parameter Map Previews</h3>");
 checkNotContains("Old 'Map Preview' heading removed", appJs, "<h3>Map Preview</h3>");
 checkContains("Empty state uses parameter-map wording", appJs, "No parameter-map previews are available.");
-checkContains("4D ASL data label kept for non-parameter files", appJs, "4D ASL data");
+checkContains("4D fallback is challenge neutral", appJs, "D signal data");
+checkNotContains("4D fallback is not hard-coded to ASL", appJs, 'return shape.length >= 4 ? "4D ASL data"');
 checkContains("Non-parameter files listed under collapsed details", appJs, "submitted-files-details");
 checkNotContains("No decorative CSS url assets", css, "url(");
 checkNotContains("No decorative CSS background-image", css, "background-image");
@@ -245,8 +246,8 @@ checkContains("Upload Zenodo source gates on input", appJs, 'source === "zenodo"
 checkContains("Upload GitHub source gates on input", appJs, 'source === "github"');
 checkContains("Upload CTA disabled until ready", appJs, "submitBtn.disabled = !canUpload");
 checkContains("Challenge type tooltip text", html,
-  "controls which maps are required, which validation rules apply");
-checkContains("Parameter map type tooltip text", html, "Use this only when automatic detection needs a hint.");
+  "Sets required maps, validation rules, and available analyses.");
+checkContains("Parameter map hint text", html, "Use only if automatic detection needs help.");
 checkNotContains("Duplicate global Start New wrapper removed", html, "global-start-new");
 checkNotContains("Global Start New styling removed", css, "global-new-btn");
 checkNotContains("Duplicate step hint cards removed", html, "step-hint-card");
@@ -255,16 +256,16 @@ checkContains("Reusable in-card action rows", appJs, "function _ensureStepAction
 checkContains("Action rows have data-step hook", appJs, "data-step-action-row");
 checkContains("Action row CSS", css, ".step-action-row");
 checkContains("Action row disabled tooltip", css, ".step-action-row[data-disabled-reason]");
-checkContains("Review action label", appJs, 'nextLabel: "Validate Submission"');
-checkContains("Validate action label", appJs, 'nextLabel: "Continue to Run"');
+checkContains("Review action label", appJs, 'nextLabel: "Validate"');
+checkContains("Validate action label", appJs, 'nextLabel: "Continue"');
 const footerConfigBlock = appJs.slice(
   appJs.indexOf("const _WF_FOOTER_CONFIG"),
   appJs.indexOf("function _selectedSubmissionCount")
 );
-checkContains("Run action label", footerConfigBlock, 'nextLabel: "Continue to QC & Preview"');
-checkContains("Score action label", footerConfigBlock, 'nextLabel: "Continue to Export"');
+checkContains("Run action label", footerConfigBlock, 'nextLabel: "Continue"');
+checkContains("Score action label", footerConfigBlock, 'nextLabel: "Continue"');
 checkNotContains("Summary action config removed", footerConfigBlock, 'summary:');
-checkContains("Export action label", footerConfigBlock, 'nextLabel: "Start New Submission"');
+checkContains("Export action label", footerConfigBlock, 'nextLabel: "New submission"');
 checkNotContains("Step 6 no longer shows generic Finish label", footerConfigBlock, 'nextLabel: "Finish"');
 checkContains("Blocked-step reason helper", appJs, "function _stepBlockedReason");
 checkContains("Validate Continue gates on error count (warnings don't block)", appJs, 'issueCount(r, "errors") === 0');
@@ -295,7 +296,7 @@ checkContains("Run skipped panel is calm workbench row", css, ".run-skipped-noti
 checkNotContains("Result-only Processing card can be hidden", css, "#step-run .run-settings-card {\n  display: block !important;");
 checkNotContains("Run notice has no success status badge", section("step-run"), "status-badge-pass");
 checkNotContains("Run step has no Execution skipped wording", html, "Execution skipped");
-checkContains("Run notice uses researcher wording", html, "Result maps were included in these submissions. No code run was needed.");
+checkContains("Run notice uses researcher wording", html, "Result maps are already available; no run is needed.");
 
 console.log("\n[ Researcher-facing language ]");
 // No developer/technical wording in the visible researcher UI.
@@ -309,7 +310,7 @@ checkNotContains("Score details drop provider line", appJs, "<strong>Provider:</
 checkNotContains("Score details drop export readiness line", appJs, "<strong>Export readiness:</strong>");
 checkNotContains("Score details drop artifacts line", appJs, "<strong>Artifacts:</strong>");
 // Researcher-facing wording present.
-checkContains("Run step header is researcher-facing", html, "Prepare submission maps");
+checkContains("Run step header is researcher-facing", html, "Run submissions");
 checkContains("Run processing button label", html, "Run processing");
 checkContains("Run meta says Maps ready for review", appJs, '"Maps ready for review"');
 checkContains("Run complete label is Processing complete", appJs, '"Processing complete"');
@@ -459,8 +460,8 @@ checkContains("Validate builder calls shared renderer", appJs, "const wrap = _wo
 checkContains("Score builder calls shared renderer", appJs, "return renderWorklistRow({");
 checkContains("Preview builder calls shared file renderer", appJs, "return renderFileRow({");
 checkContains("Export builder calls shared file renderer", appJs, "const renderRows = (items) => items.map((r) => renderFileRow({");
-checkContains("Export groups blinded reviewer outputs", appJs, "Blinded reviewer outputs");
-checkContains("Export separates organiser-only output", appJs, "Organiser-only output");
+checkContains("Export groups primary outputs", appJs, "Primary outputs");
+checkContains("Export collapses additional outputs", appJs, "Additional outputs");
 checkContains("Renderer emits canonical row skeleton", appJs, "${checkbox}${icon}${main}${actions}${chevron}");
 // ── ONE shared Details / Hide details control everywhere ──
 checkContains("Renderer auto-appends shared Details button", appJs, 'class="details-toggle" aria-expanded="false">Details</button>');
@@ -694,7 +695,7 @@ checkContains("Result-only run hides duplicate continue", appJs, 'skippedContinu
 checkContains("Result-only run status is neutral Maps ready", appJs, 'status-chip status-chip-neutral rs-badge rs-skipped">Maps ready');
 checkContains("Run complete status uses Processing complete", appJs, 'rs-badge rs-pass">Processing complete');
 checkNotContains("Run result-only badge no longer says Skipped", appJs, 'rs-badge rs-skipped">Skipped');
-checkContains("Run readiness tooltip", html, "Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.");
+checkContains("Run readiness tooltip", html, "Runnable submissions include code; result-only submissions skip this step.");
 checkNotContains("Run button no longer says Docker", html, "Run code in Docker");
 checkContains("Run button uses plain processing wording", html, "Run processing");
 check("Run collapsible section", "run-list-section");
@@ -724,7 +725,7 @@ checkContains("Score table hidden until useful", appJs, 'tableCard.style.display
 checkContains("Score metric preview present", html, 'id="score-metric-preview"');
 checkContains("QC metrics tooltip", html, "QC metrics describe map validity and statistics. They are not official OSIPI scores.");
 checkContains("Reference scoring status tooltip", appJs, "Reference metrics are calculated only when a matching private ground-truth map is available.");
-checkContains("Configuration Manager UI", html, "Challenge Configuration Manager");
+checkContains("Configuration Manager UI", html, "Challenge configuration");
 checkContains("Configuration test action", html, "1. Test Configuration");
 checkContains("Configuration preview action", html, "2. Preview Changes");
 checkContains("Configuration version save action", html, "3. Save as New Version");
@@ -916,8 +917,8 @@ console.log("\n[ Reading-results guide ]");
     countOccurrences(html, 'class="step-guide-link"'), 2);
   checkContains("from QC & Preview", section("step-score"), "step-guide-link");
   checkContains("and from Export", section("step-export"), "step-guide-link");
-  checkContains("It asks the reader's question, not ours",
-    html, "What do these numbers mean?");
+  checkContains("It uses a concise guide label",
+    html, "Metric guide");
   checkContains("It opens in a new tab, so a review in progress is not lost",
     html, 'href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank"');
   checkContains("and safely", html, 'rel="noopener"');
@@ -956,8 +957,8 @@ console.log("\n[ Step headers ]");
     countOccurrences(html, 'class="card-desc"'), 0);
   checkEqual("Every one of the six steps kept its explanation behind a ?",
     countOccurrences(html, 'class="help-tooltip title-help"'), 6);
-  checkContains("The explanation is still the real sentence, not a stub",
-    html, "Existing result maps go straight to review");
+  checkContains("The explanation still describes the step",
+    html, "Runs submitted code only when result maps are missing.");
   checkContains("A header tooltip hangs below the title, which is at the top of the page",
     css, ".title-help .tooltip-text {\n  top: calc(100% + 9px);");
   checkContains("and it is reachable by keyboard, like every other tooltip",
@@ -974,7 +975,7 @@ const scorePreviewBlock = appJs.slice(
 );
 checkContains("Step 5 label is QC & Preview", scoreSection, "Step 5 of 6: QC &amp; Preview");
 checkContains("Step 5 title is QC & Preview", scoreSection, '<h1 class="card-title" id="score-step-title">QC &amp; Preview');
-checkContains("Step 5 generic QC wording", scoreSection, "QC and previews are available for readable maps");
+checkContains("Step 5 generic QC wording", scoreSection, "Review QC, previews, and available analyses.");
 /* The wording moved into the "?" the app already uses for detail. Setting
    textContent on the heading would delete that button, so the runtime helper
    must rewrite only the heading's own text node. */
@@ -991,7 +992,7 @@ checkContains("Score preview panel hidden from default Step 5 flow", css, "#step
 checkContains("Step 5 unlocks Export", scorePreviewBlock, 'unlockStep("export")');
 checkContains("Step 5 Continue routes directly to Export", appJs, "function _goToExport()");
 checkContains("Step 5 Continue syncs Export", appJs, "_syncExportStep();");
-checkContains("Step 5 Continue copy is Export", scoreSection, "Continue to Export");
+checkContains("Step 5 Continue copy is concise", scoreSection, ">Continue</button>");
 checkNotContains("Continue to Summary copy removed", html, "Continue to Summary");
 checkNotContains("No standalone Summary section", html, 'id="step-summary"');
 checkNotContains("No Summary nav state holder", html, 'id="wf-btn-summary"');
@@ -1292,13 +1293,13 @@ console.log("\n[ Methods document ]");
   checkContains("Yes is one of the answers", uploadSection, 'value="yes"');
   checkContains("So is no", uploadSection, 'value="no"');
   checkContains("It is marked optional, because nothing requires one",
-    uploadSection, "Not required.");
+    uploadSection, "Methods document <span class=\"optional-tag\">Optional</span>");
   checkContains("A blank template is offered",
     uploadSection, 'href="/api/methods-template"');
   checkContains("and it reads as a control, not a link inside a paragraph",
     uploadSection, 'class="ghost-download"');
   checkContains("and the template does not claim to be the requirement",
-    uploadSection, "challenge leads' decision");
+    uploadSection, "Describes the software, model, and settings used.");
   checkContains("The question is labelled for screen readers",
     uploadSection, 'aria-labelledby="methods-doc-label"');
   /* The question is the whole interaction: two pills and an optional
@@ -1348,25 +1349,26 @@ checkContains("HTML report button", appJs, 'id="export-report-btn"');
 checkContains("PDF report button", appJs, 'id="export-pdf-report-btn"');
 checkContains("JSON report button", appJs, 'id="export-combined-json-btn"');
 checkContains("Export summary panel exists", html, "export-summary-panel");
-checkContains("Export summary title", exportSection, "Final review summary");
-checkContains("Export disclaimer moved into a tooltip", exportSection, "Generic QC metrics are not official OSIPI scoring");
+checkContains("Export summary title", exportSection, "Review summary");
+checkContains("Export disclaimer moved into a tooltip", exportSection, "QC metrics are not official OSIPI scores");
 checkContains("Export main list exists", exportSection, "export-main-list");
 checkContains("Export step label is Step 6 of 6", exportSection, "Step 6 of 6: Export");
 checkEqual("Step 6 main UI shows six main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 6);
-checkContains("Main HTML Report option", mainExportOptions, "HTML Report");
-checkContains("Main PDF Report option", mainExportOptions, "PDF Report");
-checkContains("Main CSV Results option", mainExportOptions, "CSV Results");
-checkContains("Main JSON Results option", mainExportOptions, "JSON Results");
-checkNotContains("Redundant Blinded CSV option removed", mainExportOptions, "Blinded CSV");
+checkContains("Main HTML report option", mainExportOptions, "HTML report");
+checkContains("Main PDF report option", mainExportOptions, "PDF report");
+checkContains("Main blinded CSV option", mainExportOptions, 'aria-label="Download blinded CSV"');
+checkContains("Main JSON results option", mainExportOptions, "JSON results");
+checkContains("Primary blinded CSV option", mainExportOptions, "Blinded CSV");
 checkContains("Main Unblinded CSV option", mainExportOptions, "Unblinded CSV");
-checkContains("Main report description", mainExportOptions, "the full tables");
-checkContains("Main PDF report description", mainExportOptions, "validation, execution, QC and limitations");
-checkContains("Main unblinded CSV description", mainExportOptions, "team and contact included");
+checkContains("Main report description", mainExportOptions, "Full tables in a browser");
+checkContains("Main PDF report description", mainExportOptions, "Validation, QC, and limitations");
+checkContains("Main blinded CSV description", mainExportOptions, "Shareable summary");
+checkContains("Main unblinded CSV description", mainExportOptions, "Internal · team and contact details");
 checkNotContains("Main copy avoids reviewer-safe wording", mainExportOptions, "reviewer-safe");
 checkNotContains("Main copy avoids external evaluation wording", mainExportOptions, "external evaluation");
 checkNotContains("Main copy avoids internal organizer wording", mainExportOptions, "internal organizer");
-checkContains("Main copy explains identifier visibility", mainExportOptions, "original submission identifiers");
-checkContains("Main report button label", mainExportOptions, ">Open Report</button>");
+checkNotContains("Main copy avoids long identifier disclaimer", mainExportOptions, "original submission identifiers");
+checkContains("Main report button label", mainExportOptions, ">Open report</button>");
 
 /* The Export step used to look untouched however much work had been done.
    `_renderExportRows` decides each row's availability from the submissions and
@@ -1497,7 +1499,7 @@ checkNotContains("Batch execution raw button removed from UI", exportSection, "b
 checkNotContains("Single validation raw button removed from UI", exportSection, "export-val-blinded-btn");
 checkNotContains("Single execution raw button removed from UI", exportSection, "exec-export-blinded-btn");
 checkNotContains("Scoring raw button removed from UI", exportSection, "export-scoring-blinded-btn");
-checkContains("Export keeps full standard CSV aria label", appJs, "Download CSV results");
+checkContains("Export keeps clear blinded CSV aria label", appJs, "Download blinded CSV");
 checkContains("Export keeps full report aria label", appJs, "Open HTML report");
 checkContains("Export keeps full PDF aria label", appJs, "Download PDF report");
 checkContains("Step 1 Upload remains intact", section("step-upload"), 'id="drop-zone"');
@@ -1514,7 +1516,7 @@ checkContains("Step 6 rows prevent overflow", css, "#step-export .export-file-ro
 checkContains("Step 6 buttons do not clip", css, "text-overflow: clip !important");
 checkContains("Step 6 buttons wrap when needed", css, "white-space: normal;");
 checkContains("Step 6 Back action returns to Score & Preview", appJs, 'export:   { back: "score"');
-checkContains("Step 6 primary label is Start New Submission", footerConfigBlock, 'nextLabel: "Start New Submission"');
+checkContains("Step 6 primary label is New submission", footerConfigBlock, 'nextLabel: "New submission"');
 checkNotContains("Step 6 primary label is not Finish", footerConfigBlock, 'nextLabel: "Finish"');
 checkContains("Step 6 export click uses reset helper", advanceWizardBlock, "_startNewSubmissionFromExport();");
 checkContains("Step 6 reset helper exists", exportResetBlock, "function _startNewSubmissionFromExport()");
@@ -1646,10 +1648,11 @@ console.log("\n[ Unification regression guards ]");
 checkNotContains("No step-specific 980px canvas remains", css, "max-width: 980px !important");
 checkContains("Shared card width variable drives every shell", css, "max-width: var(--card-w, 720px) !important");
 
-// Export exposes ONLY the four consolidated worklist rows
+// Export exposes the three primary rows plus three optional rows.
 const exportSec = mainExportOptions;
-["HTML Report", "PDF Report", "CSV Results", "JSON Results", "ROI Statistics CSV", "Unblinded CSV"].forEach((label) => {
-  checkContains(`Export shows ${label} row`, exportSec, `title: "${label}"`);
+["HTML report", "PDF report", "CSV results", "JSON results", "ROI statistics CSV", "Unblinded CSV"].forEach((label) => {
+  const expectedLabel = label === "CSV results" ? "Blinded CSV" : label;
+  checkContains(`Export shows ${expectedLabel} row`, exportSec, `title: "${expectedLabel}"`);
 });
 checkNotContains("Export hides raw Validation CSV", exportSec, "Validation CSV");
 checkNotContains("Export hides raw Execution CSV", exportSec, "Execution CSV");
@@ -1708,7 +1711,7 @@ checkContains("Reset clears wizard + session state", appJs, "clearWizardState();
 // ROI parameter-map statistics (within-scan descriptive values)
 // Export row
 checkContains("ROI export row present", appJs, "export-roi-descriptive-group");
-checkContains("ROI export row is titled", appJs, "ROI Statistics CSV");
+checkContains("ROI export row is titled", appJs, "ROI statistics CSV");
 checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
 checkContains("ROI export reuses the session query helper", appJs, "export-roi-descriptive?${q}");
 checkContains("ROI export handles a missing filename header", appJs, '"roi_descriptive_statistics.csv"');

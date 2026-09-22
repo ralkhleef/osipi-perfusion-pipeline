@@ -159,15 +159,16 @@ challenge-approved definition first:
 ## Things you can now turn on yourself
 
 These settings are controlled by configuration blocks in
-`config/validation_rules.yaml`. ICC uses the two requested models below;
-unconfirmed thresholds remain disabled.
+`config/validation_rules.yaml`. DCE uses the selected ICC(3,1) option; ASL and
+DSC retain the two-model configuration shown below. Unconfirmed thresholds
+remain disabled.
 
 ### ICC
 
 All six Shrout & Fleiss models are implemented with exact F-based confidence
-intervals. The current configuration reports the two user-confirmed models
-separately for ASL, DCE and DSC. An empty `models: []` disables ICC; the legacy
-single `model` setting remains supported. Never set both fields:
+intervals. DCE reports ICC(3,1) with a 95% interval. ASL and DSC currently
+report ICC(2,1) and ICC(3,1) separately. An empty `models: []` disables ICC;
+the legacy single `model` setting remains supported. Never set both fields:
 
 ```yaml
 challenges:

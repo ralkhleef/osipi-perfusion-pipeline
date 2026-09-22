@@ -7,7 +7,7 @@ Usage:
     from services.path_config import INCOMING_DIR, REFERENCE_DATA_DIR, ...
 """
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # This file lives at backend/services/path_config.py
 # Project root is three directory levels up.
@@ -75,7 +75,13 @@ def safe_relative_path(raw_path: str) -> Path:
     Used by both the ZIP extractor and the Zenodo downloader so that
     the traversal-blocking logic is defined in exactly one place.
     """
-    path = Path((raw_path or "").replace("\\", "/"))
+    normalized = (raw_path or "").replace("\\", "/")
+    path = Path(normalized)
+    # Imported paths may have been created on a different platform. Reject
+    # both POSIX and Windows absolute forms rather than quietly rewriting them
+    # into relative archive members.
+    if path.is_absolute() or PureWindowsPath(normalized).is_absolute():
+        raise ValueError(f"Unsafe file path rejected: {raw_path!r}")
     parts = [
         part for part in path.parts
         if part not in ("", ".", "/") and part != path.anchor

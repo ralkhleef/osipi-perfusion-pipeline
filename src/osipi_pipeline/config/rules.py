@@ -63,7 +63,14 @@ _GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size", "icc"}
 # choosing among them is a scientific decision for the challenge leads. The
 # default is "none", under which nothing is computed.
 _ICC_KEYS = {"model", "models", "axes", "confidence_level"}
-_ANALYSIS_KEYS = {"roi_descriptive", "signal_rss", "thresholds"}
+_ANALYSIS_KEYS = {
+    "roi_descriptive",
+    "signal_rss",
+    "thresholds",
+    # Optional scientific policy for turning supplied, nested ROI masks into
+    # disjoint analysis regions. Keys and values are displayed ROI labels.
+    "mask_exclusions",
+}
 #: One advisory threshold. `warn_above` marks a row for a reviewer to look at;
 #: it is never a pass/fail criterion, so there is no `fail_above`.
 _THRESHOLD_KEYS = {"warn_above", "note"}
@@ -75,6 +82,9 @@ _SIGNAL_RSS_KEYS = {
     "enabled",
     "modelled_artifact",
     "measured_artifact",
+    # Reference curves may deliberately use the same basename as submitted
+    # fitted curves; their role comes from the private reference context.
+    "reference_patterns",
 }
 # Allowed capture groups in filename identity patterns.
 _IDENTITY_GROUPS = {"dataset", "participant", "repeat", "site"}
@@ -635,6 +645,21 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                             analysis.get("thresholds"),
                             f"{analysis_path}.thresholds", errors,
                         )
+                    if "mask_exclusions" in analysis:
+                        exclusions_path = f"{analysis_path}.mask_exclusions"
+                        exclusions = _require_mapping(
+                            analysis.get("mask_exclusions"), exclusions_path, errors
+                        )
+                        if exclusions is not None:
+                            for outer_label, inner_labels in exclusions.items():
+                                label_path = f"{exclusions_path}.{outer_label}"
+                                _require_string(
+                                    outer_label, f"{label_path} label", errors
+                                )
+                                _require_string_list(
+                                    inner_labels, label_path, errors,
+                                    allow_empty=False,
+                                )
                     roi = analysis.get("roi_descriptive")
                     if roi is not None:
                         roi_path = f"{analysis_path}.roi_descriptive"
@@ -708,6 +733,12 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                                         f"{rss_path}.{field}: unknown artifact id "
                                         f"{artifact_id!r}"
                                     )
+                            if "reference_patterns" in rss_map:
+                                _require_string_list(
+                                    rss_map.get("reference_patterns"),
+                                    f"{rss_path}.reference_patterns", errors,
+                                    allow_empty=False,
+                                )
             if "filename_identity_patterns" in spec_map:
                 patterns = _require_string_list(
                     spec_map.get("filename_identity_patterns"),

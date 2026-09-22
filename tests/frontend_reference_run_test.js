@@ -140,9 +140,9 @@ console.log("\nThe step footer says which button comes first");
      first and the export described a run that had not happened. */
   const guidance = extractFunction("_scoreStepGuidance");
   check("nothing runnable does not demand a run",
-    /Nothing here needs running/.test(guidance), guidance);
+    /QC and previews are ready/.test(guidance), guidance);
   check("a runnable step names the order",
-    /Run Analysis first, then Continue to Export/.test(guidance), guidance);
+    /Run analysis before continuing/.test(guidance), guidance);
   check("it stops saying so once the run has happened",
     /_scoreAlreadyRan\(\)/.test(guidance), guidance);
   check("having run is judged by results, not by a flag someone forgot to clear",

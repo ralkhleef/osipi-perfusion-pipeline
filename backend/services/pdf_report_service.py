@@ -435,6 +435,7 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
             rss_rows.append([
                 str(record.get("dataset") or "Not available"), str(record.get("participant") or "Not available"),
                 str(record.get("repeat") or "Not available"), str(record.get("site") or "Not available"), scope,
+                _fmt(record.get("time_point_count") or 0, 0),
                 _roi_number(values.get("median")), _roi_number(values.get("mean")),
                 _roi_number(values.get("standard_deviation")),
                 _fmt(values.get("voxel_count") or 0, 0),
@@ -445,7 +446,7 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
         "icc_rows": icc_rows,
         "grouped_roi_headers": ["Axis", "Held fixed", "ROI", "Map", "Scans", "Mean", "SD", "CoV", "Pair Δ", "Status"],
         "grouped_roi_rows": grouped_rows,
-        "dce_rss_headers": ["Dataset", "Participant", "Repeat", "Site", "Region", "RSS median", "RSS mean", "RSS SD", "Voxels", "Status"],
+        "dce_rss_headers": ["Dataset", "Participant", "Repeat", "Site", "Region", "Time points", "RSS median", "RSS mean", "RSS SD", "Voxels", "Status"],
         "dce_rss_rows": rss_rows,
     }
 
@@ -623,11 +624,8 @@ def _overlap_notes(overlaps: Sequence[Mapping[str, Any]]) -> list[str]:
     """Say which ROIs share voxels, so the rows are not read as independent.
 
     A table with one row per region invites the reader to treat the regions as
-    a partition. The DCE challenge's regions are nested, so grey matter carries
-    the hippocampus inside it and the two rows are not separate measurements.
-    Silence here is what makes the pipeline's grey-matter bias look like a
-    disagreement with the challenge's own answer key rather than a different
-    and clearly stated definition.
+    a partition. Configured exclusions are already applied before this list is
+    built; anything reported here is a remaining, unconfigured overlap.
     """
     notes: list[str] = []
     for overlap in overlaps or ():
@@ -2583,11 +2581,13 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         ))
     if rss_rows:
         story.append(data_table(
-            model["dce_rss_headers"], rss_rows, num_cols=[5, 6, 7, 8]
+            model["dce_rss_headers"], rss_rows, num_cols=[5, 6, 7, 8, 9]
         ))
         story.append(caption(
-            "Residual Sum of Squares (RSS): raw voxelwise sum across time of "
-            "(measured - modelled)^2, summarized by region. This is not deviance or official scoring."
+            "Residual Sum of Squares (RSS): each 3-D mask selects a voxel-by-time "
+            "concentration matrix, then raw (measured - modelled)^2 is summed "
+            "across time for each voxel and summarized by region. This is not "
+            "deviance or official scoring."
         ))
 
     if model["issues"]:

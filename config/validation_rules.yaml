@@ -177,6 +177,12 @@ challenges:
     analysis:
       # Await challenge-approved advisory limits; empty means not assessed.
       thresholds: {}
+      # The challenge lead confirmed that hippocampus is a separate region,
+      # not part of the reported gray-matter region. Source masks stay intact;
+      # every analysis uses GM minus hippocampus for matching site masks.
+      mask_exclusions:
+        gray matter:
+        - hippocampus
       roi_descriptive:
         enabled: true
         map_types:
@@ -191,6 +197,10 @@ challenges:
         enabled: true
         modelled_artifact: modelled_st
         measured_artifact: measured_st
+        # Submitted and hidden curves are both named Ct.nii.gz. Inside the
+        # private reference tree, Ct is the measured ground-truth curve.
+        reference_patterns:
+        - ct
     grouped_statistics:
       enabled: true
       axes:
@@ -199,12 +209,11 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # Report both requested single-measurement models separately.
+      # The challenge lead selected the second option: ICC(3,1).
       # Keep the existing repeat-based grouping; site is held fixed.
       # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
         models:
-        - icc2_1
         - icc3_1
         axes:
         - inter_repeat

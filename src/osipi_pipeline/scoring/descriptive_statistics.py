@@ -97,6 +97,10 @@ class RoiDefinition:
     participant: str | None = None
     repeat: str | None = None
     site: str | None = None
+    # Private source paths of nested regions removed from this ROI. The source
+    # masks remain unchanged; this records the configured effective selector.
+    excluded_mask_paths: tuple[str, ...] = ()
+    exclusive_of: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

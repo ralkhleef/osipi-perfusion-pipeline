@@ -1237,18 +1237,20 @@ def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
             "configured has become false"
         )
 
-    for challenge, spec in sorted(icc_settings_by_challenge().items()):
-        assert spec["models"] == ("icc2_1", "icc3_1")
-    assert "ICC(2,1) and ICC(3,1)" in text
+    configured_icc = icc_settings_by_challenge()
+    assert configured_icc["dce"]["models"] == ("icc3_1",)
+    assert configured_icc["dce"]["confidence_level"] == 0.95
+    for challenge in ("asl", "dsc"):
+        assert configured_icc[challenge]["models"] == ("icc2_1", "icc3_1")
+    assert "DCE uses the selected ICC(3,1) option" in text
 
 
-def test_the_guide_warns_that_the_supplied_masks_overlap() -> None:
-    """Every hippocampus voxel also lies inside the grey matter mask, so those
-    two rows are not independent. Reading them as independent is the mistake
-    the page exists to prevent."""
+def test_the_guide_explains_the_confirmed_exclusive_gray_matter_region() -> None:
+    """Source masks overlap, but analysis must use GM minus hippocampus."""
     text = _guide_text()
-    assert "not independent" in text
-    assert "hippocampus voxels are also included in the grey matter" in text
+    assert "confirmed analysis regions do not" in text
+    assert "hippocampus is subtracted" in text
+    assert "signal RSS all use the exclusive region" in text
 
 
 def test_the_guide_distinguishes_the_two_things_called_cov() -> None:

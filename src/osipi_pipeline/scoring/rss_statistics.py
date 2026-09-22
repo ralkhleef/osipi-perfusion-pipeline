@@ -141,6 +141,8 @@ METHODOLOGY = {
     "name": "Residual Sum of Squares (RSS)",
     "reading": "4-D signals are streamed a slab of timepoints at a time; the "
                "result is identical to reading them whole",
+    "masking": "a 3-D ROI mask selects a voxel-by-time concentration matrix; "
+               "RSS is calculated along each matrix row",
     "formula": "sum_t((S_measured,t - S_modelled,t)^2) per voxel",
     "normalization": "raw, unnormalised RSS",
     "roi_summary": "median, mean, population SD (ddof=0), and finite voxel count",

@@ -43,6 +43,13 @@ def scoring_workspace(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(scoring, "OUTPUTS_DIR", outputs)
     monkeypatch.setattr(scoring, "REFERENCE_DATA_DIR", reference)
     monkeypatch.setattr(scoring, "SCORING_DIR", scoring_dir)
+    # Do not let a scoring package activated in the developer's real workspace
+    # inject its private reference masks into this temporary test workspace.
+    monkeypatch.setattr(
+        scoring,
+        "get_active_entry",
+        lambda _challenge: {"mode": "none", "package_id": None},
+    )
     for path in (extracted, outputs, reference, scoring_dir):
         path.mkdir(parents=True, exist_ok=True)
     return tmp_path
@@ -285,6 +292,33 @@ def test_multiple_masks_are_all_reported(scoring_workspace: Path) -> None:
     names = {item["mask_name"] for item in row["masks"]}
 
     assert {"brain_mask.nii.gz", "custom_region.nii.gz"}.issubset(names)
+
+
+def test_dce_reference_metrics_use_gray_matter_minus_hippocampus(
+    scoring_workspace: Path,
+) -> None:
+    _write_submitted(
+        scoring_workspace, [11, 12, 100, 100], name="Ktrans.nii.gz"
+    )
+    _write_reference(
+        scoring_workspace, [10, 10, 10, 10], name="Ktrans.nii.gz"
+    )
+    _write_mask(
+        scoring_workspace, [1, 1, 1, 0], name="GM_mask.nii.gz"
+    )
+    _write_mask(
+        scoring_workspace, [0, 0, 1, 0], name="Hipp_mask.nii.gz"
+    )
+
+    scoring.clear_analysis_cache(on_disk=True)
+    result = scoring.analyze_submission_niftis("sub-001", "dce")["reference_scoring"]
+    row = next(item for item in result["maps"] if item["detected_map_type"] == "Ktrans")
+    gray = next(item for item in row["masks"] if item["mask_label"] == "gray matter")
+
+    assert gray["exclusive_of"] == ["hippocampus"]
+    assert gray["metrics"]["voxel_count"] == 2
+    assert gray["metrics"]["mean_submitted"] == pytest.approx(11.5)
+    assert result["mask_overlaps"] == []
 
 
 def test_unknown_mask_filename_gets_clean_label(scoring_workspace: Path) -> None:

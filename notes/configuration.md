@@ -144,6 +144,9 @@ analysis:
     enabled: true
     modelled_artifact: modelled_st
     measured_artifact: measured_st
+    reference_patterns: [ct]
+  mask_exclusions:
+    gray matter: [hippocampus]
 ```
 
 `report_metrics` controls which descriptive columns appear in generated HTML
@@ -181,10 +184,19 @@ artifact_types:
     patterns: [measured_st, measured_signal, observed_st]
 ```
 
-`modelled_st` remains required for DCE. `measured_st` is optional: when one
-measured and one modelled 4-D signal can be matched to the same scan, the
-pipeline computes raw voxelwise Residual Sum of Squares (RSS) across time and
-summarizes it for the whole image and compatible ROIs. RSS is not deviance.
+`modelled_st` remains required for DCE. `measured_st` is optional in a
+submission. `reference_patterns` identifies equivalent curves inside the
+organiser's private reference tree; DCE uses `ct`, because both submitted and
+hidden curves are named `Ct.nii.gz`. Participant, site, and repeat identity—not
+the repeated basename—select the matching curve. A 3-D mask selects a
+voxel-by-time concentration matrix, raw RSS is calculated along each voxel's
+time row, and the values are summarized for the whole image and compatible
+ROIs. RSS is not deviance.
+
+`mask_exclusions` defines disjoint effective regions without changing the
+source NIfTI files. DCE's `gray matter: [hippocampus]` rule means every
+gray-matter statistic uses the matching site's GM mask minus its hippocampus
+mask.
 
 ### Provisional grouped ROI descriptions
 

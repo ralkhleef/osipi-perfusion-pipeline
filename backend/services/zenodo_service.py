@@ -20,10 +20,14 @@ except ImportError:
     _REQUESTS_AVAILABLE = False
 
 from services.path_config import REFERENCE_DATA_DIR, safe_relative_path
+from osipi_pipeline.config.rules import app_settings
 
 # Maximum cumulative bytes to download from a single Zenodo record.
-# Matches OSIPI_EXTRACT_MAX_BYTES used by the ZIP extractor (default 2 GB).
-_DOWNLOAD_MAX_BYTES = int(_os.environ.get("OSIPI_EXTRACT_MAX_BYTES", str(2 * 1024 * 1024 * 1024)))
+# Uses the same configured/environment limit as extracted local submissions.
+_CONFIGURED_EXTRACT_MAX_BYTES = int(app_settings()["limits"]["extract_max_bytes"])
+_DOWNLOAD_MAX_BYTES = int(_os.environ.get(
+    "OSIPI_EXTRACT_MAX_BYTES", str(_CONFIGURED_EXTRACT_MAX_BYTES)
+))
 
 ZENODO_API = "https://zenodo.org/api/records"
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OSIPI Perfusion Challenge, Review System</title>
+  <title>OSIPI Perfusion Challenge Review</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -19,10 +19,10 @@
   <!-- ── step-state holders ── -->
   <div id="wf-state-holder" aria-hidden="true" style="display:none">
     <button class="wf-step wf-active" id="wf-btn-upload"   data-step="upload"   type="button">Upload</button>
-    <button class="wf-step"           id="wf-btn-index"    data-step="index"    type="button" disabled>Index</button>
+    <button class="wf-step"           id="wf-btn-index"    data-step="index"    type="button" disabled>Review</button>
     <button class="wf-step"           id="wf-btn-validate" data-step="validate" type="button" disabled>Validate</button>
     <button class="wf-step"           id="wf-btn-run"      data-step="run"      type="button" disabled>Run</button>
-    <button class="wf-step wf-future" id="wf-btn-score"    data-step="score"    type="button" disabled>Score &amp; Preview</button>
+    <button class="wf-step wf-future" id="wf-btn-score"    data-step="score"    type="button" disabled>QC &amp; Preview</button>
     <button class="wf-step"           id="wf-btn-export"   data-step="export"   type="button" disabled>Export</button>
   </div>
 
@@ -70,9 +70,9 @@
           <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
           <div class="heading-text">
             <span class="step-label">Step 1 of 6: Upload</span>
-            <h1 class="card-title">Start a new submission review
+            <h1 class="card-title">New submission
               <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-                <span class="tooltip-text">Enter team details, choose the challenge type, then upload a ZIP, folder, GitHub repository or Zenodo record.</span>
+                <span class="tooltip-text">Add reviewer details, choose a challenge, and select a source.</span>
               </button>
             </h1>
           </div>
@@ -89,16 +89,16 @@
 
         <!-- Submission Information -->
         <div class="form-section">
-          <h2 class="section-heading">Submission information</h2>
-          <p class="section-intro">Reviewer details stay on this machine and are excluded from blinded reports.</p>
+          <h2 class="section-heading">Reviewer details</h2>
+          <p class="section-intro">Stored locally and excluded from blinded reports.</p>
           <div class="field-row-2">
             <div class="form-group">
-              <label class="label" for="team-name">Team Name <span class="req">*</span></label>
+              <label class="label" for="team-name">Team name <span class="req">*</span></label>
               <input type="text" id="team-name" placeholder="e.g. NeuroFlow Lab" autocomplete="off" />
               <div id="team-name-error" class="field-error"></div>
             </div>
             <div class="form-group">
-              <label class="label" for="contact-email">Contact Email <span class="req">*</span></label>
+              <label class="label" for="contact-email">Contact email <span class="req">*</span></label>
               <input type="email" id="contact-email" placeholder="name@institution.edu" />
               <div id="contact-email-error" class="field-error"></div>
             </div>
@@ -111,9 +111,9 @@
 
           <div class="form-group answer-group">
             <div class="field-label-row">
-              <label class="label">Challenge Type <span class="req">*</span></label>
+              <label class="label">Challenge type <span class="req">*</span></label>
               <button type="button" class="help-tooltip" aria-label="Challenge type help">?
-                <span class="tooltip-text">The challenge you pick controls which maps are required, which validation rules apply, and which analyses are available. The list comes from the active pipeline configuration.</span>
+                <span class="tooltip-text">Sets required maps, validation rules, and available analyses.</span>
               </button>
             </div>
             <div class="pill-row" role="radiogroup" aria-label="Challenge type">
@@ -122,16 +122,13 @@
             <div id="challenge-type-error" class="field-error"></div>
           </div>
           <details class="advanced-options">
-            <summary>Advanced: provide a parameter-map hint</summary>
+            <summary>Advanced map hint</summary>
             <div class="advanced-options-body">
-              <p class="field-hint">Optional. Leave this unset to let the pipeline detect map types from filenames and metadata.</p>
+              <p class="field-hint">Use only if automatic detection needs help.</p>
               <div class="form-group answer-group" style="margin-bottom:0">
                 <div class="field-label-row">
                   <label class="label">Parameter map type</label>
                   <span class="optional-tag">Optional</span>
-                  <button type="button" class="help-tooltip" aria-label="Parameter map type help">?
-                    <span class="tooltip-text">Use this only when automatic detection needs a hint.</span>
-                  </button>
                 </div>
                 <div id="map-type-pills" class="map-pill-row" role="group" aria-label="Parameter map type">
                   <!-- populated by JS -->
@@ -150,18 +147,18 @@
              is asked so that "no document" is recorded as an answer rather than
              left as a silence a reader has to interpret, and so that a
              submitter who says yes and sends none is told. -->
-        <div class="form-section">
-          <h2 class="section-heading">Methods document</h2>
-          <p class="section-intro">Not required. Your answer is recorded with the submission and shown in the report.</p>
+        <div class="form-section methods-section">
+          <h2 class="section-heading">Methods document <span class="optional-tag">Optional</span></h2>
+          <p class="section-intro">Included in the report when provided.</p>
 
           <div class="form-group answer-group">
             <!-- The download sits on the question's own line. Under the answers
                  it read as a third option in the same group of pills. -->
             <div class="field-label-row field-label-row--split">
               <span class="field-label-lead">
-                <label class="label" id="methods-doc-label">Does this submission include one?</label>
+                <label class="label" id="methods-doc-label">Included?</label>
                 <button type="button" class="help-tooltip" aria-label="Methods document help">?
-                  <span class="tooltip-text">A short description of the software, model and settings used. Saying no blocks nothing. What a methods document must contain is the challenge leads' decision.</span>
+                  <span class="tooltip-text">Describes the software, model, and settings used.</span>
                 </button>
               </span>
               <a class="ghost-download" href="/api/methods-template"
@@ -171,7 +168,7 @@
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                Blank template
+                Template
               </a>
             </div>
             <div class="pill-row" role="radiogroup" aria-labelledby="methods-doc-label">
@@ -189,14 +186,14 @@
 
         <!-- Upload Submission -->
         <div class="form-section">
-          <h2 class="section-heading">Upload submission</h2>
-          <p class="section-intro" id="source-guidance">Choose a ZIP, folder, or set of files from this computer.</p>
+          <h2 class="section-heading">Submission source</h2>
+          <p class="section-intro" id="source-guidance">Choose a ZIP, folder, or files.</p>
 
           <div class="source-tabs" role="radiogroup" aria-label="Submission source">
             <label class="source-tab active" id="tab-local">
               <input type="radio" name="submission_type" value="local" checked />
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Local Upload
+              Local files
             </label>
             <label class="source-tab" id="tab-zenodo">
               <input type="radio" name="submission_type" value="zenodo" />
@@ -219,16 +216,16 @@
                 <line x1="12" y1="12" x2="12" y2="21"></line>
                 <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path>
               </svg>
-              <p class="drop-primary">Drag and drop your submission here</p>
+              <p class="drop-primary">Drop files here</p>
               <p class="drop-hint">ZIP file, folder, or individual files</p>
               <div class="choose-wrap">
                 <button type="button" id="choose-btn" class="btn btn-secondary choose-btn" aria-haspopup="true" aria-expanded="false">
-                  Browse Files
+                  Browse files
                 </button>
                 <div id="choose-menu" class="choose-menu" role="menu">
-                  <button type="button" role="menuitem" data-choice="zip">Upload ZIP file</button>
-                  <button type="button" role="menuitem" data-choice="folder">Select Folder</button>
-                  <button type="button" role="menuitem" data-choice="files">Select Files</button>
+                  <button type="button" role="menuitem" data-choice="zip">Upload ZIP</button>
+                  <button type="button" role="menuitem" data-choice="folder">Select folder</button>
+                  <button type="button" role="menuitem" data-choice="files">Select files</button>
                 </div>
               </div>
             </div>
@@ -258,8 +255,8 @@
         <!-- Submit -->
         <div class="form-actions">
           <div id="submit-status" class="submit-status" style="display:none"></div>
-          <p id="submit-guidance" class="action-guidance" aria-live="polite">Choose a submission source to continue.</p>
-          <button type="button" id="submit-btn" class="btn btn-primary btn-full submit-btn">Upload and Detect</button>
+          <p id="submit-guidance" class="action-guidance" aria-live="polite">Select a source to continue.</p>
+          <button type="button" id="submit-btn" class="btn btn-primary btn-full submit-btn">Review submission</button>
         </div>
 
       </div>
@@ -275,9 +272,9 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 2 of 6: Review</span>
-          <h1 class="card-title">Review detected submission
+          <h1 class="card-title">Confirm submission
             <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-              <span class="tooltip-text">Confirm the detected challenge, maps and submission type before validation runs.</span>
+              <span class="tooltip-text">Review detected maps and submission type before validation.</span>
             </button>
           </h1>
         </div>
@@ -288,20 +285,20 @@
       <div class="pg-card review-card">
         <div class="pg-card-header" style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <div class="pg-card-title" id="batch-index-title">Review Detected Submission</div>
-            <div class="pg-card-sub" id="batch-header-desc">Submissions detected.</div>
+            <div class="pg-card-title" id="batch-index-title">Submission review</div>
+            <div class="pg-card-sub" id="batch-header-desc">Submission detected.</div>
           </div>
-          <button type="button" id="batch-new-btn" class="btn btn-ghost btn-sm" hidden>New Submission</button>
+          <button type="button" id="batch-new-btn" class="btn btn-ghost btn-sm" hidden>New submission</button>
         </div>
         <div class="pg-card-body">
           <div class="batch-controls" hidden>
             <div class="batch-controls-left">
-              <button type="button" id="batch-select-all-btn" class="btn btn-secondary btn-sm">Select All</button>
-              <button type="button" id="batch-deselect-all-btn" class="btn btn-secondary btn-sm">Deselect All</button>
+              <button type="button" id="batch-select-all-btn" class="btn btn-secondary btn-sm">Select all</button>
+              <button type="button" id="batch-deselect-all-btn" class="btn btn-secondary btn-sm">Clear</button>
             </div>
             <div class="batch-controls-right">
-              <button type="button" id="batch-validate-selected-btn" class="btn btn-primary submit-btn btn-sm">Validate Selected</button>
-              <button type="button" id="batch-validate-all-btn" class="btn btn-secondary submit-btn btn-sm btn-outline">Validate All</button>
+              <button type="button" id="batch-validate-selected-btn" class="btn btn-primary submit-btn btn-sm">Validate selected</button>
+              <button type="button" id="batch-validate-all-btn" class="btn btn-secondary submit-btn btn-sm btn-outline">Validate all</button>
             </div>
           </div>
           <div id="batch-validate-status" class="submit-status" style="display:none;margin-top:10px;"></div>
@@ -319,7 +316,7 @@
 
           <section class="collapsible-section" id="index-list-section">
             <div class="collapsible-section-header section-row">
-              <span class="collapsible-section-title section-title">Review submissions <span class="collapsible-count section-count" id="index-section-count">0</span></span>
+              <span class="collapsible-section-title section-title">Submissions <span class="collapsible-count section-count" id="index-section-count">0</span></span>
               <span class="section-actions"></span>
             </div>
             <div id="index-section-summary" class="list-summary-strip" hidden></div>
@@ -344,9 +341,9 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 3 of 6: Validate</span>
-          <h1 class="card-title">Validate submission files
+          <h1 class="card-title">Validation
             <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-              <span class="tooltip-text">Checks required maps, readable files, dimensions and the rules configured for this challenge.</span>
+              <span class="tooltip-text">Checks files, required maps, dimensions, and challenge rules.</span>
             </button>
           </h1>
         </div>
@@ -365,9 +362,9 @@
             <div class="pg-card-sub" id="batch-results-desc"></div>
           </div>
           <div id="single-result-actions" class="validation-header-actions" style="display:none">
-            <button type="button" id="replace-btn" class="btn btn-secondary btn-sm">Replace Submission</button>
-            <button type="button" id="edit-btn" class="btn btn-secondary btn-sm">Edit Details</button>
-            <button type="button" id="new-btn" class="btn btn-ghost btn-sm">Start New</button>
+            <button type="button" id="replace-btn" class="btn btn-secondary btn-sm">Replace submission</button>
+            <button type="button" id="edit-btn" class="btn btn-secondary btn-sm">Edit details</button>
+            <button type="button" id="new-btn" class="btn btn-ghost btn-sm">Start new</button>
           </div>
           <button type="button" id="batch-back-to-batch-btn" class="btn btn-secondary btn-sm">Back to Review</button>
           <!-- validate-continue-btn kept hidden for JS compat; action row handles navigation -->
@@ -378,7 +375,7 @@
 
         <section class="collapsible-section" id="validation-list-section">
           <div class="collapsible-section-header section-row">
-            <span class="collapsible-section-title section-title">Validate submissions <span class="collapsible-count section-count" id="validation-section-count">0</span></span>
+            <span class="collapsible-section-title section-title">Submissions <span class="collapsible-count section-count" id="validation-section-count">0</span></span>
             <span class="section-actions"></span>
           </div>
           <div id="validation-section-summary" class="list-summary-strip" hidden></div>
@@ -389,11 +386,11 @@
                 <div>Submission</div>
                 <div>Status</div>
                 <div>Issue</div>
-                <div>Run readiness <button type="button" class="help-tooltip" aria-label="Run readiness help">?<span class="tooltip-text">Runnable submissions include executable code. Result-only submissions skip execution and go directly to scoring.</span></button></div>
+                <div>Run readiness <button type="button" class="help-tooltip" aria-label="Run readiness help">?<span class="tooltip-text">Runnable submissions include code; result-only submissions skip this step.</span></button></div>
                 <div>Details</div>
               </div>
               <div id="batch-submissions-list" class="worklist"></div>
-              <div id="validate-no-runnable-msg" style="display:none;padding:12px 0;font-size:0.79rem;color:var(--muted)">No submissions are ready to run. Review validation issues first.</div>
+              <div id="validate-no-runnable-msg" style="display:none;padding:12px 0;font-size:0.79rem;color:var(--muted)">Nothing is ready to run. Review validation issues.</div>
               <div id="batch-empty-state" class="vr-empty" style="display:none">No submissions match the filter.</div>
               <div id="review-show-all-wrap" class="show-more-row" style="display:none">
                 <button type="button" id="review-show-all-btn" class="vr-show-all-btn"></button>
@@ -417,9 +414,9 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 4 of 6: Run</span>
-          <h1 class="card-title">Prepare submission maps
+          <h1 class="card-title">Run submissions
             <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-              <span class="tooltip-text">Existing result maps go straight to review. Participant code is run only when there are no maps yet.</span>
+              <span class="tooltip-text">Runs submitted code only when result maps are missing.</span>
             </button>
           </h1>
         </div>
@@ -433,13 +430,13 @@
       <!-- Result-only notice (shown when all submissions already include maps) -->
       <div id="run-skipped-notice" class="run-skipped-notice" style="display:none">
         <h3 style="margin-bottom:6px">Maps ready for review</h3>
-        <p>Result maps were included in these submissions. No code run was needed.</p>
+        <p>Result maps are already available; no run is needed.</p>
         <button type="button" id="run-skipped-continue-btn" class="btn btn-primary">Continue to QC &amp; Preview</button>
       </div>
 
       <!-- Run summary + action card -->
       <div class="run-settings-card" id="run-settings-card">
-        <div class="pg-card-title" style="margin:0 0 10px">Processing</div>
+        <div class="pg-card-title" style="margin:0 0 10px">Execution</div>
         <div class="rsc-top">
           <!-- Summary text: populated by JS -->
           <div id="run-summary-block">
@@ -486,7 +483,7 @@
 
       <section class="collapsible-section" id="run-list-section">
         <div class="collapsible-section-header section-row">
-          <span class="collapsible-section-title section-title">Run submissions <span class="collapsible-count section-count" id="run-section-count">0</span></span>
+          <span class="collapsible-section-title section-title">Submissions <span class="collapsible-count section-count" id="run-section-count">0</span></span>
           <span class="section-actions"></span>
         </div>
         <div id="run-section-summary" class="list-summary-strip" hidden></div>
@@ -529,11 +526,11 @@
           <span class="step-label" id="score-step-label">Step 5 of 6: QC &amp; Preview</span>
           <h1 class="card-title" id="score-step-title">QC &amp; Preview
             <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-              <span class="tooltip-text" id="score-step-desc">QC and previews are available for readable maps. ROI, reference, and provider analyses appear when compatible data are available.</span>
+              <span class="tooltip-text" id="score-step-desc">Review QC, previews, and available analyses.</span>
             </button>
           </h1>
           <a class="step-guide-link" href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank" rel="noopener">
-            What do these numbers mean?
+            Metric guide
           </a>
         </div>
       </header>
@@ -548,7 +545,7 @@
         <div class="smc-icon smc-icon--ready">QC</div>
         <div class="smc-body">
           <div class="smc-title-row">
-            <div class="smc-title" id="score-status-title">Analysis is ready</div>
+            <div class="smc-title" id="score-status-title">Ready for analysis</div>
             <span class="smc-badge smc-badge--ready" id="score-status-badge">Configured</span>
             <button type="button" class="help-tooltip" aria-label="QC metrics help">?
               <span class="tooltip-text">QC metrics describe map validity and statistics. They are not official OSIPI scores.</span>
@@ -557,8 +554,8 @@
           <p class="smc-desc" id="score-status-sub">Configured analysis is active.</p>
           <div id="score-metric-preview" class="score-metric-preview" style="display:none"></div>
           <div class="smc-actions">
-            <button id="btn-score-all" class="btn btn-primary" type="button">Run Analysis</button>
-            <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue to Export</button>
+            <button id="btn-score-all" class="btn btn-primary" type="button">Run analysis</button>
+            <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue</button>
           </div>
           <!-- Declared here rather than created in script. When this was built
                on demand it lived only until the next re-render of the card, so
@@ -588,8 +585,8 @@
           <h4 id="run-result-title">Analysis complete</h4>
           <p id="run-result-text"></p>
           <div class="run-result-actions">
-            <button type="button" class="btn btn-secondary" id="run-result-close">Stay on this step</button>
-            <button type="button" class="btn btn-primary" id="run-result-continue">Continue to Export</button>
+            <button type="button" class="btn btn-secondary" id="run-result-close">Stay here</button>
+            <button type="button" class="btn btn-primary" id="run-result-continue">Continue</button>
           </div>
         </div>
       </div>
@@ -604,7 +601,7 @@
         </summary>
         <div class="scoring-admin-body">
           <p class="scoring-admin-desc">
-            Manage challenge rules, private assets, and optional analysis providers. Nothing is activated automatically.
+            Manage rules, private assets, and analysis providers.
             <button type="button" class="help-tooltip" aria-label="Scoring package help">?
               <span class="tooltip-text">A trusted ZIP containing scoring code and optional reference data.</span>
             </button>
@@ -613,8 +610,8 @@
           <section class="config-manager" id="configuration-manager">
             <div class="config-manager-heading">
               <div>
-                <h3>Challenge Configuration Manager</h3>
-                <p>Edit, test, version, and activate challenge rules without opening the YAML file.</p>
+                <h3>Challenge configuration</h3>
+                <p>Edit, test, version, and activate challenge rules.</p>
               </div>
               <label class="config-manager-challenge" for="config-manager-challenge">
                 Challenge
@@ -1089,7 +1086,7 @@
       <div class="pg-card collapsible-section" id="leaderboard-card" style="margin-top:16px;display:none">
         <div class="pg-card-header">
           <div class="collapsible-section-header section-row leaderboard-section-toggle">
-            <span class="collapsible-section-title section-title">Processed Submissions <span class="collapsible-count section-count" id="leaderboard-section-count">0</span></span>
+            <span class="collapsible-section-title section-title">Processed submissions <span class="collapsible-count section-count" id="leaderboard-section-count">0</span></span>
             <span class="section-actions"></span>
           </div>
           <div class="leaderboard-header-copy">
@@ -1131,13 +1128,13 @@
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
         <div class="heading-text">
           <span class="step-label">Step 6 of 6: Export</span>
-          <h1 class="card-title">Export review package
+          <h1 class="card-title">Export results
             <button type="button" class="help-tooltip title-help" aria-label="About this step">?
-              <span class="tooltip-text">Blinded reviewer outputs remove team name, contact and original identifiers. The organiser-only CSV keeps them.</span>
+              <span class="tooltip-text">Blinded outputs remove team, contact, and source identifiers.</span>
             </button>
           </h1>
           <a class="step-guide-link" href="https://ralkhleef.github.io/osipi-perfusion-pipeline/reading-results.html" target="_blank" rel="noopener">
-            What do these numbers mean?
+            Metric guide
           </a>
         </div>
       </header>
@@ -1147,9 +1144,9 @@
       <!-- Export summary header -->
       <div class="export-summary-panel">
         <div class="esp-main">
-          <div class="esp-title">Final review summary
+          <div class="esp-title">Review summary
             <button type="button" class="help-tooltip" aria-label="About these reports">?
-              <span class="tooltip-text">Reports summarize validation, execution, and QC status, and note limitations, reference availability, and blinding. Generic QC metrics are not official OSIPI scoring; official scoring appears only when a configured official provider is available.</span>
+              <span class="tooltip-text">Includes validation, execution, QC, limitations, and blinding. QC metrics are not official OSIPI scores.</span>
             </button>
           </div>
         </div>

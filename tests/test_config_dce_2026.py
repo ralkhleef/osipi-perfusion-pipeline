@@ -183,6 +183,10 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
         "enabled": True,
         "modelled_artifact": "modelled_st",
         "measured_artifact": "measured_st",
+        "reference_patterns": ["ct"],
+    }
+    assert analysis["mask_exclusions"] == {
+        "gray matter": ["hippocampus"],
     }
     # ASL now enables the same 4-D fitted-model comparison as DCE: participants
     # submit what they fitted to obtain CBF and ATT, and it is compared against

@@ -64,7 +64,7 @@
             <li>DCE: Ktrans required; vp, ve and Kep optional; modelled signal-time required as 4-D. A methods document is asked about at upload and recorded, but not required. The challenge leads said it is not needed for the runs being done now.</li>
             <li>Synthetic and clinical datasets remain one submission, with participant, repeat and site structure validated.</li>
             <li>Within-scan ASL CBF/ATT and DCE Ktrans ROI statistics: mean, median, population SD, range, and coefficient of variation.</li>
-            <li>DCE measured-versus-modelled 4-D signal analysis: raw voxelwise Residual Sum of Squares (RSS), with median, mean, population SD and voxel count summaries when a measured signal is available.</li>
+            <li>DCE submitted-versus-reference 4-D <code>Ct.nii.gz</code> analysis: curves are matched by participant, site and repeat; each 3-D mask selects a voxel-by-time concentration matrix; raw voxelwise Residual Sum of Squares (RSS) is summarized with median, mean, population SD and voxel count. Gray matter excludes hippocampus.</li>
             <li>Provisional descriptive grouping of scan-level ROI medians by participant, repeat and site, including SD, CoV and a signed difference for two clearly matched repeats or sites.</li>
             <li>ASL: CBF and ATT maps required, with generic reference comparison where compatible reference data exists.</li>
             <li>DSC: CBV, CBF and MTT maps required.</li>
@@ -75,7 +75,7 @@
           <ul>
             <li>The exact formula for a single official accuracy metric and for deviance.</li>
             <li>Whether RSS should remain raw or be normalized.</li>
-            <li>Whether final repeat/site variability should be ROI-median based, voxelwise, or both. ICC(2,1) and ICC(3,1) are currently reported separately.</li>
+            <li>Whether final repeat/site variability should be ROI-median based, voxelwise, or both. DCE currently reports the selected ICC(3,1) option with a 95% confidence interval.</li>
             <li>Formal thresholds, pass/fail rules, participant ranking, final ASL 4-D comparison requirements, and the final ROI/mask set.</li>
           </ul>
 

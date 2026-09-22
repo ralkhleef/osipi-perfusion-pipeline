@@ -117,6 +117,33 @@ def test_main_is_tried_before_master(monkeypatch, tmp_path):
     assert "main.zip" in seen[0] and "master.zip" in seen[1]
 
 
+def test_successful_github_import_reports_remote_provenance(monkeypatch, tmp_path):
+    """The shared ZIP helper's local label must not leak into the public API."""
+    import services.github_service as github_service
+
+    monkeypatch.setattr(github_service, "INCOMING_DIR", tmp_path)
+    _stub_requests(
+        monkeypatch,
+        github_service,
+        lambda _url: _Response(200, [_zip_bytes()]),
+    )
+    monkeypatch.setattr(
+        github_service,
+        "save_and_extract_batch_from_path",
+        lambda *_args: {
+            "success": True,
+            "batch": False,
+            "source_type": "local",
+            "submission_id": "github_org_repo_main",
+            "file_count": 1,
+        },
+    )
+
+    out = github_service.import_github_repo("https://github.com/org/repo")
+    assert out["success"] is True
+    assert out["source_type"] == "github"
+
+
 def test_a_repository_on_neither_branch_reports_that_clearly(monkeypatch, tmp_path):
     import services.github_service as github_service
 

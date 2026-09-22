@@ -118,10 +118,11 @@ per-ROI median, population SD, CoV, and voxel count.
 
 `src/osipi_pipeline/scoring/icc.py` implements all six Shrout & Fleiss models
 with exact F-based confidence intervals, from a participants x sessions table
-built out of the same per-scan ROI rows the grouping uses. The user-confirmed
-`challenges.<id>.grouped_statistics.icc.models` list contains `icc2_1` and
-`icc3_1` for ASL, DCE and DSC. Each result is labelled by model. A
-participant missing any session is excluded and counted, never imputed.
+built out of the same per-scan ROI rows the grouping uses. The configured
+`challenges.<id>.grouped_statistics.icc.models` list contains `icc3_1` for DCE
+and both `icc2_1` and `icc3_1` for ASL and DSC. Each result is labelled by
+model. A participant missing any session is excluded and counted, never
+imputed.
 
 ### Generic reference comparison
 
@@ -132,8 +133,11 @@ and a difference NIfTI for the whole map and compatible ROIs.
 ### DCE signal RSS
 
 When configured measured and modelled 4-D signals are present, the same module
-calculates raw voxelwise Residual Sum of Squares across time and summarises it
-for the whole image and compatible ROIs. It is not labelled deviance.
+matches them by participant, site, and repeat, then calculates raw voxelwise
+Residual Sum of Squares across time. A 3-D ROI mask selects a voxel-by-time
+concentration matrix, and the per-voxel RSS is summarised for that region.
+Private DCE reference curves named `Ct.nii.gz` are recognized explicitly. It is
+not labelled deviance.
 
 ### Provider analysis
 
@@ -160,7 +164,7 @@ they are not changed to zero. Blinded outputs remove team, contact, submission,
 archive, and local-path identity.
 
 The Export screen provides blinded PDF, HTML, CSV Results, and JSON Results,
-the ROI Ktrans Statistics CSV, and an unblinded CSV for organisers.
+the ROI Statistics CSV, and an unblinded CSV for organisers.
 
 ## 8. Configuration and code boundaries
 

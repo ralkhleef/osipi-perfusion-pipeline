@@ -54,8 +54,8 @@ console.log("\nA clean run says so plainly");
 const all = outcome(5, 0, 0, 5);
 check("tone is success", all.tone === "ok", all.tone);
 check("it says the run completed", all.text.includes("Analysis complete"), all.text);
-check("it says how many ran", all.text.includes("All 5 submissions"), all.text);
-check("it points at where the results are", all.text.includes("table"), all.text);
+check("it says how many ran", all.text.includes("5 of 5 submissions"), all.text);
+check("it points at where the results are", all.text.includes("Results are below"), all.text);
 
 const one = outcome(1, 0, 0, 1);
 check("one submission is not called 'submissions'",
@@ -67,7 +67,7 @@ check("tone is error when anything failed", partial.tone === "err", partial.tone
 check("it does not claim completion", !/complete\./.test(partial.text), partial.text);
 check("it gives both numbers", partial.text.includes("3 of 5") && partial.text.includes("2 failed"),
   partial.text);
-check("it says where to look for the reason", partial.text.includes("table"), partial.text);
+check("it says where to look for the reason", partial.text.includes("details below"), partial.text);
 
 console.log("\nNothing configured is not the same as failure");
 const skipped = outcome(0, 4, 0, 4);
@@ -151,7 +151,7 @@ check("the wiring is the only path, so no branch can forget it",
 check("an unconfigured click is told apart from having no submissions",
   /tally\.unconfigured/.test(appJs), "the two cases share one message");
 check("it says the comparison does not need a provider",
-  /do not need one and are already below/.test(appJs),
+  /QC and reference comparisons remain available below/.test(appJs),
   "the message does not say what still works");
 {
   const run = sandbox._runOutcomeText({ scored: 0, skipped: 0, failed: 0, total: 0, unconfigured: true }, false);
@@ -172,13 +172,13 @@ console.log("\nNo provider is not the same as nothing to run");
     { scored: 0, skipped: 0, failed: 0, reference: 6, total: 6, unconfigured: true }, false);
   check("a comparison that ran is reported as a success", ran.tone === "ok", ran.tone);
   check("it says how many were compared",
-    ran.text.includes("6 of 6 compared against the reference data"), ran.text);
+    ran.text.includes("6 of 6 compared against reference data"), ran.text);
   check("it names what the comparison produced",
     /bias/i.test(ran.text) && /RMSE/.test(ran.text) && /ROI/.test(ran.text), ran.text);
   check("it does not report the absent provider as a failure",
     !/failed/i.test(ran.text), ran.text);
   check("the missing provider is still mentioned, as optional",
-    /separate, optional step/.test(ran.text), ran.text);
+    /Provider analysis is optional/.test(ran.text), ran.text);
 
   const partial = sandbox._runOutcomeText(
     { scored: 0, skipped: 0, failed: 2, reference: 4, total: 6, unconfigured: true }, false);
@@ -215,7 +215,7 @@ check("a compared row can be exported",
   /if \(referenceCompared\) \{[\s\S]{0,300}_enableScoringExport\(\)/.test(appJs),
   "results exist but cannot leave the page");
 check("an empty Score step says why rather than only what still works",
-  /No comparison is possible: \$\{reason\}/.test(appJs),
+  /Reference comparison unavailable: \$\{reason\}/.test(appJs),
   "the reviewer is told what works, never what does not");
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

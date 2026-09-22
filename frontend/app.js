@@ -642,6 +642,19 @@ function datasetDisplay(item) {
     .join(" + ");
 }
 
+// Dataset coverage is the most useful scope label. For older or unscoped
+// results, keep a specific map name but never expose detector placeholders
+// such as "Mixed/Other" or "Unknown" in the reviewer-facing summary.
+function validationScopeDisplay(item) {
+  const datasets = datasetDisplay(item);
+  if (datasets) return datasets;
+  const mapType = String(item?.map_type || "").trim();
+  if (!mapType || ["mixed/other", "unknown", "not detected"].includes(mapType.toLowerCase())) {
+    return "";
+  }
+  return mapType;
+}
+
 // One short line of counts, each labelled, omitting anything absent.
 function submissionCountSummary(item) {
   const c = submissionCounts(item);
@@ -1118,12 +1131,12 @@ function goToStep(step) {
 // ── Wizard Actions ────────────────────────────────────────────────────────────
 
 const _WF_FOOTER_CONFIG = {
-  upload:   { back: null,       next: null,       nextLabel: "Upload and Continue",     hint: "Fill in team details and choose a submission file below" },
-  index:    { back: "upload",   next: "validate", nextLabel: "Validate Submission",     hint: "" },
-  validate: { back: "index",    next: "run",       nextLabel: "Continue to Run",        hint: "" },
-  run:      { back: "validate", next: "score",     nextLabel: "Continue to QC & Preview", hint: "" },
-  score:    { back: "run",      next: "export",   nextLabel: "Continue to Export",      hint: "" },
-  export:   { back: "score",    next: null,        nextLabel: "Start New Submission",    hint: "" },
+  upload:   { back: null,       next: null,       nextLabel: "Review submission", hint: "" },
+  index:    { back: "upload",   next: "validate", nextLabel: "Validate",          hint: "" },
+  validate: { back: "index",    next: "run",      nextLabel: "Continue",          hint: "" },
+  run:      { back: "validate", next: "score",    nextLabel: "Continue",          hint: "" },
+  score:    { back: "run",      next: "export",   nextLabel: "Continue",          hint: "" },
+  export:   { back: "score",    next: null,       nextLabel: "New submission",    hint: "" },
 };
 
 function _selectedSubmissionCount() {
@@ -1229,7 +1242,7 @@ function _ensureStepActionRow(step) {
 }
 
 function _stepPrimaryLabel(step) {
-  if (step === "run" && _allValidationResultsAreResultOnly()) return "Continue to QC & Preview";
+  if (step === "run" && _allValidationResultsAreResultOnly()) return "Continue";
   return _WF_FOOTER_CONFIG[step]?.nextLabel || "Continue";
 }
 
@@ -1447,11 +1460,11 @@ function _scoreAlreadyRan() {
 
 function _scoreStepGuidance() {
   if (!_scoreRunIsLive) {
-    return "Nothing here needs running. Continue to Export for QC, previews and the report.";
+    return "QC and previews are ready.";
   }
   return _scoreAlreadyRan()
-    ? "Analysis has run. Next: choose reviewer or organiser outputs."
-    : "Run Analysis first, then Continue to Export.";
+    ? "Analysis complete."
+    : "Run analysis before continuing.";
 }
 
 function _syncStepActionRow(step) {
@@ -1501,11 +1514,11 @@ function _syncStepActionRow(step) {
 
   const blockedReason = canProceed ? "" : _stepBlockedReason(step);
   const readyGuidance = {
-    index: "Next: validate the selected submission files.",
-    validate: "Next: confirm whether processing is required.",
-    run: "Next: review QC and available analyses.",
+    index: "Ready to validate.",
+    validate: "Validation complete.",
+    run: "Ready for QC review.",
     score: _scoreStepGuidance(),
-    export: "This clears the current local review and returns to Upload.",
+    export: "Clears this review and returns to Upload.",
   };
   if (guidance) {
     guidance.textContent = blockedReason ? "" : (readyGuidance[step] || "");
@@ -1563,7 +1576,7 @@ function _syncUploadSubmitButton() {
   const canUpload = _canUpload();
   submitBtn.disabled = !canUpload;
   if (!canUpload) {
-    const reason = "Choose a submission file or source to continue.";
+    const reason = "Select a submission source.";
     submitBtn.title = reason;
     submitBtn.dataset.disabledReason = reason;
     submitBtn.setAttribute("aria-label", `${label}. ${reason}`);
@@ -1572,7 +1585,7 @@ function _syncUploadSubmitButton() {
     submitBtn.title = "";
     submitBtn.removeAttribute("aria-label");
     delete submitBtn.dataset.disabledReason;
-    if (guidance) guidance.textContent = "Ready. The pipeline will upload, detect, and organise the submission automatically.";
+    if (guidance) guidance.textContent = "Ready to upload.";
   }
 }
 
@@ -1728,8 +1741,8 @@ function getMapTypeMode() { return state.selectedMapType ? "manual" : "auto"; }
 // ── Submit button label ───────────────────────────────────────────────────────
 
 function submitLabel() {
-  if (state.mode === "edit" && state.submissionId) return "Save Changes and Revalidate";
-  return "Upload and Detect";
+  if (state.mode === "edit" && state.submissionId) return "Save and revalidate";
+  return "Review submission";
 }
 
 function syncSubmitLabel() {
@@ -2362,9 +2375,9 @@ function switchSource(type) {
   if (panel) panel.classList.add("active");
   const sourceGuidance = el("source-guidance");
   const sourceCopy = {
-    local: "Choose a ZIP, folder, or set of files from this computer.",
-    zenodo: "Enter a public Zenodo record URL, DOI, or record ID.",
-    github: "Enter a public GitHub repository URL and an optional branch.",
+    local: "Choose a ZIP, folder, or files.",
+    zenodo: "Enter a public record URL, DOI, or ID.",
+    github: "Enter a public repository URL and optional branch.",
   };
   if (sourceGuidance) sourceGuidance.textContent = sourceCopy[type] || sourceCopy.local;
   _refreshWizardFooter();   // selection requirement differs per source
@@ -2795,7 +2808,7 @@ async function handleSubmit() {
 
   // ── Edit mode: reuse existing submission, re-validate ────────────────────
   if (state.mode === "edit" && state.submissionId) {
-    setLoading(btn, true, "Saving & Revalidating");
+    setLoading(btn, true, "Saving and revalidating");
     try {
       const result = await runValidation();
       state.validationResult = result;
@@ -3610,7 +3623,7 @@ function renderBatchTable(submissions) {
   }
 
   const title = el("batch-index-title");
-  if (title) title.textContent = isSingle ? "Review Detected Submission" : "Review Detected Submissions";
+  if (title) title.textContent = isSingle ? "Submission review" : "Batch review";
   const desc = el("batch-header-desc");
   if (desc && safeSubmissions.length > 0) {
     desc.textContent = `${safeSubmissions.length} submission${safeSubmissions.length !== 1 ? "s" : ""} detected.`;
@@ -4222,7 +4235,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
       const safeSubId     = escapeHtml(r.submission_id);
       const safeName      = escapeHtml(submissionDisplayName(r, `Submission ${idx + 1}`));
       const safeChallenge = escapeHtml(r.challenge_type || getChallengeType() || defaultChallengeType());
-      const safeMap       = escapeHtml(r.map_type || "Not detected");
       const subType       = submissionTypeInfo(r);
       const subTypeHelp   = isResultOnly
         ? "This submission already includes result maps, so no processing run is needed."
@@ -4270,12 +4282,12 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
       // Synthetic" says what the submission contains, where "Mixed/Other"
       // only said that more than one map type was found, which is the
       // expected state for a challenge that defines several.
-      const datasets = datasetDisplay(r);
+      const scopeLabel = validationScopeDisplay(r);
       const counts = submissionCounts(r);
       const mapCount = counts.parameterMaps || Number(rNiftiCount) || 0;
       const metaHtml = [
         safeChallenge,
-        datasets ? escapeHtml(datasets) : safeMap,
+        scopeLabel ? escapeHtml(scopeLabel) : null,
         `${escapeHtml(mapCount)} parameter map${mapCount === 1 ? "" : "s"}`,
         warnings.length ? `${warnings.length} item${warnings.length === 1 ? "" : "s"} to review` : null,
       ].filter(Boolean).join(" · ");
@@ -6099,8 +6111,8 @@ function _setScoreStepCopy({ official = false, providerName = "" } = {}) {
   // The description moved into that button's tooltip; it is still the same
   // sentence, just no longer occupying a line under every step header.
   if (descEl) descEl.textContent = official
-    ? `QC and previews are available for readable maps. Results from ${providerName || "the configured provider"} appear when its required data are available.`
-    : "QC and previews are available for readable maps. Other analyses appear when compatible data are available.";
+    ? `Review QC, previews, and results from ${providerName || "the configured provider"}.`
+    : "Review QC, previews, and available analyses.";
 }
 
 function _fmtPercentValue(v) {
@@ -6378,7 +6390,7 @@ function _previewNote() {
 }
 
 // A preview item is a scored parameter map only when it is exactly 3-D and has
-// a recognized configured map type (CBF/ATT/…). 4-D ASL/model data and
+// a recognized configured map type (CBF/ATT/…). 4-D signal/model data and
 // unrecognized files are never shown in the gallery. Prefers the backend flag;
 // falls back to shape + map type for older cached manifests.
 function _isParameterMapPreview(item) {
@@ -6388,11 +6400,13 @@ function _isParameterMapPreview(item) {
   return shape.length === 3 && mt !== "" && mt !== "unknown" && mt !== "mixed/other";
 }
 
-// Display label for a non-parameter-map submitted file (e.g. the 4-D ASL input).
+// Display label for a non-parameter-map submitted file. The backend normally
+// supplies a configured artifact label; this challenge-neutral fallback keeps
+// older cached manifests readable without claiming that every 4-D file is ASL.
 function _nonParameterFileLabel(item) {
   if (item?.role_label) return item.role_label;
   const shape = Array.isArray(item?.shape) ? item.shape.filter(Boolean) : [];
-  return shape.length >= 4 ? "4D ASL data" : "Other submitted file";
+  return shape.length >= 4 ? `${shape.length}D signal data` : "Other submitted file";
 }
 
 function _storePreviewItems(manifest) {
@@ -7175,21 +7189,19 @@ function _runOutcomeText(tally, isOfficial) {
      result and reporting it as "nothing happened" is how a reviewer concludes
      the button is broken while it is in fact working. */
   if (tally.unconfigured && compared) {
-    const done = [`${compared} of ${tally.total} compared against the reference data`];
+    const done = [`${compared} of ${tally.total} compared against reference data`];
     if (tally.failed) done.push(`${tally.failed} failed`);
     return {
       tone: tally.failed ? "err" : "ok",
-      text: `Comparison complete: ${done.join(", ")}. Bias, RMSE, error CoV and the ROI `
-        + `tables are in the table below and in the report. No scoring provider is `
-        + `configured, so there are no provider metrics; that is a separate, optional step.`,
+      text: `Reference comparison complete: ${done.join(", ")}. Bias, RMSE, error CoV, and ROI results are below. `
+        + `Provider analysis is optional and was not run.`,
     };
   }
   if (tally.unconfigured) {
     const why = tally.reason ? ` Nothing could be compared: ${tally.reason}.` : "";
     return {
       tone: "warn",
-      text: `No analysis provider is configured, so there is nothing for this button to run.${why} `
-        + `QC, ROI statistics and the comparison against ground truth do not need one and are already below.`,
+      text: `No analysis provider is configured.${why} QC and reference comparisons remain available below.`,
     };
   }
   if (!tally.total) return { tone: "warn", text: "There are no submissions to analyse yet. Upload one first." };
@@ -7198,7 +7210,7 @@ function _runOutcomeText(tally, isOfficial) {
   if (tally.skipped) parts.push(`${tally.skipped} skipped, nothing configured to run`);
   if (tally.failed) parts.push(`${tally.failed} failed`);
   if (tally.failed) {
-    return { tone: "err", text: `${noun} finished with problems: ${parts.join(", ")}. Open the table below for the reason.` };
+    return { tone: "err", text: `${noun} finished with problems: ${parts.join(", ")}. See details below.` };
   }
   if (!tally.scored) {
     return { tone: "warn", text: `${noun} did not run: ${parts.join(", ")}.` };
@@ -7206,7 +7218,7 @@ function _runOutcomeText(tally, isOfficial) {
   if (tally.skipped) {
     return { tone: "warn", text: `${noun} complete: ${parts.join(", ")}.` };
   }
-  return { tone: "ok", text: `${noun} complete. All ${tally.total} submission${tally.total === 1 ? "" : "s"} analysed. Results are in the table below.` };
+  return { tone: "ok", text: `${noun} complete: ${tally.total} of ${tally.total} submission${tally.total === 1 ? "" : "s"} analysed. Results are below.` };
 }
 
 function _showRunOutcome(tally, isOfficial) {
@@ -7232,7 +7244,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
 
   const isConfigured = !!(activeMode && activeMode !== "none");
   const isOfficial = activeOfficial === true;
-  const actionText = isOfficial ? "Run Official Scoring" : "Run Analysis";
+  const actionText = isOfficial ? "Run official scoring" : "Run analysis";
   /* Reference data alone is enough to run. A provider is a separate thing and
      most challenges will not have one for a long time. */
   const canCompare = !isConfigured && !!(reference && reference.possible);
@@ -7242,7 +7254,7 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
     const existingPreview = _scoreMetricPreviewHtml();
     if (titleEl) titleEl.textContent = existingPreview
       ? (isOfficial ? "Official scoring complete" : "Analysis complete")
-      : (isOfficial ? "Official scoring is ready" : "Analysis is ready");
+      : (isOfficial ? "Official scoring ready" : "Ready for analysis");
     if (previewEl) {
       previewEl.innerHTML = existingPreview;
       previewEl.style.display = existingPreview ? "" : "none";
@@ -7250,10 +7262,10 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
 
     const scorerName = packageName || "Configured analysis provider";
     const pkgLabel = existingPreview
-      ? "Metrics generated successfully."
+      ? "Metrics generated."
       : isOfficial
         ? `${scorerName} is active.`
-        : `${scorerName} is active for configured analysis. These are not official OSIPI scores.`;
+        : `${scorerName} is active. Results are not official OSIPI scores.`;
     if (subEl)   subEl.textContent  = pkgLabel;
 
     if (badgeEl) { badgeEl.textContent = "Ready"; badgeEl.className = "smc-badge smc-badge--ready"; }
@@ -7261,8 +7273,8 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
   } else if (canCompare) {
     const existingPreview = _scoreMetricPreviewHtml();
     if (titleEl) titleEl.textContent = existingPreview
-      ? "Comparison against reference data complete"
-      : "Comparison against reference data is ready";
+      ? "Reference comparison complete"
+      : "Reference comparison ready";
     if (previewEl) {
       previewEl.innerHTML = existingPreview;
       previewEl.style.display = existingPreview ? "" : "none";
@@ -7279,15 +7291,13 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
       ? `${reference.unavailable} of ${reference.total} submissions have no reference match: ${reason}.`
       : "";
   } else {
-    if (titleEl) titleEl.textContent = "Nothing to run yet";
+    if (titleEl) titleEl.textContent = "QC and previews available";
     if (previewEl) { previewEl.innerHTML = ""; previewEl.style.display = "none"; }
     /* The old copy said only that QC and previews were available, which told a
        reviewer what still worked but never why the rest did not. */
     if (subEl) subEl.textContent = reason
-      ? `No comparison is possible: ${reason}. No scoring provider is configured either. `
-        + `QC and previews need neither and are available below.`
-      : `No scoring provider is configured and no reference data was found for this `
-        + `challenge. QC and previews need neither and are available below.`;
+      ? `Reference comparison unavailable: ${reason}.`
+      : "No analysis provider or reference data is configured.";
     if (badgeEl) { badgeEl.textContent = "Not set up"; badgeEl.className = "smc-badge"; }
     if (hintEl)  hintEl.textContent = "";
   }
@@ -9813,31 +9823,31 @@ function _renderExportRows() {
   const have = _exportAvailability();
   const noSubmission = have.submission ? null : "Nothing has been reviewed yet.";
   const rows = [
-    { id: "export-pdf-report-group", icon: "PDF", iconClass: "export-icon-check", title: "PDF Report",
-      meta: "Metadata, validation, execution, QC and limitations.",
+    { id: "export-combined-csv-group", icon: "CSV", iconClass: "export-icon-score", title: "Blinded CSV",
+      meta: "Shareable summary.",
       unavailable: noSubmission,
-      btn: `<button type="button" id="export-pdf-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download PDF report" title="Downloads the blinded PDF report.">Download PDF</button>` },
-    { id: "export-report-group", icon: "HTML", iconClass: "export-icon-check", title: "HTML Report",
-      meta: "The same content as the PDF, with the full tables.",
+      btn: `<button type="button" id="export-combined-csv-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download blinded CSV" title="Downloads the blinded CSV summary.">Download CSV</button>` },
+    { id: "export-combined-unblinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Unblinded CSV",
+      meta: "Internal · team and contact details.",
       unavailable: noSubmission,
-      btn: `<button type="button" id="export-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Open HTML report" title="Opens the blinded HTML report in a new tab.">Open Report</button>` },
-    { id: "export-combined-csv-group", icon: "CSV", iconClass: "export-icon-score", title: "CSV Results",
-      meta: "One row per submission, for a spreadsheet.",
-      unavailable: noSubmission,
-      btn: `<button type="button" id="export-combined-csv-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download CSV results" title="Downloads the blinded combined CSV summary.">Download CSV</button>` },
-    { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON Results",
-      meta: "The same data, for another program to read.",
+      btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
+    { id: "export-combined-json-group", icon: "JSON", iconClass: "export-icon-run", title: "JSON results",
+      meta: "Machine-readable results.",
       unavailable: noSubmission,
       btn: `<button type="button" id="export-combined-json-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download JSON results" title="Downloads the blinded combined JSON summary.">Download JSON</button>` },
-    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI Statistics CSV",
-      meta: "Mean, median, SD, range and CoV inside each ROI, per scan.",
+    { id: "export-pdf-report-group", icon: "PDF", iconClass: "export-icon-check", title: "PDF report",
+      meta: "Validation, QC, and limitations.",
+      unavailable: noSubmission,
+      btn: `<button type="button" id="export-pdf-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download PDF report" title="Downloads the blinded PDF report.">Download PDF</button>` },
+    { id: "export-report-group", icon: "HTML", iconClass: "export-icon-check", title: "HTML report",
+      meta: "Full tables in a browser.",
+      unavailable: noSubmission,
+      btn: `<button type="button" id="export-report-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Open HTML report" title="Opens the blinded HTML report in a new tab.">Open report</button>` },
+    { id: "export-roi-descriptive-group", icon: "CSV", iconClass: "export-icon-score", title: "ROI statistics CSV",
+      meta: "ROI statistics per map and scan.",
       unavailable: noSubmission || (have.roi ? null
         : "No ROI statistics were produced, so this would be empty. It needs compatible ROI masks."),
       btn: `<button type="button" id="export-roi-descriptive-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download ROI parameter-map statistics CSV" title="Downloads within-ROI descriptive statistics per map and scan.">Download CSV</button>` },
-    { id: "export-combined-unblinded-group", icon: "CSV", iconClass: "export-icon-score", title: "Unblinded CSV",
-      meta: "The same rows, with team and contact included.",
-      unavailable: noSubmission,
-      btn: `<button type="button" id="export-combined-unblinded-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download unblinded combined CSV" title="Unblinded export includes team name and contact email.">Download CSV</button>` },
   ];
   // Disabling the control and saying why, rather than removing the row: a row
   // that vanishes leaves someone hunting for an export that was there before.
@@ -9857,20 +9867,23 @@ function _renderExportRows() {
     actionsHtml: r.btn, actionsClass: "export-group-body export-file-actions",
   })).join("");
   host.innerHTML = `
-    <section class="export-output-group" aria-labelledby="export-reviewer-heading">
+    <section class="export-output-group export-output-group--primary" aria-labelledby="export-primary-heading">
       <div class="export-output-heading">
-        <h2 id="export-reviewer-heading">Blinded reviewer outputs</h2>
-        <p>Team, contact, and original submission identifiers are removed.</p>
+        <h2 id="export-primary-heading">Primary outputs</h2>
+        <p>CSV and JSON files for analysis.</p>
       </div>
-      <div class="worklist export-output-list">${renderRows(rows.slice(0, 5))}</div>
+      <div class="worklist export-output-list">${renderRows([rows[0], rows[1], rows[2]])}</div>
     </section>
-    <section class="export-output-group export-output-group--organiser" aria-labelledby="export-organiser-heading">
-      <div class="export-output-heading">
-        <h2 id="export-organiser-heading">Organiser-only output</h2>
-        <p>Contains identifying information and should remain internal.</p>
-      </div>
-      <div class="worklist export-output-list">${renderRows(rows.slice(5))}</div>
-    </section>`;
+    <details class="export-output-group export-output-group--additional" id="export-additional-outputs">
+      <summary class="export-output-heading export-output-summary">
+        <span>
+          <h2>Additional outputs</h2>
+          <p>Reports and detailed tables.</p>
+        </span>
+        <span class="export-output-summary-icon" aria-hidden="true"><span class="export-output-chevron"></span></span>
+      </summary>
+      <div class="worklist export-output-list">${renderRows(rows.slice(3))}</div>
+    </details>`;
   _wireExportRows();
 }
 _renderExportRows();
@@ -10056,7 +10069,7 @@ window.addEventListener("hashchange", () => {
   });
 })();
 
-/* ── ROI Ktrans statistics / configured parameter maps ───────────────────
+/* ── ROI statistics / configured parameter maps ──────────────────────
    Renders the canonical records computed once during scoring. Nothing here
    recalculates a statistic: CoV arrives as a ratio and is only formatted
    for display, and unavailable values are never shown as zero.

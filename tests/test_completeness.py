@@ -404,6 +404,30 @@ def test_a_missing_required_map_is_an_error_for_asl_and_dsc(
         f"{challenge} did not name the missing {missing} map"
 
 
+@pytest.mark.parametrize("challenge,required", [
+    ("asl", {"cbf", "att"}),
+    ("dce", {"ktrans"}),
+    ("dsc", {"cbv", "cbf", "mtt"}),
+])
+def test_no_recognized_maps_reports_every_required_map(
+    challenge: str, required: set[str]
+) -> None:
+    """Readable but unrelated NIfTIs must not make a submission complete."""
+    unrelated = [SubmissionArtifact(
+        path="phantom.nii.gz",
+        role="unknown",
+        challenge=challenge,
+        dimensions=3,
+    )]
+    issues = _run(unrelated, challenge=challenge)
+    missing = {
+        issue.get("map_type")
+        for issue in issues
+        if issue["code"] == "REQUIRED_MAP_MISSING"
+    }
+    assert missing == required
+
+
 @pytest.mark.parametrize("challenge,expected", [
     ("dce", {"ktrans", "vp", "ve", "kep"}),
     ("asl", {"cbf", "att"}),

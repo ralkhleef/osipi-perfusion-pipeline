@@ -6,6 +6,7 @@ can locate the extracted folder without exposing file paths to the frontend.
 
 import os
 import shutil
+import unicodedata
 import uuid
 import zipfile
 from pathlib import Path
@@ -716,7 +717,7 @@ def _merge_submissions(submission_ids: List[str]) -> Dict:
 
 
 def _is_participant_layout(dirs: List[Path]) -> bool:
-    """True when every directory names part of a scan rather than a team.
+    """True when directories describe scans and optional internal data.
 
     Participants, sites and repeats are all levels *inside* one submission::
 
@@ -732,23 +733,33 @@ def _is_participant_layout(dirs: List[Path]) -> bool:
             Team_A/
             Team_B/
 
-    Only participants were recognised at first, so a submission uploaded one
-    participant at a time still carved on its sites. What counts as each name
-    is not decided here: it defers to the same identity parser the rest of the
-    pipeline uses, so the two cannot drift apart and start disagreeing about
-    what ``site_1`` means.
+    Structural siblings are allowed too. A complete submission commonly has
+    ``Participant1/`` through ``Participant5/`` beside ``reference/``; the
+    reference directory is part of that submission, not a sixth team. What
+    counts as an identity or structural name comes from the same parser and
+    configuration used elsewhere, so batch detection does not maintain a
+    second hardcoded vocabulary.
+
+    At least one directory must carry scan identity and every other directory
+    must be structural. An unrecognised sibling still makes this return False,
+    preserving the safer behaviour for a real mixed team batch.
     """
     if len(dirs) < 2:
         return False
     from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
 
+    structural_names = _STRUCTURAL_SUBDIRS | _dataset_dir_names()
+    found_identity = False
     for directory in dirs:
         # The parser reads directory components and ignores the last element,
         # which is normally the filename, hence the sentinel.
         identity = parse_directory_identity((directory.name, "_"))
-        if not {"participant", "site", "repeat"} & set(identity):
+        if {"participant", "site", "repeat"} & set(identity):
+            found_identity = True
+            continue
+        if directory.name.lower() not in structural_names:
             return False
-    return True
+    return found_identity
 
 
 def _replace_previous_extraction(final_dir: Path) -> None:
@@ -943,19 +954,59 @@ def _safe_extract_zip(zf: zipfile.ZipFile, target_dir: Path) -> Tuple[int, int]:
     Returns ``(file_count, extracted_bytes)``.
     Raises ``ValueError`` if any configured limit is exceeded.
     """
+    # Validate the member topology before writing anything. ZIPs can contain a
+    # file called ``node`` followed by ``node/child`` (or the reverse), which
+    # otherwise raises an unhandled filesystem exception halfway through an
+    # upload. Case-folding and Unicode normalization make collision handling
+    # consistent across Linux, macOS, and Windows filesystems.
+    planned: List[Tuple[zipfile.ZipInfo, Path]] = []
+    path_kinds: dict[str, str] = {}
+    for member in zf.infolist():
+        if _should_skip_path(member.filename):
+            continue
+        try:
+            rel_path = _safe_relative_path(member.filename)
+        except ValueError as exc:
+            raise ValueError(
+                f"ZIP contains an unsafe path: {member.filename!r}."
+            ) from exc
+        if member.flag_bits & 0x1:
+            raise ValueError(
+                f"ZIP contains an encrypted file, which is not supported: {member.filename!r}."
+            )
+
+        key = unicodedata.normalize("NFC", rel_path.as_posix()).casefold()
+        kind = "directory" if member.is_dir() else "file"
+        previous = path_kinds.get(key)
+        if previous == kind == "file":
+            raise ValueError(
+                f"ZIP contains the same file more than once: {rel_path.as_posix()!r}."
+            )
+        if previous and previous != kind:
+            raise ValueError(
+                f"ZIP contains conflicting entries for {rel_path.as_posix()!r}."
+            )
+
+        for depth in range(1, len(rel_path.parts)):
+            parent = Path(*rel_path.parts[:depth])
+            parent_key = unicodedata.normalize("NFC", parent.as_posix()).casefold()
+            if path_kinds.get(parent_key) == "file":
+                raise ValueError(
+                    f"ZIP file {parent.as_posix()!r} conflicts with a containing directory."
+                )
+            path_kinds.setdefault(parent_key, "directory")
+        if kind == "file" and previous == "directory":
+            raise ValueError(
+                f"ZIP file {rel_path.as_posix()!r} conflicts with a directory."
+            )
+        path_kinds[key] = kind
+        planned.append((member, rel_path))
+
     file_count = 0
     extracted_bytes = 0
     CHUNK = 65536  # 64 KB streaming chunks
 
-    for member in zf.infolist():
-        if _should_skip_path(member.filename):
-            continue
-
-        try:
-            rel_path = _safe_relative_path(member.filename)
-        except ValueError:
-            continue
-
+    for member, rel_path in planned:
         if member.is_dir():
             (target_dir / rel_path).mkdir(parents=True, exist_ok=True)
             continue
@@ -970,18 +1021,23 @@ def _safe_extract_zip(zf: zipfile.ZipFile, target_dir: Path) -> Tuple[int, int]:
         dest = target_dir / rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        with zf.open(member) as src, open(dest, "wb") as dst:
-            while True:
-                chunk = src.read(CHUNK)
-                if not chunk:
-                    break
-                extracted_bytes += len(chunk)
-                if extracted_bytes > EXTRACT_MAX_BYTES:
-                    raise ValueError(
-                        f"Extracted content exceeds the size limit "
-                        f"({EXTRACT_MAX_BYTES // (1024 ** 3)} GB)."
-                    )
-                dst.write(chunk)
+        try:
+            with zf.open(member) as src, open(dest, "wb") as dst:
+                while True:
+                    chunk = src.read(CHUNK)
+                    if not chunk:
+                        break
+                    extracted_bytes += len(chunk)
+                    if extracted_bytes > EXTRACT_MAX_BYTES:
+                        raise ValueError(
+                            f"Extracted content exceeds the size limit "
+                            f"({EXTRACT_MAX_BYTES // (1024 ** 3)} GB)."
+                        )
+                    dst.write(chunk)
+        except (RuntimeError, NotImplementedError) as exc:
+            raise ValueError(
+                f"ZIP member {member.filename!r} could not be extracted: {exc}"
+            ) from exc
 
     return file_count, extracted_bytes
 

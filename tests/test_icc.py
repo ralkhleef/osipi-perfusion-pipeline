@@ -208,16 +208,22 @@ def test_no_model_produces_no_rows_at_all() -> None:
     assert icc.compute_icc_for_rows(rows, model=icc.MODEL_NONE) == []
 
 
-def test_the_shipped_configuration_uses_both_requested_models() -> None:
-    """Each challenge reports the two user-confirmed models separately."""
+def test_the_shipped_configuration_uses_selected_models() -> None:
+    """DCE uses ICC(3,1); ASL and DSC retain both configured models."""
     pytest.importorskip("yaml")
     from osipi_pipeline.config.rules import icc_settings_by_challenge
 
     settings = icc_settings_by_challenge()
     assert settings, "no challenges configured"
     for challenge, spec in sorted(settings.items()):
-        assert spec["models"] == (icc.MODEL_2_1, icc.MODEL_3_1)
+        expected = (
+            (icc.MODEL_3_1,)
+            if challenge == "dce"
+            else (icc.MODEL_2_1, icc.MODEL_3_1)
+        )
+        assert spec["models"] == expected
         assert spec["axes"] == ("inter_repeat",)
+        assert spec["confidence_level"] == 0.95
 
 
 # ── Building tables from per-scan rows ─────────────────────────────────────
@@ -466,13 +472,19 @@ def test_empty_model_list_explicitly_disables_icc(challenge_icc):
     assert result["icc_statistics"] == []
 
 
-@pytest.mark.parametrize("challenge", ["ASL", "DCE", "DSC"])
-def test_ui_uppercase_challenge_names_select_the_same_models(challenge):
+@pytest.mark.parametrize(("challenge", "expected"), [
+    ("ASL", ["icc2_1", "icc3_1"]),
+    ("DCE", ["icc3_1"]),
+    ("DSC", ["icc2_1", "icc3_1"]),
+])
+def test_ui_uppercase_challenge_names_select_the_configured_models(challenge, expected):
     import scoring
     result = {}
     scoring._attach_icc(result, challenge, [])
-    assert result["icc_models"] == ["icc2_1", "icc3_1"]
-    assert "ICC(2,1)" in scoring._icc_definition(challenge)
+    assert result["icc_models"] == expected
+    labels = {"icc2_1": "ICC(2,1)", "icc3_1": "ICC(3,1)"}
+    for model in expected:
+        assert labels[model] in scoring._icc_definition(challenge)
 
 
 @pytest.mark.parametrize("settings", [

@@ -154,17 +154,19 @@
             confirmation from the challenge leads.</p>
 
           <ul>
-            <li><strong>ICC study design.</strong> ICC(2,1) and ICC(3,1) are configured separately
-              for DCE, ASL and DSC, using scan-level ROI medians across repeat sessions with site
-              held fixed. These settings still need final approval.</li>
+            <li><strong>ICC study design.</strong> DCE uses the selected ICC(3,1) option with a
+              95% confidence interval. ASL and DSC retain ICC(2,1) and ICC(3,1). All use scan-level
+              ROI medians across repeat sessions with site held fixed; the final grouping convention
+              still needs approval.</li>
             <li><strong>Thresholds.</strong> This includes the possible 15% guideline above.</li>
             <li><strong>Methods document.</strong> Its required sections and whether it is required.</li>
             <li><strong>Region definitions.</strong> These come from the organiser-provided masks.</li>
           </ul>
 
-          <p>The supplied DCE masks overlap: hippocampus voxels are also included in the grey matter
-            mask. The regional statistics follow those masks as provided, so those two results are
-            not independent.</p>
+          <p>The supplied DCE masks overlap, but the confirmed analysis regions do not:
+            hippocampus is subtracted from the matching site's grey-matter mask. The source
+            NIfTI masks remain unchanged; grey-matter statistics, reference comparisons and
+            signal RSS all use the exclusive region.</p>
         </section>
 
         <section>

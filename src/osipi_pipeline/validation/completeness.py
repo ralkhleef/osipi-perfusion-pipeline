@@ -167,6 +167,8 @@ def validate_completeness(
     issues.extend(_conflict_issues(identity_conflicts))
 
     scan_artifacts = [a for a in artifacts if a.role in _SCAN_ROLES]
+    if required_maps and not scan_artifacts:
+        issues.extend(_submission_missing_map_issues(required_maps))
 
     # ── 2. Dataset identity ──────────────────────────────────────────────
     # A submission with no dataset folder is assigned one, either because the
@@ -544,6 +546,25 @@ def _scan_requirement_issues(complete, required_maps, required_artifacts) -> lis
                     paths=[a.path for a in matching],
                 ))
     return issues
+
+
+def _submission_missing_map_issues(required_maps) -> list[dict]:
+    """Required maps when no submitted file could establish a scan at all.
+
+    Per-scan completeness cannot iterate an empty scan set. Without this
+    submission-level guard, a folder full of unrelated but readable NIfTI
+    files could pass ASL/DCE/DSC validation with zero recognized parameter
+    maps. One issue per configured requirement is both precise and bounded.
+    """
+    return [
+        _issue(
+            "error",
+            REQUIRED_MAP_MISSING,
+            f"Required {_map_label(map_id)} map was not found in the submission.",
+            map_type=map_id,
+        )
+        for map_id in required_maps
+    ]
 
 
 def _submission_artifact_issues(artifacts, required_artifacts) -> list[dict]:

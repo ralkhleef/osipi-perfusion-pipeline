@@ -50,11 +50,11 @@ function extractFunction(name) {
 
 const context = { console };
 vm.createContext(context);
-for (const name of ["submissionCounts", "datasetDisplay", "submissionCountSummary",
+for (const name of ["submissionCounts", "datasetDisplay", "validationScopeDisplay", "submissionCountSummary",
                     "submissionTypeInfo", "hasRunInstructions", "hasResultMaps"]) {
   vm.runInContext(extractFunction(name), context);
 }
-const { submissionCounts, datasetDisplay, submissionCountSummary,
+const { submissionCounts, datasetDisplay, validationScopeDisplay, submissionCountSummary,
         submissionTypeInfo } = context;
 
 // The demo submission: 16 scans across two datasets.
@@ -112,6 +112,10 @@ checkEqual("no dataset information yields no label",
            datasetDisplay({ counts: { scans_by_dataset: {} } }), "");
 check("the label never says Mixed/Other",
       !datasetDisplay(DCE_CLEAN).includes("Mixed"));
+checkEqual("an unscoped multi-map result omits the detector placeholder",
+           validationScopeDisplay({ map_type: "Mixed/Other", counts: {} }), "");
+checkEqual("an unscoped specific map keeps its useful label",
+           validationScopeDisplay({ map_type: "CBF", counts: {} }), "CBF");
 
 // ── Count summary line ───────────────────────────────────────────────────
 console.log("\nCount summary");
@@ -175,8 +179,8 @@ console.log("\nMeta line");
 {
   const metaStart = SOURCE.indexOf("const metaHtml = [");
   const metaSource = SOURCE.slice(metaStart, SOURCE.indexOf("const typeChipHtml", metaStart));
-  check("dataset coverage is preferred over the detected map label",
-        metaSource.includes("datasets ? escapeHtml(datasets) : safeMap"));
+  check("the resolved scope label is used in the meta line",
+        metaSource.includes("scopeLabel ? escapeHtml(scopeLabel) : null"));
   check("the meta line counts parameter maps", metaSource.includes("parameter map"));
   check("the meta line no longer uses the raw NIfTI count directly",
         !/\$\{escapeHtml\(rNiftiCount\)\} map/.test(metaSource));

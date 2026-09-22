@@ -235,15 +235,26 @@ def test_no_unknown_parameter_map_card(preview_workspace: Path) -> None:
             assert str(m["detected_map_type"]) not in ("Unknown", "", "Mixed/Other")
 
 
-def test_4d_asl_file_kept_but_not_a_parameter_map(preview_workspace: Path) -> None:
+def test_unclassified_4d_file_kept_with_challenge_neutral_label(preview_workspace: Path) -> None:
     manifest = _lena_style_manifest(preview_workspace)
     four_d = [m for m in manifest["maps"] if len([d for d in m.get("shape") or [] if d]) == 4]
-    assert four_d, "4D ASL file must remain listed (for Technical Details / download)"
+    assert four_d, "4D signal file must remain listed (for Technical Details / download)"
     f = four_d[0]
     assert f["is_parameter_map"] is False
-    assert f["file_role"] == "fitted_model"
-    assert f["role_label"] == "4D ASL data"
+    assert f["file_role"] == "signal_data"
+    assert f["role_label"] == "4D signal data"
     assert f.get("download_url")             # still available for download
+
+
+def test_configured_4d_artifact_uses_configured_role_and_label() -> None:
+    item = previews._classify_preview_role({
+        "file_name": "modelled_st.nii.gz",
+        "shape": [2, 2, 2, 8],
+        "detected_map_type": "Unknown",
+    })
+    assert item["is_parameter_map"] is False
+    assert item["file_role"] == "fitted_signal"
+    assert item["role_label"] == "Modelled signal-time curve"
 
 
 def test_masks_and_reference_not_in_submission_gallery(preview_workspace: Path) -> None:
