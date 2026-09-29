@@ -166,8 +166,9 @@ def _validate_large_files(
     many small reads nibabel makes, so four threads over four real 1 GB
     concentration curves measured 1.8x slower than reading them one at a time.
     Separate processes do not share a GIL, and the same four files measured
-    3.3x faster than serial. On the DCE lead's 60-scan submission that is
-    about two minutes of validation rather than about nine.
+    3.3x faster than serial.  Together with persistent gzip handles, the full
+    180-file DCE cohort measured 22.6 seconds in the production container;
+    reopening the compressed stream for each slab took 83.6 seconds.
 
     Memory stays bounded because each worker streams: the budget is per
     process, so four workers hold four slabs, not four gigabytes.
@@ -212,14 +213,10 @@ def validate_nifti_files(
     the threads take turns while each holds a decompression buffer, and the
     contention costs more than the concurrency wins.
 
-    A previous comment in ``config/settings.yaml`` asserted the opposite, that
-    decompression releases the GIL and more threads genuinely help. That is
-    true of a single large ``decompress`` call and not of this read pattern,
-    and the setting it justified made a real 60-scan submission take about
-    16 minutes where reading the large files one at a time takes about 9.
-
-    Large files are therefore read one at a time and small ones in parallel.
-    Results stay in input order either way.
+    A single large ``decompress`` call may release the GIL, but nibabel's slab
+    read pattern does not benefit from competing threads.  Large files are
+    therefore distributed across separate processes and small ones across
+    threads. Results stay in input order either way.
     """
 
     global _LAST_WORKER_COUNT
@@ -331,7 +328,10 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
 
     try:
         with timed("validation.nifti.open", path=str(path), quick=quick):
-            img = nib.load(str(path))
+            # Deep validation streams large 4-D curves in increasing time
+            # order.  Keeping the gzip stream open avoids re-decompressing the
+            # prefix of the file for every slab.
+            img = nib.load(str(path), keep_file_open=True)
     except Exception as exc:
         result["errors"].append(f"nibabel could not load file: {exc}")
         return result

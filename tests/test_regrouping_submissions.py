@@ -61,6 +61,9 @@ def test_splitting_makes_one_submission_per_inner_folder(extracted) -> None:
     assert ids == ["upload_P01", "upload_P02", "upload_P03"], ids
     for sub_id in ids:
         assert (extracted / sub_id).is_dir()
+        participant = sub_id.rsplit("_", 1)[-1]
+        assert (extracted / sub_id / participant).is_dir(), (
+            "splitting discarded the participant folder that carries identity")
     assert not (extracted / "upload").exists(), "the original was left behind"
 
 
@@ -82,10 +85,25 @@ def test_splitting_loses_no_scan_files(extracted) -> None:
     for sub in sorted(extracted.iterdir()):
         if not sub.is_dir():
             continue
-        participant = sub.name.split("_")[-1]
-        after |= {f"{participant}/{n}" for n in _files_under(sub)
-                  if n.endswith(".nii.gz")}
+        after |= {n for n in _files_under(sub) if n.endswith(".nii.gz")}
     assert after == before, sorted(before ^ after)
+
+
+def test_splitting_preserves_participant_identity_in_the_manifest(extracted) -> None:
+    """A split participant must still validate and match its references."""
+    from services.ingest_service import regroup_submissions
+    from osipi_pipeline.ingestion.manifest import load_manifest
+
+    _one_submission(extracted, "upload", ["P01", "P02"])
+    result = regroup_submissions(["upload"], "split")
+
+    assert result["success"], result
+    manifest = load_manifest(extracted / "upload_P01") or {}
+    nifti = [row for row in manifest.get("artifacts", [])
+             if str(row.get("path") or "").endswith(".nii.gz")]
+    assert nifti
+    assert {row.get("participant") for row in nifti} == {"1"}
+    assert all(str(row.get("path") or "").startswith("P01/") for row in nifti)
 
 
 def test_merging_restores_the_folder_the_carve_consumed(extracted) -> None:

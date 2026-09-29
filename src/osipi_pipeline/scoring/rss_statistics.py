@@ -45,9 +45,11 @@ def voxelwise_rss(
     return np.where(finite, rss, np.nan)
 
 
-#: Voxels per read when streaming a 4-D pair. Matches the validator's budget so
-#: the two halves of the pipeline have one memory story rather than two.
-MAX_VOXELS_PER_READ = 32 * 1024 * 1024
+#: Voxels per read when streaming a 4-D pair.  RSS holds measured, modelled and
+#: residual slabs at once, unlike validation's one slab, so its budget is
+#: deliberately smaller.  On the supplied DCE curves 8M was also faster than
+#: 32M while reducing peak memory enough for several analyses to coexist.
+MAX_VOXELS_PER_READ = 8 * 1024 * 1024
 
 
 def _time_chunks(shape: Sequence[int], max_voxels: int):

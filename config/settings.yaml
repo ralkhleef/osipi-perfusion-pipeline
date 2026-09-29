@@ -36,10 +36,11 @@ performance:
   manifest_cache_enabled: true
   preview_cache_enabled: true
   # The analysis is what the report, every export and the frontend all ask
-  # for, and on a real DCE submission it reads a gigabyte of 4-D data and
-  # takes about a minute. Memoised on the submitted maps, the ground truth,
-  # the masks and the configuration, so changing any of them recomputes and
-  # changing none of them does not. Turn off to force a fresh read every time.
+  # for. A fresh full-cohort DCE run processes 60 compressed 4-D signal pairs
+  # and takes several minutes, so repeating it per reader is not acceptable.
+  # It is memoised on the submitted maps, ground truth, masks and configuration:
+  # changing any of them recomputes, while changing none of them does not.
+  # Turn this off only to force a fresh read every time.
   analysis_cache_enabled: true
 
 paths:

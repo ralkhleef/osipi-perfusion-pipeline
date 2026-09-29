@@ -15,7 +15,12 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 from services.path_config import EXTRACTED_DIR, INCOMING_DIR, safe_relative_path
 from osipi_pipeline.config.rules import app_settings, map_type_patterns, settings_tuple, tuple_setting
 from osipi_pipeline.ingestion.detector import detect_challenge_type
-from osipi_pipeline.ingestion.manifest import load_manifest, manifest_files, refresh_manifest
+from osipi_pipeline.ingestion.manifest import (
+    MANIFEST_FILENAME,
+    load_manifest,
+    manifest_files,
+    refresh_manifest,
+)
 
 # ── Map type detection ─────────────────────────────────────────────────────────
 
@@ -628,7 +633,13 @@ def _split_submission(submission_id: str) -> Dict:
         for child in children:
             sub_id = _safe_id(f"{submission_id}_{child.name}")
             target = staged / sub_id
-            shutil.move(str(child), str(target))
+            target.mkdir()
+            # Keep the folder being split as part of the new submission.  It
+            # may carry scan identity (P05, site_1, scan_2, ...); promoting its
+            # contents to the submission root discards that identity and makes
+            # otherwise valid maps impossible to validate or match to private
+            # references.
+            shutil.move(str(child), str(target / child.name))
             for shared in shared_files:
                 copy_to = target / shared.name
                 if not copy_to.exists():
@@ -697,8 +708,26 @@ def _merge_submissions(submission_ids: List[str]) -> Dict:
             name = Path(name).name
             inner = staged / name
             inner.mkdir(parents=True, exist_ok=True)
-            for item in sorted(source.iterdir()):
-                shutil.move(str(item), str(inner / item.name))
+            preserved_identity_dir = source / name
+            if preserved_identity_dir.is_dir():
+                # Current splits retain the identity folder.  Merge its
+                # contents into the one folder already created above, while
+                # restoring shared top-level files (README, methods, etc.) only
+                # once at the merged root.
+                for item in sorted(preserved_identity_dir.iterdir()):
+                    shutil.move(str(item), str(inner / item.name))
+                for item in sorted(source.iterdir()):
+                    if item == preserved_identity_dir or item.name == MANIFEST_FILENAME:
+                        continue
+                    destination = staged / item.name
+                    if not destination.exists():
+                        shutil.move(str(item), str(destination))
+            else:
+                # Backwards compatibility for submissions split by older
+                # versions, which promoted site/scan folders to the root.
+                for item in sorted(source.iterdir()):
+                    if item.name != MANIFEST_FILENAME:
+                        shutil.move(str(item), str(inner / item.name))
 
         final = _reset_submission_dir(merged_id)
         for item in sorted(staged.iterdir()):

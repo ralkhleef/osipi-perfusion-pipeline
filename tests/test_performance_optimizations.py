@@ -99,13 +99,40 @@ def test_quick_validation_does_not_load_voxel_array(tmp_path: Path, monkeypatch:
             return "float32"
 
     nv.clear_validation_cache()
-    monkeypatch.setattr(nv.nib, "load", lambda _path: FakeImage())
+    monkeypatch.setattr(nv.nib, "load", lambda _path, **_kwargs: FakeImage())
 
     result = nv.validate_nifti_files([path], quick=True, workers=1)[0]
 
     assert result["valid"] is True
     assert result["validation_mode"] == "quick"
     assert result["mean"] is None
+
+
+def test_streamed_nifti_readers_keep_compressed_files_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated slabs must continue one gzip stream, not decompress from zero."""
+    import nibabel as nib
+
+    import scoring
+    from osipi_pipeline.validation import nifti_validator as nv
+
+    path = _tiny_nifti(tmp_path / "streamed.nii.gz")
+    real_load = nib.load
+    keep_open: list[object] = []
+
+    def recorded_load(*args, **kwargs):
+        keep_open.append(kwargs.get("keep_file_open"))
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(nib, "load", recorded_load)
+    nv.clear_validation_cache()
+    assert nv.validate_nifti_files([path], workers=1)[0]["valid"] is True
+    scoring._analyse_nifti_with_nibabel(path)
+    scoring._nifti_geometry(path)
+
+    assert keep_open == [True, True, True]
 
 
 def test_worker_limit_is_enforced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -224,10 +251,10 @@ def test_generated_outputs_require_configured_analysis_maps(
 # ── The analysis is computed once, not once per reader ────────────────────
 #
 # The report, the HTML and PDF renderers, every export route and the frontend
-# each ask for the same analysis. On the DCE lead's real submission it reads a
-# gigabyte of 4-D data and takes about a minute, so recomputing it per request
-# made opening a report cost as much as producing it. It is now memoised on
-# its inputs.
+# each ask for the same analysis. The DCE lead's full cohort contains 60 large
+# 4-D signal pairs and takes several minutes, so recomputing it per request made
+# opening a report cost as much as producing it. It is now memoised on its
+# inputs.
 
 @pytest.fixture()
 def analysis_workspace(tmp_path, monkeypatch):

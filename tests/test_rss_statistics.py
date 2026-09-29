@@ -207,6 +207,42 @@ def test_rss_reports_masked_voxel_by_time_matrix_and_exclusive_roi(monkeypatch, 
     assert {row[5] for row in report["dce_rss_rows"]} == {"3"}
 
 
+def test_rss_loads_a_reused_mask_only_once(monkeypatch, tmp_path) -> None:
+    """Participants and repeats at one site share one prepared ROI selector."""
+    monkeypatch.setattr(scoring, "EXTRACTED_DIR", tmp_path)
+    artifacts = []
+    for repeat in ("1", "2"):
+        for kind in ("modelled_st", "measured_st"):
+            artifacts.append(SimpleNamespace(
+                artifact_type=kind,
+                path=f"P01/site_1/scan_{repeat}/{kind}.nii.gz",
+                dataset="synthetic", participant="1", repeat=repeat, site="1",
+            ))
+    monkeypatch.setattr(scoring, "submission_artifacts", lambda sid: artifacts)
+    mask = {"name": "WM_mask.nii.gz", "label": "white matter",
+            "path": "WM_mask.nii.gz"}
+    monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: [mask])
+
+    values = np.ones((2, 2, 1, 3), dtype=float)
+    monkeypatch.setattr(scoring, "_nifti_geometry", lambda path: {
+        "shape": [2, 2, 1, 3], "dataobj": values,
+        "affine": None, "voxel_size": None,
+    })
+    loads = []
+
+    def load_mask(_mask):
+        loads.append(_mask["name"])
+        return {"shape": [2, 2, 1], "values": [1, 1, 1, 1]}
+
+    monkeypatch.setattr(scoring, "_load_effective_mask", load_mask)
+    target = {}
+    scoring._score_signal_rss(target, "sub-1", "dce")
+
+    assert loads == ["WM_mask.nii.gz"]
+    assert len(target["signal_rss"]["records"]) == 2
+    assert all(row["status"] == "available" for row in target["signal_rss"]["records"])
+
+
 # ── Streaming a 4-D pair must equal reading it whole ───────────────────────
 #
 # The in-memory path materialised the measured volume, the modelled volume and

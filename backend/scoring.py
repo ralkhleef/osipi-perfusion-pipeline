@@ -580,7 +580,12 @@ def _analyse_nifti_with_nibabel(path: Path) -> dict:
     import numpy as np  # type: ignore
     import nibabel as nib  # type: ignore
 
-    img = nib.load(str(path))
+    # Chunked reads of a .nii.gz file must share one gzip stream.  With
+    # nibabel's default (keep_file_open=False), every later time slab reopens
+    # the file and decompresses from byte zero.  A real 157-timepoint DCE curve
+    # is split into several slabs, so that default multiplied the decompression
+    # work and made a full cohort take tens of minutes.
+    img = nib.load(str(path), keep_file_open=True)
     total_voxel_count = 1
     for dim in img.shape:
         total_voxel_count *= int(dim)
@@ -823,7 +828,10 @@ def _nifti_geometry(path: Path) -> dict:
     import nibabel as nib  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
 
-    img = nib.load(str(path))
+    # The caller reads this proxy repeatedly in increasing time order.  Keep
+    # the compressed stream alive so each slab continues from the previous
+    # one instead of starting decompression over from the beginning.
+    img = nib.load(str(path), keep_file_open=True)
     header = img.header
     affine = [[float(v) for v in row]
               for row in np.asarray(img.affine, dtype=np.float64).tolist()]
@@ -1391,6 +1399,7 @@ def _score_signal_rss(
         streaming_voxelwise_rss,
         summarize_rss,
     )
+    import numpy as np  # noqa: PLC0415
 
     analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
     rss_config = analysis.get("signal_rss") or {}
@@ -1441,6 +1450,23 @@ def _score_signal_rss(
     )
     if not measured and not reference_measured:
         return
+
+    # A site mask is reused by every participant and repeat at that site.  The
+    # full DCE cohort has 60 scan pairs but only nine masks; loading and applying
+    # GM-minus-hippocampus from disk for every pair needlessly repeated the same
+    # decompression hundreds of times.  Keep only the compact boolean selector,
+    # not the larger floating-point source volume.
+    prepared_masks = []
+    for mask in masks:
+        try:
+            mask_data = _load_effective_mask(mask)
+            mask_shape = tuple(int(value) for value in mask_data["shape"])
+            selector = np.asarray(
+                _mask_selector(mask_data["values"]), dtype=bool
+            ).reshape(mask_shape)
+            prepared_masks.append((mask, mask_shape, selector, None))
+        except Exception as exc:
+            prepared_masks.append((mask, None, None, str(exc)))
 
     for identity in sorted(set(models_by_id) | set(measured_by_id), key=str):
         model_items = models_by_id.get(identity, [])
@@ -1517,25 +1543,17 @@ def _score_signal_rss(
                 int(record["whole_image"].get("voxel_count") or 0),
                 time_point_count,
             ]
-            for mask in masks:
+            for mask, mask_shape, selector, mask_error in prepared_masks:
                 if not _mask_applies_to_identity(mask, identity):
                     continue
                 roi = {"mask_name": mask["name"], "roi_label": mask["label"]}
                 try:
-                    mask_data = _load_effective_mask(mask)
-                    if tuple(mask_data["shape"]) != spatial_shape:
+                    if mask_error:
+                        raise ValueError(mask_error)
+                    if mask_shape != spatial_shape:
                         raise ValueError(
-                            f"Mask shape {mask_data['shape']} does not match RSS shape {spatial_shape}"
+                            f"Mask shape {mask_shape} does not match RSS shape {spatial_shape}"
                         )
-                    # RSS is a 3-D array while the canonical NIfTI loader
-                    # exposes flat values. Restore the spatial shape before
-                    # NumPy boolean indexing; leaving this flat made every
-                    # real ROI RSS row unavailable despite matching geometry.
-                    import numpy as np  # noqa: PLC0415
-
-                    selector = np.asarray(
-                        _mask_selector(mask_data["values"]), dtype=bool
-                    ).reshape(spatial_shape)
                     roi.update(summarize_rss(rss, selector).to_dict())
                     roi["concentration_time_matrix_shape"] = [
                         int(roi.get("voxel_count") or 0), time_point_count
@@ -2882,7 +2900,7 @@ def _analysis_cache_key(
     already computed.
 
     Only file identity is read (path, size, mtime), never contents, so building
-    a key costs a handful of stat calls against the ~60 seconds it can save.
+    a key costs a handful of stat calls against the several minutes it can save.
     """
     from osipi_pipeline.ingestion.manifest import config_fingerprint
 
@@ -3051,10 +3069,10 @@ def analyze_submission_niftis(
     exist, reference-based comparison metrics. It is not official OSIPI scoring.
 
     The result is memoised on its inputs. Every export route, the report, the
-    HTML and PDF renderers and the frontend each ask for this analysis, and on
-    a real DCE submission it reads a gigabyte of 4-D data and takes about a
-    minute: recomputing it per request made opening a report cost as much as
-    producing it in the first place. ``artifact_dir`` runs are never served
+    HTML and PDF renderers and the frontend each ask for this analysis. A full
+    DCE cohort contains 60 large 4-D signal pairs and takes several minutes:
+    recomputing it per request made opening a report cost as much as producing
+    it in the first place. ``artifact_dir`` runs are never served
     from cache, because those write difference maps and RSS volumes to disk as
     a side effect and the caller wants the files, not only the numbers.
     """
