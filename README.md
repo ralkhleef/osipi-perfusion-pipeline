@@ -56,7 +56,16 @@ osipi-perfusion-pipeline/
                 └── site_3/*_mask.nii.gz
 ```
 
-Then run `docker compose up --build`, open http://localhost:8000 and:
+Start the app:
+
+- macOS: double-click `scripts/start/start.command`. If macOS says it cannot
+  be opened, right-click it, choose *Open*, then *Open* again.
+- Windows: double-click `scripts\start\start.bat`.
+- Or run `docker compose up --build` from the project folder.
+
+Docker Desktop must be installed and running. The first start downloads and
+builds the image, which takes a few minutes. The app then opens at
+http://localhost:8000. In the app:
 
 1. Upload: enter a team name and email, choose *Select folder*, and select
    the `submission` folder.

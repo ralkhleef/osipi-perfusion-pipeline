@@ -3,6 +3,7 @@ setlocal
 
 set APP_URL=http://localhost:8000
 cd /d "%~dp0..\.."
+set "PWD=%CD%"
 
 where docker >nul 2>nul
 if errorlevel 1 (
