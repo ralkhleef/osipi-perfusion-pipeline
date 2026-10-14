@@ -163,10 +163,10 @@
             <li><strong>Region definitions.</strong> These come from the organiser-provided masks.</li>
           </ul>
 
-          <p>The supplied DCE masks overlap, but the confirmed analysis regions do not:
-            hippocampus is subtracted from the matching site's grey-matter mask. The source
-            NIfTI masks remain unchanged; grey-matter statistics, reference comparisons and
-            signal RSS all use the exclusive region.</p>
+          <p>When organiser masks overlap, the configuration can make the analysis regions
+            mutually exclusive: the inner region is subtracted from the matching site's outer
+            mask. The source NIfTI masks remain unchanged; region statistics, reference
+            comparisons and signal RSS all use the exclusive region.</p>
         </section>
 
         <section>

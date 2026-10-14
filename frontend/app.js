@@ -126,6 +126,22 @@ async function checkDockerAvailability() {
 
 function el(id) { return document.getElementById(id); }
 
+// Convert a FastAPI error detail (string or list) into readable text.
+function apiErrorText(detail, fallback) {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (!item || typeof item !== "object") return String(item);
+      const loc = Array.isArray(item.loc) ? item.loc.filter((x) => x !== "body").join(".") : "";
+      return loc ? `${loc}: ${item.msg || "invalid"}` : (item.msg || JSON.stringify(item));
+    });
+    return parts.length ? `${fallback} ${parts.join("; ")}` : fallback;
+  }
+  if (typeof detail === "object") return detail.message || detail.msg || detail.error || fallback;
+  return String(detail);
+}
+
 function getRadio(name) {
   const checked = document.querySelector(`input[name="${name}"]:checked`);
   return checked ? checked.value : null;
@@ -2590,7 +2606,7 @@ function _xhrUpload(url, formData, onProgress) {
     xhr.onload = () => {
       const data = xhr.response || {};
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-      else reject(new Error(data.detail || "Upload failed."));
+      else reject(new Error(apiErrorText(data.detail, "Upload failed.")));
     };
     xhr.onerror   = () => reject(new Error("Upload failed. Is the server running?"));
     xhr.ontimeout = () => reject(new Error("Upload timed out."));
@@ -2716,7 +2732,7 @@ async function importZenodo() {
     body:    JSON.stringify({ zenodo_input: zi ? zi.value.trim() : "" }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Zenodo import failed.");
+  if (!res.ok) throw new Error(apiErrorText(data.detail, "Zenodo import failed."));
   return data;
 }
 
@@ -2732,7 +2748,7 @@ async function importGithub() {
     }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "GitHub import failed.");
+  if (!res.ok) throw new Error(apiErrorText(data.detail, "GitHub import failed."));
   return data;
 }
 
@@ -2756,7 +2772,7 @@ async function runValidation() {
     body:    JSON.stringify(payload),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Validation failed.");
+  if (!res.ok) throw new Error(apiErrorText(data.detail, "Validation failed."));
   return data;
 }
 
@@ -3582,7 +3598,7 @@ async function _regroupSubmissions(mode, ids) {
       body: JSON.stringify({ submission_ids: ids, mode }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Regrouping failed.");
+    if (!response.ok) throw new Error(apiErrorText(data.detail, "Regrouping failed."));
     // Re-enter the review step from the new grouping, rather than patching the
     // old rows: everything downstream keys off submission ids, and half of the
     // ids no longer exist.
@@ -3591,6 +3607,16 @@ async function _regroupSubmissions(mode, ids) {
     batchState.uploadData = { ...(batchState.uploadData || {}), submissions };
     batchState.selectedIds = new Set(submissions.map((s) => s.submission_id));
     batchState.isBatch = submissions.length > 1;
+    if (submissions.length === 1) {
+      state.submissionId = submissions[0].submission_id;
+      state.detection = {
+        nifti_count: Number.isFinite(Number(submissions[0].nifti_count)) ? Number(submissions[0].nifti_count) : null,
+        detected_parameter_map_type: submissions[0].detected_parameter_map_type || "Unknown",
+      };
+    } else {
+      state.submissionId = null;
+    }
+    batchState.validationData = null;
     renderBatchTable(submissions);
     _refreshWizardFooter();
     saveSessionState();
@@ -3952,7 +3978,7 @@ async function runBatchValidation(submissionIds) {
       }),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Batch validation failed.");
+    if (!res.ok) throw new Error(apiErrorText(data.detail, "Batch validation failed."));
 
     batchState.batchId        = data.batch_id;
     batchState.validationData = data;
@@ -5228,7 +5254,7 @@ async function runBatchExec(btn, subId, challenge) {
     const data = await resp.json();
 
     if (!resp.ok || !data.success) {
-      const msg = (data && (data.detail || data.message)) || "Execution failed.";
+      const msg = apiErrorText(data && (data.detail || data.message), "Execution failed.");
       _updateRunRow(subId, null, msg);
       _tickRunProgress(false, 0);
     } else {
@@ -5381,7 +5407,7 @@ function _updateValCardExecBadge(subId, newStatus) {
       const data = await resp.json();
 
       if (!resp.ok || !data.success) {
-        if (executeStatus) { executeStatus.className = "submit-status status-error"; executeStatus.textContent = (data && (data.detail || data.message)) || "Execution failed."; }
+        if (executeStatus) { executeStatus.className = "submit-status status-error"; executeStatus.textContent = apiErrorText(data && (data.detail || data.message), "Execution failed."); }
         const rps = el("run-panel-status");
         if (rps) { rps.className = "run-panel-status rps-fail"; rps.textContent = "Failed"; }
         return;
@@ -5421,7 +5447,7 @@ function _updateValCardExecBadge(subId, newStatus) {
       try {
         const url = `${API}/api/export-execution?submission_id=${encodeURIComponent(submissionId)}&blinded=${blinded}`;
         const r = await fetch(url);
-        if (!r.ok) { const err = await r.json().catch(() => ({})); if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = err.detail || "Export failed."; } return; }
+        if (!r.ok) { const err = await r.json().catch(() => ({})); if (statusEl) { statusEl.style.display = ""; statusEl.className = "submit-status status-error"; statusEl.textContent = apiErrorText(err.detail, "Export failed."); } return; }
         const blob = await r.blob();
         const cd   = r.headers.get("Content-Disposition") || "";
         const fname = cd.match(/filename="([^"]+)"/)?.[1] || `execution_${blinded ? "blinded" : "unblinded"}.csv`;
@@ -5898,7 +5924,7 @@ async function exportBatch(blinded) {
   try {
     const url = `${API}/api/export-batch?batch_id=${encodeURIComponent(batchState.batchId)}&blinded=${blinded}`;
     const res = await fetch(url);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "Export failed.")); }
     const blob = await res.blob();
     triggerDownload(blob, `osipi-batch-${batchState.batchId}-${blinded ? "blinded" : "unblinded"}.csv`);
   } catch (err) {
@@ -5929,7 +5955,7 @@ function _makeValExportHandler(btn, blinded) {
     try {
       const url = `${API}/api/export-validation?submission_id=${encodeURIComponent(state.submissionId)}&format=csv&blinded=${blinded}`;
       const res = await fetch(url);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "Export failed.")); }
       const blob = await res.blob();
       triggerDownload(blob, `osipi-validation-${blinded ? "blinded" : "unblinded"}-${state.submissionId}.csv`);
     } catch (err) {
@@ -5961,7 +5987,7 @@ async function exportBatchExecution(blinded) {
   try {
     const url = `${API}/api/export-batch-execution?batch_id=${encodeURIComponent(batchState.batchId)}&blinded=${blinded}`;
     const res = await fetch(url);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "Export failed.")); }
     const blob = await res.blob();
     triggerDownload(blob, `osipi-batch-execution-${batchState.batchId}-${blinded ? "blinded" : "unblinded"}.csv`);
   } catch (err) {
@@ -8346,7 +8372,7 @@ async function _loadConfigurationManager(challengeType = null) {
   try {
     const response = await fetch(`${API}/api/configuration-manager?challenge_type=${encodeURIComponent(challenge)}`);
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Could not load configuration.");
+    if (!response.ok) throw new Error(apiErrorText(data.detail, "Could not load configuration."));
     _renderConfigurationManager(data);
   } catch (error) {
     if (loading) loading.textContent = error.message;
@@ -8356,7 +8382,7 @@ async function _loadConfigurationManager(challengeType = null) {
 async function _configurationManagerPost(path, payload) {
   const response = await fetch(`${API}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || "Request failed.");
+  if (!response.ok) throw new Error(apiErrorText(data.detail, "Request failed."));
   return data;
 }
 
@@ -8514,7 +8540,7 @@ function _wireConfigurationManager() {
     try {
       const response = await fetch(`${API}/api/configuration-manager/import`, { method: "POST", body });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Import failed.");
+      if (!response.ok) throw new Error(apiErrorText(data.detail, "Import failed."));
       _configurationManagerShow(`${data.version.version_id} imported as an inactive version.`, true);
       await _loadConfigurationManager(data.version.challenge_type);
     } catch (error) { _configurationManagerShow(error.message, false); }
@@ -8530,7 +8556,7 @@ function _wireConfigurationManager() {
     try {
       const response = await fetch(`${API}/api/configuration-manager/assets/upload`, { method: "POST", body });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Asset upload failed.");
+      if (!response.ok) throw new Error(apiErrorText(data.detail, "Asset upload failed."));
       _configurationManagerShow(`${data.asset.name} added to local private assets.`, true);
       el("config-manager-asset-file").value = "";
       if (el("config-manager-asset-file-name")) el("config-manager-asset-file-name").textContent = "No file selected";
@@ -8777,7 +8803,7 @@ async function _saveScoringSetup() {
       body:    JSON.stringify({ challenge_type: ct, mode, package_id: packageId }),
     });
     const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || "Request failed");
+    if (!r.ok) throw new Error(apiErrorText(d.detail, "Request failed"));
 
     if (msgEl) {
       const builtin = _builtinProviderForChallenge(
@@ -8832,7 +8858,7 @@ async function _saveScoringSetup() {
       try {
         const r = await fetch(`${API}/api/scoring/packages/upload`, { method: "POST", body: fd });
         const d = await r.json();
-        if (!r.ok) throw new Error(d.detail || "Upload failed");
+        if (!r.ok) throw new Error(apiErrorText(d.detail, "Upload failed"));
         if (statusEl) { statusEl.textContent = `Installed: ${d.manifest?.name || d.package_id}`; statusEl.className = "scoring-upload-status ok"; }
         await _loadInstalledPackages(_getSessionChallengeType(), d.package_id);
         fileInput.value = "";
@@ -8853,7 +8879,7 @@ async function _saveScoringSetup() {
     if (!confirm(`Remove scoring package "${pkgId}"?`)) return;
     try {
       const r = await fetch(`${API}/api/scoring/packages/${encodeURIComponent(pkgId)}`, { method: "DELETE" });
-      if (!r.ok) { const d = await r.json(); throw new Error(d.detail || "Remove failed"); }
+      if (!r.ok) { const d = await r.json(); throw new Error(apiErrorText(d.detail, "Remove failed")); }
       await _loadInstalledPackages(_getSessionChallengeType(), null);
     } catch (err) {
       alert(`Failed to remove package: ${err.message}`);
@@ -8889,7 +8915,7 @@ async function _reloadChallengeRules() {
     // server: the person is expected to fix the file and press the button
     // again. Say which configuration is actually running so they are not left
     // wondering whether they have broken the pipeline.
-    if (!r.ok) throw new Error(d.detail || "Request failed");
+    if (!r.ok) throw new Error(apiErrorText(d.detail, "Request failed"));
     if (!d.reloaded) {
       show(`${d.error} ${d.detail || ""}`.trim(), false);
       return;
@@ -9709,7 +9735,7 @@ function _makeScoringExportHandler(btn, blinded) {
       const res = await fetch(url);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail || "Export failed.");
+        throw new Error(apiErrorText(d.detail, "Export failed."));
       }
       const blob  = await res.blob();
       const cd    = res.headers.get("Content-Disposition") || "";
@@ -9755,7 +9781,7 @@ function _makeCombinedExportHandler(btn, blinded) {
     try {
       // Researcher CSV downloads use the tidy long format (one row per map/ROI/metric).
       const res = await fetch(`${API}/api/export-combined?${q}&blinded=${blinded}&shape=long`);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "Export failed."); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "Export failed.")); }
       const blob  = await res.blob();
       const cd    = res.headers.get("Content-Disposition") || "";
       const fname = cd.match(/filename="([^"]+)"/)?.[1] || `osipi_results_long_${blinded ? "blinded" : "unblinded"}.csv`;
@@ -9782,7 +9808,7 @@ function _makeCombinedJsonExportHandler(btn, blinded = true) {
     if (statusEl) statusEl.style.display = "none";
     try {
       const res = await fetch(`${API}/api/export-combined?${q}&blinded=${blinded}&format=json`);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "JSON export failed."); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "JSON export failed.")); }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") || "";
       const fname = cd.match(/filename="([^"]+)"/)?.[1] || `osipi_combined_${blinded ? "blinded" : "unblinded"}.json`;
@@ -9916,7 +9942,7 @@ function _wireExportRows() {
       const res = await fetch(`${API}/api/export-roi-descriptive?${q}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail || "Export failed.");
+        throw new Error(apiErrorText(d.detail, "Export failed."));
       }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") || "";
@@ -9964,7 +9990,7 @@ function _wireExportRows() {
     if (statusEl) statusEl.style.display = "none";
     try {
       const res = await fetch(`${API}/api/export/report/pdf?${q}&blinded=true`);
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || "PDF report failed."); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(apiErrorText(d.detail, "PDF report failed.")); }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") || "";
       const fname = cd.match(/filename="([^"]+)"/)?.[1] || "osipi_report.pdf";

@@ -1246,11 +1246,21 @@ def test_the_guide_matches_what_the_pipeline_actually_ships() -> None:
 
 
 def test_the_guide_explains_the_confirmed_exclusive_gray_matter_region() -> None:
-    """Source masks overlap, but analysis must use GM minus hippocampus."""
     text = _guide_text()
-    assert "confirmed analysis regions do not" in text
-    assert "hippocampus is subtracted" in text
+    assert "mutually exclusive" in text
+    assert "the inner region is subtracted" in text
     assert "signal RSS all use the exclusive region" in text
+
+
+def test_docs_do_not_mention_hippocampus() -> None:
+    docs = Path(__file__).resolve().parents[1] / "docs"
+    leaks = [
+        str(page.relative_to(docs))
+        for page in docs.rglob("*")
+        if page.is_file() and page.suffix in {".html", ".js", ".css", ".csv", ".md", ".yaml"}
+        and "hippocamp" in page.read_text(encoding="utf-8", errors="ignore").lower()
+    ]
+    assert leaks == []
 
 
 def test_the_guide_distinguishes_the_two_things_called_cov() -> None:

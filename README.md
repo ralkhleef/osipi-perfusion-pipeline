@@ -29,6 +29,46 @@ docker compose down
 The `scripts/start/` and `scripts/stop/` folders also contain macOS, Linux, and
 Windows launchers for reviewers who prefer not to type Docker commands.
 
+## Testing with the DCE test data
+
+The DCE test data contains three folders. Only `submission/` is uploaded in
+the app. Copy the other two into `data/reference_data/` first:
+
+| Folder in the test data | Where it goes | Uploaded in the app? |
+|---|---|---|
+| `hidden_ground_truth/` (`P01/ … P10/`) | copy its `P01 … P10` folders into `data/reference_data/maps/` | No |
+| `shared_masks/` (`site_1/ … site_3/`) | copy its `site_*` folders into `data/reference_data/dce/masks/` | No |
+| `submission/` | — | Yes |
+
+After copying, the layout inside the repository is:
+
+```text
+osipi-perfusion-pipeline/
+└── data/
+    └── reference_data/
+        ├── maps/
+        │   ├── P01/site_1/scan_1/{Ct,Ktrans,vp}.nii.gz
+        │   └── ...
+        └── dce/
+            └── masks/
+                ├── site_1/*_mask.nii.gz
+                ├── site_2/*_mask.nii.gz
+                └── site_3/*_mask.nii.gz
+```
+
+Then run `docker compose up --build`, open http://localhost:8000 and:
+
+1. Upload: enter a team name and email, choose *Select folder*, and select
+   the `submission` folder.
+2. Review: press *Validate*.
+3. Validate: press *Continue*.
+4. Run: press *Continue*.
+5. QC & Preview: wait for "Ground truth is loaded", then press *Run analysis*.
+6. Export: download the CSV, JSON, HTML or PDF results.
+
+macOS `._*` and `__MACOSX` files are ignored, so they do not need to be
+deleted. `data/reference_data/` is ignored by Git.
+
 ## Repository guide
 
 | If you want to… | Go to… |
