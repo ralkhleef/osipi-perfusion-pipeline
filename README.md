@@ -63,7 +63,9 @@ http://localhost:8000. In the app:
    again and choose `shared_masks`. Files keep their participant, site and
    scan folders. Close the window and the analysis starts by itself; it can
    take a few minutes.
-4. Export: download the CSV, JSON, HTML or PDF results.
+4. Export: *Results table* gives one row per scan and region, with the ROI
+   statistics beside the comparison with the reference. The blinded and
+   unblinded CSVs, JSON, HTML and PDF reports are there too.
 
 Reference data only needs to be added once; it is stored in
 `data/reference_data/`, which is ignored by Git. It can also be copied there

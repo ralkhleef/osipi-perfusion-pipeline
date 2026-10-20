@@ -132,7 +132,7 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   check("median displayed", html.includes("0.2500"));
   check("mean displayed", html.includes("0.3000"));
   check("range displayed", html.includes("0.1000 to 0.5000"));
-  check("map type displayed", html.includes("KTRANS"));
+  check("map type displayed", html.includes("Ktrans"));
   check("ROI label displayed", html.includes("Tumour"));
   check("dataset title-cased for display",
         nodes["roi-descriptive-scope"].innerHTML.includes("Synthetic"),
@@ -147,7 +147,7 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   check("methodology states CoV storage",
         nodes["roi-descriptive-method"].textContent.includes("stored as a ratio"));
   check("map units shown with the map",
-        nodes["roi-descriptive-body"].innerHTML.includes("KTRANS · min^-1"));
+        nodes["roi-descriptive-body"].innerHTML.includes("Ktrans (min⁻¹)"));
 }
 
 // ── Implicit clinical site ───────────────────────────────────────────────

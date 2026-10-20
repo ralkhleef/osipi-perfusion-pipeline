@@ -1297,7 +1297,7 @@ checkContains("Export summary title", exportSection, "Review summary");
 checkContains("Export disclaimer moved into a tooltip", exportSection, "QC metrics are not official OSIPI scores");
 checkContains("Export main list exists", exportSection, "export-main-list");
 checkContains("Export step label is Step 6 of 6", exportSection, "Step 6 of 6: Export");
-checkEqual("Step 6 main UI shows six main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 6);
+checkEqual("Step 6 main UI shows seven main export options", countOccurrences(mainExportOptions, '{ id: "export-'), 7);
 checkContains("Main HTML report option", mainExportOptions, "HTML report");
 checkContains("Main PDF report option", mainExportOptions, "PDF report");
 checkContains("Main blinded CSV option", mainExportOptions, 'aria-label="Download blinded CSV"');
@@ -1370,8 +1370,8 @@ checkContains("The unavailable rows still say what is missing",
   sandbox._renderExportRows();
   const atLoad = host.innerHTML;
   checkCondition("At load every export row is disabled",
-    (atLoad.match(/<button disabled/g) || []).length === 6,
-    `${(atLoad.match(/<button disabled/g) || []).length} of 6 disabled`);
+    (atLoad.match(/<button disabled/g) || []).length === 7,
+    `${(atLoad.match(/<button disabled/g) || []).length} of 7 disabled`);
   checkCondition("and says why", atLoad.includes("Nothing has been reviewed yet."));
 
   // 2. A submission has been validated and ROI statistics exist. This is the
@@ -1402,15 +1402,15 @@ checkContains("The unavailable rows still say what is missing",
   delete sandbox._scoreCache["sub-1"];
   sandbox._renderExportRows();
   const noRoi = host.innerHTML;
-  checkCondition("A missing ROI table disables only that row",
-    (noRoi.match(/<button disabled/g) || []).length === 1,
+  checkCondition("A missing ROI table disables only the two tables that need it",
+    (noRoi.match(/<button disabled/g) || []).length === 2,
     `${(noRoi.match(/<button disabled/g) || []).length} rows disabled`);
   checkCondition("and explains what it needs",
     noRoi.includes("compatible ROI masks"));
 }
 checkContains("Main PDF report button label", mainExportOptions, ">Download PDF</button>");
 checkContains("Main JSON button label", mainExportOptions, ">Download JSON</button>");
-checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 3);
+checkEqual("Main CSV buttons share Download CSV label", countOccurrences(mainExportOptions, ">Download CSV</button>"), 4);
 checkContains("Main report reuses existing report ID", mainExportOptions, 'id="export-report-btn"');
 checkContains("Main PDF report uses PDF export ID", mainExportOptions, 'id="export-pdf-report-btn"');
 checkNotContains("Main redundant blinded CSV ID removed", mainExportOptions, 'id="export-combined-blinded-btn"');
@@ -1644,8 +1644,9 @@ checkContains("Reset clears wizard + session state", appJs, "clearWizardState();
 // Export row
 checkContains("ROI export row present", appJs, "export-roi-descriptive-group");
 checkContains("ROI export row is titled", appJs, "ROI statistics CSV");
-checkContains("ROI export uses the dedicated endpoint", appJs, "/api/export-roi-descriptive");
-checkContains("ROI export reuses the session query helper", appJs, "export-roi-descriptive?${q}");
+checkContains("Results table export uses its endpoint", appJs, '"export-results-table", "results_table.csv"');
+checkContains("ROI export uses the dedicated endpoint", appJs, '"export-roi-descriptive", "roi_descriptive_statistics.csv"');
+checkContains("CSV exports reuse the session query helper", appJs, "/api/${endpoint}?${q}");
 checkContains("ROI export handles a missing filename header", appJs, '"roi_descriptive_statistics.csv"');
 checkContains("ROI export reports errors through the existing status element", appJs, 'el("export-combined-status")');
 checkNotContains("ROI export is not mislabelled as accuracy", appJs, "ROI Accuracy CSV");
@@ -1681,7 +1682,7 @@ checkContains("Empty-state text is actually looked up by status", appJs,
 checkContains("Methodology text present", appJs, "population SD");
 checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio");
 
-["r.roi_label || r.roi_id", "_roiNumber(r.roi_median)",
+["regionLabel.charAt(0)", "_roiNumber(r.roi_median)",
  "_roiPercent(r.roi_within_scan_cov)"].forEach((expr) => {
   checkContains(`ROI field escaped: ${expr}`, appJs, `escapeHtml(${expr}`);
 });

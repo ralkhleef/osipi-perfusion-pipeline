@@ -12,7 +12,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -2092,6 +2092,126 @@ def export_roi_descriptive(
         media_type="text/csv",
         headers={"Content-Disposition":
                  f'attachment; filename="roi_descriptive_statistics_{tag}.csv"'},
+    )
+
+
+RESULTS_TABLE_COLUMNS = (
+    "Submission", "Participant", "Site", "Repeat", "Map", "Units", "Region",
+    "Voxels", "Mean", "Median", "SD", "Reference mean", "Bias", "MAE", "RMSE",
+    "Correlation",
+)
+
+
+def _results_table_number(value: Any) -> str:
+    """Four significant figures, blank when there is no finite number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return ""
+    if not math.isfinite(value):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    return f"{value:.4g}"
+
+
+def _results_table_rows(submission_label: str, scoring: dict) -> list[list[str]]:
+    """One row per scan, map and region: ROI statistics beside the comparison."""
+    def key(participant: Any, site: Any, repeat: Any, map_type: Any, region: Any) -> tuple:
+        return tuple(str(v or "").strip().lower() for v in (participant, site, repeat, map_type, region))
+
+    comparisons: dict[tuple, dict] = {}
+    names: dict[str, str] = {}
+    for item in scoring.get("maps") or []:
+        if not isinstance(item, dict) or item.get("status") != "compared":
+            continue
+        map_type = item.get("detected_map_type")
+        names[str(map_type or "").lower()] = str(map_type or "")
+        identity = (item.get("participant"), item.get("site"), item.get("repeat"), map_type)
+        whole = item.get("whole_map")
+        if isinstance(whole, dict) and whole.get("status") == "compared":
+            comparisons[key(*identity, "whole image")] = {**whole, "units": item.get("units")}
+        for mask in item.get("masks") or []:
+            metrics = mask.get("metrics") if isinstance(mask, dict) else None
+            if isinstance(metrics, dict) and metrics.get("status") == "compared":
+                comparisons[key(*identity, mask.get("mask_label"))] = {**metrics, "units": item.get("units")}
+
+    def sort_key(row: list[str]) -> tuple:
+        def num(text: str) -> tuple:
+            return (0, float(text)) if text.replace(".", "", 1).isdigit() else (1, text)
+        return (num(row[1]), num(row[2]), num(row[3]), row[4].lower(), row[6] == "Whole image", row[6].lower())
+
+    rows: list[list[str]] = []
+    seen: set[tuple] = set()
+    for record in scoring.get("roi_descriptive_statistics") or []:
+        if not isinstance(record, dict):
+            continue
+        region = record.get("roi_label") or record.get("roi_id") or ""
+        k = key(record.get("participant"), record.get("site"), record.get("repeat"),
+                record.get("map_type"), region)
+        seen.add(k)
+        match = comparisons.get(k, {})
+        map_type = str(record.get("map_type") or "")
+        rows.append([
+            submission_label,
+            str(record.get("participant") or ""), str(record.get("site") or ""),
+            str(record.get("repeat") or ""),
+            names.get(map_type.lower()) or map_type[:1].upper() + map_type[1:],
+            str(record.get("units") or ""), str(region)[:1].upper() + str(region)[1:],
+            _results_table_number(record.get("voxel_count")),
+            _results_table_number(record.get("roi_mean")),
+            _results_table_number(record.get("roi_median")),
+            _results_table_number(record.get("roi_within_scan_sd")),
+            _results_table_number(match.get("mean_reference")),
+            _results_table_number(match.get("bias")),
+            _results_table_number(match.get("mae")),
+            _results_table_number(match.get("rmse")),
+            _results_table_number(match.get("correlation")),
+        ])
+    for k, metrics in comparisons.items():
+        if k in seen:
+            continue
+        participant, site, repeat, map_type, region = k
+        rows.append([
+            submission_label, participant, site, repeat, names.get(map_type, map_type),
+            str(metrics.get("units") or ""), region[:1].upper() + region[1:],
+            _results_table_number(metrics.get("voxel_count")),
+            _results_table_number(metrics.get("mean_submitted")), "", "",
+            _results_table_number(metrics.get("mean_reference")),
+            _results_table_number(metrics.get("bias")),
+            _results_table_number(metrics.get("mae")),
+            _results_table_number(metrics.get("rmse")),
+            _results_table_number(metrics.get("correlation")),
+        ])
+    for row in rows:
+        if row[5].strip().lower() in {"units not provided", "not provided", "unknown"}:
+            row[5] = ""
+    return sorted(rows, key=sort_key)
+
+
+@app.get("/api/export-results-table")
+def export_results_table(
+    submission_id: Optional[str] = Query(None),
+    batch_id:      Optional[str] = Query(None),
+    blinded:       bool          = Query(True, description="Kept for a uniform export query; this table never names a team"),
+):
+    """A readable results table: one row per scan, map and region."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(list(RESULTS_TABLE_COLUMNS))
+    for index, sid in enumerate(_collect_export_ids(batch_id, submission_id), start=1):
+        try:
+            summary = _gather_summary(sid)
+        except Exception:
+            continue
+        analysis = summary.get("nifti_analysis")
+        scoring = (analysis or {}).get("reference_scoring") if isinstance(analysis, dict) else None
+        if isinstance(scoring, dict):
+            writer.writerows(_results_table_rows(f"Submission {index}", scoring))
+    tag = report_filename_tag(
+        (batch_id or submission_id or "export").replace("/", "_"), blinded=True)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="results_table_{tag}.csv"'},
     )
 
 

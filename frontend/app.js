@@ -9487,6 +9487,11 @@ function _renderExportRows() {
   const have = _exportAvailability();
   const noSubmission = have.submission ? null : "Nothing has been reviewed yet.";
   const rows = [
+    { id: "export-results-table-group", icon: "CSV", iconClass: "export-icon-score", title: "Results table",
+      meta: "One row per scan and region. Opens cleanly in Excel.",
+      unavailable: noSubmission || (have.roi || have.reference ? null
+        : "No ROI statistics or reference comparison yet, so this would be empty."),
+      btn: `<button type="button" id="export-results-table-btn" class="btn btn-secondary export-dl-btn export-compact-btn export-primary-action" aria-label="Download results table CSV" title="Downloads one row per scan, map and region, without team details.">Download CSV</button>` },
     { id: "export-combined-csv-group", icon: "CSV", iconClass: "export-icon-score", title: "Blinded CSV",
       meta: "Shareable summary.",
       unavailable: noSubmission,
@@ -9536,7 +9541,7 @@ function _renderExportRows() {
         <h2 id="export-primary-heading">Primary outputs</h2>
         <p>CSV and JSON files for analysis.</p>
       </div>
-      <div class="worklist export-output-list">${renderRows([rows[0], rows[1], rows[2]])}</div>
+      <div class="worklist export-output-list">${renderRows(rows.slice(0, 4))}</div>
     </section>
     <details class="export-output-group export-output-group--additional" id="export-additional-outputs">
       <summary class="export-output-heading export-output-summary">
@@ -9546,7 +9551,7 @@ function _renderExportRows() {
         </span>
         <span class="export-output-summary-icon" aria-hidden="true"><span class="export-output-chevron"></span></span>
       </summary>
-      <div class="worklist export-output-list">${renderRows(rows.slice(3))}</div>
+      <div class="worklist export-output-list">${renderRows(rows.slice(4))}</div>
     </details>`;
   _wireExportRows();
 }
@@ -9555,8 +9560,13 @@ _renderExportRows();
 function _wireExportRows() {
   // ROI descriptive CSV. Reads records already computed during scoring, the
   // download never triggers a recalculation.
-  const roiCsvBtn = el("export-roi-descriptive-btn");
-  if (roiCsvBtn) roiCsvBtn.addEventListener("click", async () => {
+  _wireCsvDownload(el("export-results-table-btn"), "export-results-table", "results_table.csv");
+  _wireCsvDownload(el("export-roi-descriptive-btn"), "export-roi-descriptive", "roi_descriptive_statistics.csv");
+  _wireCombinedExports();
+}
+
+function _wireCsvDownload(button, endpoint, fallbackName) {
+  if (button) button.addEventListener("click", async () => {
     const statusEl = el("export-combined-status");
     const q = _sessionExportQuery();
     if (!q) {
@@ -9567,20 +9577,19 @@ function _wireExportRows() {
       }
       return;
     }
-    const label = roiCsvBtn.textContent.trim() || "Download CSV";
-    setLoading(roiCsvBtn, true, label);
+    const label = button.textContent.trim() || "Download CSV";
+    setLoading(button, true, label);
     if (statusEl) statusEl.style.display = "none";
     try {
-      const res = await fetch(`${API}/api/export-roi-descriptive?${q}`);
+      const res = await fetch(`${API}/api/${endpoint}?${q}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(apiErrorText(d.detail, "Export failed."));
       }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") || "";
-      // A header-only CSV is a valid response when no ROI rows exist.
-      const fname = cd.match(/filename="([^"]+)"/)?.[1]
-        || "roi_descriptive_statistics.csv";
+      // A header-only CSV is a valid response when no rows exist.
+      const fname = cd.match(/filename="([^"]+)"/)?.[1] || fallbackName;
       triggerDownload(blob, fname);
     } catch (err) {
       if (statusEl) {
@@ -9589,10 +9598,12 @@ function _wireExportRows() {
         statusEl.textContent = err.message || "Export failed.";
       }
     } finally {
-      setLoading(roiCsvBtn, false, label);
+      setLoading(button, false, label);
     }
   });
+}
 
+function _wireCombinedExports() {
   _makeCombinedExportHandler(el("export-combined-unblinded-btn"), false);
   _makeCombinedExportHandler(el("export-combined-csv-btn"), true);
   _makeCombinedJsonExportHandler(el("export-combined-json-btn"), true);
@@ -9934,14 +9945,16 @@ function renderRoiDescriptiveStatistics(records, status) {
         .filter(([key]) => varying.has(key))
         .map(([, , read]) => `<td>${escapeHtml(read(r))}</td>`)
         .join("");
+      const mapName = _roiIdentity(r.map_type);
       const mapLabel = [
-        _roiIdentity(r.map_type).toUpperCase(),
-        r.units,
-      ].filter(Boolean).join(" · ");
+        mapName === "—" ? mapName : mapName.charAt(0).toUpperCase() + mapName.slice(1),
+        r.units ? `(${String(r.units).replace("^-1", "⁻¹")})` : "",
+      ].filter(Boolean).join(" ");
+      const regionLabel = String(r.roi_label || r.roi_id || "—");
       return `<tr data-roi-search="${escapeHtml(_roiSearchText(r))}">
         ${identity}
-        <td>${escapeHtml(mapLabel)}</td>
-        <td>${escapeHtml(r.roi_label || r.roi_id || "—")}</td>
+        <td class="roi-nowrap">${escapeHtml(mapLabel)}</td>
+        <td class="roi-nowrap">${escapeHtml(regionLabel.charAt(0).toUpperCase() + regionLabel.slice(1))}</td>
         <td class="num">${escapeHtml(_roiNumber(r.roi_mean))}</td>
         <td class="num">${escapeHtml(_roiNumber(r.roi_median))}</td>
         <td class="num">${escapeHtml(_roiNumber(r.roi_within_scan_sd))}</td>
