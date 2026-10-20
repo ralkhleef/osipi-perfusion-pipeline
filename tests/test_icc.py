@@ -164,6 +164,17 @@ def test_a_wider_level_gives_a_wider_interval() -> None:
     assert wide.confidence_high > narrow.confidence_high
 
 
+@pytest.mark.parametrize("model", icc.MODELS)
+def test_the_units_of_the_values_do_not_change_the_result(model: str) -> None:
+    """Ktrans in min^-1 is around 1e-3, so its variances sit near 1e-13."""
+    small = [[value * 1e-7 for value in row] for row in SF_TABLE]
+    reference = icc.compute_icc(SF_TABLE, model=model)
+    scaled = icc.compute_icc(small, model=model)
+    assert scaled.value == pytest.approx(reference.value, abs=1e-9)
+    assert scaled.confidence_low == pytest.approx(reference.confidence_low, abs=1e-9)
+    assert scaled.confidence_high == pytest.approx(reference.confidence_high, abs=1e-9)
+
+
 def test_the_interval_can_be_switched_off() -> None:
     result = icc.compute_icc(SF_TABLE, model=icc.MODEL_3_1, confidence_level=None)
     assert result.value is not None

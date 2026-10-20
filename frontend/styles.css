@@ -13161,3 +13161,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .cfg-asset-add #config-manager-asset-folder-status {
   margin-top: 10px;
 }
+
+.roi-table th, .roi-table td { padding: 8px 7px; }
+.roi-table th:first-child, .roi-table td:first-child { padding-left: 12px; }

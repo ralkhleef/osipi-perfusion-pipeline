@@ -430,6 +430,13 @@ def compute_icc(
     if any(len(row) != session_count for row in rows):
         return _unavailable(STATUS_INCOMPLETE_TABLE, model, **base)
 
+    # The ICC does not change when every value is multiplied by the same
+    # constant, but the variance tolerances are absolute. Rescaling to unit
+    # magnitude keeps small-valued maps such as Ktrans in min^-1 from having
+    # a real residual variance mistaken for zero.
+    scale = max((abs(float(v)) for row in rows for v in row), default=0.0)
+    if scale > 0 and math.isfinite(scale):
+        rows = [[float(v) / scale for v in row] for row in rows]
     table = anova_table(rows)
     value = _point_estimate(table, model)
     if value is None:

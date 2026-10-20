@@ -8297,7 +8297,7 @@ async function _loadScoringSetup() {
     // Update badge
     if (badgeEl) {
       if (mode === "none") {
-        badgeEl.textContent = "Not configured";
+        badgeEl.textContent = "Default";
         badgeEl.className   = "scoring-admin-badge";
       } else if (mode === "builtin") {
         badgeEl.textContent = builtin ? _providerDisplayName(builtin) : "Unavailable";
