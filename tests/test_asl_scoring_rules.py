@@ -1,13 +1,3 @@
-"""ASL-specific scoring rules added per the mentor (Lena) clarifications.
-
-Covers, without inventing any official scoring formula or threshold:
-  * real Lena filenames (Perfmap -> CBF, ATTmap -> ATT) are detected,
-  * parameter maps must be exactly 3-D; a 4-D file is a fitted-model role,
-  * same-shape-but-different-grid maps are refused (spatial_grid_mismatch),
-  * CBF and ATT metrics are reported per map type, never averaged together,
-  * repeatability/ICC are explicitly reported as unavailable from one map,
-  * difference maps preserve the submitted affine.
-"""
 from __future__ import annotations
 
 import gzip
@@ -90,7 +80,6 @@ def _row(result, map_type):
     raise AssertionError(f"No {map_type} row: {[r.get('detected_map_type') for r in result['maps']]}")
 
 
-# ── Real Lena filenames ────────────────────────────────────────────────────
 @pytest.mark.parametrize(
     ("filename", "expected"),
     [

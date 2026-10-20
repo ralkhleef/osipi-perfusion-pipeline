@@ -1,21 +1,4 @@
-"""Which findings stop a submission is challenge policy, not code.
-
-The DCE challenge lead's synthetic submission is the layout she says teams
-will really use, and it failed on rules the pipeline had assumed rather than
-been told. Every one of those is a policy decision belonging to the organiser:
-whether a methods document is mandatory, whether a submission that cannot be
-checked for completeness is still acceptable.
-
-Changing that used to mean editing Python. It is now a mapping of issue code to
-severity in the challenge's own configuration, alongside the BIDS settings that
-already worked this way.
-
-Three properties matter and are pinned below. Defaults must not move, because a
-challenge that never configures this must behave exactly as before. A typo must
-be rejected loudly, because a silently ignored override leaves a rule at a
-severity the organiser thinks they changed. And nothing indicating unreadable
-or corrupt data may be downgraded at all.
-"""
+"""Which findings stop a submission is challenge policy, not code."""
 
 from __future__ import annotations
 
@@ -51,12 +34,7 @@ def test_every_overridable_code_is_a_real_one() -> None:
 
 
 def test_unreadable_data_cannot_be_downgraded() -> None:
-    """Structure is policy. A file that will not open is not.
-
-    Allowing these to be relaxed would let a challenge accept corrupt data by
-    configuration, and every number computed from it would be wrong while the
-    submission read as acceptable.
-    """
+    """Structure is policy."""
     for code in ("NIFTI_UNREADABLE", "NO_NIFTI_FILES", "SUBMISSION_FOLDER_EMPTY"):
         assert code not in _OVERRIDABLE_ISSUE_CODES, code
 
@@ -64,13 +42,7 @@ def test_unreadable_data_cannot_be_downgraded() -> None:
 # ── The configuration schema rejects mistakes ─────────────────────────────
 
 def _rules_with(issue_severity) -> dict:
-    """The shipped rules document with one override block added to DCE.
-
-    Built from the real configuration rather than a hand-written stub. The
-    schema requires a dozen top-level sections, so a stub small enough to read
-    fails for reasons that have nothing to do with what is being tested, and a
-    stub large enough to pass is a second copy of the config that drifts.
-    """
+    """The shipped rules document with one override block added to DCE."""
     import copy
     import yaml
 
@@ -82,12 +54,7 @@ def _rules_with(issue_severity) -> dict:
 
 
 def _errors(document: dict) -> list[str]:
-    """Schema errors for a rules document, as a list.
-
-    The validator raises rather than returning, because a bad configuration
-    should stop the application rather than be worked around. Tests want the
-    text, so the exception is caught here and nowhere else.
-    """
+    """Schema errors for a rules document, as a list."""
     from osipi_pipeline.config.rules import (
         ConfigValidationError,
         _validate_validation_rules,

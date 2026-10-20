@@ -1,15 +1,4 @@
-"""Overruling how an upload was grouped into submissions.
-
-A ZIP containing ``P01`` through ``P10`` is either one submission covering ten
-participants or ten separate submissions. Nothing in the files distinguishes
-them, so detection has to guess, and a reviewer who can see the folder names
-has to be able to say the guess was wrong.
-
-The requirement these tests hold to is that regrouping never loses a file.
-A regrouping that half-finishes would leave someone with a submission quietly
-missing scans, which is worse than one that refuses to run: the numbers would
-still come out, and they would be wrong.
-"""
+"""Overruling how an upload was grouped into submissions."""
 
 from __future__ import annotations
 
@@ -107,11 +96,7 @@ def test_splitting_preserves_participant_identity_in_the_manifest(extracted) -> 
 
 
 def test_merging_restores_the_folder_the_carve_consumed(extracted) -> None:
-    """The whole point: the participant level has to come back.
-
-    Without it the merged paths start at site_1/ and the participant can no
-    longer be determined, which is the bug that started all of this.
-    """
+    """The whole point: the participant level has to come back."""
     from services.ingest_service import regroup_submissions
     _one_submission(extracted, "upload", ["P01", "P02"])
     regroup_submissions(["upload"], "split")
@@ -147,17 +132,9 @@ def test_the_old_submissions_are_gone_after_merging(extracted) -> None:
     assert not (extracted / "upload_P02").exists()
 
 
-# ── The two mechanisms that restore a participant name ────────────────────
-#
-# The merged folder name comes from the manifest, and falls back to trimming
-# the id. Either alone gets P01 right, which is deliberate redundancy but also
-# means breaking one is invisible end to end. So both are pinned directly.
-
 @pytest.mark.parametrize("ids,expected", [
     (["upload_P01", "upload_P02"], "upload"),
     (["upload_P01", "upload_P02", "upload_P10"], "upload"),
-    # The case that caused the bug: a character-wise prefix gives "upload_P0",
-    # which would restore the participants as "1" and "2".
     (["run_2_P01", "run_2_P09"], "run_2"),
     (["a_Team_A", "a_Team_B"], "a_Team"),
     (["solo"], "solo"),
@@ -169,12 +146,7 @@ def test_the_merged_name_stops_at_an_underscore_boundary(ids, expected) -> None:
 
 
 def test_the_recorded_folder_name_is_what_merging_uses(extracted) -> None:
-    """Not the id. Deriving a name from an id is guesswork; this is recorded.
-
-    refresh_manifest resolves original_path to an absolute path, so what the
-    merge needs is its last component. Asserting the raw string here would pin
-    an incidental detail of where the test happens to run.
-    """
+    """Not the id."""
     from services.ingest_service import regroup_submissions
     from osipi_pipeline.ingestion.manifest import load_manifest
     _one_submission(extracted, "upload", ["P01", "P02"])

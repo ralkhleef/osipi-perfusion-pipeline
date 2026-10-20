@@ -1,16 +1,4 @@
-"""Advisory thresholds flag rows for attention and nothing more.
-
-A challenge lead mentioned "a rough threshold of acceptable performance as
-having a CoV below 15%", in the same message that ruled out pass/fail and
-ranking. Both halves matter. These tests pin the useful behaviour and, just as
-deliberately, pin the absence of the dangerous one: nothing here may fail,
-exclude or order a submission.
-
-Two mistakes would be easy to make and hard to notice, so both are tested:
-writing a CoV threshold as `15` instead of `0.15`, which would parse and then
-never fire; and treating an unavailable metric as compliant, which would let a
-map that could not be computed look like one that passed.
-"""
+"""Advisory thresholds flag rows for attention and nothing more."""
 
 from __future__ import annotations
 
@@ -62,11 +50,7 @@ def test_nothing_is_assessed_without_a_configured_threshold() -> None:
 
 @pytest.mark.parametrize("missing", [None, float("nan"), float("inf"), "", "n/a"])
 def test_an_unavailable_metric_is_not_assessed_rather_than_compliant(missing) -> None:
-    """Absence is not compliance.
-
-    A map whose CoV could not be computed has demonstrated nothing. Reporting
-    it as within threshold would make an unusable result look like a good one.
-    """
+    """Absence is not compliance."""
     result = th.assess(COV, missing, FIFTEEN_PERCENT)
     assert result.status == th.NOT_ASSESSED
     assert result.flagged is False
@@ -79,12 +63,7 @@ def test_a_boolean_is_not_a_measurement() -> None:
 # ── There is no pass/fail here ─────────────────────────────────────────────
 
 def test_the_vocabulary_offers_no_way_to_fail_a_submission() -> None:
-    """The guarantee, enforced rather than documented.
-
-    These challenges have no pass/fail and no ranking. If a `fail`, `pass` or
-    `score` ever appears in this module's vocabulary, that decision has been
-    made by accident and this test is where it surfaces.
-    """
+    """The guarantee, enforced rather than documented."""
     statuses = {th.WITHIN, th.ABOVE, th.NOT_ASSESSED}
     assert not any(
         word in status for status in statuses for word in ("pass", "fail", "score")
@@ -139,11 +118,7 @@ def test_the_summary_is_a_count_not_a_proportion() -> None:
 # ── The percentage mistake ─────────────────────────────────────────────────
 
 def test_a_percentage_written_as_a_whole_number_is_rejected() -> None:
-    """`warn_above: 15` would parse, load, and silently never fire.
-
-    That is worse than an error: the reviewer would believe the check is
-    running. The schema refuses it and says what to write instead.
-    """
+    """`warn_above: 15` would parse, load, and silently never fire."""
     pytest.importorskip("yaml")
     from osipi_pipeline.config import rules
 
@@ -189,12 +164,7 @@ def test_a_non_ratio_metric_may_exceed_one() -> None:
 # ── Nothing is configured today ────────────────────────────────────────────
 
 def test_no_shipped_challenge_configures_a_threshold() -> None:
-    """The 15% figure was described as a rough personal guide, not a rule.
-
-    Writing it into the shipped configuration would turn one person's habit
-    into the challenge's criterion. The mechanism is here; the number is the
-    organisers' to add.
-    """
+    """The 15% figure was described as a rough personal guide, not a rule."""
     pytest.importorskip("yaml")
     from osipi_pipeline.config.rules import thresholds_by_challenge
 

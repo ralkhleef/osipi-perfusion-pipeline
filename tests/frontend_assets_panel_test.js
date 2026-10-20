@@ -1,19 +1,4 @@
 #!/usr/bin/env node
-/**
- * One hundred and eighty files with three names between them.
- *
- * The DCE reference set is Ct, Ktrans and vp repeated once per scan. The
- * organiser panel listed all one hundred and eighty flat, and printed sixty
- * folder paths above them to compensate. Neither half answered the only
- * question a reader has -- which scan is this file from -- and the paths were
- * a wall rather than an answer.
- *
- * The folder is now stated once, files are grouped by the scan their folder
- * names, unreadable files are called out where they cannot be scrolled past,
- * and anything long enough to need one gets a filter.
- *
- * Run: node tests/frontend_assets_panel_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -164,12 +149,6 @@ console.log("\nSmall and empty sets are left alone");
               readable: true, shape: [121, 145, 91] }],
   });
   const html = host.innerHTML;
-  /* Reference maps, masks and measured signals are the same kind of thing --
-     organiser files grouped by the scan they belong to -- and giving one of
-     them grouping, a filter and a collapse while the others got a flat list
-     made three unrelated-looking panels. A filter on nine files is not
-     needed; a panel that behaves differently from the one above it is
-     worse. */
   check("every kind carries the same controls",
     html.includes('data-asset-filter="mask"'));
   check("and the file is still shown", html.includes("GM_mask.nii.gz"));
@@ -193,8 +172,6 @@ console.log("\nEvery kind behaves the same way");
   sandbox._renderConfigurationAssets({ challenge_type: "dce", items: masks });
   const html = host.innerHTML;
 
-  /* Masks put the site in the file name rather than the path, so they used to
-     fall through to a flat list while reference maps grouped by scan. */
   check("masks group by the site their filename names",
     (html.match(/class="cfg-asset-scan"/g) || []).length === 3,
     String((html.match(/class="cfg-asset-scan"/g) || []).length));

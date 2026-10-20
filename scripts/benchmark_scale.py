@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
 """Measure how the pipeline behaves as a submission grows.
 
-"The system shall be scalable to handle multiple submissions and large
-imaging datasets" is a stated non-functional requirement, and until this
-script it had never been measured: everything had been exercised on small
-synthetic data plus two real submissions. A requirement nobody measured is a
-hope.
-
-This grows a submission along the two axes that actually vary, the number of
-scans and the size of each map, and records wall time and peak memory for
-ingestion, validation and analysis separately, so a slow step can be
-identified rather than guessed at.
+Grows a submission by number of scans and map size, and records wall time
+and peak memory for ingestion, validation and analysis.
 
     python3 scripts/benchmark_scale.py                 # the default sweep
     python3 scripts/benchmark_scale.py --quick         # a fast sanity run
@@ -41,15 +33,6 @@ import nibabel as nib  # noqa: E402
 from osipi_pipeline.ingestion.manifest import refresh_manifest  # noqa: E402
 from osipi_pipeline.validation.validate import validate_submission  # noqa: E402
 
-#: (scans, voxels per side, timepoints). A 64 cube is a small research volume;
-#: 128 is a realistic one; the scan counts bracket a single submission and a
-#: batch. ``timepoints`` of 0 means 3-D parameter maps only.
-#:
-#: The 4-D rows exist because this benchmark reported comfortable numbers while
-#: the pipeline could not in fact validate the DCE challenge data at all. Those
-#: files are 4-D concentration curves: 8 MB on disk, 0.93 GB decompressed, and
-#: reading one whole cost 1.91 GB. Measuring only 3-D volumes made a memory
-#: problem invisible and put a figure on the project page that did not hold.
 DEFAULT_SWEEP = [
     (1, 64, 0), (4, 64, 0), (16, 64, 0), (4, 128, 0), (16, 128, 0),
     # Roughly the shape of a real DCE submission: a 4-D curve per scan.
@@ -75,12 +58,7 @@ def measured(label: str, results: dict):
 
 def build_submission(root: Path, scans: int, side: int,
                      timepoints: int = 0) -> tuple[int, float]:
-    """Write ``scans`` scans of two maps each. Returns file count and MB.
-
-    With ``timepoints`` above zero each scan also gets a 4-D curve, which is
-    where the memory actually goes: one such file decompresses to hundreds of
-    times its size on disk.
-    """
+    """Write ``scans`` scans of two maps each."""
     rng = np.random.default_rng(0)
     shape = (side, side, side)
     written = 0
@@ -149,9 +127,6 @@ def main(argv: list[str] | None = None) -> int:
               f"{row['validate']['seconds']:>11} {peak:>8}")
 
     if len(rows) >= 2:
-        # Compared against the smallest case. Reported to one decimal because
-        # rounding a 0.25x change to "0x" says nothing, and these steps are
-        # fast enough at the small end that the ratio is noisy either way.
         first, last = rows[0], rows[-1]
         def grew(step: str) -> str:
             base = first[step]["seconds"]

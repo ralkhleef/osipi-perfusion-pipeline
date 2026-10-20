@@ -1,21 +1,4 @@
 #!/usr/bin/env node
-/**
- * Showing, and correcting, how an upload was grouped into submissions.
- *
- * A ZIP containing P01 through P10 is either one submission covering ten
- * participants or ten separate submissions. Nothing in the files distinguishes
- * them, so detection guesses, and both ways of being wrong are bad quietly:
- * split a single submission and every file loses the participant level that
- * identified it; merge a real batch and several teams are scored as one.
- *
- * `_groupingModel` decides what the review step offers. It is pure, so the
- * wording and the offered direction are pinned here directly. The case that
- * matters most is the one where nothing should be offered at all: a submission
- * with no inner folders cannot be split, and showing a button that would fail
- * is worse than showing nothing.
- *
- * Run: node tests/frontend_grouping_note_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -82,9 +65,6 @@ console.log("\nSeveral submissions offer a merge");
 }
 
 console.log("\nNothing is offered when there is no decision to make");
-/* A button that would fail is worse than no button. Splitting needs at least
-   two inner folders; the backend refuses otherwise, so the interface must not
-   invite it. */
 check("a submission with no inner folders offers nothing",
   sandbox._groupingModel(one([])) === null);
 check("a submission with one inner folder offers nothing",

@@ -1,22 +1,4 @@
-"""Build an end-to-end DCE demo bundle.
-
-The script creates a synthetic DCE submission with Clinical and Synthetic
-datasets, then runs upload, validation, analysis, and export:
-
-    data/outputs/demo_evidence/
-        DCE_Test_Clean.zip            the input, reproducible
-        roi_statistics.csv            32 ROI rows
-        results_blinded.csv           blinded combined export
-        results_blinded.json          blinded combined export
-        results_unblinded.csv         organiser export
-        report_blinded.html/.pdf      no team identity anywhere
-        report_unblinded.html/.pdf    organiser copy
-        EVIDENCE.md                   check results
-
-Temporary submission files are removed when the script finishes.
-
-    python3 scripts/demo_evidence.py
-"""
+"""Build an end-to-end DCE demo bundle."""
 
 from __future__ import annotations
 

@@ -153,23 +153,12 @@ def test_modelled_st_is_required_per_scan_not_once() -> None:
 
 
 def test_a_missing_methods_document_no_longer_blocks() -> None:
-    """It used to. The challenge leads said it is not needed for the runs
-    being done now, so `methods` is no longer in any challenge's
-    `required_artifacts` and a submission without one is complete.
-
-    The accounting did not go with it: the upload form asks whether a methods
-    document is included, the answer is recorded, and a submitter who says yes
-    and sends none is still told. That lives in
-    ``tests/test_methods_declaration.py``.
-    """
     issues = _run(_synthetic_participant("1"))
     assert not any(i.get("artifact_type") == "methods" for i in issues)
 
 
 def test_the_requirement_still_works_if_the_leads_put_it_back(monkeypatch) -> None:
-    """Relaxed, not removed. Naming `methods` in `required_artifacts` must
-    restore the blocking error, or the one line of configuration this decision
-    hangs on would be a line that does nothing."""
+    """Relaxed, not removed."""
     from osipi_pipeline.validation import completeness
 
     monkeypatch.setattr(
@@ -335,13 +324,7 @@ def test_duplicate_modelled_st_fails() -> None:
 
 
 def test_multiple_methods_documents_warn_but_do_not_block() -> None:
-    """Two documents, and no way for the pipeline to know which describes the
-    submission. It says so and lets a person decide.
-
-    This warning does not depend on the methods document being required, and
-    the check below is why: it briefly did, so relaxing the requirement took
-    the warning with it silently.
-    """
+    """Two documents, and no way for the pipeline to know which describes the submission."""
     artifacts = _complete_synthetic() + [_methods("extra/methodology.txt")]
     issues = _run(artifacts)
     assert "DUPLICATE_METHODS_DOCUMENT" in _codes(issues, "warning")
@@ -436,11 +419,7 @@ def test_no_recognized_maps_reports_every_required_map(
 def test_the_legacy_warning_is_suppressed_wherever_the_new_rules_apply(
     challenge: str, expected: set
 ) -> None:
-    """A map covered by required_maps must not also raise the old warning.
-
-    Reporting a missing map twice, once as an error and once as a warning,
-    would double-count it in every summary the reviewer reads.
-    """
+    """A map covered by required_maps must not also raise the old warning."""
     assert set(suppressed_legacy_map_ids(challenge)) == expected
 
 

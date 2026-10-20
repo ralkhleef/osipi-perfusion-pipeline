@@ -280,12 +280,7 @@ def test_malformed_yaml_reports_clear_error(tmp_path: Path, monkeypatch: pytest.
 # ── Reloading configuration clears everything derived from it ─────────────
 
 def test_reloading_config_also_drops_the_ingestion_caches(tmp_path, monkeypatch) -> None:
-    """A reload that clears half the caches leaves the halves disagreeing.
-
-    ``validate_config_files`` re-read the YAML but left ingestion matching
-    filenames against patterns compiled from the previous configuration, so a
-    newly added alias was accepted by the schema and still not recognised.
-    """
+    """A reload that clears half the caches leaves the halves disagreeing."""
     from osipi_pipeline.config import rules as config_rules
     from osipi_pipeline.ingestion import artifact_classifier, identity_parser
 

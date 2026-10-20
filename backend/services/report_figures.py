@@ -1,23 +1,4 @@
-"""Small data figures for OSIPI reports, rendered to both SVG and PDF.
-
-A report about data quality that contains no graphics makes the reader do
-the comparison arithmetic themselves. The module draws Bland-Altman and
-identity plots, the standard method-comparison figures, from statistics
-the scorer already stores, so no voxel data has to be re-read.
-
-Axes are scaled to the observed range rather than forced to zero. That is
-safe for a scatter, where no baseline is implied; it would not be for a bar
-chart, which is why bars are not used here.
-
-Styling follows the rest of the report: hairline axes, no gridlines, no
-fills, no chartjunk. Colour encodes series and nothing else.
-
-The geometry is computed once into a list of primitive dicts, then handed
-to one of two thin renderers, :func:`to_svg` for the HTML report and
-:func:`to_drawing` for the ReportLab PDF, so the two outputs cannot drift.
-Every builder returns ``None`` when there is nothing worth plotting, and
-callers are expected to skip the figure in that case.
-"""
+"""Small data figures for OSIPI reports, rendered to both SVG and PDF."""
 
 from __future__ import annotations
 
@@ -66,12 +47,6 @@ def _floor_log10(x: float) -> int:
     return int(math.floor(math.log10(x))) if x > 0 else 0
 
 
-
-
-
-
-
-
 def _xy_plot(points: Sequence[Mapping[str, Any]],
              *, width: float, height: float,
              x_label: str, y_label: str,
@@ -79,13 +54,7 @@ def _xy_plot(points: Sequence[Mapping[str, Any]],
              band: tuple[float, float] | None = None,
              band_label: str = "",
              legend: Sequence[tuple[str, str]] = ()) -> dict | None:
-    """A scatter with two real axes.
-
-    ``reference`` draws either the ``identity`` line (y = x, for
-    submitted-vs-reference) or a ``zero`` line (for Bland-Altman). ``band``
-    is an optional pair of horizontal limits drawn dashed, the 95% limits
-    of agreement. ``legend`` is ``[(name, marker style), ...]``.
-    """
+    """A scatter with two real axes."""
     xs = _nums(p.get("x") for p in points)
     ys = _nums(p.get("y") for p in points)
     if not xs or not ys:
@@ -115,11 +84,6 @@ def _xy_plot(points: Sequence[Mapping[str, Any]],
     lo_x, hi_x = min(lo_x, xt[0]), max(hi_x, xt[-1])
     lo_y, hi_y = min(lo_y, yt[0]), max(hi_y, yt[-1])
 
-    # Reserve a row above the plot for the y-axis label. Drawing it beside
-    # the axis (anchored "end" at x0) pushed long labels such as
-    # "submitted mean (ml/100g/min)" off the left edge of the figure, so it
-    # sits above the axis instead, which also avoids rotated text, which
-    # ReportLab's String cannot do.
     gutter, bottom = 42.0, 28.0
     top = (LEGEND_H if legend else 0.0) + 12.0
     x0, x1 = gutter, width - PAD_R
@@ -254,10 +218,6 @@ def identity_figure(points: Sequence[Mapping[str, Any]],
         legend=[("Whole image", "solid"), ("ROI", "hollow")],
     )
 
-
-# ── Renderers ─────────────────────────────────────────────────────────────
-# Primitives use y-up coordinates (ReportLab's convention); the SVG renderer
-# flips y so both outputs describe the same geometry.
 
 def _marker_svg(x: float, y: float, style: str) -> str:
     if style == "hollow":

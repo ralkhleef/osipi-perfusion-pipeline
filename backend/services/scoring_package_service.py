@@ -92,10 +92,6 @@ def _default_active_config() -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Manifest helpers
-# ---------------------------------------------------------------------------
-
 def _validate_manifest(manifest: dict, *, require_declared_inputs: bool = True) -> list[str]:
     """Return a list of validation error strings (empty = valid)."""
     errors: list[str] = []
@@ -215,10 +211,6 @@ def _normalise_manifest(raw: dict) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Active config I/O
-# ---------------------------------------------------------------------------
-
 def load_active_config() -> dict:
     """Load active.json, returning defaults for any missing challenge types."""
     try:
@@ -253,10 +245,7 @@ def save_active_config(config: dict) -> None:
 
 
 def get_active_entry(challenge_type: str) -> dict:
-    """Return the active config entry for a challenge type.
-
-    Returns {"mode": "none", "package_id": null} if not found.
-    """
+    """Return the active config entry for a challenge type."""
     cfg = load_active_config()
     return cfg.get(
         challenge_type.lower().strip(),
@@ -270,13 +259,7 @@ def get_active_entry(challenge_type: str) -> dict:
 
 
 def compatible_builtin_providers(challenge_type: str) -> list[dict]:
-    """Return runnable built-in providers registered for one challenge.
-
-    The registry lives in :mod:`scoring`, which imports this service for
-    package dispatch.  Importing lazily avoids a module cycle while keeping
-    provider compatibility in one registry instead of duplicating challenge
-    names in configuration and UI code.
-    """
+    """Return runnable built-in providers registered for one challenge."""
     from scoring import PROVIDERS
 
     challenge = str(challenge_type or "").strip().lower()
@@ -289,11 +272,7 @@ def compatible_builtin_providers(challenge_type: str) -> list[dict]:
 
 
 def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] = None) -> dict:
-    """Set active mode for a challenge type and persist.
-
-    mode: "none" | "builtin" | "custom"
-    Returns the updated entry.
-    """
+    """Set active mode for a challenge type and persist."""
     mode = mode.strip().lower()
     if mode not in ("none", "builtin", "custom"):
         raise ValueError(f"Invalid mode: {mode!r}. Must be 'none', 'builtin', or 'custom'.")
@@ -366,10 +345,6 @@ def set_active_entry(challenge_type: str, mode: str, package_id: Optional[str] =
     return entry
 
 
-# ---------------------------------------------------------------------------
-# Package registry
-# ---------------------------------------------------------------------------
-
 def list_packages() -> list[dict]:
     """Return manifests for all installed packages, sorted by name."""
     if not SCORING_PACKAGES_DIR.exists():
@@ -409,11 +384,7 @@ def get_package_manifest(package_id: str) -> Optional[dict]:
 
 
 def install_package(zip_path: Path) -> dict:
-    """Extract and install a scoring package from a ZIP file.
-
-    Returns {"success": True, "package_id": ..., "manifest": ...} or
-            {"success": False, "error": ...}
-    """
+    """Extract and install a scoring package from a ZIP file."""
     # 1. Validate ZIP
     if not zipfile.is_zipfile(zip_path):
         return {"success": False, "error": "Uploaded file is not a valid ZIP archive."}
@@ -520,11 +491,7 @@ def install_package(zip_path: Path) -> dict:
 
 
 def remove_package(package_id: str) -> dict:
-    """Remove an installed package.
-
-    Also clears any active-config entries pointing to this package.
-    Returns {"success": True} or {"success": False, "error": ...}
-    """
+    """Remove an installed package."""
     pkg_dir = SCORING_PACKAGES_DIR / package_id
     if not pkg_dir.exists():
         return {"success": False, "error": f"Package {package_id!r} not found."}
@@ -552,10 +519,6 @@ def remove_package(package_id: str) -> dict:
     return {"success": True}
 
 
-# ---------------------------------------------------------------------------
-# Package readiness check
-# ---------------------------------------------------------------------------
-
 def _check_package_ready_internal(
     pkg_dir: Path,
     manifest: dict,
@@ -563,12 +526,7 @@ def _check_package_ready_internal(
     perform_import_check: bool = False,
     require_declared_inputs: bool = False,
 ) -> dict:
-    """Internal check, returns a status dict.
-
-    A package is "ready" when:
-    - The scoring script (entry_point) exists.
-    - For packages needing reference data: a reference/ dir or reference files exist.
-    """
+    """Internal check, returns a status dict."""
     missing: list[str] = _validate_manifest(
         manifest,
         require_declared_inputs=require_declared_inputs,
@@ -673,18 +631,8 @@ def check_package_ready(
     )
 
 
-# ---------------------------------------------------------------------------
-# Custom package scoring
-# ---------------------------------------------------------------------------
-
-
 def _required_input_paths(root: Path, manifest: dict) -> list[tuple[Path, Path]]:
-    """Return ``(source, relative path)`` pairs declared by required_inputs.
-
-    Validation has already classified every submitted file as a configured map
-    or artifact. Reusing that manifest prevents a package that requests only a
-    3-D map such as Ktrans from accidentally loading large 4-D fitted signals.
-    """
+    """Return ``(source, relative path)`` pairs declared by required_inputs."""
     required = {
         str(value).strip().lower()
         for value in manifest.get("required_inputs") or []
@@ -732,11 +680,7 @@ def run_package_scoring(
     exec_output_dir: Path,
     score_output_dir: Path,
 ) -> dict:
-    """Run a custom installed package's scoring script.
-
-    NEVER fabricates metrics. Returns status='not_configured' or status='failed'
-    if prerequisites are absent. Returns status='scored' on success.
-    """
+    """Run a custom installed package's scoring script."""
     manifest = get_package_manifest(package_id)
     if manifest is None:
         return {
@@ -836,15 +780,8 @@ def run_package_scoring(
 
         artifacts     = _collect_artifacts(score_output_dir)
         metrics_full  = _parse_metrics_from_output(score_output_dir)
-        # Flat numeric view for the metrics table / summary cards; the full
-        # nested structure (summary + per_file) is kept under metrics_detail
-        # for the advanced view.  Booleans/strings are excluded so the UI shows
-        # only real numeric metric values (RMSE, CoV, finite %, …).
         parsed_metrics = _flatten_metrics(metrics_full)
         declared_metrics = set(manifest.get("metrics") or [])
-        # The manifest is the public metric contract. Extra numeric fields may
-        # remain in metrics_detail as technical metadata, but are not promoted
-        # into UI/export metric columns unless declared.
         metrics = {
             name: value for name, value in parsed_metrics.items()
             if name in declared_metrics
@@ -942,10 +879,6 @@ def run_package_scoring(
             staged_inputs.cleanup()
 
 
-# ---------------------------------------------------------------------------
-# Artifact + metric helpers
-# ---------------------------------------------------------------------------
-
 def _collect_artifacts(score_dir: Path) -> list[str]:
     if not score_dir.exists():
         return []
@@ -990,10 +923,7 @@ def _flatten_metrics(parsed: dict) -> dict:
 
 
 def _parse_metrics_from_output(score_dir: Path) -> dict:
-    """Parse metrics from metrics.json or results.json written by the scoring script.
-
-    Never fabricates values. Returns {} if no parseable JSON is found.
-    """
+    """Parse metrics from metrics.json or results.json written by the scoring script."""
     if not score_dir.exists():
         return {}
     # Prefer metrics.json, then results.json, then any JSON

@@ -10,9 +10,6 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-# One token, no separators, so PDF byte assertions are reliable: ReportLab
-# splits wrapped text across operators, and a multi-word name is never
-# contiguous in the file.
 SECRET = "SECRETEAMOMEGA"
 TEAM = SECRET          # the team name itself, so every derived form contains it
 SID = f"{SECRET}_Clinical"
@@ -35,12 +32,7 @@ BLINDED_LABEL = "Submission 1"
 
 
 def _summary(*, errors=None, warnings=None, roi=None, status="available") -> dict:
-    """A summary shaped exactly like _gather_summary() returns.
-
-    The base dict comes from the production gatherer for an id with nothing on
-    disk, so every key the exporters read is present and the fixture cannot
-    drift as those exporters grow.
-    """
+    """A summary shaped exactly like _gather_summary() returns."""
     root = f"/var/data/submissions/extracted/{SID}"
     base = dict(_base_summary())
     base.update({
@@ -88,12 +80,7 @@ _BASE_CACHE: dict | None = None
 
 
 def _base_summary() -> dict:
-    """The production gatherer's shape for an id with nothing on disk.
-
-    Captured once and cached, because the client fixture monkeypatches
-    ``_gather_summary`` to return this very fixture, calling it again from
-    inside would recurse forever.
-    """
+    """The production gatherer's shape for an id with nothing on disk."""
     global _BASE_CACHE
     if _BASE_CACHE is None:
         import main
@@ -316,12 +303,7 @@ def test_the_unblinded_model_keeps_identity() -> None:
 
 
 def test_the_submission_label_switches_on_the_blinded_flag() -> None:
-    """Pins both directions of the one decision every table label reads.
-
-    Asserting only that the team name appears *somewhere* in an unblinded
-    report is too weak: the metadata table prints team and contact separately,
-    so a label that stayed blinded in unblinded mode would go unnoticed.
-    """
+    """Pins both directions of the one decision every table label reads."""
     from services.pdf_report_service import _submission_label
 
     summary = _summary()
@@ -417,13 +399,7 @@ def test_roi_export_filename_can_be_blinded(client) -> None:
 ])
 def test_blinded_downloads_do_not_say_blinded_twice(client, endpoint, params,
                                                     expected) -> None:
-    """The neutral tag and the blinded suffix are the same word.
-
-    Blinding the filename replaced the submission id with "blinded", but the
-    suffix already said "blinded", so exports downloaded as
-    ``osipi_combined_blinded_blinded.csv``. Cosmetic, but it is the filename
-    a reviewer sees.
-    """
+    """The neutral tag and the blinded suffix are the same word."""
     _, api = client
     response = api.get(endpoint,
                        params={"submission_id": SID, "blinded": "true", **params})

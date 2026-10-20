@@ -28,10 +28,6 @@ FIXTURES_DIR     = Path(__file__).parent / "fixtures"
 FAKE_SUBMISSION  = FIXTURES_DIR / "fake_submission"
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _make_submission(tmp_path: Path, *, with_dockerfile: bool = True) -> Path:
     """Create a minimal submission folder, optionally with a Dockerfile."""
     sub = tmp_path / "submission"
@@ -42,12 +38,7 @@ def _make_submission(tmp_path: Path, *, with_dockerfile: bool = True) -> Path:
 
 
 def _fake_docker(build_rc: int = 0, run_rc: int = 0, rm_rc: int = 0):
-    """Return a monkeypatched subprocess.run that simulates docker build/run/rm.
-
-    ``docker image rm`` is a third verb, not an unrecognised run: a fake that
-    lumps it in with the run would let a cleanup call masquerade as executing
-    the submission twice.
-    """
+    """Return a monkeypatched subprocess.run that simulates docker build/run/rm."""
     calls: list[list[str]] = []
 
     def fake_run(command, **_kwargs):
@@ -68,10 +59,6 @@ def _fake_docker(build_rc: int = 0, run_rc: int = 0, rm_rc: int = 0):
 
     return fake_run, calls
 
-
-# ===========================================================================
-# detect_dockerfile
-# ===========================================================================
 
 def test_detect_dockerfile_uses_submission_dockerfile(tmp_path: Path) -> None:
     sub = _make_submission(tmp_path)
@@ -100,10 +87,6 @@ def test_detect_dockerfile_raises_when_both_missing(tmp_path: Path) -> None:
     with pytest.raises(DockerExecutionError, match="No Dockerfile"):
         detect_dockerfile(sub, fallback_dockerfile=tmp_path / "missing")
 
-
-# ===========================================================================
-# ExecutionResult model
-# ===========================================================================
 
 def test_execution_result_to_dict_includes_output_file_count() -> None:
     result = ExecutionResult(
@@ -142,20 +125,12 @@ def test_execution_result_build_failed_defaults_false() -> None:
     assert result.to_dict()["build_failed"] is False
 
 
-# ===========================================================================
-# Docker not installed
-# ===========================================================================
-
 def test_docker_unavailable_raises_clear_error(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
     monkeypatch.setattr(docker_runner.shutil, "which", lambda _name: None)
     with pytest.raises(DockerExecutionError, match="Docker is not installed"):
         execute_submission(sub, challenge_type="dce")
 
-
-# ===========================================================================
-# Build failure → ExecutionResult with build_failed=True (no exception)
-# ===========================================================================
 
 def test_build_failure_returns_result_not_exception(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
@@ -196,10 +171,6 @@ def test_build_failure_logs_contain_build_output(tmp_path: Path, monkeypatch) ->
     assert "syntax error in FROM" in stderr_txt
 
 
-# ===========================================================================
-# Run failure (build passes, run fails)
-# ===========================================================================
-
 def test_run_failure_saves_logs_and_marks_failed(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
     fake_run, calls = _fake_docker(build_rc=0, run_rc=7)
@@ -220,10 +191,6 @@ def test_run_failure_saves_logs_and_marks_failed(tmp_path: Path, monkeypatch) ->
     assert "run err" in stdout_txt
     assert "run stderr" in stderr_txt
 
-
-# ===========================================================================
-# Timeout
-# ===========================================================================
 
 def test_timeout_sets_timed_out_and_exit_124(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
@@ -248,10 +215,6 @@ def test_timeout_sets_timed_out_and_exit_124(tmp_path: Path, monkeypatch) -> Non
     # build, run, then image cleanup: a timed-out run still leaves an image.
     assert call_count[0] == 3
 
-
-# ===========================================================================
-# Output file collection
-# ===========================================================================
 
 def test_output_files_collected_after_run(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
@@ -283,10 +246,6 @@ def test_output_files_collected_after_run(tmp_path: Path, monkeypatch) -> None:
     assert "Ktrans.nii.gz" in names
     assert "report.csv" in names
 
-
-# ===========================================================================
-# run_config.json, command and timeout_seconds
-# ===========================================================================
 
 def test_run_config_command_is_used(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
@@ -362,10 +321,6 @@ def test_explicit_timeout_wins_over_run_config(tmp_path: Path, monkeypatch) -> N
     assert used_timeouts == [42]
 
 
-# ===========================================================================
-# Fake submission fixture: smoke test (no Docker required)
-# ===========================================================================
-
 def test_fake_submission_fixture_has_required_files() -> None:
     """Sanity-check that the fixture directory is complete."""
     assert FAKE_SUBMISSION.is_dir(), f"Fixture missing: {FAKE_SUBMISSION}"
@@ -386,15 +341,6 @@ def test_fake_submission_run_py_is_valid_python() -> None:
     source = run_py.read_text(encoding="utf-8")
     compile(source, str(run_py), "exec")  # raises SyntaxError on bad code
 
-
-# ===========================================================================
-# Build timeout → build failure, not a hung request
-# ===========================================================================
-#
-# The run path has always been bounded by `timeout_seconds`. The build was not,
-# so a Dockerfile that never finishes (an unreachable package index, an
-# interactive prompt, a `RUN sleep`) blocked the caller forever with no log and
-# no result. These tests pin the bound and the shape of the reported failure.
 
 def test_build_timeout_is_reported_as_a_build_failure(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)
@@ -455,7 +401,6 @@ def test_build_timeout_keeps_partial_output_and_explains_itself(
 
 
 def test_docker_build_is_always_given_a_timeout(tmp_path: Path, monkeypatch) -> None:
-    """An unbounded `docker build` is the bug these tests exist to prevent."""
     sub = _make_submission(tmp_path)
     seen: list[object] = []
 
@@ -472,16 +417,6 @@ def test_docker_build_is_always_given_a_timeout(tmp_path: Path, monkeypatch) -> 
     assert seen == [docker_runner.DEFAULT_BUILD_TIMEOUT_SECONDS]
     assert docker_runner.DEFAULT_BUILD_TIMEOUT_SECONDS > 0
 
-
-# ===========================================================================
-# Process-count cap and image cleanup
-# ===========================================================================
-#
-# `--memory` and `--cpus` bound how much a container may consume, not how many
-# processes it may create: a fork bomb stays inside both caps while exhausting
-# the host's process table. And every submission builds an image, so a
-# challenge round that never removes them ends as a full disk the reviewer
-# finds out about from the operating system rather than from this tool.
 
 def test_the_container_is_given_a_process_limit(tmp_path: Path, monkeypatch) -> None:
     sub = _make_submission(tmp_path)

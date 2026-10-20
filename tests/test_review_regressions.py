@@ -1,4 +1,3 @@
-"""Regression cases from the multi-scan/export code review."""
 from pathlib import Path
 
 import pytest

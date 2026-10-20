@@ -1,7 +1,4 @@
-"""
-This module accepts one input source, creates a normalized local working copy, 
-builds a manifest, and prints a summary.
-"""
+"""This module accepts one input source, creates a normalized local working copy, builds a manifest, and prints a summary."""
 
 from __future__ import annotations
 
@@ -33,7 +30,6 @@ def ingest_submission(
     normalized_challenge = _normalize_challenge_override(challenge)
 
     staging_root = Path(extracted_root)
-    # Staging is a temporary holding area before we know the challenge type.
     initial_target = staging_root / "_staging" / submission_id
     materialize_source(source, initial_target)
 

@@ -1,17 +1,4 @@
-"""DCE multi-dataset upload and validation integration tests.
-
-Expected fixture structure:
-
-    1 submission
-    ├── Clinical    5 participants x 2 repeats x 1 site  = 10 scans
-    ├── Synthetic   1 participant  x 2 repeats x 3 sites =  6 scans
-    └── methods.txt
-
-    16 Ktrans maps · 16 modelled S(t) files · 1 methods document
-    no missing-dataset-identity errors
-    no duplicate-filename warnings for standard per-scan names
-    reference files excluded from participant completeness
-"""
+"""DCE multi-dataset upload and validation integration tests."""
 
 from __future__ import annotations
 
@@ -83,7 +70,6 @@ def test_dataset_names_are_read_from_configuration_not_hardcoded() -> None:
 
 
 def test_a_real_team_batch_still_splits(tmp_path: Path) -> None:
-    """The fix must not disable batch detection for actual multi-team ZIPs."""
     from services.ingest_service import detect_batch_boundaries
 
     staged = tmp_path / "staged"
@@ -177,11 +163,7 @@ def artifacts(uploaded):
 
 
 def test_every_scan_artifact_resolves_its_dataset(artifacts) -> None:
-    """Files inside a dataset directory must know which dataset they are in.
-
-    The methods document sits at the submission root and legitimately belongs
-    to no single dataset, so it is excluded rather than asserted against.
-    """
+    """Files inside a dataset directory must know which dataset they are in."""
     scan_artifacts = [a for a in artifacts if "/" in a.path]
     assert scan_artifacts
     unresolved = [a.path for a in scan_artifacts if a.dataset is None]

@@ -1,28 +1,5 @@
 #!/usr/bin/env python3
-"""Check the pipeline's DCE error statistics against the challenge answer key.
-
-The DCE lead's synthetic submission ships with ``known_error_params.json`` for
-every scan. Each file records the error that was deliberately injected
-(``preset``) and the error actually present in the delivered voxels
-(``achieved``), per ROI. That turns "our numbers look plausible" into a claim
-that can be checked: the pipeline should reproduce ``achieved``.
-
-    python3 scripts/verify_dce_known_error.py --root /path/to/unpacked
-
-The folder must contain the four directories as delivered:
-
-    submission/            P01/site_1/scan_1/{Ktrans,vp,Ct}.nii.gz
-    hidden_ground_truth/   same layout
-    shared_masks/          site_1/{GM,WM,Hipp}_mask.nii.gz
-    known_error/           P01/site_1/scan_1/known_error_params.json
-
-Definitions used, which is the part worth arguing about rather than the code:
-
-    bias = mean(submitted - ground truth) inside the ROI
-    var  = population variance of that same difference, ddof=0
-
-Nothing is written and nothing is uploaded. Read only.
-"""
+"""Check the pipeline's DCE error statistics against the challenge answer key."""
 
 from __future__ import annotations
 
@@ -42,9 +19,6 @@ except ImportError:  # pragma: no cover
 PARAMETERS = (("ktrans", "Ktrans"), ("vp", "vp"))
 REGIONS = ("WM", "GM", "Hipp")
 
-#: Agreement below this is a match. The achieved values are recorded to about
-#: 15 significant figures, so a correct implementation lands far inside this;
-#: anything looser would hide a genuine difference in definition.
 TOLERANCE = 1e-6
 
 
@@ -53,18 +27,7 @@ def load(path: Path) -> np.ndarray:
 
 
 def exclusive_masks(masks: dict[str, np.ndarray]) -> tuple[dict[str, np.ndarray], list[str]]:
-    """Make nested ROIs disjoint, smallest wins.
-
-    The shipped masks are nested: every one of the 262 hippocampus voxels is
-    also grey matter. The answer key is not. Its grey matter count is 4698,
-    which is the 4960-voxel GM mask minus exactly those 262, so "GM" in the key
-    means grey matter *excluding* the hippocampus.
-
-    Reading the masks literally therefore mixes hippocampus voxels into grey
-    matter, and grey matter alone was wrong by 10% on bias and 35% on variance
-    while white matter and hippocampus matched to 1e-8. That is the worst kind
-    of error: two thirds of the numbers agree, so nothing looks broken.
-    """
+    """Make nested ROIs disjoint, smallest wins."""
     names = sorted(masks, key=lambda n: int(masks[n].sum()))
     result: dict[str, np.ndarray] = {}
     notes: list[str] = []
@@ -89,11 +52,7 @@ def scan_dirs(root: Path):
 
 
 def answer_key(root: Path, participant: str, site: str, scan: str) -> dict | None:
-    """The answer key for one scan.
-
-    Some deliveries put the file at the site level and some at the scan level,
-    so both are accepted rather than assuming one.
-    """
+    """The answer key for one scan."""
     for candidate in (
         root / "known_error" / participant / site / scan / "known_error_params.json",
         root / "known_error" / participant / site / "known_error_params.json",
@@ -141,12 +100,6 @@ def check_scan(root: Path, participant: str, site: str, scan: str,
                 continue
             submitted = load(sub_file)
             error = (submitted - load(gt_file))[mask]
-            # A submitted value of exactly zero where the ground truth is not
-            # means the injected error was clipped at the floor: the parameter
-            # cannot go negative, so part of it was never realised. Every
-            # deviation above tolerance in this dataset has one, and no ROI
-            # without one deviates by more than 1e-7, so it is worth naming
-            # rather than reporting as an unexplained mismatch.
             clipped = int((submitted[mask] == 0).sum())
             mine = {"bias": float(error.mean()), "var": float(error.var(ddof=0))}
             for stat, value in mine.items():

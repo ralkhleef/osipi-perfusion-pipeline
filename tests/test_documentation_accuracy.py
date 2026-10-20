@@ -1,15 +1,4 @@
-"""The documentation site must describe the code that exists.
-
-Documentation goes stale silently. A renamed config key, a removed issue code
-or a changed Docker flag leaves the page looking authoritative while telling a
-reader something untrue, and the reader has no way to tell. This project has
-already shipped a documentation site that instructed people to edit four Python
-constants that had been deleted, so the failure mode is not hypothetical.
-
-Every check here reads the *real* source of truth, the loaded YAML schema, the
-validation module, `docker-compose.yml`, and fails if the page disagrees.
-These are cheap tests that catch an expensive class of mistake.
-"""
+"""The documentation site must describe the code that exists."""
 
 from __future__ import annotations
 
@@ -35,12 +24,7 @@ PUBLISHED = sorted(p for p in DOCS.rglob("*")
 
 
 def without_comments(html: str) -> str:
-    """The markup a browser acts on, with HTML comments removed.
-
-    Commented-out markup is not a reference. A worked example of a link left
-    in a comment for whoever restores it later must not make the checks below
-    demand that the file exists, or insist the page still links to it.
-    """
+    """The markup a browser acts on, with HTML comments removed."""
     return re.sub(r"<!--.*?-->", "", html, flags=re.S)
 
 
@@ -62,15 +46,7 @@ def test_the_documentation_site_is_present() -> None:
 
 
 def test_configuration_page_has_the_safe_update_handoff() -> None:
-    """The page must still cover each topic, and keep the safety statements.
-
-    This used to look for headings numbered "1." to "4.". The numbering was
-    dropped because these are independent topics rather than a sequence, and
-    pinning a test to it meant the wording could not be improved without the
-    test failing for the wrong reason. Sections are identified by their
-    anchors, which the sidebar already depends on and which therefore cannot
-    change silently.
-    """
+    """The page must still cover each topic, and keep the safety statements."""
     html = (DOCS / "configuration.html").read_text(encoding="utf-8")
     for anchor in (
         "configuration-manager",
@@ -97,22 +73,9 @@ def test_configuration_page_has_the_safe_update_handoff() -> None:
 # ── Configuration keys ────────────────────────────────────────────────────
 
 def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
-    """Nothing that looks like a config key may be absent from the schema.
-
-    Matching a fixed list of known keys would be useless here: renaming a key
-    in the documentation would simply stop it matching, and the check would
-    pass on a page that had become wrong. So this scans for anything shaped
-    like a key and requires the schema to recognise it.
-    """
+    """Nothing that looks like a config key may be absent from the schema."""
     from osipi_pipeline.config import rules
 
-    # snake_case identifiers, which is how every key in this project is
-    # written, plus camelCase, the schema has none, so a camelCase key in the
-    # documentation is always a mistake, and catching it closes the case where
-    # only some occurrences of a key were renamed.
-    # Keys are often written as a path, challenges.<id>.required_maps, so
-    # each dotted segment is checked, not the span as a whole. Discarding the
-    # whole span let a rename inside a path slip through unseen.
     candidates: set[str] = set()
     for span in code_spans(r"[a-zA-Z0-9_.&;<>-]+"):
         if "/" in span:
@@ -127,9 +90,6 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
                 | rules._ARTIFACT_TYPE_KEYS
                 | rules._DATASET_KEYS
                 | rules._ROI_DESCRIPTIVE_KEYS
-                # Advisory thresholds. `warn_above` is a real key an organiser
-                # sets; the docs name it because setting one is the answer to
-                # "can the pipeline flag a CoV over 15%".
                 | rules._THRESHOLD_KEYS
                 | rules._GROUPED_KEYS
                 | rules._ICC_KEYS
@@ -141,9 +101,6 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
                "call_mode", "timeout_seconds", "scoring_package", "required_inputs",
                "required_assets", "requirements_file",
                "private_path_parts", "structural_subdirs", "grouped_statistics"}
-        # `osipi_cwd` is a *value* of call_mode, not a key, and only looks like
-        # one because it is snake_case. It is pinned against the code that
-        # implements it in test_the_documented_call_modes_are_implemented.
             | {"osipi_cwd", "dce_accuracy_v1_0", "dce_accuracy_v1_1"}
         # Issue codes are upper case; environment variables are handled
         # separately. Anything left must be a real configuration key.
@@ -154,11 +111,7 @@ def test_every_challenge_key_the_docs_name_is_accepted_by_the_schema() -> None:
 
 
 def test_the_schema_keys_are_actually_documented() -> None:
-    """The other direction: a key the docs stop naming has gone missing.
-
-    Catches a rename in the documentation, which the check above cannot see
-    because the renamed word simply stops resembling anything real.
-    """
+    """The other direction: a key the docs stop naming has gone missing."""
     # Substring, not an exact <code> match: keys are often written in context
     # as challenges.<id>.required_maps rather than alone.
     for key in ("required_maps", "optional_maps", "required_artifacts",
@@ -195,7 +148,6 @@ def test_documented_dataset_fields_are_the_real_ones() -> None:
 # ── Issue codes ───────────────────────────────────────────────────────────
 
 def test_every_issue_code_in_the_docs_is_raised_by_the_code() -> None:
-    """A code that no longer exists would send a reader hunting for nothing."""
     documented = {c for c in code_spans(r"[A-Z][A-Z_]{5,}") if c.isupper()}
     # KNOWN_CHALLENGE_TYPES is discussed as a runtime value, not an issue code.
     documented -= {"KNOWN_CHALLENGE_TYPES", "PYTHONPATH", "HOST_SUBMISSIONS_DIR",
@@ -330,17 +282,7 @@ def test_every_repository_path_the_docs_cite_exists() -> None:
     "roadmap recommendation",
 ])
 def test_retired_claims_do_not_return(phrase: str) -> None:
-    """These described constants that were deleted, or work already shipped.
-
-    The published site once told mentors that runtime YAML configuration was a
-    future recommendation, months after it shipped. Pinning the exact phrases
-    keeps that particular regression from recurring.
-
-    Checked across everything in ``docs/``, not only the HTML. Restricting it
-    to the pages is how a narration script describing a ``PROVIDERS`` registry
-    that no longer exists stayed published: it was in the deployed directory,
-    it was linked from a page, and no check ever read it.
-    """
+    """These described constants that were deleted, or work already shipped."""
     for path in PUBLISHED:
         assert phrase not in path.read_text(), \
             f"{path.name} reintroduced {phrase!r}"
@@ -349,12 +291,7 @@ def test_retired_claims_do_not_return(phrase: str) -> None:
 # ── Nothing published may be a stand-in for work not yet done ─────────────
 
 def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
-    """A <video> whose file is absent renders as a dead player, not as a gap.
-
-    The site shipped a walkthrough recording that taught a scoring registry
-    the code does not have. Deleting the file is not enough on its own, the
-    element referring to it has to go with it.
-    """
+    """A <video> whose file is absent renders as a dead player, not as a gap."""
     for page in PAGES:
         html = page.read_text()
         for source in re.findall(r'<(?:video|iframe|source|audio)[^>]*src="([^"]+)"',
@@ -366,24 +303,11 @@ def test_no_page_embeds_media_that_is_not_in_the_repository() -> None:
 
 
 def test_the_example_report_is_a_real_one_the_code_produced() -> None:
-    """The published example must be output, not a hand-written mock-up.
-
-    A mocked-up report is the most convincing kind of wrong thing to publish:
-    it looks exactly like the real deliverable and is under no obligation to
-    match it. Pinning structure the generator emits means a hand-edited stand-in
-    would have to reproduce the generator to pass, at which point it is real.
-    """
+    """The published example must be output, not a hand-written mock-up."""
     pdf = (DOCS / "downloads" / "example-report-blinded.pdf").read_bytes()
     assert pdf.startswith(b"%PDF"), "the example report is not a PDF"
 
-    # The generator writes uncompressed pages precisely so page text can be
-    # read back like this. If that ever changes, this check would pass
-    # vacuously, so the marker assertions have to fail first and loudly.
     text = pdf.decode("latin-1", errors="ignore")
-    # Structure the generator emits, plus the blinding label. The report used
-    # to carry the sentence "Team and contact details were withheld"; the
-    # redesign replaced it with the "Blinded report" header, so the label is
-    # what to pin now.
     for marker in ("Submission review report", "Submission 1", "Blinded report"):
         assert marker in text, (
             f"the example report lacks {marker!r}; is pageCompression enabled?")
@@ -444,14 +368,7 @@ def test_every_download_the_page_offers_exists_and_is_not_empty() -> None:
 
 
 def test_no_offered_download_is_excluded_from_version_control() -> None:
-    """Existing locally is not the same as being published.
-
-    A .gitignore rule of `downloads/`, unanchored, from the standard Python
-    template, meant for the pip cache, matched docs/downloads/ as well. The
-    files sat on disk, the page linked to them, every other check passed, and
-    they would have 404ed on the deployed site because they were never
-    committed. Nothing but git can answer this question.
-    """
+    """Existing locally is not the same as being published."""
     import shutil
     import subprocess
 
@@ -467,11 +384,7 @@ def test_no_offered_download_is_excluded_from_version_control() -> None:
 
 
 def test_each_screenshot_slot_names_the_file_that_replaces_it() -> None:
-    """The slots are temporary. Each has to say what fills it.
-
-    Without the filename recorded next to the slot, adding the screenshots
-    later becomes guesswork about where each one goes.
-    """
+    """The slots are temporary."""
     page = (DOCS / "examples.html").read_text()
     figures = re.findall(r"<figure class=\"docs-screen\">(.*?)</figure>", page, re.S)
     assert figures, "no interface slots or images found"
@@ -484,18 +397,7 @@ def test_each_screenshot_slot_names_the_file_that_replaces_it() -> None:
 
 
 def test_no_unreferenced_file_is_deployed() -> None:
-    """Everything under docs/assets and docs/downloads must be linked.
-
-    Removing the element that embedded a file is not the same as removing the
-    file. Left behind, it is still published, still reachable at its URL, and
-    invisible to every other check here because nothing links to it. That is
-    how a walkthrough recording describing a scoring registry the code does
-    not have stayed deployed after its section was deleted.
-
-    Downloads are covered as well as media. An unpublished document taken off
-    a page leaves a PDF nobody links to, which is the same failure wearing a
-    different extension.
-    """
+    """Everything under docs/assets and docs/downloads must be linked."""
     watched = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
                ".mp4", ".webm", ".mov", ".mp3", ".ico",
                ".pdf", ".csv", ".json", ".zip"}
@@ -511,14 +413,7 @@ def test_no_unreferenced_file_is_deployed() -> None:
 
 
 def test_public_docs_images_require_explicit_release_review() -> None:
-    """Do not publish derived submission/reference images by copying them into docs.
-
-    GitHub Pages deploys the entire ``docs`` directory. Local submissions,
-    reference maps, masks, and generated previews are intentionally ignored by
-    Git, but copying one of their rendered PNGs into ``docs/assets/images``
-    bypasses those protections. Keep the small public-image allowlist explicit
-    so adding any new raster asset requires a deliberate review here.
-    """
+    """Do not publish derived submission/reference images by copying them into docs."""
     approved = {
         "favicon.ico",
         "osipi-logo.png",
@@ -563,11 +458,7 @@ def test_public_docs_contain_no_raw_medical_or_submission_archives() -> None:
     "to be recorded",
 ])
 def test_no_placeholder_scaffolding_is_published(phrase: str) -> None:
-    """Notes-to-self are for a branch, not for a published site.
-
-    A reader cannot tell a plan from a description. A grid of recordings that
-    do not exist reads, to a mentor, as a site that is broken.
-    """
+    """Notes-to-self are for a branch, not for a published site."""
     for path in PUBLISHED:
         assert phrase not in path.read_text(), \
             f"{path.name} publishes the placeholder {phrase!r}"
@@ -599,11 +490,7 @@ def test_the_scope_limit_is_stated() -> None:
 # ── Structural integrity of the site ──────────────────────────────────────
 
 def _nav_pages() -> dict[str, list[tuple[str, str]]]:
-    """The PAGES table from nav.js, as {page file: [(anchor, label)]}.
-
-    Parsed rather than executed: the sidebar is the one part of the site
-    whose links live in JavaScript, so nothing else here can see them.
-    """
+    """The PAGES table from nav.js, as {page file: [(anchor, label)]}."""
     source = (DOCS / "assets" / "scripts" / "nav.js").read_text()
     pages: dict[str, list[tuple[str, str]]] = {}
     for block in re.findall(r"\{\s*id:.*?\n    \}", source, re.S):
@@ -615,15 +502,7 @@ def _nav_pages() -> dict[str, list[tuple[str, str]]]:
 
 
 def test_every_sidebar_link_points_at_a_heading_that_exists() -> None:
-    """The sidebar is generated, so a renamed heading breaks it silently.
-
-    Three links on the Configuration page pointed at sections that had been
-    renamed. Clicking them did nothing, which is the kind of thing that makes
-    a documentation site feel broken before a reader has read a word of it.
-
-    The dangling-anchor check below cannot catch this: it reads hrefs written
-    into the HTML, and these are written by nav.js at load.
-    """
+    """The sidebar is generated, so a renamed heading breaks it silently."""
     pages = _nav_pages()
     assert pages, "no PAGES table found in nav.js"
 
@@ -681,13 +560,6 @@ def test_every_local_asset_exists() -> None:
             assert path.exists(), f"{page.name} references missing asset {asset}"
 
 
-# ── The getting-started instructions are runnable ─────────────────────────
-#
-# Someone arriving at this repository for the first time follows the Install
-# page literally. A command naming a file that was renamed or deleted wastes
-# their time and, worse, makes them doubt the rest of the page. These checks
-# resolve every path the instructions tell a newcomer to type.
-
 def _documented_paths(label: str) -> set[str]:
     """Repository-relative paths appearing in the code block ``label``."""
     found: set[str] = set()
@@ -738,14 +610,7 @@ def _layout_rows() -> list[tuple[str, bool]]:
 
 
 def test_the_documented_project_layout_is_real() -> None:
-    """Every directory the table names must exist in a fresh clone.
-
-    Except the ones it says are created on first run. ``data/`` and
-    ``submissions/`` are entirely gitignored, so a clone does not contain them
-    and the table used to claim otherwise. Checking only that they exist on
-    disk was also order dependent: earlier tests create ``data/`` as a side
-    effect, which is why only ``submissions/`` was ever reported.
-    """
+    """Every directory the table names must exist in a fresh clone."""
     rows = _layout_rows()
     assert rows, "the layout table has no rows, so this check is vacuous"
 
@@ -774,13 +639,7 @@ def test_the_documented_health_check_hits_a_real_endpoint() -> None:
 
 
 def test_the_config_mount_the_instructions_depend_on_is_present() -> None:
-    """The docs promise a rules edit needs only the Reload button.
-
-    That is only true while the compose file mounts config/. Without the
-    mount the container reads the copy baked into the image, so Reload
-    re-reads the same stale file and the edit appears to do nothing, which
-    is exactly the confusion the section exists to prevent.
-    """
+    """The docs promise a rules edit needs only the Reload button."""
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     mounts = compose["services"]["osipi-backend"]["volumes"]
     assert "./config:/app/config" in mounts, \
@@ -800,11 +659,7 @@ def test_the_reload_button_the_docs_promise_actually_exists() -> None:
 
 
 def test_the_osipi_link_points_at_the_real_organisation() -> None:
-    """OSIPI is at osipi.ismrm.org, not osipi.github.io.
-
-    Every page footer and the shared navbar carry this link, so getting it
-    wrong is wrong in seven places at once.
-    """
+    """OSIPI is at osipi.ismrm.org, not osipi.github.io."""
     sources = PAGES + [DOCS / "assets" / "scripts" / "nav.js"]
     for path in sources:
         text = path.read_text()
@@ -822,12 +677,7 @@ def test_the_clone_url_is_the_repository_the_site_links_to() -> None:
 # ── Hand-written components ───────────────────────────────────────────────
 
 def test_numbered_steps_run_in_order_and_are_complete() -> None:
-    """The step numbers are typed by hand, so they can silently repeat.
-
-    A stepper reading 1, 2, 3, 3, 5, 6 looks fine at a glance and is wrong.
-    The last step also has to be the one without a connector line, or the
-    rail hangs past the final circle.
-    """
+    """The step numbers are typed by hand, so they can silently repeat."""
     for page in PAGES:
         html = page.read_text()
         blocks = re.findall(r'<div class="docs-steps">(.*?)\n\s*</div>\s*$',
@@ -855,12 +705,7 @@ def test_numbered_steps_run_in_order_and_are_complete() -> None:
 
 
 def test_every_component_class_the_pages_use_is_styled() -> None:
-    """A typo in a class name renders as unstyled markup, not as an error.
-
-    Both sides need a word boundary. Substring matching says `.docs-step-num`
-    is present when the stylesheet only defines `.docs-step-numbers`, and says
-    a page uses `docs-step` when it only ever writes `docs-steps`.
-    """
+    """A typo in a class name renders as unstyled markup, not as an error."""
     css = (DOCS / "assets" / "stylesheets" / "site.css").read_text()
 
     used: set[str] = set()
@@ -878,11 +723,7 @@ IMAGES = DOCS / "assets" / "images"
 
 
 def _png_header(path: Path) -> tuple[int, int, int]:
-    """(width, height, colour type) from the IHDR chunk.
-
-    Read by hand rather than with Pillow: this is the only thing the tests
-    need from an image, and it must not add a dependency to the suite.
-    """
+    """(width, height, colour type) from the IHDR chunk."""
     import struct
 
     data = path.read_bytes()
@@ -904,11 +745,7 @@ def test_the_wordmark_keeps_its_alpha_too() -> None:
 
 
 def test_every_page_uses_the_mark_as_its_icon_and_the_wordmark_as_its_brand() -> None:
-    """The two are not interchangeable, and the site once used one for both.
-
-    The wordmark reduced to a 16 px favicon is an illegible smear; the mark
-    alone in the navbar drops the organisation's name from every page.
-    """
+    """The two are not interchangeable, and the site once used one for both."""
     for page in PAGES:
         html = page.read_text()
         assert 'rel="icon" href="assets/images/favicon.ico"' in html, \
@@ -944,15 +781,6 @@ def test_the_documented_config_check_actually_runs() -> None:
     assert "ktrans" in result.stdout
 
 
-# ── Repository layout ─────────────────────────────────────────────────────
-#
-# docs/ is deployed by GitHub Pages and nothing else is. It used to hold both
-# the published site and five maintainer notes, which meant prose written for
-# maintainers was quietly being served to the public, and a relative link from
-# a published page to one of those notes only worked by accident of them
-# sharing a directory. The notes now live in notes/. These two tests keep the
-# split honest and keep every link resolving.
-
 def _tracked() -> list[str]:
     import subprocess
     out = subprocess.run(
@@ -971,14 +799,7 @@ def test_docs_holds_the_published_site_and_nothing_else() -> None:
 
 
 def test_every_relative_link_resolves() -> None:
-    """A moved file with a stale link is worse than no link at all.
-
-    Covers both directions that broke when the notes were moved: markdown
-    links between documents, and hrefs from a published page. A published
-    page cannot reach notes/ with a relative link, because Pages serves only
-    docs/, so those have to be absolute repository URLs and are checked
-    separately by ``test_every_repository_link_points_at_a_real_file``.
-    """
+    """A moved file with a stale link is worse than no link at all."""
     tracked = set(_tracked())
     broken: list[str] = []
 
@@ -1025,14 +846,7 @@ def test_every_repository_link_points_at_a_real_file() -> None:
 # ── The declared Python floor ─────────────────────────────────────────────
 
 def test_the_python_floor_is_declared_consistently() -> None:
-    """pyproject, CI and the Install page must agree on the minimum Python.
-
-    They did not. pyproject claimed 3.9, the Install page repeated it, and
-    nothing ever ran on 3.9 because the image ships 3.11, so the claim went
-    untested until CI was added and then failed on 136 union annotations
-    across 32 files. Rewriting those to support a version nobody runs would
-    have been the wrong repair; the declaration was what was wrong.
-    """
+    """pyproject, CI and the Install page must agree on the minimum Python."""
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     declared = re.search(r'requires-python\s*=\s*">=(\d+\.\d+)"', pyproject)
     assert declared, "pyproject does not declare requires-python"
@@ -1071,13 +885,7 @@ def test_the_declared_floor_supports_the_syntax_actually_used() -> None:
 
 
 def test_no_documentation_style_sets_a_dark_background_without_a_text_colour() -> None:
-    """A dark background with inherited text is invisible, and looks fine in CSS.
-
-    ``--docs-code-bg`` is the near-black behind code blocks, which pair it with
-    light text. Borrowing it for an inline chip without also setting a colour
-    shipped dark text on a dark chip: the rule read plausibly, and the page was
-    unreadable. Anything dark must state its own text colour.
-    """
+    """A dark background with inherited text is invisible, and looks fine in CSS."""
     css = (DOCS / "assets" / "stylesheets" / "site.css").read_text(encoding="utf-8")
 
     def luminance(colour: str) -> float:
@@ -1115,12 +923,6 @@ def test_no_documentation_style_sets_a_dark_background_without_a_text_colour() -
     )
 
 
-# ── Update instructions have to fit how people actually installed ─────────
-#
-# The update section assumed everyone cloned with Git. A mentor who downloaded
-# a ZIP from GitHub has no Git, no remote and no `.git` folder, so `git pull`
-# fails with "not a git repository" and the documented path stops there.
-
 def test_updating_covers_a_zip_download_not_only_git() -> None:
     page = (DOCS / "install.html").read_text()
     assert "If you downloaded a ZIP" in page, "only the Git path is documented"
@@ -1130,12 +932,7 @@ def test_updating_covers_a_zip_download_not_only_git() -> None:
 
 
 def test_the_zip_path_preserves_data_and_submissions() -> None:
-    """The two folders a ZIP does not contain are the two that must survive.
-
-    `data/` holds reference maps and ROI masks, `submissions/` holds every
-    upload. Neither is in the download, so an update that unpacks over the top
-    destroys them.
-    """
+    """The two folders a ZIP does not contain are the two that must survive."""
     page = (DOCS / "install.html").read_text()
     zip_section = page[page.index("If you downloaded a ZIP"):]
     for folder in ("data", "submissions"):
@@ -1148,14 +945,7 @@ def test_the_zip_path_preserves_data_and_submissions() -> None:
 
 
 def test_the_docs_do_not_ask_for_a_hard_reload() -> None:
-    """The page is versioned by content, so a plain refresh is enough.
-
-    `backend.main._asset_fingerprint` names app.js and styles.css by a hash of
-    their bytes, and the HTML itself is served `no-store`. A changed file
-    therefore arrives at a new URL and is fetched. Telling readers to empty
-    the cache first sends them at the least likely cause and hides the real
-    one, which is usually that the image was never rebuilt.
-    """
+    """The page is versioned by content, so a plain refresh is enough."""
     for path in PUBLISHED:
         text = without_comments(path.read_text())
         for match in re.finditer(r"Empty Cache and Hard Reload", text):
@@ -1182,13 +972,6 @@ def test_the_cache_busting_the_docs_rely_on_actually_exists() -> None:
     assert first != backend_main._asset_fingerprint("styles.css")
 
 
-# ── The reading-results guide ──────────────────────────────────────────────
-#
-# "What does Error CoV mean" and "what is this compared against" had no answer
-# anywhere. The guide answers them in one page. Its danger is the opposite of
-# its purpose: a page explaining the numbers is the easiest place in the
-# project to accidentally state a criterion the challenge leads never set.
-
 GUIDE = ROOT / "docs" / "reading-results.html"
 
 
@@ -1210,9 +993,7 @@ def test_the_guide_states_that_no_thresholds_or_ranking_rules_are_configured() -
 
 
 def test_the_guide_does_not_turn_the_15_percent_remark_into_a_rule() -> None:
-    """A challenge lead described 15% as a rough personal guide, in the same
-    conversation that ruled out pass/fail. A page that quoted the number
-    without the second half would quietly make it the criterion."""
+    """A page that quoted the number without the second half would quietly make it the criterion."""
     text = _guide_text()
     assert "15%" in text, "the figure people ask about is not addressed"
     assert "possible CoV guideline of 15%" in text

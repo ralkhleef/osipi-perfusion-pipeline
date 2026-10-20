@@ -1,9 +1,3 @@
-/* Documentation site behaviour: on-this-page navigation, scroll tracking,
- * copy buttons.
- *
- * No build step and no framework, Bootstrap's own JS bundle handles the
- * offcanvas menu; everything below is plain DOM work.
- */
 
 (() => {
   "use strict";
@@ -11,9 +5,6 @@
   const content = document.querySelector(".docs-content");
   if (!content) return;
 
-  // ── On this page ───────────────────────────────────────────────────────
-  // Built from the headings that are actually present, so the list can never
-  // drift from the document the way a hand-maintained one would.
   const headings = Array.from(content.querySelectorAll("h2[id], h3[id]"));
   const toc = document.querySelector("[data-toc]");
 
@@ -37,17 +28,9 @@
     heading.appendChild(anchor);
   }
 
-  // ── Active-section tracking ────────────────────────────────────────────
-  // IntersectionObserver alone marks a section active as soon as any part of
-  // it is visible, which flickers between neighbours on a fast scroll. Taking
-  // the last heading above the reading line is stable and matches what the
-  // reader is actually looking at.
   const sidebarLinks = Array.from(document.querySelectorAll(".docs-nav-link[href^='#']"));
   const tocLinks = () => Array.from(document.querySelectorAll(".docs-toc a"));
 
-  // Track whatever the sidebar actually points at. Some entries target a
-  // heading inside a section rather than the section itself, and matching on
-  // sections alone left those links permanently unhighlighted.
   const targets = sidebarLinks
     .map((link) => document.getElementById(link.getAttribute("href").slice(1)))
     .filter(Boolean)
@@ -113,9 +96,6 @@
       button.textContent = "Copied";
       button.classList.add("copied");
     } catch {
-      // Clipboard access is refused on insecure origins and in some browsers;
-      // select the text so the reader can copy it manually rather than
-      // leaving the button looking broken.
       const range = document.createRange();
       range.selectNodeContents(code);
       const selection = window.getSelection();

@@ -1,21 +1,4 @@
-"""A frontend suite that does not finish must not look like one that passed.
-
-Each JS suite counts its own checks and prints one line at the end:
-
-    === Results: 47 passed, 0 failed ===
-
-Everything downstream trusts that line, and twice in one afternoon it was
-absent while the run still looked healthy:
-
-* new checks were appended *below* the tally, so they printed their OK lines,
-  were never counted, and could never fail the run;
-* a suite threw before reaching the end, printing no tally at all, so grepping
-  the CI log for failures found nothing to find.
-
-Both read as green. The workflow now fails any suite that finishes without a
-tally, which catches the second case at runtime. These tests catch the first
-one here, where the fix is cheap, rather than after a push.
-"""
+"""A frontend suite that does not finish must not look like one that passed."""
 
 from __future__ import annotations
 
@@ -46,12 +29,7 @@ def test_the_suite_prints_a_tally(suite: Path) -> None:
 
 @pytest.mark.parametrize("suite", SUITES, ids=lambda p: p.name)
 def test_nothing_runs_after_the_tally(suite: Path) -> None:
-    """The tally is the last statement, so no check can be added below it.
-
-    A check written after the tally still prints its OK line, which is exactly
-    why this is worth enforcing: the output looks complete and the number is
-    wrong.
-    """
+    """The tally is the last statement, so no check can be added below it."""
     lines = suite.read_text(encoding="utf-8").split("\n")
     at = [i for i, line in enumerate(lines) if "=== Results:" in line]
     assert at, f"{suite.name} never prints a results line"
@@ -69,11 +47,7 @@ def test_nothing_runs_after_the_tally(suite: Path) -> None:
 
 @pytest.mark.parametrize("suite", SUITES, ids=lambda p: p.name)
 def test_the_suite_actually_prints_the_tally_when_run(suite: Path) -> None:
-    """The check the source alone cannot make: run it and read the output.
-
-    A suite can hold a well-formed tally on line 400 and still throw on line
-    12. Only running it tells the difference.
-    """
+    """The check the source alone cannot make: run it and read the output."""
     result = subprocess.run(
         ["node", suite.name], cwd=ROOT / "tests",
         capture_output=True, text=True, timeout=180,
@@ -88,11 +62,7 @@ def test_the_suite_actually_prints_the_tally_when_run(suite: Path) -> None:
 
 
 def test_the_workflow_fails_a_suite_that_prints_no_tally() -> None:
-    """The runtime half of the guard, pinned so it cannot be quietly dropped.
-
-    Without it a crashing suite is reported only by its exit code, and a suite
-    that exits 0 after throwing inside a callback is not reported at all.
-    """
+    """The runtime half of the guard, pinned so it cannot be quietly dropped."""
     workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
     assert "=== Results: [0-9]+ passed, [0-9]+ failed ===" in workflow, (
         "the workflow no longer checks that a suite printed its tally"

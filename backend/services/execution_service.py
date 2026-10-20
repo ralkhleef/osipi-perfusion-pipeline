@@ -1,15 +1,4 @@
-"""FastAPI service layer for Docker execution.
-
-Resolves a ``submission_id`` to its extracted folder path, validates that the
-submission contains a ``Dockerfile``, reads per-submission ``run_config.json``
-settings, and delegates to :func:`execute_submission`.
-
-Returns a JSON-serialisable result dict that includes:
-
-- All :class:`ExecutionResult` fields (via ``to_dict()``).
-- ``stdout_preview`` / ``stderr_preview``, first 8 KB of each log file.
-- ``output_file_count``, number of files written to ``/output``.
-"""
+"""FastAPI service layer for Docker execution."""
 
 from __future__ import annotations
 
@@ -18,10 +7,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# ---------------------------------------------------------------------------
-# Locate the pipeline package regardless of working directory.
-# The package lives at  <repo-root>/src/osipi_pipeline/
-# ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SRC_DIR   = _REPO_ROOT / "src"
 if str(_SRC_DIR) not in sys.path:
@@ -53,38 +38,6 @@ def run_submission(
     input_dir: Optional[Path] = None,
     map_type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Execute a previously ingested submission inside Docker.
-
-    Pre-flight checks performed here (before touching Docker):
-
-    1. ``submission_id`` path safety.
-    2. Submission folder exists.
-    3. Submission contains a ``Dockerfile``, callers receive a clear error
-       message if it is missing; we do not fall back to a default image.
-
-    Timeout resolution (highest priority wins):
-
-    - ``timeout_seconds`` argument (from the API caller) → used as-is.
-    - ``run_config.json`` ``timeout_seconds`` field → used when caller omits.
-    - ``DEFAULT_TIMEOUT_SECONDS`` → final fallback.
-
-    Args:
-        submission_id:   ID returned by the ingestion API.
-        challenge_type:  Configured challenge identifier.
-        timeout_seconds: Override the per-container timeout (seconds).
-                         Pass ``None`` to let ``run_config.json`` decide.
-        memory_limit:    Docker ``--memory`` value (e.g. ``"4g"``).
-        cpu_limit:       Docker ``--cpus`` value (e.g. ``"2.0"``).
-
-    Returns:
-        A plain dict with the full :class:`ExecutionResult` fields plus
-        ``stdout_preview``, ``stderr_preview``, and ``output_file_count``.
-        ``success`` is ``True`` for both passed and failed executions;
-        ``False`` only for pre-flight errors (no Dockerfile, bad path, etc.).
-    """
-    # ── Sanitize and resolve path ─────────────────────────────────────────────
-    # make_safe_id strips unsafe characters before the path is constructed,
-    # matching the same sanitization applied at ingest and validation time.
     try:
         safe_id = make_safe_id(submission_id)
     except Exception:
@@ -113,10 +66,6 @@ def run_submission(
 
     # ── Execute ───────────────────────────────────────────────────────────────
     try:
-        # Use an absolute output_dir so DooD path translation in docker_runner
-        # can correctly map it to the host-visible path via HOST_OUTPUTS_DIR.
-        # DEFAULT_EXECUTION_DIR is a relative path (used by tests); here we
-        # always use the canonical absolute path from path_config.
         abs_output_dir = OUTPUTS_DIR / "execution"
         result = execute_submission(
             effective_root,
@@ -168,19 +117,11 @@ def run_submission(
         else "output_incomplete" if result.passed
         else "execution_failed"
     )
-    # container_start_failed: exit 125 means docker itself couldn't start the
-    # container (not the submission code failing). UI uses this to show a
-    # user-friendly explanation instead of a generic "run failed" message.
     data["container_start_failed"] = (
         result.exit_code == 125 and not result.build_failed and not result.timed_out
     )
     data.setdefault("output_file_count", len(result.output_files))
     return data
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _read_log_section(log_path: str, section_keyword: str) -> str:
@@ -225,11 +166,7 @@ def _read_log_section(log_path: str, section_keyword: str) -> str:
 
 
 def _read_file_head(log_path: str) -> str:
-    """Return up to _LOG_PREVIEW_BYTES from the start of a log file.
-
-    Used for exit-125 diagnostics where the whole stderr (not just a named
-    section) is needed, the Docker daemon error message appears at the top.
-    """
+    """Return up to _LOG_PREVIEW_BYTES from the start of a log file."""
     try:
         content = Path(log_path).read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -238,24 +175,7 @@ def _read_file_head(log_path: str) -> str:
 
 
 def _find_execution_root(submission_path: Path) -> tuple:
-    """Return the directory containing the Dockerfile to use for execution.
-
-    Handles submissions packaged with a single wrapper folder, e.g. a ZIP
-    extracted as ``team_name/Dockerfile`` rather than ``Dockerfile`` at the
-    top level.  Logic:
-
-    1. ``Dockerfile`` exists at the submission root → use the root as-is.
-    2. Search recursively for all ``Dockerfile`` files.
-       * 0 found → error: no Dockerfile.
-       * 2+ found → error: ambiguous, ask user to keep one at root.
-       * 1 found → use its **parent directory** as the effective root
-         (so the docker build context and ``run_config.json`` are resolved
-         relative to the folder that actually contains the Dockerfile).
-
-    Returns:
-        (effective_root: Path, None) on success.
-        (None, error_message: str) on failure.
-    """
+    """Return the directory containing the Dockerfile to use for execution."""
     # Fast path: Dockerfile at the submission root
     if (submission_path / "Dockerfile").is_file():
         return submission_path, None
@@ -285,10 +205,7 @@ def _find_execution_root(submission_path: Path) -> tuple:
 
 
 def _read_run_config(submission_path: Path) -> dict:
-    """Read ``run_config.json`` from a submission folder.
-
-    Returns ``{"command": str|None, "timeout_seconds": int|None}``.
-    """
+    """Read ``run_config.json`` from a submission folder."""
     config_path = submission_path / "run_config.json"
     result: dict = {"command": None, "timeout_seconds": None}
     if not config_path.is_file():

@@ -1,15 +1,4 @@
-"""Where the Private Reference Assets panel looks for organiser data.
-
-The panel searched only ``data/reference_data/<challenge>/``, while
-``backend/scoring.py`` searches three roots. Given a real bundle sitting in
-the flat layout, the panel reported zero reference maps at the same moment the
-pipeline was scoring against those very files. That is the worst kind of wrong:
-quiet, and about the one thing the panel exists to report.
-
-These tests pin the three roots together. If someone changes the roots scoring
-searches without changing the panel, or the other way round, the last test here
-fails and says so.
-"""
+"""Where the Private Reference Assets panel looks for organiser data."""
 
 from __future__ import annotations
 
@@ -48,7 +37,6 @@ def _status(challenge: str = "asl") -> dict:
 
 
 def test_the_flat_layout_is_found(reference_root) -> None:
-    """The layout the mentors' bundle actually arrived in."""
     _write_nifti(reference_root / "maps" / "GT_Perf.nii.gz")
     _write_nifti(reference_root / "masks" / "gm_mask.nii.gz")
     status = _status()
@@ -82,11 +70,6 @@ def test_ingestion_manifests_are_not_counted_as_reference_maps(reference_root) -
 
 
 def test_each_file_names_the_folder_it_was_really_found_in(reference_root) -> None:
-    """The panel used to print the upload path for every file regardless.
-
-    Anyone following that path to find a file in the flat layout arrived at an
-    empty directory.
-    """
     _write_nifti(reference_root / "maps" / "GT_Perf.nii.gz")
     item = _status()["items"][0]
     assert item["folder"] == "data/reference_data/maps/", item["folder"]
@@ -99,7 +82,6 @@ def test_an_empty_kind_still_says_where_to_put_files(reference_root) -> None:
 
 
 def test_the_panel_searches_exactly_what_scoring_searches() -> None:
-    """The bug was a disagreement between these two lists, so pin them together."""
     from services.configuration_manager_service import _asset_roots
     from services import path_config
 

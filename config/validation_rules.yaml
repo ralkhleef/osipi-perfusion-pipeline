@@ -125,8 +125,6 @@ artifact_types:
     - modelled_st
     - modeled_st
     - fitted_signal
-    # The DCE challenge lead's synthetic submission names the fitted
-    # concentration curve Ct.nii.gz. Matching is case insensitive.
     - ct
   measured_st:
     role: measured_signal
@@ -162,24 +160,11 @@ challenges:
     - vp
     - ve
     - kep
-    # "methods" was required here until the challenge leads said it is not
-    # needed for the internal runs the challenge is doing now. That is their
-    # call to make, so the requirement is relaxed rather than argued with, and
-    # this is the one line to change when it becomes a real requirement again:
-    # add `- methods` back to the list below.
-    #
-    # Relaxed is not ignored. The upload form asks whether a methods document
-    # is included, the answer is recorded with the submission and shown in the
-    # report, and a submitter who says yes and sends none still gets an error.
-    # So dropping it here removes the blanket demand, not the accounting.
     required_artifacts:
     - modelled_st
     analysis:
       # Await challenge-approved advisory limits; empty means not assessed.
       thresholds: {}
-      # The challenge lead confirmed that hippocampus is a separate region,
-      # not part of the reported gray-matter region. Source masks stay intact;
-      # every analysis uses GM minus hippocampus for matching site masks.
       mask_exclusions:
         gray matter:
         - hippocampus
@@ -209,9 +194,6 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # The challenge lead selected the second option: ICC(3,1).
-      # Keep the existing repeat-based grouping; site is held fixed.
-      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
         models:
         - icc3_1
@@ -236,9 +218,6 @@ challenges:
     - vp
     - dce
     - dynamic contrast enhanced
-    # Structural BIDS checks: layout and naming only, not the full BIDS
-    # specification. Reports findings as warnings; set severity to error to
-    # block, or require_layout to insist that every submission uses BIDS.
     bids_validation:
       enabled: true
       severity: warning
@@ -266,28 +245,10 @@ challenges:
         - standard_deviation
         - range
         - coefficient_of_variation
-      # The 4-D fitted-model comparison: participants submit what they fitted
-      # to get CBF and ATT, and it is compared voxel by voxel against the
-      # ground-truth 4-D ASL signal. The analysis is challenge-generic; this
-      # block is all that turns it on.
-      #
-      # It stays inert until the files exist, so enabling it early costs
-      # nothing: a submission with no `modelled_st` reports
-      # `modelled_signal_not_available` rather than failing. To make the 4-D
-      # model mandatory, add `modelled_st` to `required_artifacts` below.
       signal_rss:
         enabled: true
         modelled_artifact: modelled_st
         measured_artifact: measured_st
-    # Grouping needs identity, not a challenge-specific filename convention:
-    # `identity_parser` resolves participant/repeat/site from directories
-    # (sub-01/ses-2/, Participant003/Site1/Repeat2/) and from explicit prefixed
-    # filename tokens (sub-004_ses-2_site-3_) for any challenge. Scans whose
-    # identity cannot be resolved are skipped rather than merged, and a group
-    # with only one scan is reported as `too_few_scans`, so enabling this on a
-    # submission that carries no identity produces nothing rather than nonsense.
-    # `datasets` below is still unset for ASL: the expected cohort grid is a
-    # separate organiser decision and completeness, not grouping, depends on it.
     grouped_statistics:
       enabled: true
       axes:
@@ -296,9 +257,6 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # Report both requested single-measurement models separately.
-      # Keep the existing repeat-based grouping; site is held fixed.
-      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
         models:
         - icc2_1
@@ -314,12 +272,8 @@ challenges:
     optional_maps: []
     required_artifacts: []
     code_execution_required: false
-    # Advisory, and only for submissions that are already BIDS-shaped:
-    # `require_layout: false` means a folder with no dataset_description.json
-    # and no sub-<label> directory is left alone rather than reported as a
-    # broken BIDS dataset, because it is not claiming to be one. Raise
-    # `severity` to `error`, or set `require_layout: true`, when the challenge
-    # decides to require the layout of every participant.
+    # Advisory. With `require_layout: false`, a folder without
+    # dataset_description.json is not checked as BIDS.
     bids_validation:
       enabled: true
       severity: warning
@@ -358,9 +312,6 @@ challenges:
       - inter_participant
       source: roi_median
       minimum_group_size: 2
-      # Report both requested single-measurement models separately.
-      # Keep the existing repeat-based grouping; site is held fixed.
-      # Use models: [] to disable ICC. No acceptance threshold is implied.
       icc:
         models:
         - icc2_1

@@ -59,9 +59,6 @@ _CHALLENGE_KEYS = {
 }
 # Optional aggregation of per-scan ROI statistics.
 _GROUPED_KEYS = {"enabled", "axes", "source", "minimum_group_size", "icc"}
-# The ICC model is configuration, not code: six defensible models exist and
-# choosing among them is a scientific decision for the challenge leads. The
-# default is "none", under which nothing is computed.
 _ICC_KEYS = {"model", "models", "axes", "confidence_level"}
 _ANALYSIS_KEYS = {
     "roi_descriptive",
@@ -82,8 +79,6 @@ _SIGNAL_RSS_KEYS = {
     "enabled",
     "modelled_artifact",
     "measured_artifact",
-    # Reference curves may deliberately use the same basename as submitted
-    # fitted curves; their role comes from the private reference context.
     "reference_patterns",
 }
 # Allowed capture groups in filename identity patterns.
@@ -255,13 +250,7 @@ def _require_positive_int(value: Any, path: str, errors: list[str]) -> None:
 
 
 def _validate_thresholds(value: Any, path: str, errors: list[str]) -> None:
-    """Check advisory thresholds, and catch the percentage mistake.
-
-    Thresholds use stored units, so a CoV threshold is the ratio ``0.15``. A
-    threshold written as ``15`` would parse, load, and then never fire, which
-    is worse than being rejected: the reviewer would believe the check was
-    running. Ratio metrics therefore refuse a limit above 1.
-    """
+    """Check advisory thresholds, and catch the percentage mistake."""
     from osipi_pipeline.scoring.thresholds import RATIO_METRICS
 
     block = _require_mapping(value, path, errors)
@@ -291,12 +280,7 @@ def _validate_thresholds(value: Any, path: str, errors: list[str]) -> None:
 
 
 def _validate_icc_block(value: Any, path: str, errors: list[str]) -> None:
-    """Check an ``icc`` block without deciding anything scientific.
-
-    Rejects an unknown model name outright rather than falling back to a
-    default: a typo in the model is the one mistake here that would silently
-    publish the wrong statistic under the right label.
-    """
+    """Check an ``icc`` block without deciding anything scientific."""
     from osipi_pipeline.scoring.icc import AXIS_SESSION_FIELD, MODEL_NONE, MODELS
 
     block = _require_mapping(value, path, errors)
@@ -458,9 +442,6 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
                 if not isinstance(dims, int) or isinstance(dims, bool) or dims < 2 or dims > 7:
                     errors.append(f"{spec_path}.dimensions: must be an integer between 2 and 7")
 
-    # ── artifact_types (optional) ─────────────────────────────────────────
-    # Validated before challenges so required_artifacts can be checked
-    # against the resolved set of artifact ids.
     artifact_ids: set[str] = set()
     if "artifact_types" in rules:
         artifact_types = _require_mapping(rules.get("artifact_types"), "artifact_types", errors)
@@ -565,9 +546,6 @@ def _validate_validation_rules(rules: dict[str, Any], path: Path) -> dict[str, A
             if "keywords" in spec_map:
                 _require_string_list(spec_map.get("keywords"), f"{spec_path}.keywords", errors)
 
-            # ── optional DCE-2026 fields ──────────────────────────────────
-            # Each is independently optional. Absent means "not declared",
-            # which preserves the existing expected_maps-only behaviour.
             for field in ("required_maps", "optional_maps"):
                 if field not in spec_map:
                     continue
@@ -966,12 +944,7 @@ def validation_rules() -> dict[str, Any]:
 def validate_validation_rules_data(
     candidate: dict[str, Any], *, label: str = "configuration preview"
 ) -> dict[str, Any]:
-    """Validate an in-memory rules candidate without changing active caches.
-
-    The Configuration Manager uses this before it writes a version or touches
-    the active YAML file.  Keeping preview validation side-effect free is what
-    lets a failed draft leave the running pipeline unchanged.
-    """
+    """Validate an in-memory rules candidate without changing active caches."""
 
     return _validate_validation_rules(copy.deepcopy(candidate), Path(label))
 
@@ -985,15 +958,7 @@ def app_settings() -> dict[str, Any]:
 
 
 def validate_config_files() -> tuple[dict[str, Any], dict[str, Any]]:
-    """Re-read and validate both config files, dropping everything derived.
-
-    The parsed YAML is not the only thing cached. Ingestion keeps its own
-    lru_caches built from it, dataset names, compiled filename patterns, the
-    map and artifact indexes, and those were never cleared here, so a reload
-    picked up new rules while still matching filenames against the old
-    patterns. Clearing only half the caches is worse than clearing none,
-    because the two halves then disagree.
-    """
+    """Re-read and validate both config files, dropping everything derived."""
     clear_config_cache()
 
     # Imported here, not at module scope: both modules read this one, so a
@@ -1056,11 +1021,7 @@ def expected_maps_by_challenge() -> dict[str, tuple[str, ...]]:
 
 
 def _challenge_id_list(field: str) -> dict[str, tuple[str, ...]]:
-    """Shared reader for the per-challenge id-list fields.
-
-    Challenges that do not declare ``field`` map to an empty tuple rather
-    than being omitted, so callers can index by challenge without guarding.
-    """
+    """Shared reader for the per-challenge id-list fields."""
     result: dict[str, tuple[str, ...]] = {}
     for challenge, config in validation_rules().get("challenges", {}).items():
         values = config.get(field) or []
@@ -1079,20 +1040,13 @@ def optional_maps_by_challenge() -> dict[str, tuple[str, ...]]:
 
 
 def required_artifacts_by_challenge() -> dict[str, tuple[str, ...]]:
-    """Artifact ids a submission must provide, per challenge.
-
-    Ids are guaranteed by schema validation to exist in ``artifact_types``.
-    """
+    """Artifact ids a submission must provide, per challenge."""
     return _challenge_id_list("required_artifacts")
 
 
 #: Keys a bids_validation block may carry.
 _BIDS_VALIDATION_KEYS = {"enabled", "severity", "require_layout"}
 
-#: Completeness findings whose severity an organiser may change. Deliberately
-#: a closed list: a typo in a config file must be rejected rather than silently
-#: leaving a rule at its default, and only structural findings belong here.
-#: Nothing that indicates unreadable or corrupt data can be downgraded.
 _OVERRIDABLE_ISSUE_CODES = {
     "REQUIRED_MAP_MISSING",
     "REQUIRED_ARTIFACT_MISSING",
@@ -1110,14 +1064,7 @@ _OVERRIDABLE_ISSUE_CODES = {
 
 
 def issue_severity_by_challenge() -> dict[str, dict[str, str]]:
-    """Per challenge severity overrides, empty when not configured.
-
-    Which findings stop a submission is a challenge policy rather than a
-    property of the code. An organiser who accepts submissions that cannot be
-    checked for completeness, because their layout omits a level the config
-    declares, should be able to say so in YAML instead of asking for a code
-    change.
-    """
+    """Per challenge severity overrides, empty when not configured."""
     return {
         str(challenge).lower(): {
             str(code): str(level)
@@ -1128,12 +1075,7 @@ def issue_severity_by_challenge() -> dict[str, dict[str, str]]:
 
 
 def bids_validation_by_challenge() -> dict[str, dict[str, Any]]:
-    """Per challenge BIDS settings, or an empty block when not configured.
-
-    Absent means the checks do not run at all, which is the default: a
-    challenge that has never adopted BIDS should not start reporting a
-    submission as non-conformant because the setting was added.
-    """
+    """Per challenge BIDS settings, or an empty block when not configured."""
     return {
         str(challenge).lower(): copy.deepcopy(config.get("bids_validation") or {})
         for challenge, config in validation_rules().get("challenges", {}).items()
@@ -1141,12 +1083,7 @@ def bids_validation_by_challenge() -> dict[str, dict[str, Any]]:
 
 
 def analysis_by_challenge() -> dict[str, dict[str, Any]]:
-    """Validated analysis enablement and input pairing for each challenge.
-
-    Scientific formulas remain implementation code; this mapping only says
-    which generic analysis is enabled and which configured maps/artifacts it
-    consumes. A missing block means the analysis is not enabled.
-    """
+    """Validated analysis enablement and input pairing for each challenge."""
     return {
         str(challenge).lower(): copy.deepcopy(config.get("analysis") or {})
         for challenge, config in validation_rules().get("challenges", {}).items()
@@ -1154,24 +1091,12 @@ def analysis_by_challenge() -> dict[str, dict[str, Any]]:
 
 
 def filename_identity_patterns_by_challenge() -> dict[str, tuple[str, ...]]:
-    """Ordered filename identity regexes per challenge.
-
-    Returns validated pattern *strings*, not compiled objects: the rules
-    mapping is deep-copied and JSON-fingerprinted by the manifest layer, and
-    a compiled pattern is neither copyable nor serialisable. The parser
-    compiles them once behind its own cache.
-
-    Order is significant: the first pattern that matches wins.
-    """
+    """Ordered filename identity regexes per challenge."""
     return _challenge_id_list_raw("filename_identity_patterns")
 
 
 def _challenge_id_list_raw(field: str) -> dict[str, tuple[str, ...]]:
-    """Like :func:`_challenge_id_list` but preserves original case.
-
-    Regexes are case-sensitive by construction, so lowercasing them would
-    silently change what they match.
-    """
+    """Like :func:`_challenge_id_list` but preserves original case."""
     result: dict[str, tuple[str, ...]] = {}
     for challenge, config in validation_rules().get("challenges", {}).items():
         values = config.get(field) or []
@@ -1180,12 +1105,7 @@ def _challenge_id_list_raw(field: str) -> dict[str, tuple[str, ...]]:
 
 
 def artifact_type_specs() -> dict[str, dict[str, Any]]:
-    """Non-parameter-map submission artifacts, keyed by lowercase id.
-
-    Covers roles such as a 4-D fitted signal or a methods document. Returns
-    a deep copy so callers cannot mutate the cached configuration, matching
-    :func:`map_type_specs`. Empty when the optional section is absent.
-    """
+    """Non-parameter-map submission artifacts, keyed by lowercase id."""
     return {
         str(key).lower(): copy.deepcopy(value)
         for key, value in (validation_rules().get("artifact_types") or {}).items()
@@ -1193,13 +1113,7 @@ def artifact_type_specs() -> dict[str, dict[str, Any]]:
 
 
 def grouped_statistics_by_challenge() -> dict[str, dict[str, Any]]:
-    """Grouped-statistics settings per challenge.
-
-    Returns ``{"enabled": False}`` when a challenge says nothing, so the
-    feature is off unless a challenge opts in explicitly. ``source`` names the
-    per-scan field to aggregate and ``axes`` which comparisons to make; both
-    are configuration because OSIPI has not yet confirmed either.
-    """
+    """Grouped-statistics settings per challenge."""
     from osipi_pipeline.scoring.grouped_statistics import AXES, MIN_GROUP_SIZE
 
     result: dict[str, dict[str, Any]] = {}
@@ -1215,11 +1129,7 @@ def grouped_statistics_by_challenge() -> dict[str, dict[str, Any]]:
 
 
 def thresholds_by_challenge() -> dict[str, dict[str, Any]]:
-    """Advisory thresholds per challenge; empty when none are configured.
-
-    Empty is the shipped state for every challenge, so nothing is flagged
-    until an organiser writes a number down.
-    """
+    """Advisory thresholds per challenge; empty when none are configured."""
     return {
         str(challenge).lower(): copy.deepcopy(
             (config.get("analysis") or {}).get("thresholds") or {}
@@ -1229,12 +1139,7 @@ def thresholds_by_challenge() -> dict[str, dict[str, Any]]:
 
 
 def icc_settings_by_challenge() -> dict[str, dict[str, Any]]:
-    """ICC settings per challenge, defaulting to "no model chosen".
-
-    Returns ``model: "none"`` when a challenge says nothing, so ICC stays
-    unavailable until the challenge leads pick a model. The default is the
-    absence of a decision, never a guess at one.
-    """
+    """ICC settings per challenge, defaulting to "no model chosen"."""
     from osipi_pipeline.scoring.icc import DEFAULT_CONFIDENCE_LEVEL, MODEL_NONE
 
     result: dict[str, dict[str, Any]] = {}
@@ -1254,14 +1159,7 @@ def icc_settings_by_challenge() -> dict[str, dict[str, Any]]:
 
 
 def datasets_by_challenge() -> dict[str, dict[str, dict[str, int | None]]]:
-    """Expected dataset structure per challenge, keyed by dataset name.
-
-    Each dataset yields ``participants``, ``repeats`` and ``sites``.
-    ``participants`` is ``None`` when the organiser has not finalised the
-    cohort size; the schema permits this so an unknown count is
-    not misrepresented as a decided one. Dataset names are not restricted to
-    synthetic/clinical, a future challenge may define its own.
-    """
+    """Expected dataset structure per challenge, keyed by dataset name."""
     result: dict[str, dict[str, dict[str, int | None]]] = {}
     for challenge, config in validation_rules().get("challenges", {}).items():
         datasets = config.get("datasets") or {}

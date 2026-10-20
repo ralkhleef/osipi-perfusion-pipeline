@@ -1,11 +1,5 @@
-/* ============================================================
-   OSIPI Perfusion Pipeline — Single-card layout
-   ============================================================ */
 
 :root {
-  /* Shared worklist design tokens
-     Shared spacing, sizing, and typography so every step renders identically.
-     Referenced by the shared .worklist-*, .status-chip, and section rules. */
   --wl-gutter:       18px;    /* horizontal content gutter on every step */
   --wl-row-pad-y:    10px;    /* worklist row vertical padding */
   --wl-row-pad-x:    12px;    /* worklist row horizontal padding */
@@ -218,9 +212,6 @@ html, body {
   padding: 12px 0;
 }
 
-/* ============================================================
-   Header (logo + title)
-   ============================================================ */
 
 .form-header {
   display: flex;
@@ -252,9 +243,6 @@ html, body {
   line-height: 1.5;
 }
 
-/* ============================================================
-   Sections
-   ============================================================ */
 
 .form-section {
   padding: 22px 28px;
@@ -277,9 +265,6 @@ html, body {
   border-bottom: 1px solid var(--divider);
 }
 
-/* ============================================================
-   Form groups + labels
-   ============================================================ */
 
 .form-group {
   margin-bottom: 16px;
@@ -326,9 +311,6 @@ html, body {
   margin-top: 3px;
 }
 
-/* ============================================================
-   Inputs
-   ============================================================ */
 
 input[type="text"],
 input[type="email"],
@@ -364,9 +346,6 @@ input[type="file"] {
   pointer-events: none;
 }
 
-/* ============================================================
-   Pill radios (Challenge Type)
-   ============================================================ */
 
 .pill-row {
   display: flex;
@@ -417,9 +396,6 @@ input[type="file"] {
   color: var(--purple);
 }
 
-/* ============================================================
-   Map type toggle pills
-   ============================================================ */
 
 .map-pill-row {
   display: flex;
@@ -452,9 +428,6 @@ input[type="file"] {
   color: var(--purple);
 }
 
-/* ============================================================
-   Source tabs (Local / Zenodo / GitHub)
-   ============================================================ */
 
 .source-tabs {
   display: flex;
@@ -495,9 +468,6 @@ input[type="file"] {
 .source-panel { display: none; }
 .source-panel.active { display: block; }
 
-/* ============================================================
-   Drop zone
-   ============================================================ */
 
 .drop-zone {
   border: 1.5px dashed var(--border);
@@ -608,9 +578,6 @@ input[type="file"] {
   gap: 10px;
 }
 
-/* ============================================================
-   Submit button + status
-   ============================================================ */
 
 .submit-btn {
   display: flex;
@@ -655,9 +622,6 @@ input[type="file"] {
   border-color: #c8bfe8;
 }
 
-/* ============================================================
-   Results
-   ============================================================ */
 
 .result-banner {
   display: flex;
@@ -704,17 +668,11 @@ input[type="file"] {
   line-height: 1.4;
 }
 
-/* ============================================================
-   Results
-   ============================================================ */
 
 .error-section .section-heading { color: var(--error); border-color: var(--error-border); }
 .warn-section  .section-heading { color: var(--warn);  border-color: var(--warn-border); }
 .pass-section  .section-heading { color: var(--success); border-color: var(--success-border); }
 
-/* ============================================================
-   Summary grid
-   ============================================================ */
 
 .summary-grid {
   display: grid;
@@ -737,9 +695,6 @@ input[type="file"] {
   font-weight: 500;
 }
 
-/* ============================================================
-   Issue lists
-   ============================================================ */
 
 .issue-list {
   list-style: none;
@@ -767,9 +722,6 @@ input[type="file"] {
 .warn-section  .issue-list li { background: var(--warn-bg);    color: var(--warn);    border: 1px solid var(--warn-border); }
 .pass-section  .issue-list li { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
 
-/* ============================================================
-   File inventory
-   ============================================================ */
 
 .inventory-summary {
   display: flex;
@@ -831,9 +783,6 @@ input[type="file"] {
 
 .inventory-list li:hover { background: var(--surface); }
 
-/* ============================================================
-   Result action buttons
-   ============================================================ */
 
 .result-actions {
   display: flex;
@@ -899,9 +848,6 @@ input[type="file"] {
 
 .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
 
-/* ============================================================
-   Field label row + help tooltip
-   ============================================================ */
 
 .field-label-row {
   display: flex;
@@ -959,9 +905,6 @@ input[type="file"] {
   visibility: visible;
 }
 
-/* ============================================================
-   Spinner
-   ============================================================ */
 
 .spinner {
   display: inline-block;
@@ -977,9 +920,6 @@ input[type="file"] {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ============================================================
-   Batch UI
-   ============================================================ */
 
 /* Small size variants for action buttons */
 .btn-sm {
@@ -1181,9 +1121,6 @@ details.batch-sub-card[open] .batch-sub-toggle { transform: rotate(90deg); }
   border-color: var(--success-border);
 }
 
-/* ============================================================
-   Batch results — tab navigation
-   ============================================================ */
 
 .batch-tab-nav {
   display: flex;
@@ -1212,9 +1149,6 @@ details.batch-sub-card[open] .batch-sub-toggle { transform: rotate(90deg); }
 
 .batch-tab-panel { padding: 24px 34px; border-top: none; }
 
-/* ============================================================
-   Batch results — stats chips row
-   ============================================================ */
 
 .batch-stats-row {
   display: flex;
@@ -1270,9 +1204,6 @@ details.batch-sub-card[open] .batch-sub-toggle { transform: rotate(90deg); }
   font-weight: 500;
 }
 
-/* ============================================================
-   Batch results — expand / collapse controls
-   ============================================================ */
 
 .batch-expand-controls {
   display: flex;
@@ -1280,9 +1211,6 @@ details.batch-sub-card[open] .batch-sub-toggle { transform: rotate(90deg); }
   margin-bottom: 12px;
 }
 
-/* ============================================================
-   Batch results — mini chips in card header
-   ============================================================ */
 
 .batch-sub-header-right {
   display: flex;
@@ -1315,9 +1243,6 @@ details.batch-sub-card[open] .batch-sub-toggle { transform: rotate(90deg); }
   color: var(--warn);
 }
 
-/* ============================================================
-   Execution tab — exec cards
-   ============================================================ */
 
 .exec-card {
   border: 1px solid var(--border);
@@ -1459,9 +1384,6 @@ details.exec-card[open] .exec-toggle { transform: rotate(90deg); }
 .badge-exec-warn { background: var(--warn-bg); color: var(--warn); }
 .badge-exec-na   { background: var(--surface); color: var(--subtle); border: 1px solid var(--border); }
 
-/* ============================================================
-   Execution tab — Docker availability banner
-   ============================================================ */
 
 .docker-avail-row {
   display: flex;
@@ -1481,9 +1403,6 @@ details.exec-card[open] .exec-toggle { transform: rotate(90deg); }
   border: 1px solid var(--success-border);
 }
 
-/* ============================================================
-   Section header row — heading + inline controls side by side
-   ============================================================ */
 
 .section-header-row {
   display: flex;
@@ -1499,9 +1418,6 @@ details.exec-card[open] .exec-toggle { transform: rotate(90deg); }
   flex: 1;
 }
 
-/* ============================================================
-   Step-details — collapsible optional sections (exec, etc.)
-   ============================================================ */
 
 .step-details {
   /* inherits .form-section padding from HTML class combo */
@@ -1532,9 +1448,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin-top: 16px;
 }
 
-/* ============================================================
-   Batch results table and list layout
-   ============================================================ */
 
 /* Header bar */
 .br-header {
@@ -1795,9 +1708,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 
 .br-hdr-link:hover { color: var(--text); background: var(--surface); }
 
-/* ============================================================
-   Single submission — Panel layout (Stripe-style)
-   ============================================================ */
 
 .sp-panel {
   border-top: 1px solid var(--divider);
@@ -1840,9 +1750,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin-bottom: 6px;
 }
 
-/* ============================================================
-   Execution steps redesign — GitHub Actions style
-   ============================================================ */
 
 /* Override old exec-step-num with status-colored icon */
 .exec-step-icon {
@@ -1908,9 +1815,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   color: var(--text);
 }
 
-/* ============================================================
-   Batch results — tab nav (kept for compatibility, hidden)
-   ============================================================ */
 
 .batch-tab-nav { display: none !important; }
 
@@ -1920,9 +1824,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   border: 1px solid var(--error-border);
 }
 
-/* ============================================================
-   Results — Summary bar (single submission)
-   ============================================================ */
 
 .result-summary-bar {
   display: flex;
@@ -1981,9 +1882,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .status-badge-run  { background: #e8f0fe; color: #1a56a4; border: 1px solid #bad0f7; }
 .status-badge-na   { background: var(--surface); color: var(--subtle); border: 1px solid var(--border); }
 
-/* ============================================================
-   Results — Export section grouping
-   ============================================================ */
 
 .export-note {
   font-size: 0.75rem;
@@ -1998,9 +1896,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   flex-wrap: wrap;
 }
 
-/* ============================================================
-   Results — Run Package panel (single submission)
-   ============================================================ */
 
 .run-panel {
   border: 1px solid var(--border);
@@ -2051,9 +1946,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   line-height: 1.6;
 }
 
-/* ============================================================
-   Batch results — Section nav (sticky top)
-   ============================================================ */
 
 .batch-section-nav {
   display: flex;
@@ -2087,9 +1979,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .batch-nav-btn:hover { color: var(--text); }
 .batch-nav-btn.bnav-active { color: var(--purple); border-bottom-color: var(--purple); }
 
-/* ============================================================
-   Batch results — Controls bar (search + sort)
-   ============================================================ */
 
 .batch-controls-bar {
   display: flex;
@@ -2162,9 +2051,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   -webkit-appearance: auto;
 }
 
-/* ============================================================
-   Batch results — Expand controls
-   ============================================================ */
 
 .batch-expand-controls {
   display: flex;
@@ -2173,9 +2059,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   margin-bottom: 14px;
 }
 
-/* ============================================================
-   Batch results — Empty state
-   ============================================================ */
 
 .batch-empty-state {
   display: none;
@@ -2187,9 +2070,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   border-radius: 8px;
 }
 
-/* ============================================================
-   Batch results — Clickable stat chips
-   ============================================================ */
 
 .batch-stat-chip {
   cursor: pointer;
@@ -2201,9 +2081,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
   transform: translateY(-1px);
 }
 
-/* ============================================================
-   Batch results — Card badge row (dual badges)
-   ============================================================ */
 
 .card-badge-row {
   display: flex;
@@ -2220,9 +2097,6 @@ details.step-details[open] .step-arrow { transform: rotate(90deg); }
 .badge-exec-fail { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
 .badge-exec-na   { background: var(--surface); color: var(--subtle); border: 1px solid var(--border); font-style: italic; }
 
-/* ============================================================
-   Responsive
-   ============================================================ */
 
 @media (max-width: 600px) {
   .page-shell { padding: 0 12px; }
@@ -2769,9 +2643,6 @@ body {
 .br-badge.badge-run-result { background: #e8f0fe; color: #1a56a4; border: 1px solid #bad0f7; }
 .br-badge.badge-run-cannot { background: var(--surface); color: var(--subtle); border: 1px solid var(--border); }
 
-/* ============================================================
-   Export cards grid (Step 6)
-   ============================================================ */
 
 .export-cards-grid {
   display: grid;
@@ -2828,9 +2699,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* ============================================================
-   Validate step components
-   ============================================================ */
 
 /* Compact summary row */
 .vr-summary {
@@ -2931,9 +2799,6 @@ body {
 .batch-exec-section { display: none; }
 .batch-exec-section.exec-visible { display: block; }
 
-/* ============================================================
-   Validate step toolbar and table
-   ============================================================ */
 
 /* Compact one-line toolbar */
 .vr-toolbar {
@@ -3150,9 +3015,6 @@ body {
 .docker-ok  { background:#eef8f1; color:#1a7a3f; }
 .docker-err { background:#fdf0f0; color:#b91c1c; }
 
-/* ═══════════════════════════════════════════════════════════════
-   Page cards, source cards, and progress panel
-   ═══════════════════════════════════════════════════════════════ */
 
 /* ── Content max-width wrapper ── */
 .step-panel { max-width: 860px; margin: 0 auto; padding: 24px 0; }
@@ -3584,9 +3446,6 @@ body {
   padding: 2px 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Analysis step styles
-   ═══════════════════════════════════════════════════════════════ */
 
 /* Score table */
 .sc-table {
@@ -3959,9 +3818,6 @@ body {
   margin: 0;
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   Session restore notice
-   ══════════════════════════════════════════════════════════════════════════════ */
 
 /* Restore banner — kept in DOM for smoke-test compatibility; NEVER shown */
 .restore-banner { display: none !important; }
@@ -4523,10 +4379,6 @@ body {
   background: #fff;
 }
 .config-manager-card-wide { grid-column: 1 / -1; }
-/* ── Configuration Manager: maps ──────────────────────────────────────────
-   One row per map. The requirement is the decision organisers actually make,
-   so it is a visible three way control rather than a dropdown; everything
-   else is reference detail and collapses. */
 
 .cfg-toolbar {
   display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
@@ -4731,10 +4583,6 @@ body {
 .config-manager-message { padding: 12px 0; color: var(--muted); font-size: 0.75rem; }
 .config-manager-asset-upload { align-items: flex-end; }
 .config-manager-asset-upload > * { min-width: 0; max-width: 100%; }
-/* Direct children only. This rule used to match the select nested inside
-   .cfg-asset-field, whose flex direction is column. A flex basis meant for the
-   width was therefore applied to the height and then grown to fill, which is
-   how the Type dropdown ended up roughly 350 pixels tall. */
 .config-manager-asset-upload > select { flex: 0 1 210px; width: auto; }
 .config-manager-asset-upload > .cfg-asset-field { flex: 0 1 220px; }
 .cfg-asset-field select {
@@ -4870,9 +4718,6 @@ body.config-manager-modal-open { overflow: hidden; }
   .config-manager-selected-file { flex-basis: auto; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Run step card layout
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Summary card top row */
 .rsc-top {
@@ -4990,9 +4835,6 @@ body.config-manager-modal-open { overflow: hidden; }
   color: var(--text);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Analysis not-configured card
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 .score-not-configured-card {
   display: flex;
@@ -5066,10 +4908,6 @@ body.config-manager-modal-open { overflow: hidden; }
 .sc-col-action { white-space: nowrap; }
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   STEP COMPLETION BANNER — shown after validate / run finishes
-   ═══════════════════════════════════════════════════════════════════════════ */
-
 .step-completion-banner {
   display: none;
   align-items: center;
@@ -5106,9 +4944,6 @@ body.config-manager-modal-open { overflow: hidden; }
   flex: 1;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Upload step form card
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Step panel context — tighter max-width for form-card feel */
 .step-panel-upload {
@@ -5267,10 +5102,6 @@ body.config-manager-modal-open { overflow: hidden; }
   background: var(--purple-faint);
 }
 
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Full-width application layout
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Keep the application layout in one column. */
 .app {
@@ -5478,10 +5309,6 @@ body.config-manager-modal-open { overflow: hidden; }
 }
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Compact upload form and workflow actions
-   ═══════════════════════════════════════════════════════════════════════════ */
-
 /* ── Upload step panel — no extra bottom padding (footer hidden on upload) ── */
 .step-panel-upload {
   padding: 16px 0 20px !important;
@@ -5593,10 +5420,6 @@ body.config-manager-modal-open { overflow: hidden; }
 }
 
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Workflow scrolling and footer layout
-   ═══════════════════════════════════════════════════════════════════════════ */
-
 /* 1. Top step navigation — removed from HTML, also hidden via CSS for safety */
 .top-step-nav,
 .tsn-item,
@@ -5661,9 +5484,6 @@ html, body {
   .topbar-brand-sub { display: none !important; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Analysis cards and tooltips
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Score main card (both not-configured + ready states) ── */
 .score-main-card {
@@ -5816,9 +5636,6 @@ html, body {
 /* Keep old score-status-badge selectors working (now aliased) */
 .score-status-badge { display: none !important; }   /* replaced by smc-badge */
 
-/* ══════════════════════════════════════════════════════════════════════════
-   OSIPI interface styles
-   ══════════════════════════════════════════════════════════════════════════ */
 
 /* 1. Lock to Inter — remove Montserrat from body */
 html, body {
@@ -5965,7 +5782,6 @@ html, body {
 .ss-failed   { background: var(--error-bg) !important; color: var(--error) !important; border: 1px solid var(--error-border) !important; border-radius: 20px; padding: 2px 9px; font-size: 0.70rem; font-weight: 600; }
 
 /* 14. Scoring admin: hide raw technical code references from non-admin view */
-/* (code tags inside collapsed admin are fine; in normal mode we display: none them) */
 .scoring-mode-desc code {
   font-family: inherit;
   background: none;
@@ -6504,9 +6320,6 @@ html, body {
   text-align: center;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Footer, Start New, and restore controls
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Hide the purple topbar entirely */
 .app-topbar { display: none !important; }
@@ -6563,9 +6376,6 @@ html, body {
 }
 .wf-restore-pill--warn:hover { border-color: #dc2626; }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Upload-card restore notice
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Upload-card restore notice — slim inline strip */
 .upload-restore-notice {
@@ -6610,10 +6420,6 @@ html, body {
 }
 .upload-restore-dismiss:hover { opacity: 1; }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Upload-step footer suppression
-   These rules win via specificity AND !important on the upload-specific selector.
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Shared footer on wizard steps after Upload. Upload keeps its in-card CTA. */
 .wizard-footer:not([hidden]) {
@@ -6630,13 +6436,6 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   display: flex !important;
 }
 
-/* ==========================================================================
-   Shared interface consistency
-   Every step now matches the Upload card: one centred 720px column, white
-   cards, soft border + shadow, 12px radius, a single purple accent, the same
-   font, and tooltips instead of long technical text. This block is appended
-   last so it authoritatively overrides earlier dashboard-era rules.
-   ========================================================================== */
 
 :root {
   --card-radius: 12px;
@@ -6758,9 +6557,6 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 .field-label-row .help-tooltip,
 .pg-card-header .help-tooltip { vertical-align: middle; }
 
-/* ==========================================================================
-   Guided review workflow
-   ========================================================================== */
 
 .status-pill {
   display: inline-flex;
@@ -6983,9 +6779,6 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
   }
 }
 
-/* ==========================================================================
-   Button system, compact progress, and footer
-   ========================================================================== */
 
 .btn,
 .submit-btn,
@@ -7190,6 +6983,19 @@ body[data-step="upload"] .upload-form-card .form-actions .submit-btn {
 
 .btn-loading {
   pointer-events: none;
+  cursor: progress;
+  opacity: 1;
+}
+
+.btn-loading:disabled {
+  opacity: 1;
+}
+
+.btn-elapsed {
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  font-weight: 500;
 }
 
 .btn-loading .spinner,
@@ -7373,9 +7179,6 @@ body[data-step="upload"] .content.step-main {
   }
 }
 
-/* ==========================================================================
-   Shared workflow card shell
-   ========================================================================== */
 
 .step-shell {
   max-width: var(--card-w, 720px) !important;
@@ -7563,9 +7366,6 @@ body[data-step="upload"] .content.step-main {
   }
 }
 
-/* ==========================================================================
-   In-card workflow actions
-   ========================================================================== */
 
 .content,
 .content.step-main {
@@ -8440,11 +8240,6 @@ body[data-step] .wizard-footer {
   }
 	}
 
-/* ==========================================================================
-   QC and Preview review summary
-   Fewer boxes, softer separators: one hero, one slim rail, one analytics
-   panel (two columns), one compact export block, one collapsed details.
-   ========================================================================== */
 .summary-report { display: flex; flex-direction: column; gap: 14px; max-width: 720px; margin: 0 auto; }
 .summary-muted { font-size: 0.74rem; color: var(--muted); margin: 6px 0 0; }
 
@@ -8559,9 +8354,6 @@ body[data-step] .wizard-footer {
   .summary-kv-value { text-align: left; }
 }
 
-/* ==========================================================================
-   QC and Preview information hierarchy
-   ========================================================================== */
 
 .summary-report {
   display: flex;
@@ -9193,12 +8985,7 @@ body.preview-modal-open {
   }
 }
 
-/* ==========================================================================
-   Clinical workbench design system for Steps 2-6
-   Consolidates the previous versioned override stack into one product UI:
-   contained step shell, compact worklists, unified chips, clinical summary,
-   and export file rows. Step 1 Upload markup/layout is unchanged.
-   ========================================================================== */
+/* Clinical workbench design system for Steps 2-6 */
 
 :root {
   --card-w: 720px;
@@ -10975,12 +10762,6 @@ body[data-step] .wizard-footer,
   }
 }
 
-/* ==========================================================================
-   Step 5 map preview panel and modal gallery
-   Compact tabbed preview (one map visible at a time, ~92px thumbnail,
-   tight padding) and Prev/Next gallery controls with a counter inside the
-   existing preview modal. Scoped to Step 5 / the shared modal only.
-   ========================================================================== */
 
 /* Map tabs: small chips above the single preview item */
 #step-score .map-preview-tabs {
@@ -11059,11 +10840,6 @@ body[data-step] .wizard-footer,
   font-weight: 800;
 }
 
-/* ==========================================================================
-   Submission structure popover
-   Clinical, OSIPI-purple styled. Normal CSS (no Tailwind). Lives inside the
-   shared worklist details area; does not replace worklist rows.
-   ========================================================================== */
 
 .structure-control {
   position: relative;
@@ -11148,9 +10924,6 @@ body[data-step] .wizard-footer,
   font-size: 0.73rem;
 }
 
-/* ==========================================================================
-   Shared Review and Validate layout
-   ========================================================================== */
 
 .page-summary-line {
   margin: 0 0 10px;
@@ -11238,11 +11011,6 @@ body[data-step] .wizard-footer,
   border-color: var(--line-soft) !important;
 }
 
-/* ==========================================================================
-   Shared workflow section layout
-   stats into a compact summary row. Score/Validate/Export rows now share the
-   exact worklist row layout (title left, single chip + actions on the right).
-   ========================================================================== */
 
 /* Remove the old table-style Score UI. The Reviewer/Admin panel is visible
    again because it now contains the supported Configuration Manager. */
@@ -11253,7 +11021,6 @@ body[data-step] .wizard-footer,
   display: block !important;
 }
 
-/* Step 3 validation stats/dashboard UI was removed. */
 #step-validate .validation-summary-stats,
 #step-validate .validation-summary-stats.val-stat-tiles {
   display: none !important;
@@ -11281,11 +11048,6 @@ body[data-step] .wizard-footer,
   display: none !important;
 }
 
-/* ==========================================================================
-   Shared details controls and compact rows
-   Every row uses the same .details-toggle button (right side, after any
-   primary action). Secondary info lives inside .worklist-details.
-   ========================================================================== */
 
 .details-toggle {
   flex: 0 0 auto;
@@ -11330,11 +11092,6 @@ body[data-step] .wizard-footer,
   margin: 0 0 8px !important;
 }
 
-/* ==========================================================================
-   Contained workflow shell and visible worklists
-   Steps 2-6 match the Upload card width/header/action rhythm while keeping the
-   list area open; only per-row Details panels collapse.
-   ========================================================================== */
 
 :root {
   --card-w: 720px;
@@ -11513,11 +11270,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   }
 }
 
-/* ==========================================================================
-   Review toolbar and filter menus
-   Review uses the same compact filter row as Validate; selection is a small
-   inline text group, and dropdown labels/values/menu items cannot collide.
-   ========================================================================== */
 
 #step-index .pg-card-sub#batch-header-desc {
   white-space: nowrap;
@@ -11684,11 +11436,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   }
 }
 
-/* ==========================================================================
-   Compact toolbars and submission icons
-   Sort is no longer visible in the main worklist toolbars, Step 2 selection
-   actions sit inline with filters, and submission rows use one file mark.
-   ========================================================================== */
 
 #step-index .review-filter-bar,
 .validation-filter-bar,
@@ -11817,12 +11564,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   }
 }
 
-/* ==========================================================================
-   Filter dropdown: open as a fixed overlay so it is never clipped by
-   the card / step scroll container, and always stays inside the viewport.
-   The higher-specificity selector beats the base .filter-menu !important rules.
-   Applies to every filter dropdown (Status / Map / Sort / shared menus).
-   ========================================================================== */
 .filter-menu.filter-menu--floating {
   position: fixed !important;
   top: var(--fm-top) !important;
@@ -11837,11 +11578,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   z-index: 1400 !important;
 }
 
-/* ==========================================================================
-   Researcher-facing workflow styling
-   Replace loud OK/success + yellow warning styling in the visible UI with
-   neutral gray. Red is reserved for true blocking errors only.
-   ========================================================================== */
 
 /* "Items to review" list — calm neutral, not a loud yellow warning box. */
 .review-section .vp-section-heading,
@@ -11895,18 +11631,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .submitted-files-list .submitted-file-role { font-weight: 600; }
 .submitted-files-list .submitted-file-name { color: var(--text-muted, #666); flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
 
-/* ============================================================
-   Journal register — issue lists, status chips, section headings
-   ============================================================
-   Matches the treatment already used by the HTML and PDF reports
-   (backend/services/report_branding.py): rules instead of fills,
-   status carried by a small coloured dot rather than a filled pill,
-   small-caps section labels. Filled pastel boxes stacked forty deep
-   read as decoration; a ruled list reads as a document.
-
-   Appended last so it wins over the earlier !important layers
-   without editing five separate rule sets in place.
-   ============================================================ */
 
 :root {
   --jr-ink:       #16161a;
@@ -12193,12 +11917,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   line-height: 1.35;
 }
 
-/* Outcome of a scoring or analysis run.
-
-   Previously a run ended in silence: the button returned to its idle label
-   and nothing said whether anything had worked. Colour alone does not carry
-   the message here, the wording does, so this still reads correctly to
-   someone who cannot distinguish the three tints. */
 .score-run-outcome {
   margin: 10px 0 0;
   padding: 9px 12px;
@@ -12211,9 +11929,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .score-run-outcome--warn { border-color: #fac775; background: #fffaf0; color: #854f0b; }
 .score-run-outcome--err  { border-color: #f7c1c1; background: #fff5f5; color: #c53030; }
 
-/* ── The run confirmation popup ──────────────────────────────────────────
-   Colours match the banner tone for tone, so the popup and the line left
-   behind on the page cannot tell different stories about the same run. */
 .run-result-modal[hidden] { display: none; }
 .run-result-modal {
   position: fixed;
@@ -12269,20 +11984,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   flex-wrap: wrap;
 }
 
-/* ── Unsaved configuration changes ────────────────────────────────────────
-   An edit used to leave no trace until a version was saved and read back.
-   Changes are named here rather than counted, because "CBF: Not used to
-   Required" answers "did that click do what I meant" and a number does not.
-
-   Coloured with the coral from the OSIPI mark (#eb6364) rather than the
-   purple used everywhere else in this panel, so pending work is visible
-   against its surroundings instead of blending into them. Text is darkened
-   to #9b4142, which is 6.06:1 on the panel tint and 5.57:1 on the badge,
-   both past the 4.5:1 threshold.
-
-   Coral sits near the error styling, so the panel is distinguished by shape
-   as well as hue: it carries a solid left rule that no error message has,
-   and the marker on a card is a text badge, never colour on its own. */
 .config-manager-changes {
   margin: 14px 0 0;
   padding: 13px 15px;
@@ -12315,14 +12016,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   font-size: 0.7rem; font-weight: 600;
 }
 
-/* ── ROI parameter-map statistics table ───────────────────────────────────
-   A single-scan submission filled Dataset, Participant, Repeat and Site with
-   a dash on every row: four columns of no information taking a third of the
-   width, which pushed Status off the right edge. Those columns are now lifted
-   into the line above when they never vary, and what remains fits.
-
-   The range reads as one value, so it must not break across three lines the
-   way "0.9988 to 1.1106" did. */
 .roi-scope {
   display: flex; flex-wrap: wrap; gap: 6px 8px;
   margin: 0 0 10px;
@@ -12341,11 +12034,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .roi-table td.roi-range { white-space: nowrap; }
 .roi-table th[hidden], .roi-table td[hidden] { display: none; }
 
-/* ── Configuration preview ────────────────────────────────────────────────
-   This printed the whole maps array as JSON on both sides of an arrow: a
-   reviewer had to read a serialized object to learn that one map changed
-   state. The server now diffs lists by id, so each row is one setting, and
-   the row says which setting in the words the interface uses for it. */
 .cfg-preview-count { margin: 0 0 9px; font-size: 0.78rem; color: var(--muted); }
 .cfg-preview-list { margin: 0; padding: 0; list-style: none; }
 .cfg-preview-row {
@@ -12373,11 +12061,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cfg-preview-row .cfg-preview-arrow { display: none; }
 }
 
-/* ── Private reference assets ─────────────────────────────────────────────
-   The panel used to show a count line and a flat list of filenames, which
-   left the obvious question unanswered: where do these live, and where do I
-   put mine. Each kind is now its own group stating what it is for and the
-   folder it occupies, so an empty group still tells you something. */
 .cfg-asset-groups { display: grid; gap: 10px; }
 .cfg-asset-group {
   padding: 12px 14px;
@@ -12440,10 +12123,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   pointer-events: none;
 }
 
-/* ── The wizard running itself ─────────────────────────────────────────────
-   Bottom right, out of the way of the step content, but moving so it is
-   noticed. It has to be dismissable: an automatic thing that cannot be
-   stopped is worse than a manual one. */
 .auto-advance[hidden] { display: none; }
 .auto-advance {
   position: fixed;
@@ -12496,10 +12175,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 }
 .auto-advance-stop:hover { background: #f6f4fc; }
 
-/* ── Correcting how an upload was grouped ──────────────────────────────────
-   Deliberately quiet. The detection is usually right, so this reads as a
-   statement of what happened with a way to change it, not as a warning that
-   something is wrong. */
 .grouping-note[hidden] { display: none; }
 .grouping-note {
   display: flex;
@@ -12528,15 +12203,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .grouping-note-folders:empty { display: none; }
 .grouping-note .btn { flex: none; }
 
-/* ── Active Analysis Provider, tidied ──────────────────────────────────────
-   Three problems, all of them the panel showing more than it knows.
-
-   An unavailable option kept a live-looking radio, so the one row you cannot
-   choose looked exactly like the two you can. The radio is now hidden and the
-   row reads as a statement of fact rather than a rejected choice.
-
-   The security notice was the loudest thing on screen, competing with the
-   choice it is meant to annotate. It still says the same words. */
 .scoring-mode-row-unavailable input[type="radio"] { display: none; }
 .scoring-mode-row-unavailable {
   border-style: dashed;
@@ -12557,8 +12223,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   margin-bottom: 10px;
 }
 
-/* The label sat outside the control it names, so it read as a heading for the
-   whole section rather than for the dropdown directly beneath it. */
 #scoring-pkg-select-wrap {
   display: flex;
   align-items: center;
@@ -12576,9 +12240,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .scoring-pkg-select { flex: 1 1 260px; min-width: 0; }
 .scoring-pkg-selection-detail { flex: 1 1 100%; margin: 0; }
 
-/* Run Analysis, once moved into the step footer. Secondary weight beside
-   Continue to Export: the primary action on this step is moving on, and the
-   analysis is optional. */
 .step-action-right .step-action-run {
   flex: none;
   margin-right: 8px;
@@ -12586,14 +12247,14 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   color: var(--text, #212529);
   border: 1px solid #d9d4e8;
 }
-.step-action-right .step-action-run:hover:not(:disabled) { background: #f6f4fc; }
+.step-action-right .step-action-run:hover:not(:disabled),
+.step-action-right .step-action-run:focus:not(:disabled) {
+  background: #f6f4fc;
+  color: var(--text, #212529);
+  border-color: #cfc6e6;
+}
 .step-action-right .step-action-run:disabled { opacity: 0.55; }
 
-/* ── Collapsible section headers on QC and Preview ─────────────────────────
-   The grey fill read as a disabled control rather than something to open, and
-   it was the only grey block on an otherwise white page, so the eye went to
-   it for the wrong reason. White with a hairline rule keeps it quiet while
-   the hover state and the arrow say it is interactive. */
 .scoring-admin-summary {
   background: #fff;
   border-bottom: 1px solid transparent;
@@ -12617,14 +12278,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   color: var(--muted, #6b7280);
 }
 
-/* A card whose body folds away. Same shape as the panel above, so the page
-   has one way of collapsing things rather than two that look different.
-
-   Deliberately does not restate the card header's padding. .step-shell
-   .pg-card-header sets it with !important, so any value here would either
-   lose silently or have to shout back, and either way a folding card would
-   drift out of line with a plain one the next time that rule is touched.
-   Only the things a fold actually needs are declared. */
 .qc-fold > summary {
   display: flex;
   align-items: center;
@@ -12659,22 +12312,12 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 .qc-fold > summary .pg-card-title { margin: 0; }
 .qc-fold > summary .pg-card-sub { margin: 2px 0 0; }
 
-/* Closed, the header is the whole card. The rule under it would run along
-   the bottom edge with nothing beneath, and the margin would leave a band of
-   empty card below that. Both come from rules that carry !important, so
-   undoing them takes the same, at higher specificity so this still wins. */
 .qc-fold:not([open]) > summary.pg-card-header {
   border-bottom: none !important;
   margin-bottom: 0 !important;
   border-radius: 14px;
 }
 
-/* ── Foldable sections inside the Score & Preview panel ────────────────────
-   These are <details> whose summary is the existing .sdc-head, so the header
-   keeps the look it already had and only gains a pointer, a hover tint and
-   an arrow. The arrow is drawn here rather than left to the browser default,
-   because the default marker sits at the start of the line and pushes the
-   heading out of alignment with the sections that do not fold. */
 #step-score .sdc-fold > summary.sdc-head {
   cursor: pointer;
   list-style: none;
@@ -12690,9 +12333,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   outline: 2px solid #6b46c1;
   outline-offset: -2px;
 }
-/* .sdc-head is justify-content: space-between and may already hold a chip on
-   the right, so the arrow is pinned last with a left margin of its own
-   rather than relying on margin-left: auto. */
 .sdc-fold > summary.sdc-head::after {
   content: "";
   order: 99;
@@ -12706,8 +12346,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   transition: transform 140ms ease;
 }
 .sdc-fold[open] > summary.sdc-head::after { transform: rotate(90deg); }
-/* Closed, the header is the whole card, so it should not keep a gap under
-   itself where the body used to be. */
 #step-score .sdc-fold:not([open]) > summary.sdc-head { margin-bottom: -4px; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -12715,23 +12353,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .qc-fold > summary::after { transition: none; }
 }
 
-/* ============================================================
-   Upload form: rhythm and density
-   ------------------------------------------------------------
-   The upload card had accumulated three competing definitions of
-   `.form-section` and two of `.section-heading`, each added to fix a symptom
-   of the last, and the result read as a stack of unrelated slabs: a heading
-   and an intro that looked alike, a question label that looked like both, and
-   large unexplained gaps where empty error rows were holding space open.
 
-   This block is the single place the upload form's spacing is decided. It is
-   last in the file deliberately, so it settles the earlier disagreements
-   rather than joining them.
-   ============================================================ */
-
-/* An error slot that has no error in it should take no room. Two empty ones sat
-   under Team Name and Contact Email, which is where the dead space under the
-   first section came from. */
 .field-error:empty {
   min-height: 0;
   margin-top: 0;
@@ -12754,9 +12376,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   text-transform: none !important;
 }
 
-/* The card is already only 720px wide, so it bounds the line length on its
-   own. A 60ch cap on top of that broke every intro onto a second line with a
-   one-word orphan, which is most of what made the page look unfinished. */
 .upload-form-card .section-intro {
   margin: 0 0 16px;
   max-width: none;
@@ -12801,9 +12420,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   color: var(--text);
 }
 
-/* ── Advanced disclosure ───────────────────────────────────────────────────
-   It carried a full-width rule above it, which read as the end of the section
-   rather than an optional extra inside it. */
 .upload-form-card .advanced-options {
   margin-top: 16px;
   padding-top: 0;
@@ -12871,9 +12487,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .upload-form-card .advanced-options > summary::before { transition: none; }
 }
 
-/* ── A quiet download that is still obviously a control ────────────────────
-   The template used to be a link buried mid-sentence in a three-line grey
-   paragraph, which is where a reader's eye goes last. */
 .ghost-download {
   display: inline-flex;
   align-items: center;
@@ -12926,15 +12539,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .upload-form-card .field-label-row--split { flex-direction: column; align-items: flex-start; }
 }
 
-/* ============================================================
-   Step headers: the title, and a "?" for the rest
-   ------------------------------------------------------------
-   Every step opened with a sentence explaining itself, in grey, above content
-   that then explained itself again. Six of them, one per step, none of which a
-   returning reviewer ever needed to read. The sentence now lives behind the
-   "?" the app already uses everywhere else, so it is one hover away for
-   somebody who wants it and out of the way for everybody who does not.
-   ============================================================ */
 
 /* The heading's own source newline already renders as one space, so the margin
    only has to add a hair on top of it. */
@@ -12945,9 +12549,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   vertical-align: middle;
 }
 
-/* Wider than a field tooltip, because a step description is a sentence rather
-   than a phrase, and it hangs below the title so a header at the top of the
-   page does not push it off-screen. */
 .title-help .tooltip-text {
   top: calc(100% + 9px);
   bottom: auto;
@@ -12957,8 +12558,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   text-transform: none;
 }
 
-/* A header with no description under it no longer needs the space that
-   description used to occupy. */
 .heading-text > .card-title:last-child {
   margin-bottom: 0;
 }
@@ -12972,35 +12571,18 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   }
 }
 
-/* The header padding was sized around a three-line block: label, title and a
-   description. With the description behind the "?" the block is two lines, and
-   the old padding left the title floating in the middle of a tall empty band. */
 .upload-form-card .form-header,
 .step-shell-header {
   padding-top: 16px !important;
   padding-bottom: 15px !important;
 }
 
-/* A heading sits 3px above its intro, which is right when there is one. Where
-   the intro moved into the "?" the heading would otherwise land straight on
-   top of the first control. No :has() needed: the adjacent sibling is only a
-   control when no intro came between them. */
 .upload-form-card .section-heading + .form-group,
 .upload-form-card .section-heading + .pill-row,
 .upload-form-card .section-heading + .field-label-row {
   margin-top: 14px;
 }
 
-/* ============================================================
-   Organiser assets: 180 files with three names between them
-   ------------------------------------------------------------
-   The DCE reference set is one hundred and eighty files whose names repeat
-   once per scan, and the panel listed them flat under sixty printed folder
-   paths. Neither half answered the only question a reader has, which is which
-   scan a file belongs to. The folder is now stated once, the files are grouped
-   by the scan their folder names, and anything unreadable is called out where
-   it cannot be scrolled past.
-   ============================================================ */
 
 .cfg-asset-search {
   display: block;
@@ -13111,20 +12693,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cfg-asset-scan > summary::before { transition: none; }
 }
 
-/* ============================================================
-   Less grey
-   ------------------------------------------------------------
-   The organiser panels had tinted fills nested three deep: a lilac
-   Configuration Manager holding white cards holding a lilac review bar, all of
-   it inside a white step card. Every level was a slightly different
-   near-white, so nothing read as foreground and the whole region looked
-   unfinished rather than calm.
-
-   One rule instead: white surfaces, hairline borders, and colour reserved for
-   state and for the thing you are meant to press. A tint here now means
-   something -- it is a hover, or an active item -- rather than being the
-   default background of anything that happens to be a container.
-   ============================================================ */
 
 .config-manager,
 .config-manager-review-bar {
@@ -13168,9 +12736,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   font-size: 0.76rem;
 }
 
-/* Reviewer settings: a section header, not a floating grey pill.
-   Inside a step shell the panel is deliberately full-bleed with no border, so
-   a rounded tinted summary sat in the middle of it with nothing to belong to. */
 .step-shell .scoring-admin-summary,
 .step-shell .scoring-admin-panel[open] > .scoring-admin-summary {
   background: transparent;
@@ -13196,9 +12761,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   color: var(--muted);
 }
 
-/* A way out to the guide, from the two steps where the numbers appear and
-   where they leave the app. Quiet enough not to compete with the step title,
-   present enough that "what does Error CoV mean" has an answer on screen. */
 .step-guide-link {
   display: inline-flex;
   align-items: center;
@@ -13221,11 +12783,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   text-decoration: underline;
 }
 
-/* ── Filtering the ROI table ───────────────────────────────────────────────
-   Sixty scans contribute a row per map per region, so the table is hundreds
-   of rows long and correct. The filter narrows what is on screen and nothing
-   else: the count chip still states the real total, and the CSV export is
-   built from the records rather than from the visible rows. */
 .roi-filter {
   display: flex;
   align-items: center;
@@ -13279,27 +12836,12 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .roi-filter-count { text-align: right; }
 }
 
-/* Small values are printed in scientific notation, and "5.50e-5" broken across
-   two lines reads as two numbers. Numeric cells stay on one line and align on
-   the digits. */
 .roi-table td.num,
 .roi-table th.num {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-/* ============================================================
-   One accent colour
-   ------------------------------------------------------------
-   The Run step had a dark green primary button and a blue progress panel,
-   while every other primary action in the app is purple. Three accent
-   families is not a palette, and green in particular already means something
-   here: it is the colour of a passed check. A green "Run processing" button
-   reads as a result rather than as the thing you press to get one.
-
-   Purple is the accent. Green and red stay for state -- passed, failed --
-   which is the only job they should have.
-   ============================================================ */
 
 .run-settings-card .run-model-btn.idle {
   background: var(--purple);
@@ -13310,9 +12852,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   box-shadow: 0 4px 14px rgba(94, 66, 166, .28);
 }
 
-/* Work in progress is the accent; completion is the only thing that turns
-   green, and it turns green because it has finished, not because it is a
-   progress bar. */
 .run-progress-panel {
   background: var(--purple-faint);
   border-color: #ded7f2;
@@ -13330,18 +12869,7 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 /* Green is left doing the one job it should: saying a thing finished or
    passed. `state-done` keeps it, and so do the readiness dots. */
 
-/* ============================================================
-   Empty states that look deliberate
-   ------------------------------------------------------------
-   An empty list was a tall grey band with one grey sentence floating in the
-   middle of it, and on the Validate step two sentences that said nearly the
-   same thing. It read as a rendering failure rather than as "there is nothing
-   here yet".
-   ============================================================ */
 
-/* `.vr-empty` is the one an empty list actually uses; it is toggled with an
-   inline `display`, so the layout rules go on the element rather than on a
-   `display` this file would fight. */
 .vr-empty {
   margin: 8px 0;
   padding: 26px 20px;
@@ -13357,14 +12885,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   background: #fff !important;
 }
 
-/* ============================================================
-   Capabilities: state first, detail second
-   ------------------------------------------------------------
-   Eight rows per challenge, five of them reading "Not configured" in the same
-   grey as the rows that said something. The one question the panel answers --
-   what can this challenge actually do right now -- took reading twenty-four
-   lines of near-identical text to answer.
-   ============================================================ */
 
 .config-capability-card {
   background: #fff;
@@ -13448,8 +12968,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
 
 .cap-detail:empty { display: none; }
 
-/* An odd number of challenges left the last card alone on a row at half
-   width, which read as a missing fourth card. */
 .config-capability-grid > .config-capability-card:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
@@ -13459,13 +12977,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cap-state { justify-content: flex-start; }
 }
 
-/* ── Each kind of organiser file collapses ─────────────────────────────────
-   Reference maps, ROI masks and measured signals are the same kind of thing,
-   so they get the same treatment: a header that states the count, a body that
-   can be folded away, grouping by the scan each file belongs to, and a filter.
-   A long list starts closed -- the count answers "how many are loaded"
-   without opening anything -- and a short one stays open, because collapsing
-   nine files hides nothing and costs a click. */
 .cfg-asset-group > .cfg-asset-head {
   display: flex;
   align-items: center;
@@ -13515,9 +13026,6 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
   .cfg-asset-group > .cfg-asset-head::before { transition: none; }
 }
 
-/* ============================================================
-   Upload step: compact, consistent shell
-   ============================================================ */
 
 /* Match the remaining workflow steps and keep the primary action visible in
    a standard desktop viewport. */
@@ -13641,4 +13149,15 @@ body:not([data-step="upload"]) .step-shell:not([hidden]) {
     flex: 0 0 36px;
     width: 36px;
   }
+}
+
+.cfg-asset-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cfg-asset-add #config-manager-asset-folder-status {
+  margin-top: 10px;
 }

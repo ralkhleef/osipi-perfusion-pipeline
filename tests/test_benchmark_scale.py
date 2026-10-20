@@ -27,12 +27,7 @@ SCRIPT = ROOT / "scripts" / "benchmark_scale.py"
 
 
 def _env() -> dict:
-    """The caller's environment with the project on the path.
-
-    Replacing os.environ outright dropped the site-packages the interpreter
-    was installed with, so the script failed to import nibabel and every test
-    below reported a benchmark failure that was really a fixture bug.
-    """
+    """The caller's environment with the project on the path."""
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(
         [str(ROOT), str(ROOT / "backend"), str(ROOT / "src")])
@@ -73,12 +68,7 @@ def test_the_sweep_actually_grows(measurements) -> None:
 
 
 def test_memory_is_bounded_rather_than_proportional(measurements) -> None:
-    """The claim on the GSoC page: files are read one at a time.
-
-    If the pipeline held a whole submission in memory, peak usage would climb
-    with the input. It should stay near the size of the largest single file
-    instead, so this asserts peak grows far more slowly than input does.
-    """
+    """The claim on the GSoC page: files are read one at a time."""
     first, last = measurements[0], measurements[-1]
     input_growth = last["input_mb"] / max(first["input_mb"], 0.01)
     peak_first = max(first[s]["peak_mb"] for s in ("ingest", "validate"))
@@ -120,14 +110,7 @@ def test_the_published_memory_claim_is_the_one_the_script_checks() -> None:
 
 
 def test_the_published_claim_covers_four_dimensional_data() -> None:
-    """The 3-D figure alone was true and misleading at the same time.
-
-    The benchmark measured only 3-D volumes, so it reported comfortable
-    numbers while the pipeline could not in fact read the DCE challenge data:
-    one 4-D concentration curve is 8 MB on disk and needed 2.38 GB to load.
-    A page that quotes the 3-D figure without saying so invites someone to
-    plan capacity from it and be badly wrong.
-    """
+    """The 3-D figure alone was true and misleading at the same time."""
     page = (ROOT / "docs" / "gsoc.html").read_text(encoding="utf-8")
     assert "4-D" in page, "the page does not mention 4-D data at all"
     assert re.search(r"0\.54 GB|chunk", page), (

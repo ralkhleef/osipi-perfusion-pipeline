@@ -1,16 +1,4 @@
-"""An unreadable file must not look like a file with nothing to say.
-
-Found during a walkthrough. A corrupt NIfTI produced a preview item with an
-empty shape, no orientation and no dtype, which is exactly what a readable file
-with a blank header produces. The header check then reported "Not verified",
-which a reviewer reads as "we did not look" when the truth is "we looked and
-the file will not open".
-
-That distinction matters here more than in most places. The header check exists
-because a submission can be the right shape, score plausibly, and still be
-flipped or at the wrong voxel size. A reviewer who sees "not verified" moves
-on; one who sees "could not be read" does not.
-"""
+"""An unreadable file must not look like a file with nothing to say."""
 
 from __future__ import annotations
 
@@ -51,7 +39,6 @@ def test_an_unreadable_file_says_why(files) -> None:
 
 
 def test_the_two_cases_are_distinguishable(files) -> None:
-    """The actual bug: both used to be an empty shape and nothing else."""
     from services.nifti_preview_service import _base_preview_item
     good, bad = files
     a, b = _base_preview_item("p", good), _base_preview_item("p", bad)
@@ -83,7 +70,6 @@ def test_nothing_comparable_is_still_not_verified() -> None:
 
 
 def test_an_unreadable_submission_is_not_reported_as_not_verified() -> None:
-    """The regression this whole file exists for."""
     bad = {"read_error": "invalid stored block lengths"}
     good = {"shape": [4, 4, 4], "axis_codes": ["R", "A", "S"], "dtype": "float32"}
     result = _check(bad, good)

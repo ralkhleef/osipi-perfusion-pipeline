@@ -1,19 +1,4 @@
-"""Which ROI columns a reader is actually shown.
-
-A submission with one scan has nothing to put in Dataset, Participant, Repeat
-or Site, so the table printed four columns of dashes on every row. They took
-about a third of the width and pushed Status off the right edge, which is how
-a table ends up being read with a horizontal scrollbar.
-
-Columns whose value never varies carry no information per row, so they are
-lifted out and stated once above the table. The rule is about variation, not
-about emptiness: a DCE submission where every scan is from the clinical
-dataset lifts "clinical" out too, and keeps Participant because that differs.
-
-The full rows stay as they were. The CSV export is built from the records and
-must keep every column whatever a particular submission happens to look like,
-and these tests check that it still does.
-"""
+"""Which ROI columns a reader is actually shown."""
 
 from __future__ import annotations
 
@@ -73,7 +58,6 @@ def test_a_single_scan_drops_the_identity_columns() -> None:
 
 
 def test_the_dropped_columns_are_stated_once_instead() -> None:
-    """Lifting a column must not lose what it said."""
     result = model(MANY_SCANS)
     assert result["roi_descriptive_scope"].get("Dataset") == "clinical"
     assert result["roi_descriptive_scope"].get("Repeat") == "1"
@@ -155,8 +139,7 @@ def test_no_records_produces_no_rows_and_no_scope() -> None:
 
 
 def test_a_single_record_does_not_lift_everything_into_the_caption() -> None:
-    """With one row every column is constant, so the rule needs a floor:
-    Map and ROI are what the row is about and must stay in the table."""
+    """With one row every column is constant, so the rule needs a floor: Map and ROI are what the row is about and must stay in the table."""
     display = model([record()])["roi_descriptive_display_headers"]
     assert "Map" in display and "ROI" in display
     assert "Mean" in display

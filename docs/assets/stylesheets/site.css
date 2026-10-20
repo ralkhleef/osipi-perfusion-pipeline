@@ -539,12 +539,6 @@ h3:hover .docs-anchor,
   .docs-navbar .nav-link { font-size: .85rem; }
 }
 
-/* ── Term and description pairs ───────────────────────────────────────────
-   For lists where each item is a named thing plus an explanation. Written as
-   a bulleted list with a bold lead-in and a full stop, nine of them read as a
-   glossary and the bold does the work a column position should: the eye has
-   to re-find where each description starts. The term sits in its own column
-   instead, so nothing needs emphasising. */
 .docs-defs { margin: 0 0 1.1rem; }
 .docs-defs > div {
   display: grid;
@@ -572,9 +566,6 @@ h3:hover .docs-anchor,
 
 /* A control or menu item named in prose. Bold was doing this job and reads as
    emphasis, which these are not: the name is a label, not a stressed word. */
-/* Both are set explicitly. --docs-code-bg is the near-black used behind code
-   blocks, which pair it with light text; borrowing it here without also
-   setting a colour rendered dark text on a dark chip. */
 .docs-ui {
   padding: .05rem .35rem;
   border: 1px solid var(--docs-border);

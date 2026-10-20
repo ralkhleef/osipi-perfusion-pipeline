@@ -1,36 +1,5 @@
 #!/usr/bin/env python3
-"""Build the smallest submission a challenge will accept, for a quick try.
-
-The archives in ``submissions/incoming/`` are realistic, which makes them slow
-to reason about when all you want is to press the buttons once and watch what
-happens. This writes the smallest thing that still exercises the whole
-pipeline, with a few voxels per map, so a pass through Upload, Review,
-Validate, Run, QC and Export takes seconds and every number on screen is small
-enough to check by hand.
-
-    python3 scripts/make_minimal_submission.py
-
-What "smallest" means depends on the challenge, and the script reads that from
-the configuration rather than assuming it:
-
-  ASL and DSC declare no dataset grid, so one scan holding the required maps
-  validates cleanly. ASL is the default for exactly that reason.
-
-  DCE declares a grid, five participants by two repeats for the clinical
-  dataset, and requires a modelled signal-time curve alongside the maps. A
-  single DCE scan therefore cannot pass, and the script says so instead of
-  claiming otherwise. Pass --complete to build the full declared grid.
-
-Options:
-    --challenge asl|dce|dsc   Default asl, the smallest clean pass.
-    --complete                Build whatever the challenge declares, grid and
-                              required artifacts included, so validation
-                              passes. Larger, still small.
-    --maps cbf,att            Override which maps to include.
-    --out PATH                Write somewhere else.
-
-Nothing here is imaging data: the voxel values are a fixed ramp.
-"""
+"""Build the smallest submission a challenge will accept, for a quick try."""
 
 from __future__ import annotations
 
@@ -54,19 +23,11 @@ from osipi_pipeline.testing.synthetic import (  # noqa: E402
     write_nifti,
 )
 
-#: Fallback when a dataset declares a count as null, meaning "pending a
-#: decision from the challenge leads". One keeps the archive small and is
-#: never wrong in a way that matters here.
 PENDING_COUNT = 1
 
 
 def _scans(challenge: str, complete: bool) -> list[tuple[str, int, int, int]]:
-    """Which (dataset, participant, site, repeat) scans to write.
-
-    Without ``complete`` this is deliberately one scan, whatever the challenge
-    declares, because seeing the count mismatch reported is itself a useful
-    thing to look at.
-    """
+    """Which (dataset, participant, site, repeat) scans to write."""
     grid = datasets_by_challenge().get(challenge) or {}
     if not grid:
         return [("Clinical", 1, 1, 1)]

@@ -1,14 +1,4 @@
-"""What Preview Changes reports, and at what granularity.
-
-The comparison recursed into dictionaries but treated lists as opaque values.
-``maps`` is a list, so changing one map's state produced a single row holding
-both entire lists serialized as JSON, and a reviewer had to read a wall of
-objects to work out that one map had moved from unused to required.
-
-Lists whose entries carry an ``id`` are matched up by that id instead, so the
-report says ``maps.ktrans.state`` and nothing else. Order is not identity in
-these lists, and the tests below pin that: reordering is not a change.
-"""
+"""What Preview Changes reports, and at what granularity."""
 
 from __future__ import annotations
 

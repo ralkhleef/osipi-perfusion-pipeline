@@ -1,11 +1,4 @@
-"""Tests for the shared report model and figure builders.
-
-The report had no direct coverage: the API tests exercised the endpoints and
-grepped the rendered output for section headings, so a wrong *number* would
-sail through while a renamed heading failed the build. These tests assert the
-content rules instead, de-duplication, conditional caveats, per-challenge
-scoping, and the invariant that missing data is never rendered as zero.
-"""
+"""Tests for the shared report model and figure builders."""
 
 from __future__ import annotations
 
@@ -51,7 +44,6 @@ def test_multiscan_results_keep_their_own_metrics(use_path):
     model = _build_report_model([summary], tag="regression", blinded=True)
     column = model["main_map_metric_headers"].index("RMSE")
     assert [row[column] for row in model["main_map_metric_rows"]] == ["1", "2"]
-
 
 
 def _scored(map_type="CBF", *, sub=58.0, ref=60.0, sd=6.0, units="ml/100g/min"):
@@ -126,11 +118,6 @@ def test_qc_and_scoring_do_not_repeat_each_other():
 
 
 def test_aggregate_statistics_live_in_the_results_table():
-    """The key-figures band was removed; a paper puts its numbers in a table.
-
-    The band repeated the results table, so the aggregates belong in the
-    summary table and must appear there exactly once.
-    """
     model = _build_report_model([_summary()], tag="t", blinded=True)
     for stat in ("Submissions", "Maps", "Finite voxels", "NaN / Inf",
                  "Negative voxels"):
@@ -275,20 +262,8 @@ def test_challenge_name_is_not_hardcoded_to_asl():
 # ── Figures ───────────────────────────────────────────────────────────────
 
 
-
-
-
-
-
-
-
 def test_svg_output_is_self_contained_and_escaped():
-    """Axis labels carry attacker-influenced text and must be escaped.
-
-    The units string is read from the submitted NIfTI's own header, so it is
-    participant-supplied and lands directly in an axis label. The HTML report
-    embeds this SVG inline, so an unescaped tag here would execute.
-    """
+    """Axis labels carry attacker-influenced text and must be escaped."""
     fig = bland_altman_figure(
         [{"mean_level": 1.0, "bias": 0.0, "sd": 0.5}],
         units="<script>alert(1)</script>", width=400)
@@ -385,11 +360,7 @@ def _dashed_lines(fig):
 
 
 def _axis_ticks(fig, gutter=42.0):
-    """Return (x tick labels, y tick labels) read back off the figure.
-
-    X ticks are centre-anchored under the axis; Y ticks are end-anchored just
-    left of it. The axis captions are excluded by position.
-    """
+    """Return (x tick labels, y tick labels) read back off the figure."""
     x_ticks, y_ticks = [], []
     for p in fig["prims"]:
         if p["t"] != "text":
@@ -402,13 +373,6 @@ def _axis_ticks(fig, gutter=42.0):
 
 
 def test_identity_plot_uses_a_shared_square_scale():
-    """Both axes must span the same range, so a deviation reads honestly.
-
-    Checked via the rendered tick labels rather than the drawn line: because
-    both axis mappings are affine, a point where submitted equals reference
-    lands on the drawn line whether or not the scales agree, so that test
-    would pass on a stretched plot. Equal tick sets is the real property.
-    """
     pts = [{"mean_submitted": 60.0, "mean_reference": 60.0, "style": "solid"},
            {"mean_submitted": 40.0, "mean_reference": 95.0, "style": "hollow"}]
     fig = identity_figure(pts, units="ml/100g/min", width=300)
@@ -426,7 +390,6 @@ def test_identity_plot_draws_the_reference_line_dashed():
 
 
 def test_negative_bias_plots_below_the_zero_line():
-    """Sign matters: under-estimating the reference must read as 'below'."""
     fig = bland_altman_figure(
         [{"mean_level": 59.0, "bias": -2.0, "sd": 6.0, "style": "solid"}],
         width=300)
@@ -482,13 +445,7 @@ def test_unblinded_model_keeps_team_columns():
 # ── ICC has two different reasons for being blank ─────────────────────────
 
 def test_the_icc_caveat_names_the_missing_decision_not_missing_data() -> None:
-    """A reader must not be sent looking for data when a choice is missing.
-
-    Before ICC existed there was one reason it was blank: no repeated scans.
-    There are now two, and they call for different actions. Reporting "requires
-    repeated datasets" when the real blocker is that nobody has picked a model
-    sends someone to collect data that would change nothing.
-    """
+    """A reader must not be sent looking for data when a choice is missing."""
     from services.pdf_report_service import build_limitations
 
     items = build_limitations(
@@ -524,15 +481,6 @@ def test_the_caveat_is_unchanged_when_nothing_is_known() -> None:
     )
     assert any("require repeated" in item for item in items)
 
-
-# ── Overlapping regions are disclosed, not silently averaged ──────────────
-#
-# The DCE challenge ships nested ROIs: all 262 hippocampus voxels are also
-# grey matter. A table with one row per region invites the reader to treat the
-# regions as a partition, and the challenge's own answer key does exactly that
-# (its grey matter is 4698 voxels, the 4960-voxel mask minus the hippocampus).
-# The pipeline reports the mask as supplied, so the two differ for a reason
-# nothing on the page used to explain.
 
 def test_a_nested_region_is_called_out_by_name() -> None:
     from services.pdf_report_service import build_limitations
@@ -579,14 +527,6 @@ def test_disjoint_regions_add_no_note() -> None:
     assert not any("overlap" in i.lower() for i in items)
 
 
-# ── Small numbers must survive the formatter ──────────────────────────────
-#
-# Ktrans is of order 1e-4. Printed to three decimal places, a real bias of
-# 5.5e-05 becomes "0" and a real bias of -2e-05 becomes "-0". A reviewer
-# reading that column would see a submission that matched the ground truth
-# perfectly, when what they were actually looking at was the rounding. This
-# was live in the DCE report until it was caught by eye.
-
 def test_a_small_bias_is_not_rounded_to_zero() -> None:
     from services.pdf_report_service import _fmt
 
@@ -604,7 +544,6 @@ def test_the_sign_of_a_small_number_survives() -> None:
 
 
 def test_zero_is_still_zero() -> None:
-    """Zero is a measurement, not a rounding artifact, and must read as one."""
     from services.pdf_report_service import _fmt
 
     assert _fmt(0.0) == "0"
@@ -612,7 +551,6 @@ def test_zero_is_still_zero() -> None:
 
 
 def test_ordinary_numbers_are_unchanged() -> None:
-    """The fix must not restyle every number in every report."""
     from services.pdf_report_service import _fmt
 
     assert _fmt(3.182) == "3.182"

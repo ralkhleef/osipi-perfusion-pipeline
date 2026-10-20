@@ -230,12 +230,7 @@ def test_substring_lookalikes_do_not_match_a_map_type(name: str) -> None:
 
 
 def test_longest_pattern_wins_when_several_match() -> None:
-    """'ktrans_ve.nii.gz' holds both tokens; resolution must be deterministic.
-
-    Without a longest-first rule the answer would depend on dict ordering,
-    which is exactly the kind of silent instability that makes a classifier
-    untrustworthy.
-    """
+    """'ktrans_ve.nii.gz' holds both tokens; resolution must be deterministic."""
     assert detect_map_type("ktrans_ve.nii.gz") == "ktrans"
     assert detect_map_type("ve_ktrans.nii.gz") == "ktrans"
 
@@ -462,12 +457,7 @@ def test_flat_submission_yields_null_identity(tmp_path: Path) -> None:
 def test_legacy_map_field_agrees_with_normalized_artifact(
     tmp_path: Path, filename: str, expected: str
 ) -> None:
-    """The legacy manifest field and the artifact must not disagree.
-
-    Required-map enforcement reads the artifact, but both fields are visible
-    to consumers; two different answers for one file is how the substring bug
-    would quietly survive.
-    """
+    """The legacy manifest field and the artifact must not disagree."""
     _write_nifti(tmp_path / filename, 3)
     manifest = _manifest(tmp_path)
     entry = next(e for e in manifest.files if e["relative_path"] == filename)

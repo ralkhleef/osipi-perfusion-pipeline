@@ -28,11 +28,7 @@ class ExecutionResult:
     docker_run_cmd: str = ""
 
     def to_dict(self) -> dict[str, object]:
-        """Convert the result into a plain dictionary.
-
-        ``output_files`` is serialised as a list for JSON compatibility.
-        ``output_file_count`` is added as a convenience field.
-        """
+        """Convert the result into a plain dictionary."""
         d = asdict(self)
         d["output_files"] = list(d["output_files"])
         d["output_file_count"] = len(d["output_files"])

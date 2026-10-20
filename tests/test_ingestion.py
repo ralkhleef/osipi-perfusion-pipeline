@@ -1,8 +1,4 @@
-"""Tests for the ingestion stage.
-
-The tests use tiny fake submissions so the repo stays lightweight and does not
-need real MRI challenge data.
-"""
+"""Tests for the ingestion stage."""
 
 from __future__ import annotations
 
@@ -208,18 +204,7 @@ def _make_dce_submission(root: Path) -> Path:
 # ── Re-uploading a submission, when the old copy cannot be removed ────────
 
 def test_replacing_a_previous_extraction_explains_itself(tmp_path, monkeypatch) -> None:
-    """A failed replace must name the operation, not just a file.
-
-    Re-uploading is the most ordinary thing a reviewer does, and it deletes the
-    previous extraction. When that delete fails (read-only mount, folder open
-    elsewhere, missing permission) `shutil.rmtree` raises with only the first
-    file it could not remove:
-
-        [Errno 1] Operation not permitted: 'sub-001_acq-001_asl_32float.nii.gz'
-
-    which names a file the reviewer did not choose, in a folder they were not
-    told about, for an operation they did not know was happening.
-    """
+    """A failed replace must name the operation, not just a file."""
     import shutil as _shutil
 
     from services import ingest_service

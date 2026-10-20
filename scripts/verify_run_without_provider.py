@@ -1,19 +1,4 @@
-"""Run Analysis with no scoring provider configured.
-
-A scoring provider and a comparison against the organisers' ground truth are
-two different things, and only the first one needs configuring. Every challenge
-starts life with reference maps and masks in place and no provider at all --
-which is exactly the state the DCE challenge is in -- and in that state the
-comparison still produces bias, RMSE, error CoV and the ROI descriptive tables.
-
-The Score step used to treat "no provider" as "nothing to run": the card was
-hidden, the table was hidden, and the button reported that there was nothing
-for it to do. This script proves the opposite by driving the real routes the
-browser calls with the active configuration set to mode="none", on data small
-enough to run in seconds.
-
-Run:  python3 scripts/verify_run_without_provider.py
-"""
+"""Run Analysis with no scoring provider configured."""
 from __future__ import annotations
 
 import json
@@ -44,9 +29,6 @@ gm[2:7, 2:7, 1:4] = 1.0
 wm = np.zeros(SHAPE, dtype=np.float32)
 wm[8:11, 3:8, 1:4] = 1.0
 
-# Correct everywhere except inside grey matter, where Ktrans is 0.01 too high.
-# A comparison that is actually running has to show that; one that is being
-# skipped cannot.
 GM_BIAS = 0.01
 submitted = truth + gm * GM_BIAS
 

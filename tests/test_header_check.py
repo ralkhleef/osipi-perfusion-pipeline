@@ -1,15 +1,4 @@
-"""Header and orientation agreement between a submission and the ground truth.
-
-Both challenge leads asked for this after reviewing real ASL data. The case
-that motivates it is a left-right flip: the shape is unchanged, the voxel
-count is unchanged, every summary statistic stays plausible, and every number
-computed from the map is wrong. No agreement metric reveals it, because the
-metric has no idea which way round the volume is.
-
-The checks below therefore care most about geometry, and treat a differing
-data type as benign, since a team submitting float64 against a float32
-reference has done nothing wrong.
-"""
+"""Header and orientation agreement between a submission and the ground truth."""
 
 from __future__ import annotations
 
@@ -49,11 +38,6 @@ def test_a_matching_header_reports_matches(build):
 
 
 def test_a_left_right_flip_is_caught(build):
-    """The case the leads actually asked about.
-
-    Same shape, same voxel size, same voxel count. Only the orientation codes
-    differ, and every downstream number would be computed on mirrored data.
-    """
     flipped = build(affine=np.diag([-1.0, 1.0, 1.0, 1.0]))
     check = scoring._header_check(flipped, build())
 
@@ -76,11 +60,7 @@ def test_a_different_shape_is_caught(build):
 
 
 def test_a_different_dtype_alone_is_not_a_geometry_problem(build):
-    """Submitting float64 against a float32 reference is not an error.
-
-    Reporting it as one would train reviewers to ignore the check, which is
-    the outcome that matters, because then the flip goes unnoticed too.
-    """
+    """Submitting float64 against a float32 reference is not an error."""
     check = scoring._header_check(build(dtype=np.float64), build())
     assert check["status"] == "dtype_differs"
     assert check["mismatched_fields"] == ["dtype"]
@@ -101,11 +81,7 @@ def test_both_values_are_reported_not_just_the_verdict(build):
 
 
 def test_a_field_neither_file_declares_is_not_verified_rather_than_matching(build):
-    """Unknown must never be reported as agreement.
-
-    The pure-Python fallback reader cannot always recover orientation. Saying
-    "matches" there would be a claim the code never checked.
-    """
+    """Unknown must never be reported as agreement."""
     submitted = dict(build())
     reference = dict(build())
     submitted["axis_codes"] = None

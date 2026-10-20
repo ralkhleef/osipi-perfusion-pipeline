@@ -1,11 +1,4 @@
-"""Canonical path definitions for the OSIPI pipeline backend.
-
-All paths are absolute and computed from this file's location, so the
-server works correctly no matter which directory uvicorn is started from.
-
-Usage:
-    from services.path_config import INCOMING_DIR, REFERENCE_DATA_DIR, ...
-"""
+"""Canonical path definitions for the OSIPI pipeline backend."""
 
 from pathlib import Path, PureWindowsPath
 
@@ -29,16 +22,6 @@ EXTRACTED_DIR   = SUBMISSIONS_DIR / "extracted"     # extracted submission folde
 # --- frontend ---
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
-# --- scoring ---
-#
-# Provider scripts + reference data live under data/scoring/providers/<provider_id>/
-# Each provider directory is self-contained:
-#   data/scoring/providers/osipi_tf62_dce_ktrans/
-#       challengeScoring.py          ← scoring script
-#       reference/                   ← reference / DRO NIfTI maps
-#       masks/                       ← mask NIfTI files
-#
-# Scoring artifacts (result JSONs, CSVs, plots) go to data/outputs/scoring/
 
 SCORING_DIR         = DATA_DIR / "scoring"
 PROVIDERS_DIR       = SCORING_DIR / "providers"      # legacy built-in provider scripts + reference data
@@ -61,25 +44,10 @@ SCORING_ACTIVE_CONFIG = SCORING_DIR / "active.json"
 SCORING_RESULTS_DIR = SCORING_OUTPUTS_DIR
 
 
-# ---------------------------------------------------------------------------
-# Shared path-safety utility
-# ---------------------------------------------------------------------------
-
-
 def safe_relative_path(raw_path: str) -> Path:
-    """Sanitize an archive or download file path to a safe relative Path.
-
-    Rejects absolute paths and any component that is ``..``.
-    Raises ``ValueError`` if the path is empty or unsafe.
-
-    Used by both the ZIP extractor and the Zenodo downloader so that
-    the traversal-blocking logic is defined in exactly one place.
-    """
+    """Sanitize an archive or download file path to a safe relative Path."""
     normalized = (raw_path or "").replace("\\", "/")
     path = Path(normalized)
-    # Imported paths may have been created on a different platform. Reject
-    # both POSIX and Windows absolute forms rather than quietly rewriting them
-    # into relative archive members.
     if path.is_absolute() or PureWindowsPath(normalized).is_absolute():
         raise ValueError(f"Unsafe file path rejected: {raw_path!r}")
     parts = [

@@ -36,11 +36,6 @@ UNAVAILABLE_METRICS_NOTE = (
     "(noise-varied) datasets, which have not been provided."
 )
 
-#: ICC now has two distinct reasons for being blank and a reader has to be able
-#: to tell them apart: the challenge has chosen no model, or it has chosen one
-#: and this submission has no repeated scans to apply it to. Reporting the
-#: second when the first is true would send someone looking for data when what
-#: is missing is a decision.
 ICC_NOT_CONFIGURED_NOTE = (
     "ICC was not calculated: this challenge has not selected an ICC model. "
     "All six Shrout & Fleiss models are implemented; set "
@@ -98,16 +93,7 @@ CAPTION_AGGREGATE_TAIL = (
 
 
 def _submission_contents_rows(summaries: Sequence[Mapping[str, Any]]) -> list[list[str]]:
-    """What the submission contains, grouped by dataset and artifact type.
-
-    Rows come from the canonical role-based counts computed during validation,
-    so a fitted signal is never counted as a parameter map and reference data
-    is never counted as submitted content. Labels and units are read from
-    configuration; nothing challenge-specific is written here.
-
-    Falls back to an empty table when a summary predates the counts field, so
-    an older stored validation result still renders.
-    """
+    """What the submission contains, grouped by dataset and artifact type."""
     rows: list[list[str]] = []
     for summary in summaries:
         counts = summary.get("counts") if isinstance(summary.get("counts"), Mapping) else {}
@@ -124,12 +110,7 @@ def _submission_contents_rows(summaries: Sequence[Mapping[str, Any]]) -> list[li
 
 
 def _units_display(units: Any, configured: Any = None) -> str:
-    """Units as configured, distinguishing "unitless" from "not configured".
-
-    A blank in the report should not silently mean the same thing for a
-    quantity that is genuinely dimensionless (a volume fraction) and one whose
-    unit nobody has recorded yet.
-    """
+    """Units as configured, distinguishing "unitless" from "not configured"."""
     text = str(units).strip() if units is not None else ""
     if text:
         return text
@@ -139,9 +120,7 @@ def _units_display(units: Any, configured: Any = None) -> str:
 
 
 def _per_map_sections(summaries: Sequence[Mapping[str, Any]], *, blinded: bool) -> list[dict]:
-    """Per-submission, per-map scientific detail: submitted-output properties
-    (units/dimensions/shape/voxel size + QC) and reference metrics per ROI, with
-    valid/excluded voxel counts. CBF and ATT are always separate map entries."""
+    """Per-submission, per-map scientific detail: submitted-output properties (units/dimensions/shape/voxel size + QC) and reference metrics..."""
     sections: list[dict] = []
     for idx, s in enumerate(summaries, start=1):
         analysis = s.get("nifti_analysis") if isinstance(s.get("nifti_analysis"), dict) else {}
@@ -258,11 +237,7 @@ def _roi_range(record: Mapping[str, Any]) -> str:
 def _roi_descriptive_model(
     summaries: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:
-    """Collect the canonical ROI records and render them once.
-
-    Reads ``reference_scoring.roi_descriptive_statistics``, the records
-    computed during scoring. Nothing here recalculates a statistic.
-    """
+    """Collect the canonical ROI records and render them once."""
     records: list[dict] = []
     configured_metrics: list[str] = []
     for summary in summaries:
@@ -322,12 +297,6 @@ def _roi_descriptive_model(
         "Voxels", "Units", "Status",
     ]
 
-    # A single-scan submission has nothing to put in Dataset, Participant,
-    # Repeat or Site, so four columns of dashes took a third of the width and
-    # pushed Status off the edge. Any column whose value never varies carries
-    # no information per row: it is lifted out and stated once above the table
-    # instead. The full rows stay untouched below for the CSV, which must keep
-    # every column whatever one submission happens to look like.
     LIFTABLE = ("Dataset", "Participant", "Repeat", "Site", "Units", "Status")
     scope: dict[str, str] = {}
     drop: set[int] = set()
@@ -453,19 +422,7 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
 
 def agreement_points(summaries: Sequence[Mapping[str, Any]], *,
                      blinded: bool) -> dict[str, list[dict]]:
-    """Collect per-region agreement points, keyed by map type.
-
-    Reads the full ``reference_scoring`` block, which keeps richer stats than
-    ``reference_metric_rows`` surfaces, ``mean_submitted``,
-    ``mean_reference``, and ``standard_deviation_error`` are all recorded by
-    the scorer per region and were simply never carried into the report. That
-    is enough for Bland-Altman and identity plots without re-reading a single
-    voxel.
-
-    Keyed by map type rather than by challenge because bias and mean level
-    carry the units of the specific parameter: CBF (ml/100 g/min) and ATT
-    (seconds) must not share an axis any more than ASL and DCE may.
-    """
+    """Collect per-region agreement points, keyed by map type."""
     grouped: dict[str, list[dict]] = {}
     for idx, summary in enumerate(summaries, start=1):
         label = _submission_label(summary, idx, blinded=blinded)
@@ -530,19 +487,7 @@ _SMALL_VALUE = 5e-4
 
 
 def _fmt(value: Any, digits: int = 3) -> str:
-    """Format a number for a report table without rounding it out of existence.
-
-    Fixed decimals suit the quantities most of this pipeline reports, and
-    destroy the one that matters most in DCE. Ktrans is of order 1e-4, so a
-    real bias of 5.5e-05 printed to three decimals is "0", and a real bias of
-    -2e-05 is "-0". A reviewer reading that column sees a submission that
-    matched the ground truth perfectly, when what they are actually looking at
-    is the formatter.
-
-    Anything smaller than the smallest value three decimals can distinguish is
-    therefore shown in scientific notation. Zero stays "0", because zero is a
-    measurement and not a rounding artifact.
-    """
+    """Format a number for a report table without rounding it out of existence."""
     if value is None or value == "":
         return "Not available"
     if isinstance(value, bool):
@@ -583,14 +528,7 @@ def _status_text(status: Any) -> str:
 
 def _status_fields(validation: str, execution: str, qc: str,
                    readiness: str) -> dict[str, str]:
-    """Keep only the status fields that carry information for this run.
-
-    All four derive from the same two counters, so on most runs three of them
-    restate each other, "Unable to continue" appearing twice teaches the
-    reader that the band is decorative. Execution is dropped when nothing
-    required execution (the normal case for result-only submissions), and QC
-    is dropped when it agrees with validation.
-    """
+    """Keep only the status fields that carry information for this run."""
     fields = {"Validation": validation}
     if str(execution).strip().lower() not in {
         "execution not required", "not available", "",
@@ -603,10 +541,7 @@ def _status_fields(validation: str, execution: str, qc: str,
 
 
 def _first_mask_overlaps(summaries: Sequence[Mapping[str, Any]]) -> list:
-    """Mask overlaps from the first summary that reports any.
-
-    One organiser mask set applies to the whole run, so one list describes it.
-    """
+    """Mask overlaps from the first summary that reports any."""
     for summary in summaries or ():
         if not isinstance(summary, Mapping):
             continue
@@ -621,12 +556,6 @@ def _first_mask_overlaps(summaries: Sequence[Mapping[str, Any]]) -> list:
 
 
 def _overlap_notes(overlaps: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Say which ROIs share voxels, so the rows are not read as independent.
-
-    A table with one row per region invites the reader to treat the regions as
-    a partition. Configured exclusions are already applied before this list is
-    built; anything reported here is a remaining, unconfigured overlap.
-    """
     notes: list[str] = []
     for overlap in overlaps or ():
         regions = list(overlap.get("regions") or [])
@@ -654,15 +583,6 @@ def _overlap_notes(overlaps: Sequence[Mapping[str, Any]]) -> list[str]:
 
 
 def _methods_document_status(summaries: Sequence[Mapping[str, Any]]) -> str:
-    """What the submitters said about their methods documents.
-
-    A methods document is not required, so its absence is not a finding. It is
-    still worth stating, because "no methods document" and "nobody recorded
-    whether there is one" are different things and a blank line reads as
-    either. The declaration is what is reported: a blank template the pipeline
-    inserted itself is a file, not a document, and validation has already
-    excluded it by content.
-    """
     labels: list[str] = []
     for summary in summaries or ():
         if not isinstance(summary, Mapping):
@@ -704,14 +624,7 @@ def build_limitations(
     icc_status: str = "",
     mask_overlaps: Sequence[Mapping[str, Any]] = (),
 ) -> list[str]:
-    """Build the caveat list, including only caveats that actually apply.
-
-    Shared by the HTML and PDF renderers. Previously both printed the same
-    eight bullets on every report, which trained readers to skip the section.
-    A caveat about repeatability CoV is noise on a run that computed no
-    reference metrics at all. Wording is derived from the run rather than
-    hardcoded, so a DCE-only report no longer claims something about ASL.
-    """
+    """Build the caveat list, including only caveats that actually apply."""
     items = [
         "QC checks NIfTI readability and voxel statistics. BIDS checking, "
         "where a challenge enables it, covers layout and naming only, "
@@ -894,23 +807,12 @@ def _detected_map_types(fields: Iterable[Mapping[str, Any]]) -> str:
 
 
 def _normalize_identity(value: str) -> str:
-    """Reduce a string to comparable letters and digits.
-
-    Collapses the derived forms one name takes across the pipeline,
-    ``Secret Team Omega``, ``secret_team_omega``, ``SECRET-TEAM-OMEGA``,
-    ``secret team omega.zip``, to a single comparable token, so a check
-    cannot be defeated by a formatting difference.
-    """
+    """Reduce a string to comparable letters and digits."""
     return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
 
 
 def identity_tokens(summary: Mapping[str, Any]) -> frozenset[str]:
-    """Normalised forms of everything that could name the submitter.
-
-    Used only as a final safety net *after* structural selection has already
-    chosen a safe value, never as a search-and-replace over rendered output,
-    which would miss metadata and could corrupt unrelated text.
-    """
+    """Normalised forms of everything that could name the submitter."""
     raw = [
         summary.get("team_name"),
         summary.get("contact_email"),
@@ -940,20 +842,7 @@ def affected_display(
     *,
     blinded: bool,
 ) -> str:
-    """Return an identity-safe value for the report's Affected column.
-
-    Selection order:
-
-    1. no path → ``Not specified``
-    2. a path *below* the submission root → that relative path, which by
-       construction contains no owner name
-    3. anything else (the root itself, or an unrecognised path) → the
-       submission's display label, already blinded by the caller
-
-    A final check re-blinds the result if an identity token survives in any
-    derived form, so an unusual layout degrades to the safe label rather than
-    leaking.
-    """
+    """Return an identity-safe value for the report's Affected column."""
     text = str(raw_path or "").strip()
     if not text:
         return "Not specified"
@@ -972,11 +861,7 @@ def affected_display(
 
 
 def _relative_to_submission(path_text: str, summary: Mapping[str, Any]) -> str:
-    """The portion of ``path_text`` strictly below the submission root.
-
-    Returns "" when the path *is* the submission root or the root cannot be
-    located, which the caller turns into the safe label.
-    """
+    """The portion of ``path_text`` strictly below the submission root."""
     parts = [part for part in str(path_text).replace("\\", "/").split("/") if part]
     if not parts:
         return ""
@@ -1011,33 +896,17 @@ def _submission_label(summary: Mapping[str, Any], index: int, *, blinded: bool) 
     return str(summary.get("source_folder") or summary.get("submission_id") or f"Submission {index}")
 
 
-
-
-#: How each header check verdict reads to a reviewer. Keyed by the status
-#: ``scoring._header_check`` returns, so a new status shows up as itself
-#: rather than being silently reported as a pass.
 _HEADER_CHECK_VERDICTS = {
     "matches": "Matches",
     "dtype_differs": "Data type differs",
     "geometry_mismatch": "Geometry differs",
     "not_verified": "Not verified",
-    # Distinct from "not verified" on purpose. One means nobody looked, the
-    # other means we looked and the file would not open.
     "unreadable": "File could not be read",
 }
 
 
 def _header_field_text(field: Any, *, joiner: str = " x ") -> str:
-    """One header field rendered for a reviewer.
-
-    A field that matches shows its value once. A field that differs shows both
-    values, because "differs" on its own does not tell a reviewer whether the
-    submission is flipped or merely at a different voxel size. A field neither
-    file declares reads as not verified, which is not the same as a pass.
-
-    ``joiner`` exists because axis codes are conventionally written joined,
-    as LAS, while shapes and voxel sizes are written separated.
-    """
+    """One header field rendered for a reviewer."""
     if not isinstance(field, Mapping):
         return "Not verified"
     submitted, reference = field.get("submitted"), field.get("reference")
@@ -1060,16 +929,7 @@ def _header_field_text(field: Any, *, joiner: str = " x ") -> str:
 def _header_check_model(
     summaries: Sequence[Mapping[str, Any]], *, blinded: bool,
 ) -> dict[str, Any]:
-    """Rows for the header and orientation check, one per compared map.
-
-    Both challenge leads asked for this. The check itself has been computed
-    since the scorer gained ``_header_check``, but it was stored on the row
-    and never rendered, so a flipped submission was caught internally and
-    then not mentioned to the person reviewing it.
-
-    Only maps that were actually compared against a reference appear here,
-    because there is nothing to compare a header against otherwise.
-    """
+    """Rows for the header and orientation check, one per compared map."""
     rows: list[list[str]] = []
     for index, summary in enumerate(summaries, start=1):
         label = _submission_label(summary, index, blinded=blinded)
@@ -1107,26 +967,8 @@ def _header_check_model(
 def _reference_by_region_model(
     summaries: Sequence[Mapping[str, Any]], *, blinded: bool,
 ) -> dict[str, Any]:
-    """Comparison against ground truth, broken down by region.
-
-    Both challenge leads asked for exactly this and the report did not show
-    it. The scorer has computed it per mask for a while, but the only place
-    it appeared was an appendix that is off by default, so a reader saw the
-    whole-image bias and nothing else.
-
-    That difference is not cosmetic. On the challenge lead's own ASL data the
-    whole-image CBF bias is +0.83, which looks like close agreement, while
-    grey matter is +7.99 and white matter is -4.20. Averaged over the brain
-    the two nearly cancel. The regional rows are the result; the single
-    number hides it.
-
-    The whole image is kept as its own row so the two sit together and the
-    cancellation is visible rather than inferred.
-    """
+    """Comparison against ground truth, broken down by region."""
     rows: list[list[str]] = []
-    # Columns are added only when they would tell two rows apart. A "Scan"
-    # column on a single-scan submission is noise; on this one it is the
-    # difference between 480 readable rows and 480 identical ones.
     scan_labels_available = any(
         isinstance(entry, Mapping) and entry.get("scan_label")
         for item in summaries
@@ -1272,9 +1114,6 @@ def _build_report_model(
                 "Bias": _fmt(bias) if reference_available else "Not available",
                 "Spatial CoV": _fmt(cov),
             }
-        # A compact overview must not become a second results appendix. Mixed
-        # challenges use different units, so the complete per-challenge values
-        # stay in the expandable HTML and structured exports.
         return {
             "Reference metrics": "Reported separately by challenge in HTML/JSON"
         }
@@ -1353,9 +1192,6 @@ def _build_report_model(
     ]
 
     main_map_metric_rows: list[list[str]] = []
-    # A column that would be the same word on every row is noise; one that
-    # tells two otherwise identical rows apart is the point. Both are decided
-    # from the data rather than assumed.
     scan_labels_available = any(
         isinstance(item, Mapping) and item.get("scan_label")
         for summary in summaries
@@ -1373,10 +1209,6 @@ def _build_report_model(
         for item in maps:
             if not isinstance(item, Mapping):
                 continue
-            # A 4-D fitted curve is not a parameter map, so detection declines
-            # to name one and the row used to read "Unknown" with every
-            # reference metric "Not available" -- which reads as a failure
-            # rather than as a file that was never a parameter map.
             map_type = str(
                 item.get("detected_map_type")
                 or item.get("parameter_label")
@@ -1564,11 +1396,6 @@ def _build_report_model(
         "pipeline_version": provenance["pipeline_version"],
         "configuration_version": provenance["challenge_configuration"],
         "analysis_provenance": provenance,
-        # Submission contents, grouped. A clean 16-scan DCE submission is
-        # eight rows here where the per-map appendix was sixty-seven cards
-        # across a dozen pages, which buried the results it was meant to
-        # support. The detail remains available in JSON and CSV, and the
-        # appendix can still be requested explicitly.
         "submission_contents": _submission_contents_rows(summaries),
         "submission_contents_headers": [
             "Dataset", "Type", "Count", "Dimensions", "Units", "Status"],
@@ -1586,9 +1413,6 @@ def _build_report_model(
         # Map preview thumbnails removed from the printable report at researcher
         # request (previews remain in the interactive app).
         "previews": [],
-        # Per-submission series for the figures. Reference metrics are None
-        # when no reference was available, and the figure builders skip
-        # non-numeric values rather than plotting them as zero.
         "figure_rows": [
             {
                 "label": _submission_label(s, i, blinded=blinded),
@@ -1602,10 +1426,6 @@ def _build_report_model(
             }
             for i, (s, af) in enumerate(zip(summaries, fields), start=1)
         ],
-        # Per-map-type agreement points plus the units to label their axes.
-        # ROI descriptive rows, formatted once here. HTML and PDF both render
-        # these exact rows in this exact order, neither reformats, refilters,
-        # or recomputes, which is what kept the two formats in step before.
         **roi_model,
         **prototype_model,
         **header_check_model,
@@ -1630,9 +1450,6 @@ def _build_report_model(
             "Execution": execution_review_status,
             "QC": qc_review_status,
             "Reference comparison": reference_status,
-            # Stated even though nothing requires one, because a blank line
-            # here reads as "there was none" and as "nobody recorded it"
-            # equally well, and those are different facts.
             "Methods document": _methods_document_status(summaries),
         },
         "executive_metrics": {
@@ -1674,9 +1491,6 @@ def _build_report_model(
             ["Validation outcome", "Passed", str(max(0, len(summaries) - errors)), "Warnings", str(warnings), "Blocking errors", str(errors)],
             ["Voxel validity", "Finite", _fmt(sum(int(af.get("finite_voxel_count") or 0) for af in fields), 0), "NaN", str(nan_count), "Inf", str(inf_count)],
         ],
-        # The key-figures band was removed (a paper puts its numbers in a
-        # table, and the band repeated the results table anyway), so the
-        # aggregate statistics live here again.
         "qc": {
             "Submissions": len(summaries),
             "Maps": map_count,
@@ -1708,9 +1522,6 @@ def _build_report_model(
             icc_status=_first_icc_status(summaries),
             mask_overlaps=_first_mask_overlaps(summaries),
         ),
-        # "Notes" held counts like "1 warning(s) reported" while the issues
-        # table below already lists each warning in full with its fix, so the
-        # column was a less useful restatement of the next table.
         "table_headers": (
             ["Submission"]
             + ([] if blinded else ["Team", "Contact"])
@@ -1844,17 +1655,7 @@ def _simple_pdf_bytes(lines: Sequence[str]) -> bytes:
 
 
 def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
-    """Render the branded PDF.
-
-    Layout notes:
-      * Every page uses portrait letter dimensions.
-      * Page 1 uses a tall masthead (logo + gradient band); later pages use a
-        slim running header. That needs two PageTemplates, hence
-        BaseDocTemplate rather than SimpleDocTemplate.
-      * "Page X of Y" requires knowing the total up front, so pages are
-        buffered by ``NumberedCanvas`` and the footer is stamped in a second
-        pass once the count is known.
-    """
+    """Render the branded PDF."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -1870,19 +1671,12 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     PAGE_W, PAGE_H = letter
     MARGIN = 0.75 * inch
     CONTENT_W = PAGE_W - 2 * MARGIN
-    # Must clear the whole canvas-drawn masthead: 0.50in top gap + the
-    # lockup height + 0.13in to the rule + 0.58in down to the deck
-    # baseline, plus descenders and a gap before the leader paragraph.
     FIRST_HEADER_H = 1.88 * inch    # lockup + rule + title block
     LATER_HEADER_H = 0.50 * inch    # slim running head thereafter
     FOOTER_H = 0.42 * inch
 
     logo_path = logo_reportlab_path()
 
-    # ── Styles ────────────────────────────────────────────────────────────
-    # Use one clean sans-serif family throughout so the PDF matches the app and
-    # the self-contained HTML report. Helvetica is a base-14 PDF font, so the
-    # report remains portable without loading an external webfont.
     styles = getSampleStyleSheet()
     body_style = ParagraphStyle(
         "OsipiBody", parent=styles["BodyText"],
@@ -1937,11 +1731,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return Paragraph(esc(text), style)
 
     def section(title: str, width: float | None = None) -> Table:
-        """Letterspaced small-caps heading sitting on a hairline rule.
-
-        ``width`` defaults to the content measure; callers pass their own
-        when the rule must span something narrower.
-        """
+        """Letterspaced small-caps heading sitting on a hairline rule."""
         table = Table([[Paragraph(esc(str(title)), heading_style)]],
                       colWidths=[width or CONTENT_W], hAlign="LEFT")
         table.setStyle(TableStyle([
@@ -1954,12 +1744,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return KeepTogether([table, Spacer(1, 4)])
 
     def status_para(value: Any, style=table_cell_style) -> Paragraph:
-        """Coloured dot plus plain text, never a filled pill.
-
-        U+25CF is present in the base-14 Helvetica encoding, so this needs no
-        embedded font. Both dot and text carry the tone, which keeps the
-        signal legible when the page is printed in greyscale.
-        """
+        """Coloured dot plus plain text, never a filled pill."""
         tone = status_tone(value)
         return Paragraph(
             f'<font color="{BRAND[tone]}">●</font> '
@@ -1978,14 +1763,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
 
     def fitted_widths(headers: Sequence[Any], rows: Sequence[Sequence[Any]],
                       total: float) -> list[float]:
-        """Share the measure out by how much text each column carries.
-
-        Equal columns are what broke the headings: "Submission" and
-        "Reference status" got the same width as "Maps", so ReportLab split
-        them mid-word into "SUBMISSI / ON". Weighting by the longest word in
-        each column means a column is at least wide enough for its own
-        heading, which is the thing that has to stay readable.
-        """
+        """Share the measure out by how much text each column carries."""
         n = max(1, len(headers))
         # Headings are set uppercase and letterspaced, so they need more room
         # per character than the cells beneath them.
@@ -2015,12 +1793,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                    col_widths: Sequence[float] | None = None,
                    tone_col: int | None = None,
                    num_cols: Sequence[int] = ()) -> Table:
-        """A booktabs table: rule above the header, below it, and at the foot.
-
-        ``tone_col`` renders that column as a coloured status dot plus text.
-        ``num_cols`` right-aligns those columns so magnitudes compare down
-        the column rather than ragging against the left edge.
-        """
+        """A booktabs table: rule above the header, below it, and at the foot."""
         widths = col_widths or fitted_widths(headers, rows, CONTENT_W)
         numeric = set(num_cols)
         cells = [[
@@ -2108,11 +1881,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         return table
 
     def two_up(left, right, ratio: float = 0.5, gap: float = 0.22 * inch) -> Table:
-        """Place two flowables side by side.
-
-        A lone key/value table leaves dead space to its right. Pairing
-        related blocks keeps the report compact.
-        """
+        """Place two flowables side by side."""
         usable = CONTENT_W - gap
         table = Table(
             [[left, "", right]],
@@ -2133,12 +1902,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
 
 
     def figures(items: Mapping[str, Any]) -> Table:
-        """Key figures as a ruled band: label above, numeral below.
-
-        Hairline verticals separate the figures. This is the one place
-        vertical rules are used, because the figures are not tabular data
-        and the rules are doing grouping work rather than table work.
-        """
+        """Key figures as a ruled band: label above, numeral below."""
         entries = list(items.items())
         if not entries:
             return Spacer(1, 0)
@@ -2186,12 +1950,7 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             return False
 
     def _spaced(canvas, x, y, text, font, size, tracking):
-        """Draw letterspaced text, advancing one glyph at a time.
-
-        ReportLab's canvas exposes no public character-spacing setter (only a
-        private ``_charSpace``), so rather than reach into internals we
-        measure and place each glyph. Returns the final x for chaining.
-        """
+        """Draw letterspaced text, advancing one glyph at a time."""
         canvas.setFont(font, size)
         for ch in str(text):
             canvas.drawString(x, y, ch)
@@ -2206,17 +1965,10 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             return (PAGE_W, PAGE_H)
 
     def draw_first_header(canvas, doc_obj):
-        """Running head, then the thick/thin rule pair, then the title block.
-
-        The rule pair is the journal signal: a hairline under the running
-        head and a 3pt rule beneath it, with the title hanging below.
-        """
+        """Running head, then the thick/thin rule pair, then the title block."""
         canvas.saveState()
         page_w, page_h = _page_dims(canvas)
         top = page_h
-        # The official lockup already contains the mark, the OSIPI wordmark,
-        # and the tagline, so nothing is set alongside it, typesetting our
-        # own wordmark next to it would duplicate the artwork.
         lockup_w = 2.70 * inch
         lockup_h = lockup_w / max(0.1, lockup_aspect())
         logo_bottom = top - 0.50 * inch - lockup_h
@@ -2319,9 +2071,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 if parts and len(scoped_values) == 1 and len(scoped_values) == len({
                     part.split(":", 1)[1].strip() for part in parts if ":" in part
                 }):
-                    # ASL/DCE/DSC often share one version or one unconfigured
-                    # state. Printing that common value once avoids a footer
-                    # longer than the page measure.
                     return next(iter(scoped_values))
                 return text if len(text) <= 62 else "per challenge; full details in HTML/JSON"
 
@@ -2359,9 +2108,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
         pageCompression=0,
     )
     body_bottom = FOOTER_H + 0.12 * inch
-    # Frame defaults to 6pt padding on every side, which pushed all flowed
-    # content 6pt right of the canvas-drawn masthead and made tables 12pt
-    # wider than their frame. Zero it so flow and canvas share one margin.
     _pad = dict(leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
     doc.addPageTemplates([
         PageTemplate(
@@ -2412,10 +2158,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
     else:
         story.append(Paragraph("No readable map metrics were available.", note_style))
 
-    # Placed ahead of the results because it qualifies them: a map whose
-    # geometry disagrees with the reference produces numbers that look
-    # ordinary and mean nothing, so a reviewer needs this before the metrics
-    # rather than after them.
     header_rows = model.get("header_check_rows") or []
     if header_rows:
         header_headers = list(model.get("header_check_headers") or [])
@@ -2431,10 +2173,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
 
     roi_rows = model.get("roi_descriptive_display_rows") or []
     if roi_rows:
-        # Columns that never vary have already been lifted out of the display
-        # rows by _roi_descriptive_model, so a single-scan submission no longer
-        # prints four columns of dashes. Resolve the rest by name, never by
-        # fixed offsets: configurable metrics change both count and order.
         roi_headers = list(model.get("roi_descriptive_display_headers") or [])
         configured_labels = [
             dict(ROI_METRIC_COLUMNS)[metric]
@@ -2477,9 +2215,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
             "The whole image is shown as its own row for that reason.",
             note_style))
         headers = list(model.get("reference_region_headers") or [])
-        # The submission column repeats one value on a single-submission
-        # report, so it is dropped there the way the ROI table drops its
-        # constant identity columns.
         if len({row[0] for row in region_rows}) == 1:
             headers, region_rows = headers[1:], [row[1:] for row in region_rows]
         story.append(data_table(
@@ -2501,9 +2236,6 @@ def _reportlab_pdf_bytes(model: Mapping[str, Any]) -> bytes:
                 "Units": m["units"],
                 "Shape": m["shape"],
                 "Finite voxels": _pct(m["finite_percent"]),
-                # _status_text normalises reference_not_available -> Not
-                # available; .title() left it as the much longer, wrapping
-                # "Reference Not Available".
                 "Reference": _status_text(m["reference_status"]),
             }))
             story.append(Spacer(1, 0.1 * inch))
@@ -2627,13 +2359,7 @@ def generate_pdf_report(
     generated: datetime | None = None,
     include_map_appendix: bool = False,
 ) -> bytes:
-    """Generate a compact OSIPI PDF report from existing export summaries.
-
-    ``include_map_appendix`` restores the per-map detail cards. Off by default:
-    a clean 16-scan DCE submission produced a dozen pages of near-identical
-    cards that buried the results they were meant to support. The same detail
-    remains available in the JSON and CSV exports.
-    """
+    """Generate a compact OSIPI PDF report from existing export summaries."""
     if not summaries:
         raise ValueError("At least one summary is required.")
     model = _build_report_model(summaries, tag=tag, blinded=blinded,

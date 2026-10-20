@@ -113,8 +113,6 @@ def validate_submission(
         warnings.extend(_empty_nifti_warnings(nifti_files))
         warnings.extend(_missing_expected_map_warnings(nifti_files, normalized_challenge, path))
 
-        # Run nibabel readability check on non-empty files.
-        # 0-byte files are already reported above, so we skip them here.
         non_empty_niftis = [f for f in nifti_files if f.stat().st_size > 0]
         if non_empty_niftis:
             nifti_summary = validate_nifti_files(non_empty_niftis)
@@ -152,10 +150,6 @@ def validate_submission(
             )
         )
 
-    # BIDS layout, only when the challenge asks for it and the submission is
-    # actually laid out that way. A folder with no description and no subject
-    # directories is not a broken BIDS dataset, it is not one, and reporting
-    # it as such would bury the real findings.
     bids_issues = _bids_issues(path, normalized_challenge)
     errors.extend(issue for issue in bids_issues if issue.severity == "error")
     warnings.extend(issue for issue in bids_issues if issue.severity != "error")

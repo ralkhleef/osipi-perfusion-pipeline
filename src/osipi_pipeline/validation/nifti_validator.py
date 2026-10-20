@@ -23,17 +23,6 @@ _CACHE_LOCK = threading.Lock()
 _VALIDATION_CACHE: dict[tuple[str, int, int, str, str], dict[str, Any]] = {}
 _LAST_WORKER_COUNT = 1
 
-#: How many voxels to hold in memory at once, as float32. 32 mebivoxels is
-#: 128 MB.
-#:
-#: Reading a whole image was fine while every image was 3-D. The DCE challenge
-#: sends 4-D concentration curves: one is 8 MB on disk and 0.93 GB decompressed,
-#: 121x compressed, and reading it whole cost 1.91 GB because the cast to
-#: float32 makes a second copy. Sixty of those files could not be validated on
-#: an ordinary machine.
-#:
-#: Anything smaller than this threshold is still read in a single piece, so the
-#: 3-D path is byte for byte what it was.
 MAX_VOXELS_PER_READ = 32 * 1024 * 1024
 
 
@@ -53,12 +42,7 @@ class _VoxelStats:
 
 
 def _last_axis_chunks(shape: tuple[int, ...], max_voxels: int):
-    """Yield (start, stop) along the last axis, each at most max_voxels.
-
-    Splitting on the last axis is deliberate. For the 4-D curves that forced
-    this it is the time axis, so a chunk is a whole number of timepoints and
-    never a partial volume.
-    """
+    """Yield (start, stop) along the last axis, each at most max_voxels."""
     if not shape:
         return
     last = int(shape[-1])
@@ -76,14 +60,7 @@ def _last_axis_chunks(shape: tuple[int, ...], max_voxels: int):
 
 def _streaming_stats(dataobj: Any, shape: tuple[int, ...],
                      max_voxels: int = MAX_VOXELS_PER_READ) -> "_VoxelStats":
-    """NaN, infinite, min, max and mean, without holding the whole image.
-
-    The mean is accumulated as a float64 running total and a count, rather
-    than by averaging per-chunk means, which would weight a short final chunk
-    as heavily as a full one. Summation order still differs from reading the
-    array whole, so the mean can differ in the last bits or so; that is far
-    below any tolerance the reports display.
-    """
+    """NaN, infinite, min, max and mean, without holding the whole image."""
     stats = _VoxelStats()
     seen_finite = False
     for start, stop in _last_axis_chunks(shape, max_voxels):
@@ -92,16 +69,6 @@ def _streaming_stats(dataobj: Any, shape: tuple[int, ...],
         if not size:
             continue
 
-        # Three reductions, no temporary arrays. NumPy propagates: a NaN
-        # anywhere makes both the minimum and the maximum NaN, and an infinity
-        # shows up as an infinite minimum or maximum. So these three numbers
-        # answer "is anything non-finite here" without building a boolean mask
-        # the size of the chunk, which is what the previous version did before
-        # gathering every finite value into a second full-size copy.
-        # errstate because reducing over a NaN is the detection mechanism here,
-        # not an accident. Without it NumPy warns "invalid value encountered in
-        # reduce" for every chunk of a map that legitimately contains NaN,
-        # which fills the log and breaks anyone running with -W error.
         with np.errstate(invalid="ignore"):
             low = float(chunk.min())
             high = float(chunk.max())
@@ -143,16 +110,11 @@ def last_worker_count() -> int:
     return _LAST_WORKER_COUNT
 
 
-#: Above this compressed size a file is treated as "large" and read without
-#: competing threads. Measured on the DCE challenge lead's real submission: a
-#: 3-D Ktrans map is about 50 KB on disk, a 4-D concentration curve about
-#: 8 MB, so anything in between lands on the correct side.
 LARGE_FILE_BYTES = 2 * 1024 * 1024
 
 
 def _check_one(payload: tuple) -> dict[str, Any]:
-    """Validate one file. Module level and single-argument so it can be sent
-    to a worker process, which cannot pickle a closure or a keyword call."""
+    """Validate one file."""
     path, force_refresh, quick = payload
     return _validate_single_cached(Path(path), force_refresh=force_refresh, quick=quick)
 
@@ -160,23 +122,7 @@ def _check_one(payload: tuple) -> dict[str, Any]:
 def _validate_large_files(
     paths: list[Path], *, force_refresh: bool, quick: bool, workers: int,
 ) -> list[dict[str, Any]]:
-    """Read the large files in parallel *processes*, falling back to serial.
-
-    Threads cannot help here and actively hurt: gzip holds the GIL through the
-    many small reads nibabel makes, so four threads over four real 1 GB
-    concentration curves measured 1.8x slower than reading them one at a time.
-    Separate processes do not share a GIL, and the same four files measured
-    3.3x faster than serial.  Together with persistent gzip handles, the full
-    180-file DCE cohort measured 22.6 seconds in the production container;
-    reopening the compressed stream for each slab took 83.6 seconds.
-
-    Memory stays bounded because each worker streams: the budget is per
-    process, so four workers hold four slabs, not four gigabytes.
-
-    A process pool is not always available, some sandboxes and frozen builds
-    forbid it, so failing to start one falls back to reading serially rather
-    than failing the validation.
-    """
+    """Read the large files in parallel *processes*, falling back to serial."""
     if workers <= 1 or len(paths) <= 1:
         return [_check_one((path, force_refresh, quick)) for path in paths]
     payloads = [(str(path), force_refresh, quick) for path in paths]
@@ -202,22 +148,7 @@ def validate_nifti_files(
     quick: bool = False,
     workers: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Validate NIfTI files and return results in input order.
-
-    Threads are applied by file size rather than uniformly, because the two
-    sizes of file in a perfusion submission want opposite treatment. Measured
-    on the DCE challenge lead's real data, four threads over sixteen 3-D
-    parameter maps is 2.5x faster than serial, while the same four threads over
-    four 4-D concentration curves is 1.8x *slower* than serial: gzip
-    decompression holds the GIL through the many small reads nibabel makes, so
-    the threads take turns while each holds a decompression buffer, and the
-    contention costs more than the concurrency wins.
-
-    A single large ``decompress`` call may release the GIL, but nibabel's slab
-    read pattern does not benefit from competing threads.  Large files are
-    therefore distributed across separate processes and small ones across
-    threads. Results stay in input order either way.
-    """
+    """Validate NIfTI files and return results in input order."""
 
     global _LAST_WORKER_COUNT
     if not nifti_paths:
@@ -328,9 +259,6 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
 
     try:
         with timed("validation.nifti.open", path=str(path), quick=quick):
-            # Deep validation streams large 4-D curves in increasing time
-            # order.  Keeping the gzip stream open avoids re-decompressing the
-            # prefix of the file for every slab.
             img = nib.load(str(path), keep_file_open=True)
     except Exception as exc:
         result["errors"].append(f"nibabel could not load file: {exc}")
@@ -369,9 +297,6 @@ def _validate_single(path: Path, *, quick: bool = False) -> dict[str, Any]:
         result["errors"].append(f"Could not read NIfTI voxel data: {exc}")
         return result
 
-    # Keep the on-disk dtype in the report. Data are converted internally for
-    # stable statistics, but showing every map as float32 hides useful header
-    # information from reviewers.
     result["dtype"] = source_dtype
     try:
         result["nan_count"] = stats.nan_count

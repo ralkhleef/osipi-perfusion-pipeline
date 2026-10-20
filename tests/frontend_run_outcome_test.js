@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * What the interface says after a scoring or analysis run.
- *
- * The run used to end in silence. The button went back to reading "Run
- * Analysis", which is what it read before, and the only evidence of anything
- * having happened was a table further down the page. A run that failed on
- * every submission looked identical to one that succeeded, and both looked
- * identical to never having pressed the button.
- *
- * `_runOutcomeText` turns the tally into one sentence and a tone. It is pure,
- * so the wording can be pinned here directly. The cases that matter are the
- * partial ones: "3 of 5 analysed" and "5 of 5 analysed" are different results
- * and the sentence has to make that impossible to miss.
- *
- * Run: node tests/frontend_run_outcome_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -98,9 +82,6 @@ check("an official failure is also named correctly",
   outcome(1, 0, 1, 2, true).text);
 
 console.log("\nWiring");
-/* The banner is declared in index.html rather than built by script. Built on
-   demand it survived only until the next re-render of the status card, so the
-   one line saying the run had happened could disappear before it was read. */
 check("the outcome banner is declared in the page, not created on demand",
   /id="score-run-outcome"/.test(indexHtml), "score-run-outcome is not in index.html");
 check("the outcome is announced to screen readers",
@@ -108,11 +89,6 @@ check("the outcome is announced to screen readers",
 check("a new run clears the previous outcome first",
   appJs.includes("_clearRunOutcome()"));
 
-/* A banner alone was missed in use, because nothing else on the card changes:
-   the button returns to reading "Run Analysis" whether the run worked, failed
-   or never started. The popup states the outcome where the eye already is. */
-/* Anchored to the start of a line. A plain substring check passed even with
-   the call commented out, which is exactly the regression worth catching. */
 check("a run also raises a popup that has to be dismissed",
   /^\s*_openRunResult\(tone, text, isOfficial\);/m.test(appJs),
   "_showRunOutcome does not open the popup");
@@ -138,15 +114,12 @@ check("an empty provider list hides the expander instead of showing an empty one
   /providerDetails\.hidden = provs\.length === 0/.test(appJs));
 
 
-/* A visible button with no listener absorbs every click in silence. That state
-   is reachable whenever the card is on screen while nothing is configured, for
-   instance after an activation fails and resets the provider back to none. */
 console.log("\nThe button always does something");
 check("the button is wired even when nothing is configured",
   /function _wireRunButton\(\{[^}]*live[^}]*\}\)[\s\S]{0,600}if \(!live\) \{[\s\S]{0,200}addEventListener\("click"/.test(appJs),
   "an unconfigured card leaves the button dead");
-check("the wiring is the only path, so no branch can forget it",
-  (appJs.match(/_wireRunButton\(/g) || []).length === 2,
+check("the button is wired in known places only (status card and new reference data)",
+  (appJs.match(/_wireRunButton\(/g) || []).length === 3,
   "there is more than one way to wire the run button");
 check("an unconfigured click is told apart from having no submissions",
   /tally\.unconfigured/.test(appJs), "the two cases share one message");
@@ -161,24 +134,16 @@ check("it says the comparison does not need a provider",
     run.tone === "warn", `tone was ${run.tone}`);
 }
 
-/* ── A comparison against ground truth is not a scoring provider ───────────
-   The two were conflated, so a reviewer with the organisers' reference maps
-   and masks loaded pressed Run Analysis and was told there was nothing to
-   run. There was: bias, RMSE, error CoV and the ROI tables all come from the
-   comparison and need no provider at all. */
 console.log("\nNo provider is not the same as nothing to run");
 {
   const ran = sandbox._runOutcomeText(
     { scored: 0, skipped: 0, failed: 0, reference: 6, total: 6, unconfigured: true }, false);
   check("a comparison that ran is reported as a success", ran.tone === "ok", ran.tone);
   check("it says how many were compared",
-    ran.text.includes("6 of 6 compared against reference data"), ran.text);
-  check("it names what the comparison produced",
-    /bias/i.test(ran.text) && /RMSE/.test(ran.text) && /ROI/.test(ran.text), ran.text);
+    ran.text.includes("6 of 6 submissions with the reference data"), ran.text);
+  check("it points to the results", /Results are below/.test(ran.text), ran.text);
   check("it does not report the absent provider as a failure",
     !/failed/i.test(ran.text), ran.text);
-  check("the missing provider is still mentioned, as optional",
-    /Provider analysis is optional/.test(ran.text), ran.text);
 
   const partial = sandbox._runOutcomeText(
     { scored: 0, skipped: 0, failed: 2, reference: 4, total: 6, unconfigured: true }, false);

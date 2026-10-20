@@ -14,14 +14,7 @@ ROLE_UNKNOWN = "unknown"
 
 @dataclass(frozen=True)
 class SubmissionArtifact:
-    """One submitted file, with whatever identity could be resolved.
-
-    Identity fields remain ``None`` when they cannot be determined. Validation
-    decides whether missing identity is allowed for the selected challenge.
-
-    ``map_type`` is set only for ``role == "parameter_map"``. A 4-D fitted
-    signal is not a parameter map, so it carries ``None``.
-    """
+    """One submitted file, with whatever identity could be resolved."""
 
     path: str
     role: str
@@ -41,10 +34,7 @@ class SubmissionArtifact:
 
 @dataclass(frozen=True)
 class IdentityConflict:
-    """Recorded when directory and filename identity disagree.
-
-    Directory identity wins; the conflict remains available to validation.
-    """
+    """Recorded when directory and filename identity disagree."""
 
     path: str
     field: str
@@ -57,11 +47,6 @@ class IdentityConflict:
 
 @dataclass(frozen=True)
 class Manifest:
-    """A manifest is the inventory we write after ingesting a submission.
-
-    It records where the submission came from, where it was copied or extracted,
-    and which useful files were found.
-    """
 
     submission_id: str
     challenge_type: str

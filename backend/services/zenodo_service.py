@@ -1,8 +1,4 @@
-"""Download Zenodo record files into a configured local folder.
-
-Accepts a Zenodo URL, DOI, or bare record ID.  Calls the Zenodo REST API to
-read the record title and file list, then downloads each file.
-"""
+"""Download Zenodo record files into a configured local folder."""
 
 import os as _os
 import re
@@ -32,11 +28,6 @@ _DOWNLOAD_MAX_BYTES = int(_os.environ.get(
 ZENODO_API = "https://zenodo.org/api/records"
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def handle_zenodo_input(zenodo_input: str) -> Dict:
     """Import a Zenodo record as official benchmark/reference data."""
     return download_zenodo_record(
@@ -53,16 +44,7 @@ def download_zenodo_record(
     folder_prefix: str,
     reset_existing: bool = False,
 ) -> Dict:
-    """Parse the input, fetch record metadata, and download files.
-
-    Args:
-        zenodo_input: A Zenodo URL, DOI link, or plain numeric record ID.
-        target_root: Parent folder for the downloaded record.
-        folder_prefix: Prefix used for the record folder name.
-        reset_existing: Whether to replace an existing target folder first.
-
-    Returns a dict with: success, record_id, title, downloaded_files, errors.
-    """
+    """Parse the input, fetch record metadata, and download files."""
     if not _REQUESTS_AVAILABLE:
         return _err("The 'requests' library is not installed. Run: pip install requests")
 
@@ -116,11 +98,6 @@ def download_zenodo_record(
     }
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
 def _parse_record_id(text: str) -> Optional[str]:
     """Extract a numeric Zenodo record ID from any supported input format."""
 
@@ -142,14 +119,7 @@ def _parse_record_id(text: str) -> Optional[str]:
 
 
 def _download_files(files: List, record_id: str, target_dir: Path) -> Tuple[List[str], List[str]]:
-    """Download each file in the record's file list in parallel.
-
-    Enforces a cumulative size limit (``_DOWNLOAD_MAX_BYTES``) across all
-    concurrent downloads.  When the limit is exceeded the abort event is set
-    and all workers stop writing as soon as they notice it.
-
-    Returns ``(downloaded_filenames, error_messages)``.
-    """
+    """Download each file in the record's file list in parallel."""
     abort_event  = threading.Event()
     counter_lock = threading.Lock()
     total_written = [0]  # list so closures can mutate it

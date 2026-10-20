@@ -65,9 +65,6 @@ def test_rss_orchestration_compares_one_clear_scan_pair(monkeypatch, tmp_path) -
         _artifact("measured_st", "measured_st.nii.gz"),
     ])
 
-    # 4-D signals are streamed from an array proxy rather than loaded whole, so
-    # the stub supplies `dataobj`. A NumPy array is a valid proxy: it supports
-    # the same `[..., start:stop]` slicing the real nibabel one does.
     def geometry(path):
         import numpy as np
         values = [1, 2, 3] if "modelled" in str(path) else [2, 4, 6]
@@ -243,18 +240,6 @@ def test_rss_loads_a_reused_mask_only_once(monkeypatch, tmp_path) -> None:
     assert all(row["status"] == "available" for row in target["signal_rss"]["records"])
 
 
-# ── Streaming a 4-D pair must equal reading it whole ───────────────────────
-#
-# The in-memory path materialised the measured volume, the modelled volume and
-# their residual in float64. A real DCE concentration curve from the challenge
-# lead is 121 x 145 x 91 x 157: 1 GB as float32, 2 GB as float64. Scoring one
-# scan pair therefore asked for roughly 6 GB and the kernel killed the process
-# on an ordinary laptop, which is a hard failure with no error message.
-#
-# RSS sums over time, so it accumulates: only a slab of timepoints needs to be
-# resident. These tests exist to guarantee that the cheaper reading strategy
-# does not change a single number.
-
 import numpy as _np  # noqa: E402
 
 from osipi_pipeline.scoring.rss_statistics import (  # noqa: E402
@@ -297,11 +282,6 @@ def test_streaming_matches_with_non_finite_voxels() -> None:
 
 
 def test_validity_is_tracked_across_chunks_not_within_one() -> None:
-    """The bug a naive chunked version would have.
-
-    A voxel whose only bad timepoint sits in the first chunk must still be NaN
-    after later, entirely finite chunks are added.
-    """
     shape = (2, 2, 1, 8)
     measured = _np.ones(shape)
     modelled = _np.zeros(shape)
@@ -325,12 +305,6 @@ def test_a_three_dimensional_input_is_refused() -> None:
 
 
 def test_peak_memory_stays_near_the_spatial_size() -> None:
-    """The property the fix exists for, measured rather than asserted by hope.
-
-    A 4-D volume large enough that holding it whole in float64 would dwarf the
-    accumulator. Reading it in slabs must allocate a small multiple of one
-    slab, never a multiple of the whole volume.
-    """
     shape = (40, 40, 10, 60)          # 960k voxels, 7.7 MB as float64
     measured, modelled = _pair(shape, seed=5)
 

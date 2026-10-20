@@ -1,26 +1,4 @@
-"""Masks must be found wherever the organiser put them.
-
-A challenge lead reported that masks "don't seem to be applied" and that it was
-unclear what bias and MAE were computed over. Both symptoms had one cause:
-mask discovery ran against a single reference root, and that root was chosen by
-which one contained ground-truth *maps*::
-
-    selected_root = next(r for r in roots if _reference_maps_by_type(r))
-    masks = _reference_masks(selected_root)      # only this one
-
-The pipeline offers six candidate roots. An organiser keeping a shared
-``masks/`` folder next to a per-challenge ``asl/maps/`` folder, which is a
-natural layout and one of the six, had their masks silently ignored: no ROI
-rows, and whole-image metrics reported with nothing to say the region
-breakdown was missing rather than genuinely empty.
-
-Masks and ground truth are independent assets. The map root must stay a single
-choice, mixing two ground truths would be wrong, but a mask found anywhere the
-pipeline already looks is a mask the organiser meant to provide.
-
-These tests use real NIfTI files through the real discovery code rather than
-stubs, because the bug was in which directories were searched.
-"""
+"""Masks must be found wherever the organiser put them."""
 
 from __future__ import annotations
 
@@ -71,9 +49,6 @@ def organiser(tmp_path, monkeypatch):
     for name, value in roots.items():
         monkeypatch.setattr(scoring, name, value)
         value.mkdir(parents=True, exist_ok=True)
-    # An active package in a developer's real workspace may provide its own
-    # reference masks. Keep this fixture isolated from that persisted state so
-    # these tests exercise only the roots created above.
     monkeypatch.setattr(
         scoring,
         "get_active_entry",
@@ -81,8 +56,6 @@ def organiser(tmp_path, monkeypatch):
     )
     return roots
 
-
-# ── The layout that was broken ─────────────────────────────────────────────
 
 def test_a_mask_beside_the_maps_is_found(organiser) -> None:
     """The layout that always worked, kept as the control."""
@@ -95,7 +68,6 @@ def test_a_mask_beside_the_maps_is_found(organiser) -> None:
 
 
 def test_a_mask_in_a_different_root_from_the_maps_is_found(organiser) -> None:
-    """The reported bug: shared masks, per-challenge ground truth."""
     write(organiser["REFERENCE_DATA_DIR"] / "masks" / "gm_mask.nii.gz", gm_mask())
     write(organiser["REFERENCE_DATA_DIR"] / "asl" / "maps" / "Perfmap.nii.gz",
           cbf_map(1.05))
@@ -134,7 +106,6 @@ def test_challenge_masks_take_priority_over_legacy_shared_masks(organiser) -> No
 
 
 def test_dce_gray_matter_excludes_same_site_hippocampus(organiser) -> None:
-    """Confirmed DCE policy: effective GM is the supplied GM minus Hipp."""
     root = organiser["REFERENCE_DATA_DIR"] / "dce" / "masks" / "site_1"
     gm = np.zeros(SHAPE, dtype=np.float32)
     gm[1:4, 1:4, :] = 1
@@ -178,7 +149,6 @@ def test_the_same_mask_seen_through_two_roots_is_counted_once(organiser) -> None
 
 
 def test_masks_carry_the_label_the_report_shows(organiser) -> None:
-    """`gm_mask.nii.gz` has to read as "gray matter" in a table of results."""
     base = organiser["REFERENCE_DATA_DIR"] / "masks"
     write(base / "gm_mask.nii.gz", gm_mask())
     write(base / "wm_mask.nii.gz", gm_mask())
@@ -209,11 +179,7 @@ def _submitted(path: Path, values) -> dict:
 
 
 def test_a_shared_mask_produces_per_region_metrics(organiser) -> None:
-    """The whole point: bias and CoV *inside* the region, not just whole-image.
-
-    The mask sits in the shared root and the ground truth in the challenge
-    root, the layout that previously yielded whole-image metrics only.
-    """
+    """The whole point: bias and CoV *inside* the region, not just whole-image."""
     truth = cbf_map()
     write(organiser["REFERENCE_DATA_DIR"] / "masks" / "gm_mask.nii.gz", gm_mask())
     write(organiser["REFERENCE_DATA_DIR"] / "asl" / "maps" / "Perfmap.nii.gz", truth)
@@ -242,12 +208,7 @@ def test_a_shared_mask_produces_per_region_metrics(organiser) -> None:
 
 
 def test_the_region_is_where_the_difference_actually_is(organiser) -> None:
-    """A mask that does nothing would pass the test above; this one it cannot.
-
-    The error is confined to the masked region, so whole-image bias is diluted
-    by the untouched background while the ROI reports the real magnitude. If
-    the mask were being ignored the two would be equal.
-    """
+    """A mask that does nothing would pass the test above; this one it cannot."""
     truth = cbf_map()
     mask = gm_mask()
     submitted_values = truth + mask * 10.0
@@ -269,7 +230,6 @@ def test_the_region_is_where_the_difference_actually_is(organiser) -> None:
 
 
 def test_every_mask_gets_its_own_row(organiser) -> None:
-    """Lena asked for GM, WM, lesion and "any other mask I provide"."""
     truth = cbf_map()
     base = organiser["REFERENCE_DATA_DIR"] / "masks"
     for name in ("gm_mask.nii.gz", "wm_mask.nii.gz", "lesion_roi.nii.gz"):
@@ -289,11 +249,7 @@ def test_every_mask_gets_its_own_row(organiser) -> None:
 def test_a_mask_on_a_different_grid_says_so_rather_than_silently_skipping(
     organiser,
 ) -> None:
-    """Wrong geometry must be a reported status, not an absent row.
-
-    This is the case the orientation QC exists for: a reviewer needs to see
-    that their mask did not line up, not an empty region column.
-    """
+    """Wrong geometry must be a reported status, not an absent row."""
     truth = cbf_map()
     wrong_shape = np.ones((4, 4, 2), dtype=np.float32)
     write(organiser["REFERENCE_DATA_DIR"] / "masks" / "gm_mask.nii.gz", wrong_shape)

@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Find out why Run Analysis appears to do nothing.
-
-Run Analysis can look broken for several unrelated reasons, and they need
-different fixes, so guessing wastes time. This asks the running application
-directly and prints one verdict.
-
-    python3 scripts/diagnose_run_analysis.py
-
-It reads only. It uploads nothing and changes no configuration.
-"""
+"""Find out why Run Analysis appears to do nothing."""
 
 from __future__ import annotations
 
@@ -17,9 +8,6 @@ import json
 import urllib.error
 import urllib.request
 
-# Markers that only exist in the current frontend. If the server is handing out
-# an older copy, the browser cannot possibly show the new behaviour, and that is
-# by far the most common cause.
 FRONTEND_MARKERS = {
     "/": ["run-result-modal", "score-run-outcome", "grouping-note", "auto-advance"],
     "/static/app.js": [
@@ -34,17 +22,7 @@ FRONTEND_MARKERS = {
 
 
 def _assets_differing_from_disk(base: str):
-    """Which frontend assets the server serves from a different build than this.
-
-    The page names its script and stylesheet with a version taken from the
-    file's own bytes, so the version in the served HTML is a fingerprint of
-    the copy the container was built from. Hashing the same files here and
-    comparing tells you whether the running app came from this folder.
-
-    Returns a list of (name, served_version, local_version) for anything that
-    disagrees, an empty list when everything matches, or None when the
-    comparison cannot be made.
-    """
+    """Which frontend assets the server serves from a different build than this."""
     import hashlib
     import re as _re
     from pathlib import Path as _Path
@@ -115,14 +93,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print("  [ ok ] The served frontend is current")
 
-    # ── 2b. Is it built from THIS folder? ────────────────────────────────
-    #
-    # The markers above only prove the served copy is not ancient. Updating
-    # from a downloaded ZIP creates two folders that both look right, and
-    # rebuilding the wrong one leaves the old container running while every
-    # file on disk says it should not be. Comparing what the page asks for
-    # against what is on disk here names that mistake instead of leaving
-    # someone to rebuild repeatedly and wonder why nothing changes.
     mismatched = _assets_differing_from_disk(base)
     if mismatched is None:
         print("  [ -- ] Could not compare the served assets with this folder")

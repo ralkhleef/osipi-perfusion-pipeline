@@ -67,9 +67,6 @@ def test_compatible_mask_generates_private_safe_overlay(preview_workspace: Path)
     item = _manifest(preview_workspace)["maps"][0]
 
     assert item["mask_overlay_status"] == "available"
-    # The label the scoring tables use, so an overlay can be matched to a row.
-    # It used to be derived from the filename, which both read badly and put
-    # an organiser asset name on screen.
     assert item["mask_overlay_label"] == "gray matter"
     assert len(item["mask_overlays"]) == 1
 
@@ -204,10 +201,6 @@ def test_download_endpoint_does_not_serve_private_reference_maps(preview_workspa
     assert blocked.status_code == 404
     assert fastapi is not None
 
-
-# ---------------------------------------------------------------------------
-# Parameter Map Previews: gallery must show only 3-D recognized parameter maps
-# ---------------------------------------------------------------------------
 
 def _lena_style_manifest(workspace: Path) -> dict:
     """4-D ASL input (Unknown) + 3-D Perfmap (CBF) + 3-D ATTmap (ATT)."""

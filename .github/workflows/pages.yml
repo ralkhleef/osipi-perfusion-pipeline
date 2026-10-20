@@ -24,9 +24,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # enablement turns Pages on if it is not already, so a fresh clone or a
-      # fork does not fail with "Get Pages site failed" before anyone has
-      # visited the settings page.
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

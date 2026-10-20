@@ -1,18 +1,4 @@
-"""Every map a challenge requires must declare the dimensionality it expects.
-
-`completeness.check_dimensions` skips any map whose `map_types` entry has no
-`dimensions` key, silently and without a warning. That is the right behaviour
-for a map whose shape a challenge has genuinely not fixed, but it is easy to
-reach by accident: the DSC challenge shipped requiring `cbv`, `cbf` and `mtt`
-while only `cbf` declared `dimensions: 3`, so a 4-D file submitted as CBV or MTT
-passed validation, and one required map of the same challenge was checked while
-the other two were not.
-
-Inconsistency inside one challenge is the tell. These tests do not decide what
-any map's dimensionality *is*, which stays a configuration and organiser
-decision; they only require that a challenge answers the question for every map
-it makes mandatory, so silence is never mistaken for approval.
-"""
+"""Every map a challenge requires must declare the dimensionality it expects."""
 
 from __future__ import annotations
 
@@ -60,7 +46,6 @@ def test_every_required_map_declares_its_dimensions(challenge: str) -> None:
 def test_a_challenge_does_not_check_some_of_its_maps_and_not_others(
     challenge: str,
 ) -> None:
-    """Mixed declaration inside one challenge is the accident to catch."""
     specs = map_type_specs()
     configured = [
         *required_maps_by_challenge()[challenge],

@@ -1,26 +1,5 @@
 #!/usr/bin/env python3
-"""Build a working scoring package you can upload and run.
-
-Writing one by hand is where the mistakes are. The demo package shipped with a
-manifest that declared eight metrics its script never produced, because the
-manifest listed per-file names while the pipeline reads the run summary. It
-looked fine until it was run, and then failed with a message about missing
-metrics that told you nothing about the cause.
-
-This generates the pair together, so the manifest can only ever declare what
-the script emits: the metric names come from one list used to write both.
-
-    python3 scripts/make_example_scoring_package.py --challenge asl
-    python3 scripts/make_example_scoring_package.py --challenge dce --with-masks
-    python3 scripts/make_example_scoring_package.py --challenge dsc
-    python3 scripts/make_example_scoring_package.py --challenge asl --out my.zip
-
-The generated package computes real numbers from the submitted maps, and with
---with-masks reports them inside each ROI as well. It is a starting point to
-edit, not official scoring, and says so in its own output.
-
-No real or private data is involved. Nothing is written outside the output path.
-"""
+"""Build a working scoring package you can upload and run."""
 
 from __future__ import annotations
 
@@ -43,10 +22,6 @@ SUMMARY_METRICS = (
     "mean_of_map_means",
 )
 
-#: Reported only when masks are supplied. Kept separate because a metric that
-#: is sometimes absent must not be declared unconditionally: the pipeline reads
-#: a declared-but-null metric as one the package failed to produce, which is
-#: exactly how the shipped demo package came to fail.
 MASK_METRICS = (
     "roi_count",
     "mean_roi_mean",

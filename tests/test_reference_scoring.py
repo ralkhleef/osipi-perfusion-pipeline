@@ -248,12 +248,7 @@ def test_configured_known_mask_alias_is_used(scoring_workspace: Path) -> None:
 
 
 def test_arbitrary_custom_roi_mask_is_accepted(scoring_workspace: Path) -> None:
-    """A mask the label rules do not recognise still gets scored.
-
-    Named to match no rule but the generic `roi` one, so this stays a test of
-    "any mask an organiser supplies is accepted" rather than a test of a
-    particular label.
-    """
+    """A mask the label rules do not recognise still gets scored."""
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
     _write_mask(scoring_workspace, [1, 0, 0, 1], name="custom_roi.nii.gz")
@@ -266,12 +261,6 @@ def test_arbitrary_custom_roi_mask_is_accepted(scoring_workspace: Path) -> None:
 
 
 def test_a_lesion_mask_is_labelled_lesion_not_roi(scoring_workspace: Path) -> None:
-    """`lesion_roi_mask.nii.gz` used to report as "ROI".
-
-    The rules are ordered and the first match wins, so the generic `roi`
-    pattern claimed it before anything more specific could. A reviewer with
-    several ROIs then could not tell which row was the lesion.
-    """
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
     _write_mask(scoring_workspace, [1, 0, 0, 0], name="lesion_roi_mask.nii.gz")
@@ -335,9 +324,6 @@ def test_unknown_mask_filename_gets_clean_label(scoring_workspace: Path) -> None
 def test_duplicate_mask_display_labels_do_not_drop_masks(scoring_workspace: Path) -> None:
     _write_submitted(scoring_workspace, [12, 14, 100, 100])
     _write_reference(scoring_workspace, [10, 10, 10, 10])
-    # Both must still resolve to the *same* display label, or this stops
-    # testing anything: "tumor_roi" now labels as lesion, which would have
-    # left one ROI row and a passing test that had lost its own premise.
     _write_mask(scoring_workspace, [1, 0, 0, 0], name="left_roi.nii.gz")
     _write_mask(scoring_workspace, [0, 1, 0, 0], name="right_roi.nii.gz")
 
@@ -387,19 +373,6 @@ def test_reference_artifacts_include_json_csv_and_difference_map(scoring_workspa
     assert any(name.endswith("_difference.nii") for name in artifacts)
 
 
-# ── Matching a scan to its own ground truth ───────────────────────────────
-#
-# The DCE challenge lays a submission out as P05/site_2/scan_1/Ktrans.nii.gz
-# with the ground truth in the same shape, so every one of the sixty candidate
-# files is named exactly "Ktrans.nii.gz". Matching on the filename alone left
-# all sixty tied and broke the tie on path length, which is arbitrary: measured
-# against the real data, 59 of 60 scans were paired with P01/site_1/scan_1.
-#
-# Where the grids differed that surfaced as a shape mismatch, which is at least
-# visible. Where they agreed, within site_1, it produced a full set of accuracy
-# metrics computed against another participant's ground truth. Nothing in the
-# output would have looked wrong.
-
 def _tree(root: Path, name: str = "Ktrans.nii.gz") -> list[Path]:
     made = []
     for participant in ("P01", "P05", "P10"):
@@ -430,11 +403,7 @@ def test_a_scan_is_matched_to_its_own_ground_truth(tmp_path) -> None:
 
 
 def test_identity_beats_the_filename_when_they_disagree(tmp_path) -> None:
-    """Directory identity is the stronger signal and must win.
-
-    A reference file whose *name* happens to share more tokens with the
-    submission must not outrank the one that is actually this scan.
-    """
+    """Directory identity is the stronger signal and must win."""
     submission = tmp_path / "submission"
     reference = tmp_path / "gt"
     submitted = submission / "P05" / "site_2" / "scan_1" / "Ktrans.nii.gz"

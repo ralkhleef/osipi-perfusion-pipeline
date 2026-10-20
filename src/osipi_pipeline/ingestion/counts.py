@@ -1,19 +1,4 @@
-"""Canonical, role-based counts for one submission.
-
-Counting NIfTI files is not the same as counting parameter maps. A DCE-2026
-submission of 16 scans holds 48 parameter maps, but 67 NIfTI files: the 16
-modelled signal-time curves are fitted signals, not parameter maps, and the
-reference map and ROI masks are organiser inputs that the team never submitted.
-Reporting 67 overstates the submission by 40%.
-
-Every count here is derived from artifact *roles*, which the ingestion layer
-has already resolved, so no caller re-walks the tree or re-decides what a file
-is. Reference and mask directories are excluded upstream by
-``manifest.is_reference_path``, so they cannot reach these counts at all.
-
-Nothing is hardcoded per challenge: roles and artifact types come from
-configuration.
-"""
+"""Canonical, role-based counts for one submission."""
 
 from __future__ import annotations
 
@@ -67,11 +52,7 @@ def _scan_key(artifact: Any) -> tuple | None:
 
 
 def count_submission(artifacts: Iterable[Any]) -> SubmissionCounts:
-    """Role-based counts over already-normalised artifacts.
-
-    A scan is counted once per distinct resolved identity, so three maps in one
-    scan directory are three parameter maps but one scan.
-    """
+    """Role-based counts over already-normalised artifacts."""
     items = list(artifacts)
 
     by_role: Counter = Counter(getattr(a, "role", None) for a in items)
@@ -106,12 +87,7 @@ def count_submission(artifacts: Iterable[Any]) -> SubmissionCounts:
 
 
 def contents_rows(artifacts: Iterable[Any]) -> list[dict[str, Any]]:
-    """One row per (dataset, artifact kind), for the submission-contents table.
-
-    Replaces the per-file appendix: a clean 16-scan submission becomes eight
-    rows instead of sixty-seven cards. Units and labels are looked up from
-    configuration, never hardcoded here.
-    """
+    """One row per (dataset, artifact kind), for the submission-contents table."""
     from osipi_pipeline.config.rules import artifact_type_specs, map_type_specs
 
     map_specs = map_type_specs()

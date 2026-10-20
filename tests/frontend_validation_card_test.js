@@ -1,14 +1,3 @@
-// The validation card reports what the submission contains, once.
-//
-// Two visible defects motivated this: the card said "Result maps provided"
-// twice — the submission-type chip and the run-readiness chip carry the same
-// words for a result-only submission — and it labelled a complete DCE
-// submission "Mixed/Other", which only meant that more than one map type was
-// found. For a challenge that defines Ktrans, vp and ve, finding three is the
-// expected state, not an ambiguity.
-//
-// The helpers are executed in a sandbox rather than read as text, so a wrong
-// key path or a mislabelled count fails here.
 
 const fs = require("fs");
 const path = require("path");
@@ -198,12 +187,6 @@ console.log("\nTechnical details");
 }
 
 
-
-/* ── Files are not maps ────────────────────────────────────────────────────
-   A DCE scan carries two parameter maps and one 4-D fitted curve, so six
-   scans are 12 maps and 18 files. The review row labelled the file count
-   "18 maps", which overstates the maps by half and is exactly the number a
-   reviewer checks against the challenge. */
 console.log("\nMap counts are not file counts");
 {
   const fn = (() => {

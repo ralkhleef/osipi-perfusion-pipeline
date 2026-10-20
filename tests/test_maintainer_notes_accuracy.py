@@ -1,21 +1,4 @@
-"""The README and maintainer notes must point at files that exist.
-
-`tests/test_documentation_accuracy.py` already holds the published GitHub Pages
-site to the code. Nothing held the *maintainer* documentation to it, and it
-drifted the same way: `notes/CODE_WALKTHROUGH.md` sent a reader to
-`backend/docker_runner.py` for the Docker execution code, a path that has never
-existed (the module is `src/osipi_pipeline/execution/docker_runner.py`), and the
-README listed ten of the thirteen frontend suites as if that were all of them.
-
-Both failures are cheap to make, invisible in review, and expensive for the
-reader: a new contributor opens the file they were sent to, finds nothing, and
-has no way to tell whether the code moved or they misread the guide.
-
-This checks only paths inside the repository's own tracked source trees. A
-backticked `results/maps/` inside a submission, a `data/outputs/` folder created
-at runtime, an API route, and `/var/run/docker.sock` are not repository paths
-and are deliberately out of scope.
-"""
+"""The README and maintainer notes must point at files that exist."""
 
 from __future__ import annotations
 
@@ -29,9 +12,6 @@ ROOT = Path(__file__).resolve().parent.parent
 #: Documentation a maintainer reads before touching the code.
 DOCS: list[Path] = [ROOT / "README.md", *sorted((ROOT / "notes").glob("*.md"))]
 
-#: Source trees that are committed. A backticked path starting with one of
-#: these is a claim about this repository, so it has to be true. Anything else
-#: (runtime output, private assets, submission-internal folders) is not.
 TRACKED_ROOTS = frozenset({
     "backend", "src", "tests", "config", "docs",
     "frontend", "scripts", "examples", "notes",
@@ -87,12 +67,6 @@ def test_the_check_would_have_caught_the_walkthrough_regression() -> None:
     assert not (ROOT / "backend" / "docker_runner.py").exists()
     assert (ROOT / "src/osipi_pipeline/execution/docker_runner.py").exists()
 
-
-# ── Test-suite lists must not be enumerated by hand ────────────────────────
-#
-# The README listed ten of thirteen frontend suites. An enumerated list is a
-# copy of the filesystem that nothing keeps in sync, so both the README and the
-# walkthrough now discover the suites instead. CI already does.
 
 FRONTEND_SUITE_LINE = re.compile(r"^\s*node\s+tests/[A-Za-z0-9_.\-]+\.js\s*$", re.M)
 

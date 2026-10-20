@@ -1,8 +1,4 @@
-"""Handle submission uploads and imports.
-
-Returns a submission_id (the ZIP stem) so the rest of the backend
-can locate the extracted folder without exposing file paths to the frontend.
-"""
+"""Handle submission uploads and imports."""
 
 import os
 import shutil
@@ -45,14 +41,8 @@ _SKIP_NAMES    = set(settings_tuple("ingestion", "skip_names"))
 # ── Public API, single submission (legacy) ───────────────────────────────────
 
 
-
-
 def save_and_extract_batch(file_bytes: bytes, filename: str) -> Dict:
-    """Extract a ZIP (bytes) and auto-detect single vs. batch submissions.
-
-    Size is checked against ZIP_MAX_BYTES before writing.
-    Delegates to ``save_and_extract_batch_from_path`` after saving to disk.
-    """
+    """Extract a ZIP (bytes) and auto-detect single vs."""
     if len(file_bytes) > ZIP_MAX_BYTES:
         return {
             "success": False,
@@ -68,13 +58,7 @@ def save_and_extract_batch(file_bytes: bytes, filename: str) -> Dict:
 
 
 def save_and_extract_batch_from_path(zip_path: Path, filename: str) -> Dict:
-    """Batch extraction from a ZIP already on disk.
-
-    No in-memory size check: the caller is responsible for enforcing the limit
-    while streaming (e.g. the ``/api/upload-batch`` endpoint).
-    Handles wrapper-folder ZIPs and returns the same response shape as
-    ``save_and_extract_batch``.
-    """
+    """Batch extraction from a ZIP already on disk."""
     safe_filename = Path(filename).name
     batch_stem = _safe_id(Path(safe_filename).stem)
     temp_id = f"_batch_temp_{batch_stem}"
@@ -94,14 +78,7 @@ def save_and_extract_batch_from_path(zip_path: Path, filename: str) -> Dict:
 
 
 def save_uploaded_folder(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dict:
-    """Save browser folder-upload files into a single submission folder.
-
-    ``files`` is an iterable of ``(relative_path_string, data)`` where
-    ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
-    on disk (streaming path, avoids holding all files in RAM at once).
-
-    Enforces cumulative file count and size limits before staging.
-    """
+    """Save browser folder-upload files into a single submission folder."""
     materialized = list(files)
     if not materialized:
         return {"success": False, "error": "No files were uploaded."}
@@ -169,16 +146,7 @@ def save_uploaded_folder(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dic
 
 
 def save_folder_as_batch(files: Iterable[Tuple[str, Union[bytes, Path]]]) -> Dict:
-    """Save browser folder-upload files and auto-detect batch boundaries.
-
-    ``files`` is an iterable of ``(relative_path_string, data)`` where
-    ``data`` is either raw ``bytes`` (legacy) or a ``Path`` to a temp file
-    on disk (streaming path, avoids holding all files in RAM at once).
-
-    Enforces cumulative size / file-count limits before staging.
-    Uses the same ``_finalize_staged_dir`` path as ZIP uploads, so
-    wrapper-folder detection and the shared response shape are consistent.
-    """
+    """Save browser folder-upload files and auto-detect batch boundaries."""
     materialized = list(files)
     if not materialized:
         return {"success": False, "error": "No files were uploaded."}
@@ -247,14 +215,7 @@ def finalize_imported_dir(
     display_name: str,
     source_type: str,
 ) -> Dict:
-    """Run batch detection on an already-downloaded import directory.
-
-    Used by Zenodo and GitHub import paths after their files land on disk.
-    If the directory contains exactly one ZIP file and nothing else, that ZIP
-    is auto-extracted before detection runs (common for Zenodo records).
-
-    Returns the same response shape as ``save_and_extract_batch``.
-    """
+    """Run batch detection on an already-downloaded import directory."""
     if not imported_dir.exists() or not imported_dir.is_dir():
         return {
             "success": False,
@@ -304,10 +265,6 @@ def make_safe_id(stem: str) -> str:
     return _safe_id(stem)
 
 
-
-
-
-
 def detect_submission_metadata(submission_id: str) -> Dict:
     """Detect NIfTI count and likely map type for an ingested submission."""
     folder = EXTRACTED_DIR / _safe_id(submission_id)
@@ -332,18 +289,11 @@ def detect_submission_metadata(submission_id: str) -> Dict:
         confidence = "low"
         warning = "Multiple parameter map types were detected from filenames."
 
-    # Per-submission challenge detection so a mixed upload (e.g. ASL + DCE) can
-    # tag each submission with its own challenge. "unknown" means the user must
-    # pick/confirm; downstream steps must scope by challenge, never mix them.
     try:
         detected_challenge = detect_challenge_type(folder)
     except Exception:
         detected_challenge = "unknown"
 
-    # The inner folder names, so the Review step can show what this submission
-    # would split into and let a reviewer judge. Whether P01..P10 are
-    # participants of one submission or ten separate submissions cannot be told
-    # from the files, so the names have to be visible rather than inferred.
     try:
         inner = sorted(d.name for d in folder.iterdir()
                        if d.is_dir() and not d.name.startswith("."))
@@ -361,15 +311,7 @@ def detect_submission_metadata(submission_id: str) -> Dict:
 
 
 def _is_submission_candidate(d: Path) -> bool:
-    """Return True if *d* looks like a submission folder.
-
-    A directory qualifies as a submission candidate if it contains at least one
-    file anywhere in its subtree.  NIfTI files are *not* required, a folder
-    that only contains a README, Dockerfile, metadata.json, or any other file
-    is still a valid (if incomplete) submission.  Validation decides pass/fail.
-
-    Empty directories are not considered submission candidates.
-    """
+    """Return True if *d* looks like a submission folder."""
     try:
         for p in d.rglob("*"):
             if p.is_file():
@@ -380,23 +322,7 @@ def _is_submission_candidate(d: Path) -> bool:
 
 
 def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
-    """Return the top-level subdirectories that are submission candidates.
-
-    A directory is a candidate if it contains any files (NIfTI or otherwise).
-    NIfTI files are *not* required: invalid/incomplete submissions are included
-    so that validation can mark them as failed rather than silently skipping them.
-
-    Handles the wrapper-folder pattern: if exactly one top-level directory
-    exists, looks one level deeper for multiple submission directories.
-
-    Examples:
-        batch.zip/Team_A/ Team_B/              → [Team_A, Team_B]
-        batch.zip/wrapper/Team_A/ Team_B/      → [Team_A, Team_B]  (wrapper unwrapped)
-        batch.zip/Team_A/ Team_B/ Team_C_bad/  → [Team_A, Team_B, Team_C_bad]
-        batch.zip/Team_A/                      → None  (single submission)
-
-    Returns None if fewer than 2 qualifying directories are found.
-    """
+    """Return the top-level subdirectories that are submission candidates."""
     try:
         top_dirs = sorted(d for d in extracted_dir.iterdir() if d.is_dir())
     except PermissionError:
@@ -414,20 +340,10 @@ def detect_batch_boundaries(extracted_dir: Path) -> Optional[List[Path]]:
     if len(submission_dirs) < 2:
         return None
 
-    # If every top-level dir is a well-known structural subdir (input/, results/,
-    # maps/, …) this is a single submission whose data is laid out across those
-    # folders, NOT a multi-team batch.  Without this check a ZIP that contains
-    # ``input/`` and ``results/maps/`` at its top level would be wrongly split
-    # into two submissions (e.g. ``<name>_input`` and ``<name>_results``).
     if _is_structural_layout(submission_dirs):
         return None
 
-    # Participants are not submissions. The DCE challenge lead's synthetic
-    # submission is one team's work laid out as P01..P10. Splitting it per
-    # participant produced ten "submissions" whose paths then began at site_1/,
-    # so the participant could no longer be determined and every file failed
-    # with INCOMPLETE_ARTIFACT_IDENTITY. The submission was fine; the carve had
-    # discarded the level that identified it.
+    # A participant-level layout (P01..P10) is one submission, not a batch.
     if _is_participant_layout(submission_dirs):
         return None
 
@@ -444,14 +360,7 @@ def _finalize_staged_dir(
     file_count: int,
     source_type: str = "local",
 ) -> Dict:
-    """Core post-staging logic shared by all import paths.
-
-    Runs batch detection on ``temp_dir``.
-    - Single submission → renames temp_dir to the final submission dir.
-    - Batch → carves per-team submission dirs, then removes temp_dir.
-
-    ``temp_dir`` is always cleaned up by the time this function returns.
-    """
+    """Core post-staging logic shared by all import paths."""
     batch_dirs = detect_batch_boundaries(temp_dir)
 
     # ── Single submission ─────────────────────────────────────────────────────
@@ -459,10 +368,6 @@ def _finalize_staged_dir(
         final_dir = EXTRACTED_DIR / batch_stem
         if final_dir.exists():
             _replace_previous_extraction(final_dir)
-        # Unwrap a single redundant wrapper folder so the submission root
-        # directly contains input/ , results/maps/ , README, etc.  Without this
-        # a ZIP shaped like ``Lena_ASL/input/ Lena_ASL/results/maps/`` would
-        # extract to ``<id>/Lena_ASL/input`` (an extra nesting level).
         inner = _redundant_wrapper(temp_dir)
         if inner is not None:
             inner.rename(final_dir)
@@ -482,9 +387,6 @@ def _finalize_staged_dir(
             "message": f"Extracted {file_count} file(s).",
         }
 
-    # ── Batch: carve per-team submission dirs ─────────────────────────────────
-    #
-    # Files beside team directories are shared artifacts for every submission.
     shared_files = sorted(
         item for item in batch_dirs[0].parent.iterdir() if item.is_file()
     )
@@ -525,10 +427,6 @@ def _finalize_staged_dir(
     }
 
 
-# ── Structural subdirectory names: indicate a SINGLE-submission layout ────────
-# If ALL inner directories of a folder have names from this set, the parent is
-# ONE submission (input/results/maps are its internal data layout), not a batch.
-# A real multi-team batch would have names like "Team_A", "submission_001", etc.
 _STRUCTURAL_SUBDIRS: frozenset = frozenset(
     item.lower() for item in settings_tuple("ingestion", "structural_subdirs")
 )
@@ -554,29 +452,7 @@ def _dataset_dir_names() -> frozenset:
 
 
 def _is_structural_layout(dirs: List[Path]) -> bool:
-    """Return True if every directory name is structural rather than a team.
-
-    Two kinds of name qualify:
-
-    *Layout* subdirectories, treat as ONE submission (not a batch)::
-
-        lena_realistic_asl_osipi_named/
-            input/        ← structural
-            results/      ← structural
-                maps/
-
-    *Dataset* subdirectories declared by a challenge, also ONE submission::
-
-        dce_team_alpha/
-            Synthetic/    ← dataset partition
-            Clinical/     ← dataset partition
-
-    A real batch has team-named subdirectories::
-
-        batch_upload/
-            Team_A/
-            Team_B/
-    """
+    """Return True if every directory name is structural rather than a team."""
     if not dirs:
         return False
     known = _STRUCTURAL_SUBDIRS | _dataset_dir_names()
@@ -584,21 +460,7 @@ def _is_structural_layout(dirs: List[Path]) -> bool:
 
 
 def regroup_submissions(submission_ids: List[str], mode: str) -> Dict:
-    """Re-decide whether one upload is one submission or several.
-
-    A ZIP containing ``P01`` through ``P10`` is either one submission covering
-    ten participants or ten separate submissions, and nothing in the files can
-    tell those apart. Detection guesses, sensibly, and this is how a reviewer
-    overrules the guess after seeing the actual folder names.
-
-    ``mode`` is ``"split"``, which takes one submission and makes each of its
-    top-level directories a submission of its own, or ``"merge"``, which takes
-    several and nests them back under one.
-
-    Files are staged and only committed once every move has succeeded, because
-    a regrouping that half-finishes would leave a reviewer with a submission
-    that is missing scans and no indication that anything went wrong.
-    """
+    """Re-decide whether one upload is one submission or several."""
     mode = (mode or "").strip().lower()
     if mode not in ("split", "merge"):
         return {"success": False, "error": "mode must be 'split' or 'merge'."}
@@ -634,11 +496,6 @@ def _split_submission(submission_id: str) -> Dict:
             sub_id = _safe_id(f"{submission_id}_{child.name}")
             target = staged / sub_id
             target.mkdir()
-            # Keep the folder being split as part of the new submission.  It
-            # may carry scan identity (P05, site_1, scan_2, ...); promoting its
-            # contents to the submission root discards that identity and makes
-            # otherwise valid maps impossible to validate or match to private
-            # references.
             shutil.move(str(child), str(target / child.name))
             for shared in shared_files:
                 copy_to = target / shared.name
@@ -667,13 +524,7 @@ def _split_submission(submission_id: str) -> Dict:
 
 
 def _merged_stem(submission_ids: List[str]) -> str:
-    """What the upload was called before it was carved into these.
-
-    Trimmed back to an underscore boundary. A character-wise common prefix of
-    ``upload_P01`` and ``upload_P02`` is ``upload_P0``, which would restore the
-    participants as ``1`` and ``2`` and so destroy the very level the merge
-    exists to bring back.
-    """
+    """What the upload was called before it was carved into these."""
     ids = [s for s in submission_ids if s]
     if not ids:
         return ""
@@ -699,10 +550,6 @@ def _merge_submissions(submission_ids: List[str]) -> Dict:
     staged.mkdir(parents=True)
     try:
         for source, sub_id in zip(sources, submission_ids):
-            # Restore the folder name the carve consumed, so identity parsing
-            # sees P01/site_1/... again rather than site_1/... The manifest
-            # recorded it at carve time; the id is only a fallback, because
-            # deriving a name from an id is guesswork and this is not.
             recorded = (load_manifest(source) or {}).get("original_path")
             name = str(recorded or "").strip() or sub_id[len(merged_id):].lstrip("_") or sub_id
             name = Path(name).name
@@ -710,10 +557,6 @@ def _merge_submissions(submission_ids: List[str]) -> Dict:
             inner.mkdir(parents=True, exist_ok=True)
             preserved_identity_dir = source / name
             if preserved_identity_dir.is_dir():
-                # Current splits retain the identity folder.  Merge its
-                # contents into the one folder already created above, while
-                # restoring shared top-level files (README, methods, etc.) only
-                # once at the merged root.
                 for item in sorted(preserved_identity_dir.iterdir()):
                     shutil.move(str(item), str(inner / item.name))
                 for item in sorted(source.iterdir()):
@@ -754,24 +597,10 @@ def _is_participant_layout(dirs: List[Path]) -> bool:
             P01/                 site_1/          scan_1/
             P02/                 site_2/          scan_2/
 
-    Splitting on any of them throws away the level that identifies a scan, and
-    every file below it then fails with INCOMPLETE_ARTIFACT_IDENTITY. A real
-    batch has team-named directories, which parse as none of these::
-
-        batch_upload/
-            Team_A/
-            Team_B/
-
-    Structural siblings are allowed too. A complete submission commonly has
-    ``Participant1/`` through ``Participant5/`` beside ``reference/``; the
-    reference directory is part of that submission, not a sixth team. What
-    counts as an identity or structural name comes from the same parser and
-    configuration used elsewhere, so batch detection does not maintain a
-    second hardcoded vocabulary.
-
+    Splitting on any of them would cause INCOMPLETE_ARTIFACT_IDENTITY errors.
+    A real batch has team-named directories (``Team_A/``, ``Team_B/``).
     At least one directory must carry scan identity and every other directory
-    must be structural. An unrecognised sibling still makes this return False,
-    preserving the safer behaviour for a real mixed team batch.
+    must be structural.
     """
     if len(dirs) < 2:
         return False
@@ -792,20 +621,7 @@ def _is_participant_layout(dirs: List[Path]) -> bool:
 
 
 def _replace_previous_extraction(final_dir: Path) -> None:
-    """Delete a previous extraction of the same submission, or explain why not.
-
-    Re-uploading a submission is the most ordinary thing a reviewer does, and
-    it means deleting what was extracted last time. When that delete fails, a
-    read-only mount, a folder held open by another program, a permission the
-    account does not have, ``shutil.rmtree`` raises with only the name of the
-    first file it could not remove. The reviewer sees
-
-        [Errno 1] Operation not permitted: 'sub-001_acq-001_asl_32float.nii.gz'
-
-    which names a file they did not choose, in a folder they were not told
-    about, for an operation they did not know was happening. The failure is
-    real and worth surfacing; the message is not.
-    """
+    """Delete a previous extraction of the same submission, with a clear error on failure."""
     try:
         shutil.rmtree(final_dir)
     except OSError as exc:
@@ -822,21 +638,10 @@ def _replace_previous_extraction(final_dir: Path) -> None:
 def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
     """Return the inner directory if *staged_dir* is just a single wrapper folder.
 
-    Many submission ZIPs wrap everything in one named folder
-    (e.g. ``Lena_ASL_osipi_named/`` containing ``input/`` and ``results/maps/``).
-    After extraction that produces a redundant nesting level.  This detects the
-    case so the caller can promote the inner folder up to the submission root.
-
     Returns the inner directory only when *staged_dir* contains exactly one
-    entry, that entry is a directory, and its name is NOT a structural subdir
-    (``input``/``results``/…). Returns None otherwise (nothing to unwrap).
-
-    A folder that names a participant, site or repeat is never redundant. A ZIP
-    of one participant extracts to a single ``P01/`` directory, which looks
-    exactly like a wrapper and is not one: promoting its contents discarded the
-    participant, and all eighteen files then failed as unidentifiable. The
-    wrapper this exists for carries no information; ``P01`` carries the only
-    thing that says whose scans these are.
+    entry, that entry is a directory, and its name is not a structural subdir
+    (``input``/``results``/...) or a participant, site or repeat folder.
+    Returns None otherwise.
     """
     try:
         entries = [e for e in staged_dir.iterdir()]
@@ -854,11 +659,7 @@ def _redundant_wrapper(staged_dir: Path) -> Optional[Path]:
 
 
 def _names_an_identity_level(directory: Path) -> bool:
-    """Whether this directory name carries scan identity rather than nothing.
-
-    Defers to the same parser used everywhere else, so "what P01 means" is
-    decided in one place.
-    """
+    """Whether this directory name carries scan identity rather than nothing."""
     from osipi_pipeline.ingestion.identity_parser import parse_directory_identity
 
     identity = parse_directory_identity((directory.name, "_"))
@@ -866,20 +667,7 @@ def _names_an_identity_level(directory: Path) -> bool:
 
 
 def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
-    """One-level wrapper-unwrap: check if wrapper_dir itself is a batch container.
-
-    Only called when exactly one top-level directory exists.  Does NOT recurse
-    further, so three-level nesting is treated as a single submission.
-
-    Returns None (single submission) if:
-    - fewer than 2 inner directories are found, OR
-    - ALL inner directories look like structural subdirectories of one submission
-      (e.g. ``input/``, ``results/``, ``maps/``, see ``_is_structural_layout``).
-
-    Includes all inner directories that contain any files, not just those with
-    NIfTI files: so that incomplete submissions are detected and can fail
-    validation rather than being silently skipped.
-    """
+    """One-level wrapper-unwrap: check if wrapper_dir itself is a batch container."""
     try:
         inner_dirs = sorted(d for d in wrapper_dir.iterdir() if d.is_dir())
     except PermissionError:
@@ -898,12 +686,7 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
     if _is_structural_layout(submission_dirs):
         return None
 
-    # Participants are not submissions. The DCE challenge lead's synthetic
-    # submission is one team's work laid out as P01..P10. Splitting it per
-    # participant produced ten "submissions" whose paths then began at site_1/,
-    # so the participant could no longer be determined and every file failed
-    # with INCOMPLETE_ARTIFACT_IDENTITY. The submission was fine; the carve had
-    # discarded the level that identified it.
+    # A participant-level layout (P01..P10) is one submission, not a batch.
     if _is_participant_layout(submission_dirs):
         return None
 
@@ -911,16 +694,7 @@ def _check_inner_batch(wrapper_dir: Path) -> Optional[List[Path]]:
 
 
 def _auto_extract_single_zip(directory: Path) -> None:
-    """Extract ZIP file(s) in a directory if no NIfTI files are present yet.
-
-    Used by ``finalize_imported_dir`` to unwrap Zenodo records that consist of
-    one or more ZIP archives alongside non-NIfTI content (e.g. README.md).
-
-    Extraction is skipped when:
-    - The directory contains no ZIP files.
-    - NIfTI files are already present (the record may already be unpacked).
-    - A ZIP file is corrupt or would exceed extraction limits (silently skipped).
-    """
+    """Extract ZIP file(s) in a directory if no NIfTI files are present yet."""
     try:
         all_items = [f for f in directory.iterdir() if f.is_file()]
     except PermissionError:
@@ -978,16 +752,7 @@ def _should_skip_path(filename: str) -> bool:
 
 
 def _safe_extract_zip(zf: zipfile.ZipFile, target_dir: Path) -> Tuple[int, int]:
-    """Extract ZIP safely, skipping junk files and enforcing size/count limits.
-
-    Returns ``(file_count, extracted_bytes)``.
-    Raises ``ValueError`` if any configured limit is exceeded.
-    """
-    # Validate the member topology before writing anything. ZIPs can contain a
-    # file called ``node`` followed by ``node/child`` (or the reverse), which
-    # otherwise raises an unhandled filesystem exception halfway through an
-    # upload. Case-folding and Unicode normalization make collision handling
-    # consistent across Linux, macOS, and Windows filesystems.
+    """Extract ZIP safely, skipping junk files and enforcing size/count limits."""
     planned: List[Tuple[zipfile.ZipInfo, Path]] = []
     path_kinds: dict[str, str] = {}
     for member in zf.infolist():

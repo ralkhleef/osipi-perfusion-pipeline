@@ -1,15 +1,4 @@
-"""The header check as a reviewer actually sees it.
-
-``tests/test_header_check.py`` covers the comparison itself. This file covers
-the step after it: the check was computed and stored on the row for a while
-before anything rendered it, so a flipped submission was caught internally and
-never mentioned to the person reviewing it. These tests fail if that happens
-again in either output format.
-
-The two formats are built from one model, so the rows are asserted on the
-model where possible and on the rendered HTML where the rendering is the
-thing at risk.
-"""
+"""The header check as a reviewer actually sees it."""
 
 from __future__ import annotations
 
@@ -187,14 +176,7 @@ def test_the_model_builds_with_no_reference_data_at_all(blinded):
 # ── The warning fires on the exact string the model emits ─────────────────
 
 def test_both_renderers_watch_for_the_verdict_the_model_actually_produces():
-    """A parity check between the model and the two things that read it.
-
-    Both renderers show an extra warning when a row reads "Geometry differs".
-    They compare against that literal, so if the model's wording is ever
-    changed on its own the warning stops appearing and nothing else breaks:
-    the table still renders, every existing test still passes, and the one
-    case the check exists for goes quiet. This ties the three together.
-    """
+    """A parity check between the model and the two things that read it."""
     repo = Path(__file__).resolve().parents[1]
     model = _header_check_model([_summary(_flipped_check())], blinded=True)
     verdict = model["header_check_rows"][0][-1]

@@ -1,11 +1,4 @@
-"""Safe, local challenge-configuration lifecycle for reviewer handoff.
-
-The active repository YAML remains the single source of truth.  This service
-adds a non-destructive workflow around it: construct and test an in-memory
-candidate, preview a human-readable diff, save an immutable local version,
-and only then activate it. Private assets and history are kept
-under ignored ``data/`` paths.
-"""
+"""Safe, local challenge-configuration lifecycle for reviewer handoff."""
 
 from __future__ import annotations
 
@@ -194,9 +187,6 @@ def candidate_rules(payload: dict[str, Any]) -> tuple[str, dict[str, Any], dict[
         raise ValueError("At least one required map must be selected.")
     spec["required_maps"] = required
     spec["optional_maps"] = optional
-    # ``expected_maps`` is the legacy warning list, not a synonym for optional.
-    # Preserve its current intent while ensuring every newly-required map is
-    # represented and every now-unused map is removed.
     used = set(required + optional)
     expected = [str(item).lower() for item in spec.get("expected_maps") or []]
     spec["expected_maps"] = [item for item in expected if item in used]
@@ -241,14 +231,7 @@ def candidate_rules(payload: dict[str, Any]) -> tuple[str, dict[str, Any], dict[
 
 
 def _identified(items: Any) -> Optional[dict[str, dict]]:
-    """A list of objects keyed by ``id``, or None if it is not one.
-
-    ``maps`` and ``required_artifacts`` are lists whose order carries no
-    meaning; identity lives in the ``id`` field. Treating them as opaque made
-    the preview report a single change containing both entire lists, which is
-    how a reviewer ends up reading serialized JSON to find out that one map
-    changed state.
-    """
+    """A list of objects keyed by ``id``, or None if it is not one."""
     if not isinstance(items, list) or not items:
         return None
     if not all(isinstance(item, dict) and "id" in item for item in items):
@@ -289,24 +272,13 @@ def preview_configuration(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _asset_roots(challenge: str) -> list[Path]:
-    """The folders reference assets may live in, best first.
-
-    These are deliberately the same three roots backend/scoring.py searches.
-    While this function knew only about the challenge-scoped layout, the panel
-    reported zero reference maps at the same time as the pipeline was happily
-    scoring against files in the flat one. That is the worst kind of wrong:
-    quiet, and about the single thing the panel exists to report.
-    """
+    """The folders reference assets may live in, best first (same roots as backend/scoring.py)."""
     base = paths.REFERENCE_DATA_DIR
     return [base / challenge, base / "reference", base]
 
 
 def _asset_files(challenge: str) -> list[tuple[str, Path]]:
-    """Every asset across all three layouts, each file reported once.
-
-    Dotfiles are skipped so the ingestion manifests that sit beside the data
-    are not counted as reference maps.
-    """
+    """Every asset across all three layouts, each file reported once."""
     result: list[tuple[str, Path]] = []
     seen: set[Path] = set()
     for root in _asset_roots(challenge):
@@ -358,8 +330,6 @@ def asset_status(challenge_type: str) -> dict[str, Any]:
             kind: sum(1 for item in items if item["kind"] == kind)
             for kind in _ASSET_DIRS
         },
-        # Where an upload would put each kind. Shown when a kind is empty, so
-        # the answer to "where do I put mine" is on screen either way.
         "upload_folders": {
             kind: f"data/reference_data/{challenge}/{directory}/"
             for kind, directory in _ASSET_DIRS.items()
@@ -398,6 +368,115 @@ def store_private_asset(challenge_type: str, asset_kind: str, filename: str, con
     staged.replace(target)
     return {"stored": True, "asset": {"kind": kind, "name": safe_name, **inspected}}
 
+
+_SITE_IN_NAME = re.compile(r"(?:^|[_\-.])(site[_\-]?\d+)(?=[_\-.]|$)", re.I)
+_JUNK_PARTS = {"__macosx", ".ds_store"}
+
+
+def _clean_relative_path(relative_path: str) -> Optional[Path]:
+    """A safe relative path inside the upload, or None for junk files."""
+    parts = [part for part in str(relative_path or "").replace("\\", "/").split("/") if part not in ("", ".")]
+    if not parts or any(part == ".." for part in parts):
+        raise ValueError(f"Unsafe path in upload: {relative_path!r}.")
+    if any(part.lower() in _JUNK_PARTS or part.startswith("._") for part in parts):
+        return None
+    return Path(*parts)
+
+
+def _classify_asset(relative: Path, source_folder: str, asset_kind: str) -> str:
+    kind = str(asset_kind or "auto").strip().lower()
+    if kind in _ASSET_DIRS:
+        return kind
+    if kind != "auto":
+        raise ValueError("asset_kind must be auto, reference, mask, or measured_signal.")
+    words = " ".join([source_folder, *relative.parts]).lower()
+    if "mask" in words or "roi" in relative.name.lower():
+        return "mask"
+    if "measured" in words or "signal" in words:
+        return "measured_signal"
+    return "reference"
+
+
+def _placed_path(kind: str, relative: Path) -> Path:
+    """Where a file goes inside the asset folder; masks named by site go under that site."""
+    if kind == "mask" and len(relative.parts) == 1:
+        match = _SITE_IN_NAME.search(relative.name)
+        if match:
+            site = re.sub(r"[_\-]", "", match.group(1).lower()).replace("site", "site_")
+            return Path(site) / relative.name
+    return relative
+
+
+def store_private_folder(
+    challenge_type: str,
+    asset_kind: str,
+    source_folder: str,
+    entries: list[tuple[str, bytes]],
+) -> dict[str, Any]:
+    """Store a folder of private NIfTI assets, keeping participant/site/scan folders.
+
+    ``entries`` holds (path relative to the selected folder, file bytes). With
+    ``asset_kind="auto"`` masks are recognised by name or folder and everything
+    else is stored as reference data. Identical files already present are
+    skipped; a different file at the same path is reported, never overwritten.
+    """
+    challenge = _challenge_id(challenge_type)
+    root = paths.REFERENCE_DATA_DIR / challenge
+    planned: list[tuple[str, Path, bytes, str]] = []
+    skipped: list[str] = []
+    for relative_path, content in entries:
+        relative = _clean_relative_path(relative_path)
+        if relative is None:
+            continue
+        if not relative.name.lower().endswith((".nii", ".nii.gz")):
+            skipped.append(str(relative))
+            continue
+        if len(content) > 1024 * 1024 * 1024:
+            raise ValueError(f"{relative} exceeds the 1 GB local upload limit.")
+        kind = _classify_asset(relative, source_folder, asset_kind)
+        target = root / _ASSET_DIRS[kind] / _placed_path(kind, relative)
+        planned.append((kind, target, content, str(relative)))
+
+    added: list[dict[str, Any]] = []
+    unchanged: list[str] = []
+    conflicts: list[str] = []
+    unreadable: list[str] = []
+    for kind, target, content, label in planned:
+        if target.exists():
+            if target.read_bytes() == content:
+                unchanged.append(label)
+            else:
+                conflicts.append(label)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        suffix = ".nii.gz" if target.name.lower().endswith(".nii.gz") else ".nii"
+        with tempfile.NamedTemporaryFile(
+            dir=target.parent, prefix=".asset-", suffix=suffix, delete=False
+        ) as handle:
+            handle.write(content)
+            staged = Path(handle.name)
+        inspected = _inspect_nifti(staged)
+        if not inspected.get("readable"):
+            staged.unlink(missing_ok=True)
+            unreadable.append(label)
+            continue
+        staged.replace(target)
+        added.append({
+            "kind": kind,
+            "path": str(target.relative_to(paths.REFERENCE_DATA_DIR)),
+            "shape": inspected.get("shape"),
+        })
+
+    counts = {kind: sum(1 for item in added if item["kind"] == kind) for kind in _ASSET_DIRS}
+    return {
+        "stored": bool(added),
+        "added": added,
+        "counts": counts,
+        "unchanged": unchanged,
+        "conflicts": conflicts,
+        "unreadable": unreadable,
+        "skipped": skipped,
+    }
 
 def test_configuration(payload: dict[str, Any]) -> dict[str, Any]:
     checks: list[dict[str, str]] = []

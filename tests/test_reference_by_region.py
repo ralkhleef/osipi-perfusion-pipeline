@@ -1,16 +1,4 @@
-"""Comparison against ground truth, broken down by region.
-
-Both challenge leads asked for this and the report did not show it. The
-scorer had computed it per mask for a while, but the only place it appeared
-was an appendix that is off by default, so a reader saw the whole-image bias
-and nothing else.
-
-The difference is not cosmetic. On the challenge lead's own ASL data the
-whole-image CBF bias is +0.83, which reads as close agreement, while grey
-matter is +7.99 and white matter is -4.20: averaged over the brain the two
-nearly cancel. These tests pin the rows, and pin the whole image staying
-alongside them so that cancellation is visible rather than inferred.
-"""
+"""Comparison against ground truth, broken down by region."""
 
 from __future__ import annotations
 
@@ -86,7 +74,6 @@ def test_every_row_has_one_cell_per_header() -> None:
 
 
 def test_all_the_requested_metrics_are_present() -> None:
-    """Lena asked for bias and CoV per region; MAE and RMSE came with it."""
     headers = _reference_by_region_model([summary(LENA)], blinded=True)["reference_region_headers"]
     for column in ("Bias", "MAE", "RMSE", "Error CoV", "Voxels"):
         assert column in headers
@@ -95,7 +82,6 @@ def test_all_the_requested_metrics_are_present() -> None:
 # ── What must not appear ──────────────────────────────────────────────────
 
 def test_a_region_that_was_not_compared_is_omitted() -> None:
-    """A row of blanks would read as a result of zero."""
     maps = [{
         "detected_map_type": "cbf",
         "whole_map": metrics(),

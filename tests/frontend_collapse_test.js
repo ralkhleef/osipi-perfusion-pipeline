@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * Collapsible sections on Score & Preview.
- *
- * Step 5 is the longest page in the app: two tables, a preview grid, a
- * reference comparison and a technical drawer. A reviewer who has read a
- * section wants it out of the way.
- *
- * The part worth testing is not that the sections fold, HTML does that. It
- * is that folding sticks. The panel is rebuilt with innerHTML every time an
- * async status resolves, so a plain <details> forgets its state and springs
- * back open on its own a second or two after being closed. That reads as the
- * app fighting the reviewer, and it is invisible in any static check of the
- * markup, so _foldAttrs and the toggle listener are exercised for real here.
- *
- * Run: node tests/frontend_collapse_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -44,9 +28,6 @@ function extractFunction(name) {
   throw new Error(`unbalanced braces in ${name}`);
 }
 
-/* ── The remembering, run for real ────────────────────────────────────────
-   A stub document that records the one capture-phase listener the module
-   registers, so a toggle can be replayed against the genuine handler. */
 const listeners = [];
 const sandbox = {
   console,
@@ -68,9 +49,6 @@ const toggle = listeners.find((l) => l.type === "toggle");
 
 console.log("\nThe listener is wired the only way that works");
 check("something listens for toggle", !!toggle, "no toggle listener registered");
-/* The sandbox above calls _watchFolds itself, so it proves the function
-   works without proving anything calls it. Deleting the call left every
-   check here passing and every fold in the app forgetful. */
 check("the module registers it on load",
   /^_watchFolds\(\);$/m.test(appJs),
   "the handler exists but nothing ever hooks it up");
@@ -105,9 +83,6 @@ check("a third is independent again", sandbox._collapsedFolds.size === 2,
   [...sandbox._collapsedFolds].join(","));
 
 console.log("\nUnrelated details on the page are left alone");
-/* Technical Details and the per-map mask tables are plain <details> with no
-   fold key. Recording them would be harmless but tracking a growing set of
-   things nobody asked to persist is how this kind of state rots. */
 const before = sandbox._collapsedFolds.size;
 toggle.fn({ target: { dataset: {}, open: false } });
 toggle.fn({ target: null });
@@ -116,8 +91,6 @@ check("a details with no fold key is ignored",
   sandbox._collapsedFolds.size === before, `${before} -> ${sandbox._collapsedFolds.size}`);
 
 console.log("\nEvery foldable section actually asks to be remembered");
-/* A section converted to <details> but rendered without _foldAttrs would
-   look right and quietly reset on every redraw, which is the whole bug. */
 const foldTags = appJs.match(/<details[^>]*\bsdc-fold\b[^>]*>/g) || [];
 check("the Score & Preview folds exist", foldTags.length >= 4, `${foldTags.length} found`);
 foldTags.forEach((tag) => {
@@ -128,17 +101,11 @@ foldTags.forEach((tag) => {
 ["qc-results", "map-previews", "reference-comparison"].forEach((key) => {
   check(`section keyed '${key}'`, appJs.includes(`_foldAttrs("${key}")`));
 });
-/* The preview section is rendered from two places, the normal path and the
-   error path. Only one of them having a key means the fold survives success
-   and forgets on failure. */
 check("both renders of the preview section use the same key",
   (appJs.match(/_foldAttrs\("map-previews"\)/g) || []).length === 2,
   "the error path would reopen a section the reviewer closed");
 
 console.log("\nThe headers are summaries, not divs with a click handler");
-/* A <summary> is keyboard reachable and announced as a disclosure for free.
-   A div with a click handler is neither, and that is the usual way this gets
-   built. */
 const sdcHeadDivs = (appJs.match(/<div class="sdc-head">/g) || []).length;
 check("no folding section left a div header behind", sdcHeadDivs === 0,
   `${sdcHeadDivs} still present`);
@@ -160,20 +127,12 @@ check("the default triangle is suppressed",
 check("the arrow rotates when open",
   /qc-fold\[open\] > summary::after \{ transform: rotate\(90deg\); \}/.test(css));
 
-/* Found by rendering it, not by reading it. `.step-shell .pg-card-header`
-   sets the rule and the margin with !important, so the closed-state reset
-   lost silently and a folded card kept a line along its bottom edge with a
-   band of empty card under it. Two things follow, and both are load-bearing. */
 const closedCard = (css.match(
   /\.qc-fold:not\(\[open\]\) > summary\.pg-card-header \{[^}]*\}/) || [""])[0];
 check("the closed card cancels the rule under its header",
   /border-bottom: none !important/.test(closedCard), closedCard);
 check("and the gap the margin would leave",
   /margin-bottom: 0 !important/.test(closedCard), closedCard);
-/* The other half of the same lesson: whatever this file says about the
-   header's padding either loses to that !important rule or has to fight it,
-   and either way a folding card ends up inset differently from a plain one.
-   So it says nothing, and the two line up by construction. */
 const foldSummary = (css.match(/\.qc-fold > summary \{[^}]*\}/) || [""])[0];
 check("the fold does not restate the card header's padding",
   !/padding/.test(foldSummary), foldSummary);

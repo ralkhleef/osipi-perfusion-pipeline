@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * What the Configuration Manager says you changed.
- *
- * The panel used to acknowledge nothing. You could switch a map from required
- * to unused, close the section, and the page looked exactly as before; the
- * only way to confirm a click had registered was to save a version and read it
- * back. The comparison below is what replaced that, and its whole value is in
- * being specific: "CBF: Not used to Required" answers "did I click the right
- * thing", where a count of changes does not.
- *
- * `_configurationChanges` reads two module-level snapshots, so the two
- * snapshot helpers are stubbed here and the diff is driven directly. That
- * keeps the assertions on the wording an organiser actually reads.
- *
- * Run: node tests/frontend_config_changes_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -60,8 +44,6 @@ vm.runInContext([
   "let _draft = null;",
   "function _configurationSnapshot() { return _draft; }",
   "function setPair(before, after) { _configurationBaseline = before; _draft = after; }",
-  // const declarations stay in the script scope rather than landing on the
-  // sandbox object, so the section list is handed over deliberately.
   "function sections() { return CONFIG_SECTIONS; }",
 ].join("\n"), sandbox);
 
@@ -90,9 +72,6 @@ function diff(mutate) {
 }
 
 const texts = (changes) => changes.map((c) => c.text);
-// A mutation that stops a change being detected leaves this empty. Returning
-// "" rather than undefined keeps the suite reporting every remaining case
-// instead of dying on the first one.
 const first = (changes) => texts(changes)[0] || "";
 const sectionOf = (changes) => (changes[0] || {}).section || "";
 
@@ -178,10 +157,6 @@ check("a number typed as a string is not a change",
   diff((c) => { c.datasets.clinical.participants = 5; }).length === 0);
 
 console.log("\nEvery change is filed somewhere the panel renders");
-// _refreshConfigurationChanges only lists sections present in CONFIG_SECTIONS,
-// so a change filed under an unknown name is counted and never shown. That is
-// worse than not detecting it, because the count says something is pending and
-// the list cannot say what.
 const KNOWN = new Set(sandbox.sections().map(([id]) => id));
 const everySection = [
   (c) => { c.maps[0].state = "required"; },

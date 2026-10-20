@@ -37,9 +37,6 @@ from pathlib import Path
 
 from osipi_pipeline.validation.models import ValidationIssue
 
-#: The order BIDS fixes for filename entities. A file may use any subset, but
-#: the ones it does use have to appear in this sequence, which is what makes a
-#: name mechanically parseable rather than merely readable.
 ENTITY_ORDER: tuple[str, ...] = (
     "sub", "ses", "task", "acq", "ce", "trc", "stain", "rec", "dir",
     "run", "mod", "echo", "flip", "inv", "mt", "part", "proc", "hemi",
@@ -204,12 +201,7 @@ def _check_file(path: Path, root: Path, severity: str) -> list[ValidationIssue]:
 
 
 def validate_bids_structure(root: str | Path, *, severity: str = "warning") -> list[ValidationIssue]:
-    """Check the BIDS layout and naming of ``root``.
-
-    ``severity`` decides whether findings are advisory or blocking, so a
-    challenge can adopt BIDS gradually rather than rejecting every submission
-    on the day it is switched on.
-    """
+    """Check the BIDS layout and naming of ``root``."""
     path = Path(root)
     if not path.is_dir():
         return []
@@ -230,13 +222,7 @@ def validate_bids_structure(root: str | Path, *, severity: str = "warning") -> l
 
 
 def looks_like_bids(root: str | Path) -> bool:
-    """Whether a folder is plausibly a BIDS dataset.
-
-    Used so that a challenge can enable the checks without them firing on
-    every submission that simply does not use BIDS: a folder with neither a
-    description nor a subject directory is not an invalid BIDS dataset, it is
-    not one at all, and saying otherwise would be noise.
-    """
+    """Whether a folder is plausibly a BIDS dataset."""
     path = Path(root)
     if not path.is_dir():
         return False

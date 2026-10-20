@@ -1,24 +1,8 @@
-"""Participants are not submissions.
+"""Participant folders (P01..P10) form one submission, not a batch.
 
-The DCE challenge lead's synthetic submission is one team's work laid out as
-``P01`` through ``P10``. Batch detection treated every top-level directory as a
-separate submission, so it became ten of them, and each one's paths then began
-at ``site_1/``. The participant level had been discarded by the carve, so it
-could no longer be determined, and every file failed with
-INCOMPLETE_ARTIFACT_IDENTITY. Nothing was wrong with the submission.
-
-The distinction that has to hold is between a batch of separate submissions,
-which really is several teams::
-
-    batch_upload/Team_A/  Team_B/
-
-and one submission covering many participants::
-
-    submission/P01/  P02/
-
-Getting this wrong in the other direction would be worse: a real batch merged
-into one submission would score several teams together. So the tests below
-pin both directions.
+A batch has team folders (``batch_upload/Team_A/  Team_B/``); one submission
+has participant folders (``submission/P01/  P02/``). Otherwise every file fails
+with INCOMPLETE_ARTIFACT_IDENTITY. Both directions are tested.
 """
 
 from __future__ import annotations
@@ -41,9 +25,6 @@ def _dirs(tmp_path: Path, names: list[str]) -> list[Path]:
 
 @pytest.mark.parametrize("names", [
     ["P01", "P02"],
-    # Sites and repeats are inside a submission too. Recognising only
-    # participants meant a submission uploaded one participant at a time still
-    # carved on its sites, and the identity broke exactly as before.
     ["site_1", "site_2", "site_3"],
     ["scan_1", "scan_2"],
     ["ses-01", "ses-02"],
@@ -103,7 +84,6 @@ def _submission_tree(root: Path, participants: list[str]) -> None:
 
 
 def test_ten_participants_stay_one_submission(tmp_path) -> None:
-    """The shape of the real thing, and the bug this file exists for."""
     from services.ingest_service import detect_batch_boundaries
     root = tmp_path / "extracted"
     root.mkdir()
@@ -113,7 +93,6 @@ def test_ten_participants_stay_one_submission(tmp_path) -> None:
 
 
 def test_a_wrapper_around_participants_is_also_one_submission(tmp_path) -> None:
-    """Her ZIP has a ``submission/`` wrapper, so the inner path matters too."""
     from services.ingest_service import detect_batch_boundaries
     root = tmp_path / "extracted"
     (root / "submission").mkdir(parents=True)
@@ -134,12 +113,7 @@ def test_a_wrapper_with_participants_and_reference_is_one_submission(tmp_path) -
 
 
 def test_one_participants_folder_uploaded_alone(tmp_path) -> None:
-    """Uploading P01 on its own, to avoid waiting for all sixty scans.
-
-    Its top level is then site_1, site_2, site_3, which recognising only
-    participants did not catch, so it carved into three "submissions" whose
-    paths began at scan_1 and every file lost its site.
-    """
+    """Uploading P01 on its own, to avoid waiting for all sixty scans."""
     from services.ingest_service import detect_batch_boundaries
     root = tmp_path / "extracted"
     for site in ("site_1", "site_2", "site_3"):
@@ -152,7 +126,6 @@ def test_one_participants_folder_uploaded_alone(tmp_path) -> None:
 
 
 def test_a_genuine_batch_is_still_split(tmp_path) -> None:
-    """The regression that would matter most: several teams scored as one."""
     from services.ingest_service import detect_batch_boundaries
     root = tmp_path / "extracted"
     root.mkdir()

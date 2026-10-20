@@ -1,7 +1,4 @@
 "use strict";
-// ─────────────────────────────────────────────────────────────────────────────
-// OSIPI Perfusion Challenge review interface
-// ─────────────────────────────────────────────────────────────────────────────
 
 const API = window.location.origin;
 
@@ -147,41 +144,11 @@ function getRadio(name) {
   return checked ? checked.value : null;
 }
 
-/* ── Tooltips that are not clipped by the card they sit in ────────────────
-
-   Every "?" in the app opens its bubble with CSS alone: absolutely positioned
-   against the button. That works until the button is inside something with
-   `overflow: hidden`, which is every card in this interface, because each one
-   clips its children to its own rounded corners. The bubble is then cut off at
-   the card edge, and near the top of a card it is cut off entirely -- a help
-   affordance that shows nothing when pressed, which is worse than none.
-
-   Raising z-index does not help: an ancestor's overflow clips regardless of
-   stacking. The only fix that is not "remove overflow from sixty containers
-   and accept whatever else leaks out" is to take the bubble out of the
-   document flow entirely while it is open. `position: fixed` is measured
-   against the viewport, so no ancestor can clip it.
-
-   The CSS placement is left alone and remains the fallback: if this script
-   never runs, tooltips behave exactly as they did before.
-*/
 
 const _TOOLTIP_GAP = 9;
 const _TOOLTIP_EDGE = 12;
 const _tooltipHome = new WeakMap();
 
-/* While a bubble is open it is moved to <body>.
-
-   `position: fixed` alone is not enough. It escapes `overflow: hidden`, but any
-   ancestor carrying a `transform`, `filter` or `will-change` becomes the
-   containing block for fixed descendants, and this interface has several
-   (hover lifts, the progress rail). A bubble inside one is positioned against
-   that element rather than the viewport, which is how one of them ended up
-   ninety pixels below the fold while its inline `top` said 477.
-
-   Re-parenting to <body> removes every ancestor at once. The bubble is put
-   back where it came from on hide, so the markup a reader inspects, and the
-   CSS-only fallback if this script never runs, are both unchanged. */
 function _showTooltip(host) {
   const bubble = host.querySelector(".tooltip-text")
     || _tooltipHome.get(host)?.node;
@@ -202,8 +169,6 @@ function _showTooltip(host) {
   bubble.style.right = "auto";
   bubble.style.transform = "none";
   bubble.style.maxWidth = "";
-  // Outside the host, `:hover .tooltip-text` no longer matches, so visibility
-  // is driven directly.
   bubble.style.opacity = "1";
   bubble.style.visibility = "visible";
   bubble.style.pointerEvents = "none";
@@ -213,9 +178,6 @@ function _showTooltip(host) {
   bubble.style.maxWidth = `${Math.min(bubble.offsetWidth, room.width - _TOOLTIP_EDGE * 2)}px`;
   const box = bubble.getBoundingClientRect();
 
-  // Below by default. Above only when below would run off the bottom and there
-  // is genuinely more room up top, so a bubble never covers the control it
-  // explains unless it has to.
   const below = anchor.bottom + _TOOLTIP_GAP;
   const above = anchor.top - _TOOLTIP_GAP - box.height;
   const fitsBelow = below + box.height <= room.height - _TOOLTIP_EDGE;
@@ -439,16 +401,38 @@ async function hydrateAppConfig() {
   }
 }
 
+function _formatElapsed(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+const _loadingTimers = new WeakMap();
+
+function _stopLoadingTimer(btn) {
+  const timer = _loadingTimers.get(btn);
+  if (timer) clearInterval(timer);
+  _loadingTimers.delete(btn);
+}
+
 function setLoading(btn, loading, label) {
   if (!btn) return;
   const nextLabel = label || btn.dataset.idleLabel || btn.textContent.trim();
+  _stopLoadingTimer(btn);
   if (loading) {
     if (!btn.dataset.idleHtml) btn.dataset.idleHtml = btn.innerHTML;
     btn.dataset.idleLabel = nextLabel;
     btn.disabled = true;
     btn.classList.add("btn-loading");
     btn.setAttribute("aria-busy", "true");
-    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${escapeHtml(nextLabel)}…`;
+    btn.innerHTML = `<span class="spinner" aria-hidden="true"></span>${escapeHtml(nextLabel)}…`
+      + `<span class="btn-elapsed" aria-hidden="true"></span>`;
+    const started = Date.now();
+    _loadingTimers.set(btn, setInterval(() => {
+      if (!btn.isConnected) return _stopLoadingTimer(btn);
+      const seconds = (Date.now() - started) / 1000;
+      const slot = btn.querySelector(".btn-elapsed");
+      if (slot && seconds >= 3) slot.textContent = _formatElapsed(seconds);
+    }, 1000));
     return;
   }
 
@@ -495,8 +479,8 @@ function basenameOnly(value) {
 
 function cleanSubmissionName(value, fallback) {
   const raw = basenameOnly(value || fallback || "Submission");
-  const noArchive = raw.replace(/\.(zip|tar|gz|tgz)$/i, "");
-  return noArchive || "Submission";
+  const noArchive = raw.replace(/\.(zip|tar|gz|tgz)$/i, "").replace(/\s*\(folder\)$/i, "").trim();
+  return noArchive || (fallback ? cleanSubmissionName(fallback) : "Submission");
 }
 
 function originalSubmissionName(sub, fallback) {
@@ -645,9 +629,7 @@ function submissionCounts(item) {
   };
 }
 
-// What the submission covers, e.g. "Clinical + Synthetic". Derived from
-// resolved scan identity, not from how many map types were detected:
-// a DCE submission holding Ktrans, vp and ve is complete, not "Mixed/Other".
+// Datasets the submission covers, e.g. "Clinical + Synthetic".
 function datasetDisplay(item) {
   const names = Object.keys(submissionCounts(item).scansByDataset);
   if (!names.length) return "";
@@ -658,9 +640,6 @@ function datasetDisplay(item) {
     .join(" + ");
 }
 
-// Dataset coverage is the most useful scope label. For older or unscoped
-// results, keep a specific map name but never expose detector placeholders
-// such as "Mixed/Other" or "Unknown" in the reviewer-facing summary.
 function validationScopeDisplay(item) {
   const datasets = datasetDisplay(item);
   if (datasets) return datasets;
@@ -827,9 +806,6 @@ function _closeFilterMenus() {
   });
 }
 
-// Open a filter menu as a fixed-position overlay so it is never clipped by the
-// card / step scroll container, and clamp it inside the viewport (right edge +
-// height). Applies to every filter dropdown (Status / Map / Sort / …).
 function _positionFilterMenu(btn, menu) {
   menu.classList.add("filter-menu--floating");
   const r = btn.getBoundingClientRect();
@@ -843,24 +819,6 @@ function _positionFilterMenu(btn, menu) {
   menu.style.setProperty("--fm-left", `${Math.round(left)}px`);
   menu.style.setProperty("--fm-min-w", `${Math.round(r.width)}px`);
   menu.style.setProperty("--fm-max-h", `${Math.round(maxH)}px`);
-}
-
-function _dateWithinFilter(value, filter) {
-  if (!filter || filter === "all") return true;
-  if (!value) return false;
-  const dt = new Date(value);
-  if (Number.isNaN(dt.getTime())) return false;
-  const now = Date.now();
-  const ageMs = now - dt.getTime();
-  const day = 24 * 60 * 60 * 1000;
-  const limits = {
-    "24h": day,
-    "7d": 7 * day,
-    "1m": 31 * day,
-    "1q": 92 * day,
-    "1y": 366 * day,
-  };
-  return ageMs <= (limits[filter] || Infinity);
 }
 
 function _handleFilterSelection(group, value) {
@@ -1032,26 +990,12 @@ function simplifyMessage(item) {
   if (lower.includes("dockerfile") || lower.includes("code file"))
     return "No code files detected";
 
-  // Messages read better whole. The issue list wraps them cleanly, so only
-  // genuinely runaway text, a validator that pastes an entire path list,
-  // needs a cap, and that cap breaks at a word boundary instead of mid-word
-  // ("… because datase…" told the reader nothing).
   if (text.length > 240) {
     const cut = text.slice(0, 240);
     const boundary = cut.lastIndexOf(" ");
     return (boundary > 160 ? cut.slice(0, boundary) : cut).trimEnd() + "…";
   }
   return text;
-}
-
-function formatDate(iso) {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return iso.slice(0, 16).replace("T", " "); }
 }
 
 function buildSuccessChecks(data, errCount, warnCount, detectedMapType) {
@@ -1094,9 +1038,6 @@ const STEP_TITLES = {
   export:   { title: "Export",             sub: "Download reports, CSV, and JSON summaries" },
 };
 
-// The top session-summary card and the numbered workflow stepper were removed;
-// the Upload card is now the first content. Internal step state lives in the
-// hidden wf-btn-* holders + goToStep()/hash navigation below.
 
 function _normalizeWorkflowStep(step, fallback = "upload") {
   if (step === "summary") return fallback === "export" ? "export" : "score";
@@ -1188,9 +1129,6 @@ function _hideLegacyWizardFooter() {
 }
 
 function _stepActionHost(step) {
-  // Action rows pin to the bottom of the step card itself (after the
-  // .step-body internal scroll region) so they stay visible on the
-  // contained one-screen layouts of Steps 2-6.
   return el(`step-${step}`);
 }
 
@@ -1206,14 +1144,6 @@ function _syncInactiveStepActions(activeStep) {
   });
 }
 
-/* ── Run Analysis, next to the step it belongs to ─────────────────────────
-   The button lived in the status card at the top of QC and Preview, while the
-   action a reviewer is looking for lives in the footer beside Continue to
-   Export. Pressing it produced no visible change up there, so it read as
-   broken even when it had run.
-
-   The element is moved rather than duplicated, so its click handler, loading
-   state and label come along with it and there is still exactly one button. */
 function _placeRunAnalysisInFooter(step, row) {
   const button = el("btn-score-all");
   if (!button || !row) return;
@@ -1279,37 +1209,7 @@ function _resetToUploadAndClearPersistence() {
   clearWizardState();
 }
 
-// The session-card "Start New" button was removed. Start New remains available
-// on the Validate step header (#new-btn) and the Export step.
 
-/* ── Running the steps that need no decision ───────────────────────────────
-
-   Of the six steps, three ask the reviewer for nothing. Validation, the run
-   step and QC all compute from what was already uploaded, and clicking
-   through them is not review, it is just clicking. The project was asked for
-   a pipeline rather than a form, and the pipeline underneath is already
-   headless: scripts/preflight.py drives the whole thing through the API with
-   no interface at all. Only the interface insisted on being driven by hand.
-
-   So after a clean validation the wizard carries itself to QC and stops
-   there, because QC is the first screen with something worth looking at.
-
-   What it will not do is skip a decision. Validation errors stop it, because
-   a failed submission is exactly the thing a person is here to see. Warnings
-   do not stop it: a warning is advisory by definition, and halting on one
-   would mean halting on almost every real submission, which is how an
-   automatic thing teaches people to ignore it. */
-
-/* ── Which sections on Score & Preview are folded shut ─────────────────────
-   The panel is rebuilt with innerHTML on every status resolution, so a
-   details element there forgets whether it was open the moment anything
-   async lands. Collapsing a section and watching it spring back open two
-   seconds later reads as the app fighting you, so the closed ones are
-   remembered here by key and reapplied on each render.
-
-   Held in memory, not localStorage: it is a reading position within one
-   review, not a setting, and a reviewer opening a different submission
-   should get the sections back. */
 const _collapsedFolds = new Set();
 
 /* Emits the attributes for a foldable section. Open unless the reviewer
@@ -1318,9 +1218,6 @@ function _foldAttrs(key) {
   return ` data-fold="${key}"${_collapsedFolds.has(key) ? "" : " open"}`;
 }
 
-/* `toggle` does not bubble, so this listens in the capture phase. Registered
-   once on the document rather than per render, because the elements it
-   watches are replaced wholesale each time the panel redraws. */
 function _watchFolds() {
   document.addEventListener("toggle", (event) => {
     const target = event.target;
@@ -1344,9 +1241,6 @@ function _setAutoAdvance(on) {
 
 let _autoAdvanceCancelled = false;
 
-/* Why the wizard should stop and hand back to a person, or null to carry on.
-   Returning a sentence rather than a boolean so the interface can say which
-   of these happened instead of just going quiet. */
 function _autoAdvanceBlocker(results) {
   const list = results || [];
   if (!list.length) return "Nothing was validated.";
@@ -1368,18 +1262,53 @@ function _autoAdvanceNote(results) {
     : ` ${warned} submissions have warnings worth reading.`;
 }
 
+let _autoAdvanceHideTimer = null;
+
+let _autoAdvanceButton = null;
+
+function _clearAutoAdvanceTimers() {
+  if (_autoAdvanceHideTimer) clearTimeout(_autoAdvanceHideTimer);
+  _autoAdvanceHideTimer = null;
+}
+
+function _releaseAutoAdvanceButton() {
+  if (_autoAdvanceButton && _autoAdvanceButton.classList.contains("btn-loading")) {
+    setLoading(_autoAdvanceButton, false);
+  }
+  _autoAdvanceButton = null;
+}
+
+// Busy progress shows on the current step's main button; only messages that
+// need reading (a stop or an error) use the floating notice.
 function _showAutoAdvance(text, { busy = true } = {}) {
   const host = el("auto-advance");
   const label = el("auto-advance-text");
   const stop = el("auto-advance-stop");
+  _clearAutoAdvanceTimers();
+  if (busy) {
+    if (host) host.hidden = true;
+    if (!_autoAdvanceButton) {
+      const button = [...document.querySelectorAll("[data-step-action-row] .step-action-primary")]
+        .find((candidate) => candidate.offsetParent !== null);
+      if (button) {
+        _autoAdvanceButton = button;
+        setLoading(button, true, "Preparing results");
+      }
+    }
+    return;
+  }
+  _releaseAutoAdvanceButton();
   if (!host || !label) return;
   label.textContent = text;
   host.hidden = false;
-  host.dataset.busy = busy ? "true" : "false";
-  if (stop) stop.style.display = busy ? "" : "none";
+  host.dataset.busy = "false";
+  if (stop) stop.style.display = "none";
+  _autoAdvanceHideTimer = setTimeout(_hideAutoAdvance, 8000);
 }
 
 function _hideAutoAdvance() {
+  _clearAutoAdvanceTimers();
+  _releaseAutoAdvanceButton();
   const host = el("auto-advance");
   if (host) host.hidden = true;
 }
@@ -1404,11 +1333,8 @@ async function _autoAdvanceToQc(results) {
     if (_autoAdvanceCancelled) return;
 
     unlockStep("export");
+    _hideAutoAdvance();
     goToStep("score");
-    _showAutoAdvance(
-      `Ran validation, the run step and QC for you.${_autoAdvanceNote(results)}`,
-      { busy: false });
-    setTimeout(_hideAutoAdvance, 9000);
   } catch (error) {
     // A failure here must not strand the reviewer on a half-built step, so
     // it says what happened and leaves them where they can act.
@@ -1460,11 +1386,6 @@ function _advanceWizardStep(step) {
   goToStep(cfg.next);
 }
 
-/* Two primary-looking buttons share this footer: Run Analysis and Continue to
-   Export. Nothing said which came first, and Continue is the one that reads as
-   the next step, so it was pressed first and the export described a run that
-   had not happened. The line below names the order, stops saying it once the
-   run has happened, and does not demand a run that has nothing to do. */
 let _scoreRunIsLive = false;
 
 function _scoreAlreadyRan() {
@@ -1475,12 +1396,8 @@ function _scoreAlreadyRan() {
 }
 
 function _scoreStepGuidance() {
-  if (!_scoreRunIsLive) {
-    return "QC and previews are ready.";
-  }
-  return _scoreAlreadyRan()
-    ? "Analysis complete."
-    : "Run analysis before continuing.";
+  if (!_scoreRunIsLive || _scoreAlreadyRan()) return "";
+  return "Run analysis before continuing.";
 }
 
 function _syncStepActionRow(step) {
@@ -1529,16 +1446,10 @@ function _syncStepActionRow(step) {
   };
 
   const blockedReason = canProceed ? "" : _stepBlockedReason(step);
-  const readyGuidance = {
-    index: "Ready to validate.",
-    validate: "Validation complete.",
-    run: "Ready for QC review.",
-    score: _scoreStepGuidance(),
-    export: "Clears this review and returns to Upload.",
-  };
+  const readyGuidance = { score: _scoreStepGuidance() };
   if (guidance) {
     guidance.textContent = blockedReason ? "" : (readyGuidance[step] || "");
-    guidance.hidden = !!blockedReason;
+    guidance.hidden = !guidance.textContent;
   }
   if (blockedReason) {
     primaryBtn.title = blockedReason;
@@ -1570,9 +1481,6 @@ function _updateWizardFooter(step) {
   _syncStepActionRow(step);
 }
 
-// True when a submission source/file is selected on the Upload step (so the
-// in-card "Upload and Detect" button can enable). Edit mode (re-validate
-// an existing submission) is always ready.
 function _canUpload() {
   if (state.mode === "edit" && state.submissionId) return true;
   const source = getSourceType();
@@ -1601,7 +1509,7 @@ function _syncUploadSubmitButton() {
     submitBtn.title = "";
     submitBtn.removeAttribute("aria-label");
     delete submitBtn.dataset.disabledReason;
-    if (guidance) guidance.textContent = "Ready to upload.";
+    if (guidance) guidance.textContent = "";
   }
 }
 
@@ -1614,11 +1522,6 @@ function _isStepReady(step) {
       return !!(batchState.uploadData || batchState.validationData || state.submissionId);
     case "validate": {
       const results = batchState.validationData ? (batchState.validationData.results || []) : [];
-      // Warnings never block. Continue → Run is enabled when at least one
-      // submission has ZERO blocking errors (r.passed === error_count === 0).
-      // Run-readiness (runnable vs result-only) is decided on the Run step, so
-      // it must NOT gate the action row here, a result-only submission that passed
-      // with warnings still has 0 errors and must be allowed to continue.
       return results.some((r) => r.passed || issueCount(r, "errors") === 0);
     }
     case "run": {
@@ -1708,18 +1611,9 @@ function _syncWfNav() {
   _syncCompactProgress();
 }
 
-function _stepUnlocked(step) {
-  if (step === "upload") return true;
-  const btn = el(`wf-btn-${step}`);
-  return !!btn && !btn.disabled;
-}
-
 // Per-step progress-status helpers were removed together with the numbered
 // stepper that consumed them.
 
-// The visible numbered stepper was removed. This is kept as a safe no-op so the
-// many progress-refresh call sites stay valid; step gating/navigation is handled
-// by the hidden wf-btn-* state holders, _syncWfNav(), and goToStep().
 function _syncCompactProgress() { /* stepper removed, no visible progress nav to sync */ }
 
 // Wire wf-nav button clicks
@@ -1834,13 +1728,6 @@ function resetAll() {
   if (ctErr) ctErr.textContent = "";
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Session persistence  (localStorage key: osipi_pipeline_session_v1)
-// Rules:
-//   • No auto-restore, banner shown, user must click "Restore"
-//   • 24 h expiry, expired sessions are silently discarded
-//   • No files, logs, CSVs, or large arrays stored, IDs and summaries only
-// ══════════════════════════════════════════════════════════════════════════════
 
 function _generateSessionId() {
   return `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1946,15 +1833,6 @@ function clearSessionState() {
   Object.keys(_scoreCache).forEach((k) => delete _scoreCache[k]);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Wizard reload persistence  (sessionStorage key: osipi_wizard_state_v1)
-// Auto-restores the active step on browser reload. Lightweight state only,
-// step id, submission/batch ids, and form basics. No files, no results.
-// The full session snapshot stays in localStorage (saveSessionState above);
-// this layer only decides WHERE to resume and whether that is still valid.
-// URL hash (#upload/#review/#validate/#run/#score/#export) is kept
-// in sync and, when valid, wins over the saved step on load.
-// ══════════════════════════════════════════════════════════════════════════════
 
 const WIZARD_KEY = "osipi_wizard_state_v1";
 const STEP_TO_HASH = { upload: "upload", index: "review", validate: "validate", run: "run", score: "score", export: "export" };
@@ -2076,9 +1954,6 @@ function _collectScoringSnapshot() {
   }));
 }
 
-// ── Restore chip (replaces the old full-width banner) ────────────────────────
-// The old #restore-banner is kept in the DOM for smoke-test compatibility but
-// is NEVER shown. All restore UI goes through #restore-chip-btn in the topbar.
 
 function showRestoreBanner(saved) {
   // Build a human-readable summary for the notice text
@@ -2194,8 +2069,6 @@ async function restoreSessionFromStorage() {
   if (savedStepIdx >= 2 && saved.validationSummary) {
     const synthData = _synthValidationData(saved.validationSummary);
     batchState.validationData = synthData;
-    // renderValidateStep may auto-advance to "run", we'll override with goToStep after
-    // fromRestore: rebuilding the step from saved state, not a fresh run.
     renderValidateStep(synthData, /*isSingleMode=*/undefined, /*fromRestore=*/true);
   }
 
@@ -2462,11 +2335,37 @@ if (fileInput) {
   });
 }
 
+const _ORGANISER_FOLDER = /(ground[_\- ]?truth|^hidden[_\- ]|^shared[_\- ]?masks?$)/i;
+
+// Organiser reference data must not be uploaded as a submission.
+function _organiserFolderProblem(files) {
+  const root = (files[0]?.webkitRelativePath || "").split("/")[0] || "";
+  if (_ORGANISER_FOLDER.test(root)) {
+    return `"${root}" is organiser reference data. Add it in step 5 under Reviewer settings, `
+      + "Private reference assets, and select the submission folder here.";
+  }
+  const inner = new Set();
+  files.forEach((file) => {
+    const parts = (file.webkitRelativePath || "").split("/");
+    if (parts.length > 2 && _ORGANISER_FOLDER.test(parts[1])) inner.add(parts[1]);
+  });
+  if (!inner.size) return "";
+  return `"${root}" contains organiser reference data (${[...inner].sort().join(", ")}). `
+    + "Select only the submission folder inside it.";
+}
+
 const folderInput = el("folder-input");
 if (folderInput) {
   folderInput.addEventListener("change", () => {
     const files = Array.from(folderInput.files || []);
+    folderInput.value = "";
     if (!files.length) return;
+    const problem = _organiserFolderProblem(files);
+    if (problem) {
+      const srcErr = el("source-error");
+      if (srcErr) srcErr.textContent = problem;
+      return;
+    }
     const name = files[0].webkitRelativePath
       ? files[0].webkitRelativePath.split("/")[0]
       : "Folder";
@@ -2494,9 +2393,6 @@ function setLocalFiles(files, label) {
   _syncUploadSubmitButton();
 }
 
-// ── Selected upload file card ────────────────────────────────────────────────
-// Rendered below the dropzone once a file/folder/ZIP is picked. Shows name,
-// size, kind tag, live status, and a real (never faked) progress bar.
 
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
@@ -2705,9 +2601,6 @@ async function uploadLocalFiles() {
   };
 
   const fd = new FormData();
-  /* Sent only when the submitter actually answered. An unanswered question is
-     recorded as unanswered; defaulting it to "no" would put words in their
-     mouth, and defaulting it to "yes" would raise an error they never earned. */
   const methodsAnswer = getRadio("methods_document");
   if (methodsAnswer) fd.append("methods_document", methodsAnswer);
   if (isSingleZip) {
@@ -2779,6 +2672,7 @@ async function runValidation() {
 // ── Submit button status ──────────────────────────────────────────────────────
 
 function showSubmitStatus(type, msg) {
+  if (type !== "error") { clearSubmitStatus(); return; }
   const s = el("submit-status");
   if (!s) return;
   s.style.display = "block";
@@ -2893,7 +2787,7 @@ async function handleSubmit() {
         source_type: source,
         submissions: [{
           submission_id: importData.submission_id,
-          display_name: cleanSubmissionName(importData.original_filename || importData.submission_id),
+          display_name: cleanSubmissionName(importData.original_filename, importData.submission_id),
           nifti_count:   importData.nifti_count ?? null,
           detected_parameter_map_type: importData.detected_parameter_map_type || "Unknown",
           has_run_instructions: importData.has_run_instructions ?? importData.has_dockerfile ?? null,
@@ -2911,9 +2805,7 @@ async function handleSubmit() {
       batchState.selectedIds = new Set([importData.submission_id]);
 
       const desc = el("batch-header-desc");
-      if (desc) {
-        desc.textContent = "1 submission detected.";
-      }
+      if (desc) desc.textContent = "";
 
       renderBatchTable(fakeUpload.submissions);
       unlockStep("index");
@@ -3056,9 +2948,6 @@ function _wireIndexFilterBar() {
   }
 }
 
-// ── Compact submission rows: map-type labels + metadata line ─────────────────
-// Display-only resolution of configured map labels from existing metadata and
-// NIfTI filenames. Backend detection is unchanged.
 
 function _mapTypesFromFilenames(names) {
   const found = [];
@@ -3082,24 +2971,12 @@ function _subMapTypesLabel(sub) {
   return t;
 }
 
-// Uppercase challenge key for a submission ("" when unknown), used to group
-// the Review list by challenge so ASL/DCE/DSC stay visually separate.
 function _subChallengeKey(sub) {
   const c = sub && (sub.confirmed_challenge_type || sub.challenge_type || sub.detected_challenge_type);
   return c && String(c).toLowerCase() !== "unknown" ? String(c).toUpperCase() : "";
 }
 
 // One-line row summary: challenge, map labels, and map count.
-/* How many parameter maps a submission has, and how many files it has, are
-   different numbers. A DCE scan carries two maps and one 4-D fitted curve, so
-   a six-scan submission is 12 maps and 18 files. Labelling the file count
-   "18 maps" tells a reviewer the submission contains half again as many maps
-   as it does, and the count they are checking against the challenge is the
-   one that is wrong.
-
-   The backend already separates them. This prefers its counts and falls back
-   to the file count only when they are absent, which is what old cached
-   session state looks like. */
 function _mapCountLabel(sub) {
   const counts = sub && sub.counts;
   const maps = counts && Number(counts.parameter_maps);
@@ -3113,16 +2990,12 @@ function _mapCountLabel(sub) {
   }
   const files = Number(sub && sub.nifti_count);
   if (!Number.isFinite(files)) return null;
-  // Deliberately says "files" rather than "maps": without the breakdown the
-  // honest label is the one that does not claim to know what they are.
   return `${files} file${files === 1 ? "" : "s"}`;
 }
 
 function _subRowMetaLine(sub) {
   // Collapsed row shows only the essentials; NIfTI count and readiness live in Details.
   const niftiCount = sub.nifti_count;
-  // Before validation the row only has the ingestion-detected challenge; after
-  // validation it has the confirmed challenge_type. Prefer the confirmed one.
   const detected = sub.detected_challenge_type && String(sub.detected_challenge_type).toLowerCase() !== "unknown"
     ? sub.detected_challenge_type : null;
   const parts = [
@@ -3236,10 +3109,6 @@ function _resolveRowMapTypes(sub, rowEl) {
     .catch(() => { /* display-only enhancement, ignore failures */ });
 }
 
-// ── Submission Structure popover ─────────────────────────────────────────────
-// A compact, click-to-open folder tree of a submission's contents. Built as a
-// best-effort tree from the submission's known file paths via the existing
-// /api/nifti-files endpoint (no backend changes). Reused by Review + Validate.
 
 const _structureCache = {};   // submissionId -> array of relative file paths
 
@@ -3340,9 +3209,6 @@ function toggleStructurePopover(sid, trigger) {
     .catch(() => { pop.innerHTML = renderSubmissionStructure(null); });
 }
 
-// Reusable markup for the trigger + (empty, lazy-loaded) popover.
-// The popover id is unique per instance (same submission can appear in both
-// the Review and Validate lists), while the tree lookup stays relative.
 let _structureUid = 0;
 function _structureControlHtml(sid) {
   const safeSid = escapeHtml(sid || "");
@@ -3370,24 +3236,6 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeStructurePopovers();
 });
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Shared worklist component system
-// ------------------------------------------------------------------------------
-// ONE renderer used by every step (Review, Validate, Run, Score, Map Preview,
-// Export). Each row produces the SAME structure, only the content differs:
-//   <row>
-//     [checkbox]
-//     <worklist-icon>
-//     <worklist-main>
-//       <worklist-row-head> <worklist-title> [<worklist-status>] </>
-//       [lead]  [worklist-meta]  [extraMain]  [worklist-details]
-//     </worklist-main>
-//     [worklist-actions]
-//     [chevron]
-//   </row>
-// Legacy per-step class names are passed through as slot aliases so existing
-// CSS/JS hooks keep working, but the STRUCTURE comes from here only.
-// ══════════════════════════════════════════════════════════════════════════════
 
 function _wlCls(base, extra) { return extra ? `${base} ${extra}` : base; }
 
@@ -3488,9 +3336,6 @@ function renderFileRow(o = {}) {
   });
 }
 
-// Shared section header/body. _renderCollapsibleSection delegates here so the
-// section-row / section-title / section-count / section-actions structure is
-// produced in exactly one place.
 function renderSection(o = {}) {
   const key = o.key || "section";
   const open = true;
@@ -3517,17 +3362,6 @@ function _worklistRowEl(opts) {
 
 // Render detected submissions as compact list rows. Selection state and
 // action-row validation both work through batchState.selectedIds.
-/* ── Correcting how an upload was grouped ──────────────────────────────────
-
-   A ZIP containing P01 through P10 is either one submission covering ten
-   participants or ten separate submissions. Nothing in the files tells those
-   apart, so detection has to guess. The guess is usually right, and when it is
-   wrong the consequences are bad in a quiet way: split a single submission and
-   every file loses the participant level that identified it; merge a real
-   batch and several teams get scored as one.
-
-   So the decision is shown, with the folder names that drove it, and can be
-   changed in one click by the person who knows which it is. */
 
 function _groupingModel(submissions) {
   const list = submissions || [];
@@ -3599,9 +3433,6 @@ async function _regroupSubmissions(mode, ids) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(apiErrorText(data.detail, "Regrouping failed."));
-    // Re-enter the review step from the new grouping, rather than patching the
-    // old rows: everything downstream keys off submission ids, and half of the
-    // ids no longer exist.
     const submissions = data.submissions
       || [{ submission_id: data.submission_id, ...data }];
     batchState.uploadData = { ...(batchState.uploadData || {}), submissions };
@@ -3677,8 +3508,8 @@ function renderBatchTable(submissions) {
   const selectedCount = safeSubmissions.filter((s) => batchState.selectedIds.has(s.submission_id)).length;
   const summaryText = safeSubmissions.length > 1
     ? `${safeSubmissions.length} submissions · ${selectedCount} selected`
-    : `${safeSubmissions.length} submission detected`;
-  if (desc && safeSubmissions.length > 0) desc.textContent = summaryText;
+    : "";
+  if (desc) desc.textContent = summaryText;
   const countEl = el("index-section-count");
   if (countEl) countEl.textContent = String(safeSubmissions.length);
   const summaryEl = el("index-section-summary");
@@ -3908,9 +3739,6 @@ if (batchNewBtn) {
 
 // ── Step 2→3: Validate ────────────────────────────────────────────────────────
 
-// Build {submission_id: challenge} from ingestion's per-submission detection.
-// Only confidently detected challenges are included; unknown/blank are omitted
-// so the backend falls back to the globally selected challenge for those.
 function _perSubmissionChallengeMap(submissionIds) {
   const subs = batchState.uploadData?.submissions || [];
   const byId = Object.fromEntries(subs.map((s) => [s.submission_id, s]));
@@ -3935,10 +3763,6 @@ async function runBatchValidation(submissionIds) {
   };
   disableBtns(true);
   if (actionNext) setLoading(actionNext, true, "Validating");
-  // No "Validating N submissions" banner. The button already says Validating
-  // and spins, so the banner repeated it a few centimetres away and pushed the
-  // list down while it did. The element is kept for failures, which the button
-  // cannot express.
   if (statusEl) statusEl.style.display = "none";
 
   try {
@@ -3958,9 +3782,6 @@ async function runBatchValidation(submissionIds) {
     const teamNamesMap  = sharedTeam  ? Object.fromEntries(submissionIds.map((id) => [id, sharedTeam]))  : null;
     const emailsMap     = sharedEmail ? Object.fromEntries(submissionIds.map((id) => [id, sharedEmail])) : null;
 
-    // Per-submission challenge overrides from ingestion detection, so a mixed
-    // batch validates each submission under its own challenge. Only include
-    // confidently detected challenges; the rest fall back to the selected one.
     const challengeTypesMap = _perSubmissionChallengeMap(submissionIds);
 
     const res  = await fetch(`${API}/api/validate-batch`, {
@@ -4024,11 +3845,6 @@ function _renderSingleAsValidate(data) {
       errors:               data.errors  || [],
       warnings:             data.warnings || [],
       nifti_count:          data.nifti_count ?? state.detection.nifti_count,
-      // Carried through rather than dropped. Rebuilding the row from a subset
-      // of the response meant a single submission fell back to the raw file
-      // count and reported 18 maps where the backend had said 12 maps and 6
-      // fitted signals. A batch of one showed different numbers from a batch
-      // of two, for no reason a reader could see.
       counts:               data.counts || null,
       map_type:             data.map_type || state.detection.detected_parameter_map_type,
       has_run_instructions: data.has_run_instructions ?? data.has_dockerfile ?? null,
@@ -4053,20 +3869,6 @@ function _renderSingleAsValidate(data) {
 
 const _reviewFilter = { filter: "all", search: "", map: "all", sort: "status", showAll: false };
 
-// ── Issue summary helper, one brief text (not a list) ───────────────────────
-function _issueSummary(errors, warnings) {
-  function trunc(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
-  if (errors.length === 0 && warnings.length === 0)
-    return { html: `<span class="vr-issue-ok">No issues</span>` };
-  if (errors.length > 0) {
-    const main = errors.length === 1 ? trunc(errors[0], 32) : `${errors.length} errors`;
-    const extra = warnings.length > 0 ? ` · ${warnings.length}w` : "";
-    return { html: `<span class="vr-issue-err" title="${escapeHtml(errors.join("; "))}">${escapeHtml(main + extra)}</span>` };
-  }
-  const main = warnings.length === 1 ? trunc(warnings[0], 32) : `${warnings.length} warnings`;
-  return { html: `<span class="vr-issue-warn" title="${escapeHtml(warnings.join("; "))}">${escapeHtml(main)}</span>` };
-}
-
 function _validationIssueDetails(r) {
   const rNiftiCount = Number(r.nifti_count ?? 0);
   const withoutSpuriousNoOutput = (msgs) =>
@@ -4077,12 +3879,6 @@ function _validationIssueDetails(r) {
     .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
   const checks = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
   return { errors, warnings, checks, niftiCount: rNiftiCount };
-}
-
-function _validationReason(errors, warnings) {
-  if (errors.length > 0) return errors[0];
-  if (warnings.length > 0) return warnings[0];
-  return "No issues found.";
 }
 
 function _renderValidationFilterBar() {
@@ -4266,10 +4062,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
         ? "This submission already includes result maps, so no processing run is needed."
         : "Indicates whether result maps are included or processing must be run.";
 
-      // Detail content
-      // Role-based counts, computed once by the backend. The old line showed
-      // the raw NIfTI file count, which counted fitted signals and organiser
-      // reference data as parameter maps.
       const countSummary = submissionCountSummary(r);
       const niftiLine = countSummary
         ? `<div class="vr-detail-nifti">${escapeHtml(countSummary)}</div>`
@@ -4291,9 +4083,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
              <summary>Technical details</summary>
              <ul class="issue-list" style="margin-top:6px">${checks.map((m) => `<li class="is-pass">${escapeHtml(m)}</li>`).join("")}</ul>
            </details>` : "";
-      // The run-readiness chip already says "Result maps provided"; repeating
-      // it here made three mentions of one fact. The note carries only the
-      // consequence.
       const resultOnlyNote = isResultOnly
         ? `<p class="vr-result-only-note">No processing run is needed.</p>`
         : "";
@@ -4303,11 +4092,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
       // No inline exec section on Validate, execution happens in Run step only
       const execHtml = "";
 
-      // Collapsed row: one short meta line. Everything else moves into Details.
-      // Dataset coverage beats a detected map-type label here: "Clinical +
-      // Synthetic" says what the submission contains, where "Mixed/Other"
-      // only said that more than one map type was found, which is the
-      // expected state for a challenge that defines several.
       const scopeLabel = validationScopeDisplay(r);
       const counts = submissionCounts(r);
       const mapCount = counts.parameterMaps || Number(rNiftiCount) || 0;
@@ -4317,9 +4101,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
         `${escapeHtml(mapCount)} parameter map${mapCount === 1 ? "" : "s"}`,
         warnings.length ? `${warnings.length} item${warnings.length === 1 ? "" : "s"} to review` : null,
       ].filter(Boolean).join(" · ");
-      // The submission-type chip and the run-readiness chip both read
-      // "Result maps provided" for a result-only submission, so the card
-      // said it twice. Show the type chip only when it adds something.
       const typeChipHtml = subType.label === runTxt ? "" :
         `<span class="validation-meta-with-help">${escapeHtml(subType.label)} ${helpTooltip(subTypeHelp, "Submission type help")}</span>`;
       const detailChips = `
@@ -4399,11 +4180,6 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
 
   goToStep("validate");
 
-  // Only after a validation the reviewer just ran. This function is also the
-  // one that rebuilds the step from saved state on reload, and carrying the
-  // wizard forward there fought the restore's own navigation: two things
-  // deciding which step you land on, from a state that was only a summary.
-  // Reloading is not an instruction to run anything.
   if (!fromRestore) {
     _autoAdvanceToQc(results).catch(() => {});
   }
@@ -4735,6 +4511,21 @@ function _refreshRunProgress() {
 }
 
 // Build/refresh the entire run step table from batchState.validationData
+function _erRunStatusHtml(execStatus, runnable) {
+  switch (execStatus) {
+    case "not-run":     return runnable
+                          ? `<span class="status-chip status-chip-neutral rs-badge rs-ready">Ready to review</span>`
+                          : `<span class="status-chip status-chip-neutral rs-na">—</span>`;
+    case "cannot-run":  return `<span class="status-chip status-chip-neutral rs-badge rs-cannot">Needs review</span>`;
+    case "result-only": return `<span class="status-chip status-chip-neutral rs-badge rs-skipped">Maps ready</span>`;
+    case "running":     return `<span class="status-chip status-chip-neutral rs-badge rs-running">Processing…</span>`;
+    case "passed":      return `<span class="status-chip status-chip-neutral rs-badge rs-pass">Processing complete</span>`;
+    case "failed":      return `<span class="status-chip status-chip-danger rs-badge rs-fail">Needs review</span>`;
+    case "timed-out":   return `<span class="status-chip status-chip-neutral rs-badge rs-timeout">Needs review</span>`;
+    default:            return `<span class="status-chip status-chip-neutral rs-na">—</span>`;
+  }
+}
+
 async function renderRunStep() {
   const results = batchState.validationData ? (batchState.validationData.results || []) : [];
 
@@ -4921,22 +4712,6 @@ async function renderRunStep() {
 
   _applyRunFilters();
   _refreshWizardFooter();
-}
-
-// Render the run-status cell content for a given execStatus + runnable
-function _erRunStatusHtml(execStatus, runnable) {
-  switch (execStatus) {
-    case "not-run":     return runnable
-                          ? `<span class="status-chip status-chip-neutral rs-badge rs-ready">Ready to review</span>`
-                          : `<span class="status-chip status-chip-neutral rs-na">—</span>`;
-    case "cannot-run":  return `<span class="status-chip status-chip-neutral rs-badge rs-cannot">Needs review</span>`;
-    case "result-only": return `<span class="status-chip status-chip-neutral rs-badge rs-skipped">Maps ready</span>`;
-    case "running":     return `<span class="status-chip status-chip-neutral rs-badge rs-running">Processing…</span>`;
-    case "passed":      return `<span class="status-chip status-chip-neutral rs-badge rs-pass">Processing complete</span>`;
-    case "failed":      return `<span class="status-chip status-chip-danger rs-badge rs-fail">Needs review</span>`;
-    case "timed-out":   return `<span class="status-chip status-chip-neutral rs-badge rs-timeout">Needs review</span>`;
-    default:            return `<span class="status-chip status-chip-neutral rs-na">—</span>`;
-  }
 }
 
 function _erRunMetaText(execStatus, runnable) {
@@ -5218,10 +4993,6 @@ function renderExecResult(data) {
   return `<div class="exec-steps">${step1}${step2}${step3}${step4}</div>`;
 }
 
-function renderExecError(msg) {
-  return `<div style="color:var(--error,#c00);font-size:13px;padding:6px 0">${escapeHtml(msg)}</div>`;
-}
-
 // ── Core execution function (used by both validate-row buttons and run-step buttons) ──
 
 // Helper: find a run card by submission ID (works for both .run-sub-card and legacy .er-row-wrap)
@@ -5269,25 +5040,6 @@ async function runBatchExec(btn, subId, challenge) {
     if (btn) setLoading(btn, false, idleLabel || "Run code in Docker");
     _syncCompactProgress();
   }
-}
-
-function _updateValCardExecBadge(subId, newStatus) {
-  const wraps = [...document.querySelectorAll("#batch-submissions-list .br-row-wrap")]
-    .filter((w) => w.dataset.subId === subId);
-  wraps.forEach((wrap) => {
-    wrap.dataset.execStatus = newStatus;
-    // Update all .val-card-exec-badge inside this row (both row cell and detail)
-    wrap.querySelectorAll(".val-card-exec-badge").forEach((badge) => {
-      badge.style.display = "";
-      if (newStatus === "passed") {
-        badge.className = "br-badge badge-exec-pass val-card-exec-badge";
-        badge.textContent = "Ran";
-      } else {
-        badge.className = "br-badge badge-exec-fail val-card-exec-badge";
-        badge.textContent = "Run failed";
-      }
-    });
-  });
 }
 
 // Delegation: Run buttons in validate-step inline exec panels (.batch-exec-btn)
@@ -5395,7 +5147,7 @@ function _updateValCardExecBadge(subId, newStatus) {
 
     const timeoutSeconds = parseInt(el("execute-timeout")?.value || "300", 10) || 300;
     executeBtn.disabled = true;
-    if (executeStatus) { executeStatus.style.display = ""; executeStatus.className = "submit-status"; executeStatus.textContent = "Building and running package…"; }
+    if (executeStatus) { executeStatus.style.display = "none"; executeStatus.textContent = ""; }
     if (executeResult) { executeResult.style.display = "none"; executeResult.innerHTML = ""; }
 
     try {
@@ -5479,21 +5231,6 @@ function _leaderboardStatusLabel(status) {
     case "reference_invalid": return "Reference invalid";
     case "no_finite_overlap": return "No finite overlap";
     default:               return status ? status.replace(/_/g, " ") : "Unknown";
-  }
-}
-
-function _leaderboardReferenceStatusLabel(status) {
-  switch (status) {
-    case "scored": return "Reference comparison available";
-    case "reference_not_available": return "Reference unavailable";
-    case "partial_reference_scoring": return "Partial reference";
-    case "not_configured":
-    case "not_ready":
-    case "":
-    case null:
-    case undefined:
-      return "Unavailable";
-    default: return _leaderboardStatusLabel(status);
   }
 }
 
@@ -5622,10 +5359,6 @@ function _filteredLeaderboardEntries() {
   return rows;
 }
 
-function _leaderboardStatusBadge(status) {
-  return `<span class="${_leaderboardStatusClass(status)}">${escapeHtml(_leaderboardStatusLabel(status))}</span>`;
-}
-
 function _leaderboardSummary(entries) {
   const rows = entries || [];
   const scored = rows.filter(_analysisComplete).length;
@@ -5749,6 +5482,11 @@ function _renderLeaderboardEntries(options = {}) {
   const countEl = el("leaderboard-count");
   const sub = el("leaderboard-sub");
   if (!card || !list || !filterBar) return;
+  const hasEntries = (_leaderboardFilter.entries || []).length > 0;
+  if (!hasEntries && !_leaderboardFilter.error) {
+    card.style.display = "none";
+    return;
+  }
   card.style.display = "";
   _syncCollapsibleSection("leaderboard", (_leaderboardFilter.entries || []).length, _leaderboardSummary(_leaderboardFilter.entries || []));
   if (!options.skipFilterBar) {
@@ -5833,6 +5571,21 @@ function _formatLeaderboardTimestamp(value) {
   };
 }
 
+function _leaderboardReferenceStatusLabel(status) {
+  switch (status) {
+    case "scored": return "Reference comparison available";
+    case "reference_not_available": return "Reference unavailable";
+    case "partial_reference_scoring": return "Partial reference";
+    case "not_configured":
+    case "not_ready":
+    case "":
+    case null:
+    case undefined:
+      return "Unavailable";
+    default: return _leaderboardStatusLabel(status);
+  }
+}
+
 async function loadLeaderboard() {
   const card = el("leaderboard-card");
   if (!card) return;
@@ -5877,9 +5630,6 @@ document.addEventListener("click", (e) => {
 // ── Step 6: Export ────────────────────────────────────────────────────────────
 
 function _syncExportStep() {
-  /* Redraw first. Availability is worked out from the current submissions and
-     analyses, and at load time there were none of either, so a row rendered
-     once at startup is frozen at "Nothing has been reviewed yet". */
   _renderExportRows();
   // Show single or batch validation export buttons based on mode
   const batchValWrap  = el("batch-export-val-wrap");
@@ -6102,9 +5852,6 @@ function _fmtMetricVal(v) {
   return (Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3)).replace(/\.?0+$/, "");
 }
 
-// Return only the numeric metric entries from a (possibly mixed) metrics object,
-// skipping strings, booleans, and nested objects/arrays. This keeps string
-// metadata (e.g. "package") out of the metrics table per OSIPI requirements.
 function _numericMetricEntries(metrics) {
   if (!metrics || typeof metrics !== "object") return [];
   return Object.entries(metrics).filter(
@@ -6134,8 +5881,6 @@ function _setScoreStepCopy({ official = false, providerName = "" } = {}) {
   /* Only the text node is rewritten. The title now carries a "?" button as a
      child, and setting textContent on the heading would delete it. */
   if (titleEl && titleEl.firstChild) titleEl.firstChild.nodeValue = "QC & Preview\n            ";
-  // The description moved into that button's tooltip; it is still the same
-  // sentence, just no longer occupying a line under every step header.
   if (descEl) descEl.textContent = official
     ? `Review QC, previews, and results from ${providerName || "the configured provider"}.`
     : "Review QC, previews, and available analyses.";
@@ -6171,17 +5916,6 @@ function _cacheScoreStatus(sid, data, row) {
   };
 }
 
-/* Canonical ROI payload for the Results Summary.
-
-   Path, verified against the real API response rather than assumed:
-     /api/scoring-status
-       -> _scorePayload(data).nifti_analysis
-       -> _scoreCache[sid].niftiAnalysis
-       -> .reference_scoring.roi_descriptive_statistics
-
-   Returns [rows, status] for the existing renderer. Both are empty when no
-   submission carries ROI data, which is what clears stale rows when a new
-   submission or a challenge without configured ROI analysis is loaded. */
 function _roiDescriptivePayload() {
   const rows = [];
   let status = null;
@@ -6370,13 +6104,6 @@ function _summaryMetric(label, value, tone = "") {
   </div>`;
 }
 
-function _summaryPanel(title, bodyHtml) {
-  return `<section class="summary-nifti-card">
-    <div class="summary-nifti-title">${escapeHtml(title)}</div>
-    <div class="summary-nifti-body">${bodyHtml}</div>
-  </section>`;
-}
-
 function _metricOrUnavailable(value, formatter = _fmtMetricVal) {
   return typeof value === "number" && isFinite(value) ? formatter(value) : "not available";
 }
@@ -6415,10 +6142,6 @@ function _previewNote() {
   return `<p class="nifti-preview-note">Open full NIfTI files in ITK-SNAP, FSLeyes, or 3D Slicer.</p>`;
 }
 
-// A preview item is a scored parameter map only when it is exactly 3-D and has
-// a recognized configured map type (CBF/ATT/…). 4-D signal/model data and
-// unrecognized files are never shown in the gallery. Prefers the backend flag;
-// falls back to shape + map type for older cached manifests.
 function _isParameterMapPreview(item) {
   if (typeof item?.is_parameter_map === "boolean") return item.is_parameter_map;
   const shape = Array.isArray(item?.shape) ? item.shape.filter(Boolean) : [];
@@ -6426,9 +6149,6 @@ function _isParameterMapPreview(item) {
   return shape.length === 3 && mt !== "" && mt !== "unknown" && mt !== "mixed/other";
 }
 
-// Display label for a non-parameter-map submitted file. The backend normally
-// supplies a configured artifact label; this challenge-neutral fallback keeps
-// older cached manifests readable without claiming that every 4-D file is ASL.
 function _nonParameterFileLabel(item) {
   if (item?.role_label) return item.role_label;
   const shape = Array.isArray(item?.shape) ? item.shape.filter(Boolean) : [];
@@ -6457,9 +6177,6 @@ function _previewGalleryIds() {
   return _previewMapOrder.filter((id) => _previewItemsById[id]?.preview_available);
 }
 
-// Compact imaging strip item: small dark-framed thumbnail (~88px), map type
-// label, filename, and two small actions (Preview / Download). The existing
-// modal keeps the large axial/coronal/sagittal views and full stats.
 function _renderPreviewCard(item) {
   const mapId = item.map_id || "";
   const mapLabel = item.detected_map_type || "Unknown map";
@@ -6778,22 +6495,14 @@ function _overallSummaryStatus(mapSummary, valTotal, valFailed, scoredCount) {
   return { state: "complete", label: "Complete", refStatus: mapSummary.referenceStatus };
 }
 
-/* How a header check verdict reads in the interface, keyed by the status the
-   scorer returns. An unrecognised status falls through to itself rather than
-   being shown as a pass. */
 const HEADER_CHECK_VERDICTS = {
   matches: "Matches reference",
   dtype_differs: "Data type differs",
   geometry_mismatch: "Geometry differs",
   not_verified: "Not verified",
-  // "Not verified" means nobody looked. This means we looked and the file
-  // would not open, which is a finding rather than an absence of one.
   unreadable: "File could not be read",
 };
 
-/* One header field for display. A field that differs shows both values,
-   because "differs" alone does not say whether a map is flipped or simply at
-   a different voxel size. Axis codes join without a separator, as LAS. */
 function _headerFieldText(field, joiner = " x ") {
   if (!field || typeof field !== "object") return "Not verified";
   if (field.matches === null || field.matches === undefined) return "Not verified";
@@ -6806,11 +6515,6 @@ function _headerFieldText(field, joiner = " x ") {
     : `${text(field.submitted)} vs ${text(field.reference)}`;
 }
 
-/* The header and orientation check for one map, as a small table.
-
-   Both challenge leads asked for this. A submission can be the right shape,
-   score plausibly, and still be flipped, in which case every number computed
-   from it is wrong in a way no comparison metric reveals. */
 function _renderHeaderCheck(check) {
   if (!check || typeof check !== "object") return "";
   const fields = check.fields && typeof check.fields === "object" ? check.fields : {};
@@ -7051,30 +6755,11 @@ function _renderProviderCard(p) {
 
 // Update the main user-facing status card based on provider status.
 // activeMode: "none" | "builtin" | "custom"
-/* ── Saying whether a run actually worked ─────────────────────────────────
-
-   Running analysis used to end in silence. The button went back to reading
-   "Run Analysis", which is exactly what it read before, and the only evidence
-   anything had happened was a table further down the page that a reviewer had
-   to know to look at. A run that failed on every submission looked the same as
-   a run that succeeded, and both looked the same as never having pressed the
-   button.
-
-   The banner below states the outcome in one line, is announced to screen
-   readers, and is cleared at the start of the next run so a stale result is
-   never mistaken for a fresh one. */
 
 function _runOutcomeHost() {
-  // Declared in index.html directly beneath the button that was just pressed.
-  // It used to be built here on demand, which meant it lived only until the
-  // next re-render of the status card.
   return el("score-run-outcome");
 }
 
-/* The popup. The banner is correct but quiet, and quiet was the original
-   complaint: nothing on screen changes enough to notice, so a completed run
-   and a click that did nothing look the same. This says so in the middle of
-   the screen and offers the next step, which is where people were heading. */
 const RUN_RESULT_HEADINGS = {
   ok: "Analysis complete",
   warn: "Analysis finished with nothing to do",
@@ -7136,18 +6821,6 @@ function _clearRunOutcome() {
   host.className = "score-run-outcome";
 }
 
-/* ── A comparison against ground truth is not a scoring provider ─────
-
-   These are two different things and only one of them needs configuring. A
-   challenge that has the organisers' reference maps and masks in place can
-   already produce bias, RMSE, error CoV and the ROI descriptive tables with no
-   provider at all, which is the state every challenge is in before a provider
-   exists.
-
-   Treating "no provider" as "nothing to run" hid that behind a dead button: a
-   reviewer with ground truth loaded pressed Run Analysis and was told there
-   was nothing for it to do, which was false. The helpers below let the Score
-   step tell the two apart, and say which one is missing. */
 
 const _REFERENCE_COMPARED_STATUSES = new Set(["available", "partial_reference_scoring"]);
 
@@ -7182,9 +6855,6 @@ function _referenceReasonText(status) {
   return `the comparison reported "${status}"`;
 }
 
-/* Summarise reference readiness across the submissions on screen. Called with
-   the /api/scoring-status payloads, which already carry the comparison result,
-   so the card knows what is runnable before anything is pressed. */
 function _referenceComparisonSummary(payloads) {
   const summary = { compared: 0, unavailable: 0, total: 0, masks: 0, reasons: [] };
   (payloads || []).forEach((data) => {
@@ -7201,26 +6871,16 @@ function _referenceComparisonSummary(payloads) {
   return summary;
 }
 
-/* One sentence describing what a run did. Counts are spelled out rather than
-   reduced to "done", because "analysed 3 of 5" and "analysed 5 of 5" are very
-   different results and a reviewer needs to notice the difference. */
 function _runOutcomeText(tally, isOfficial) {
   const noun = isOfficial ? "Scoring" : "Analysis";
-  /* Distinguished from "no submissions", because the two have different
-     remedies and telling someone to upload a submission they have already
-     uploaded is how a person concludes the button is broken. */
   const compared = tally.reference || 0;
 
-  /* No provider, but the comparison against ground truth ran. That is a real
-     result and reporting it as "nothing happened" is how a reviewer concludes
-     the button is broken while it is in fact working. */
   if (tally.unconfigured && compared) {
-    const done = [`${compared} of ${tally.total} compared against reference data`];
+    const done = [`${compared} of ${tally.total} submission${tally.total === 1 ? "" : "s"} with the reference data`];
     if (tally.failed) done.push(`${tally.failed} failed`);
     return {
       tone: tally.failed ? "err" : "ok",
-      text: `Reference comparison complete: ${done.join(", ")}. Bias, RMSE, error CoV, and ROI results are below. `
-        + `Provider analysis is optional and was not run.`,
+      text: `Compared ${done.join(", ")}. Results are below.`,
     };
   }
   if (tally.unconfigured) {
@@ -7319,11 +6979,9 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
   } else {
     if (titleEl) titleEl.textContent = "QC and previews available";
     if (previewEl) { previewEl.innerHTML = ""; previewEl.style.display = "none"; }
-    /* The old copy said only that QC and previews were available, which told a
-       reviewer what still worked but never why the rest did not. */
-    if (subEl) subEl.textContent = reason
-      ? `Reference comparison unavailable: ${reason}.`
-      : "No analysis provider or reference data is configured.";
+    if (subEl) subEl.textContent = !reason || reason === _REFERENCE_REASONS.reference_not_available
+      ? "No reference data yet. Add it under Reviewer settings → Private reference assets."
+      : `Reference comparison unavailable: ${reason}.`;
     if (badgeEl) { badgeEl.textContent = "Not set up"; badgeEl.className = "smc-badge"; }
     if (hintEl)  hintEl.textContent = "";
   }
@@ -7334,21 +6992,16 @@ function _updateScoreStatusCard(provs, activeMode, packageName, activeOfficial =
   _refreshWizardFooter();
 }
 
-/* A visible button with no click listener is the worst outcome available: it
-   looks pressable, it presses, and nothing happens, forever, with no
-   explanation. That is reachable whenever the card is on screen while nothing
-   is configured, which happens if the active configuration changes under a
-   page that is already open, for instance after an activation fails and resets
-   the provider to none.
-
-   So the button is always wired. `live` decides whether pressing it runs the
-   submissions or explains why there is nothing to run; either way the press is
-   answered. Cloning first clears any handler left by a previous render. */
 function _wireRunButton({ isOfficial, actionText, live, unconfigured, reason }) {
   const btnAll = el("btn-score-all");
   if (!btnAll) return;
+  _stopLoadingTimer(btnAll);
   const fresh = btnAll.cloneNode(true);
   fresh.disabled = false;
+  fresh.classList.remove("btn-loading");
+  fresh.removeAttribute("aria-busy");
+  delete fresh.dataset.idleHtml;
+  delete fresh.dataset.idleLabel;
   fresh.textContent = actionText;
   btnAll.replaceWith(fresh);
 
@@ -7371,7 +7024,7 @@ function _wireRunButton({ isOfficial, actionText, live, unconfigured, reason }) 
       _showRunOutcome({ scored: 0, skipped: 0, failed: 0, reference: 0, total: 0, unconfigured, reason }, isOfficial);
       return;
     }
-    setLoading(fresh, true, isOfficial ? "Scoring" : "Checking");
+    setLoading(fresh, true, isOfficial ? "Scoring" : "Running analysis");
     _clearRunOutcome();
     _initScoreProgress(subs.length);
     const tally = {
@@ -7403,9 +7056,6 @@ function _wireRunButton({ isOfficial, actionText, live, unconfigured, reason }) 
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Admin Scoring Setup Panel
-// ═══════════════════════════════════════════════════════════════════════════
 
 let _configurationManagerState = null;
 let _configurationManagerModalOpener = null;
@@ -7492,16 +7142,20 @@ function _renderConfigurationSummaries(state = _configurationManagerState) {
     scoringText += installed ? ` · ${installed.name} v${installed.version} · ${installed.ready ? "ready" : "not ready"}` : " · No compatible package selected";
   }
   const scoringSummary = el("config-summary-scoring");
-  if (scoringSummary) scoringSummary.textContent = `${scoringText}. Generic QC and compatible reference comparisons remain separate.`;
+  if (scoringSummary) scoringSummary.textContent = mode === "none" ? "No provider" : scoringText;
 
   const counts = state.assets?.counts || {};
   const assetsSummary = el("config-summary-assets");
-  if (assetsSummary) assetsSummary.textContent = `${_pluralSummary(Number(counts.reference || 0), "reference map")} · ${_pluralSummary(Number(counts.mask || 0), "mask")} · ${_pluralSummary(Number(counts.measured_signal || 0), "measured signal")}`;
+  if (assetsSummary) assetsSummary.textContent = [
+    _pluralSummary(Number(counts.reference || 0), "reference map"),
+    _pluralSummary(Number(counts.mask || 0), "mask"),
+    ...(Number(counts.measured_signal || 0) ? [_pluralSummary(Number(counts.measured_signal), "measured signal")] : []),
+  ].join(" · ");
 
   const capability = (state.capabilities || []).find((row) => row.challenge_type === editable.challenge_type);
   const capabilitiesSummary = el("config-summary-capabilities");
   if (capabilitiesSummary) capabilitiesSummary.textContent = capability
-    ? `QC and previews available for readable maps · Provider analysis ${String(capability.provider_analysis || "not configured").toLowerCase()} · Official ranking not configured`
+    ? "QC, previews and reference comparison"
     : "Capability details are not available.";
 
   const versions = state.versions || [];
@@ -7522,21 +7176,6 @@ function _renderConfigurationChallengeDetails(state) {
     <dt>Active configuration</dt><dd>${escapeHtml(active?.version_id || "Repository validation rules")}</dd>`;
 }
 
-/* ── Configuration Manager: maps and artifacts ──────────────────────────────
-
-   These panels are edited by challenge organisers, who are researchers rather
-   than developers. The earlier version asked them to keep filename aliases in
-   a comma separated textarea and gave every map an equally tall block, so the
-   one decision that actually matters, whether a map is required, was the same
-   size as reference information they rarely change.
-
-   The rewrite makes the requirement a visible three way choice, turns aliases
-   into chips so nobody has to punctuate a list correctly, and hides the rest
-   behind a disclosure. The hidden inputs are deliberate: ``config-map-state``
-   and ``config-map-aliases`` stay in the DOM with the same class names and the
-   same value format, so the code that reads a draft is untouched by any of
-   this.
-*/
 
 const MAP_STATES = [
   ["required", "Required", "A submission without this map is rejected."],
@@ -7664,13 +7303,6 @@ function _writeAliases(row) {
   if (hidden) hidden.value = chips.join(", ");
 }
 
-/* Which names a typed entry actually adds, given what is already there.
-
-   Kept free of the DOM so it can be tested directly: this is where the fiddly
-   rules live. Someone pasting "cbf, perfusion" means two names rather than
-   one, a repeat of something already listed adds nothing, and case is not a
-   distinction worth keeping since the matching that uses these is itself
-   case insensitive. */
 function _newAliases(existing, raw) {
   const seen = new Set((existing || []).map((alias) => String(alias).trim().toLowerCase()));
   const additions = [];
@@ -7803,9 +7435,6 @@ function _renderConfigurationManager(state) {
   const referenceVersion = el("config-manager-reference-version");
   if (referenceVersion) referenceVersion.value = editable.reference_dataset_version || "";
 
-  // Take the baseline after every control has been rendered, so the very
-  // first comparison is against what is actually on screen. Taking it earlier
-  // would report the initial render as a change.
   setTimeout(() => {
     _watchConfigurationChanges();
     _setConfigurationBaseline();
@@ -7862,28 +7491,13 @@ function _renderConfigurationVersions(versions) {
     </div>`).join("") : `<p>No saved versions yet. Test, preview, then save the first version.</p>`;
 }
 
-/* The three kinds of organiser file, what each is for, and the folder it goes
-   in. The folder matters most: the panel previously showed a count and a flat
-   list of names, so the obvious question, where do these live and where do I
-   put mine, had no answer anywhere on screen. */
 const ASSET_KINDS = [
-  ["reference", "Reference maps", "maps",
-   "Ground truth parameter maps. Submitted maps are compared against these."],
-  ["mask", "ROI masks", "masks",
-   "Regions to report statistics inside, such as grey matter or a lesion."],
-  ["measured_signal", "Measured signal-time curves", "signals",
-   "The measured curve, compared against a submitted modelled curve."],
+  ["reference", "Reference maps", "maps", ""],
+  ["mask", "ROI masks", "masks", ""],
+  ["measured_signal", "Measured signal-time curves", "signals", ""],
 ];
 
-/* Which scan a reference file belongs to, read off the folder it sits in.
-
-   The DCE reference set is one hundred and eighty files with three distinct
-   names between them: Ct, Ktrans and vp, repeated once per scan. Listed flat
-   they are sixty identical-looking triples, and the panel printed sixty folder
-   paths above them to compensate, which is a wall rather than an answer. */
 function _assetScanLabel(folder, name = "") {
-  // Folders are matched a whole segment at a time, so a directory called
-  // "preview" cannot be read as participant review.
   const parts = String(folder || "").split("/").filter(Boolean);
   const fromFolder = (pattern) => {
     for (const part of parts) {
@@ -7911,9 +7525,6 @@ function _assetScanLabel(folder, name = "") {
   return pieces.length ? pieces.join(" · ") : null;
 }
 
-/* The folder every one of these files is under, rather than each of them.
-   Sixty sibling paths share a root; printing the root once says the same
-   thing in one line. */
 function _assetCommonRoot(folders) {
   const lists = folders.filter(Boolean).map((folder) => String(folder).split("/").filter(Boolean));
   if (!lists.length) return "";
@@ -7937,13 +7548,104 @@ function _assetFileRow(item) {
     </li>`;
 }
 
+let _assetsAddedSinceOpen = false;
+
+function _refreshScoreStepAfterAssets() {
+  const step = el("step-score");
+  if (!step || step.hidden) return;
+  Object.keys(_scoreCache).forEach((k) => delete _scoreCache[k]);
+  // New reference data: run the analysis straight away rather than computing
+  // a preview first and the full analysis again on Run analysis.
+  const official = !!_scoreOfficialMode;
+  _wireRunButton({
+    isOfficial: official,
+    actionText: official ? "Run official scoring" : "Run analysis",
+    live: true,
+    unconfigured: !official,
+    reason: "",
+  });
+  const title = el("score-status-title");
+  if (title) title.textContent = "Running analysis";
+  const badge = el("score-status-badge");
+  if (badge) { badge.textContent = "Reference data"; badge.className = "smc-badge smc-badge--ready"; }
+  const sub = el("score-status-sub");
+  if (sub) sub.textContent = "Comparing the submission with the new reference data. This can take a few minutes.";
+  el("btn-score-all")?.click();
+}
+
+function _assetFolderStatus(message, ok = null) {
+  const target = el("config-manager-asset-folder-status");
+  if (!target) return;
+  target.className = `config-manager-results${ok === true ? " ok" : ok === false ? " err" : ""}`;
+  target.textContent = message || "";
+  target.style.display = message ? "" : "none";
+}
+
+async function _uploadPrivateAssets(files, folder, button, idleLabel) {
+  setLoading(button, true, "Adding");
+  _assetFolderStatus("", null);
+  const totals = { reference: 0, mask: 0, measured_signal: 0, unchanged: 0, conflicts: [], unreadable: [] };
+  try {
+    const batchSize = 20;
+    for (let start = 0; start < files.length; start += batchSize) {
+      const body = new FormData();
+      body.append("challenge_type", _configurationManagerChallenge());
+      body.append("asset_kind", "auto");
+      body.append("source_folder", folder || "");
+      files.slice(start, start + batchSize).forEach(({ file, path }) => {
+        body.append("relative_paths", path);
+        body.append("files", file, file.name);
+      });
+      const response = await fetch(`${API}/api/configuration-manager/assets/upload-folder`, { method: "POST", body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorText(data.detail, "Upload failed."));
+      Object.keys(data.counts || {}).forEach((kind) => { totals[kind] = (totals[kind] || 0) + data.counts[kind]; });
+      totals.unchanged += (data.unchanged || []).length;
+      totals.conflicts.push(...(data.conflicts || []));
+      totals.unreadable.push(...(data.unreadable || []));
+      const done = Math.min(start + batchSize, files.length);
+      const slot = button?.querySelector(".btn-elapsed");
+      if (slot) slot.textContent = `${done}/${files.length}`;
+    }
+    const parts = [];
+    if (totals.reference) parts.push(`${totals.reference} reference map${totals.reference === 1 ? "" : "s"}`);
+    if (totals.mask) parts.push(`${totals.mask} mask${totals.mask === 1 ? "" : "s"}`);
+    if (totals.measured_signal) parts.push(`${totals.measured_signal} signal curve${totals.measured_signal === 1 ? "" : "s"}`);
+    const problems = totals.conflicts.length + totals.unreadable.length;
+    let message = parts.length ? `Added ${parts.join(" and ")}.` : "Already added.";
+    if (totals.conflicts.length) message += ` ${totals.conflicts.length} skipped: a different file with that name exists.`;
+    if (totals.unreadable.length) message += ` ${totals.unreadable.length} could not be read.`;
+    _assetFolderStatus(message, !problems);
+    if (!problems) setTimeout(() => _assetFolderStatus("", null), 6000);
+    await _loadConfigurationManager(_configurationManagerChallenge());
+    // The comparison is rerun once, when the assets window is closed.
+    _assetsAddedSinceOpen = true;
+  } catch (error) {
+    _assetFolderStatus(error.message, false);
+  } finally {
+    setLoading(button, false, idleLabel);
+  }
+}
+
+// NIfTI files from a folder picker, with paths relative to the chosen folder.
+function _assetFolderEntries(fileList) {
+  const all = Array.from(fileList || []);
+  const folder = (all[0]?.webkitRelativePath || "").split("/")[0] || "";
+  const files = all
+    .map((file) => {
+      const parts = (file.webkitRelativePath || file.name).split("/");
+      const inner = parts[0] === folder && parts.length > 1 ? parts.slice(1) : parts;
+      return { file, path: inner.join("/") };
+    })
+    .filter(({ file, path }) => /\.nii(\.gz)?$/i.test(file.name)
+      && !path.split("/").some((part) => part.startsWith("._") || part === "__MACOSX"));
+  return { folder, files };
+}
+
 function _renderConfigurationAssets(assets) {
   const target = el("config-manager-assets-status");
   if (!target) return;
   const items = assets.items || [];
-  // Before the panel has loaded there is no challenge yet. Showing a
-  // placeholder keeps the path readable as a template; interpolating an empty
-  // string produced data/reference_data//maps/, which someone would copy.
   const challenge = String(assets.challenge_type || "").toLowerCase() || "<challenge>";
   const uploadFolders = assets.upload_folders || {};
 
@@ -7952,9 +7654,6 @@ function _renderConfigurationAssets(assets) {
     const root = _assetCommonRoot(mine.map((item) => item.folder))
       || uploadFolders[kind] || `data/reference_data/${challenge}/${folder}/`;
 
-    // Grouped by scan when the folders say which scan; otherwise one list, as
-    // before. Unreadable files lead, because they are the only rows anybody
-    // has to act on.
     const byScan = new Map();
     mine.forEach((item) => {
       const label = _assetScanLabel(item.folder, item.name) || "";
@@ -7966,8 +7665,7 @@ function _renderConfigurationAssets(assets) {
 
     let body;
     if (!mine.length) {
-      body = `<p class="cfg-asset-empty">None yet. Add one below, or copy files
-              straight into this folder.</p>`;
+      body = `<p class="cfg-asset-empty">None yet.</p>`;
     } else if (scanned) {
       body = `<div class="cfg-asset-scans">${[...byScan.entries()]
         .sort((a, b) => String(a[0]).localeCompare(String(b[0]), undefined, { numeric: true }))
@@ -7995,12 +7693,6 @@ function _renderConfigurationAssets(assets) {
         </li>`).join("")}</ul>`;
     }
 
-    /* The same controls on every kind. Reference maps, masks and measured
-       signals are the same kind of thing -- organiser files, grouped by the
-       scan they belong to -- and giving one of them a search box and grouping
-       while the others got a flat list made them look like three unrelated
-       panels. A search on nine files is not needed; a panel that behaves
-       differently from the one above it is worse. */
     const search = mine.length
       ? `<label class="cfg-asset-search">
            <span class="visually-hidden">Search ${escapeHtml(title)}</span>
@@ -8009,10 +7701,6 @@ function _renderConfigurationAssets(assets) {
          </label>`
       : "";
 
-    /* A long list starts closed: the count is in the header, so the section
-       answers "how many masks are loaded" without being opened at all. Short
-       ones stay open, because collapsing three files hides nothing and costs
-       a click. */
     const startOpen = mine.length > 0 && mine.length <= _ASSET_COLLAPSE_ABOVE;
     return `
       <details class="cfg-asset-group" data-asset-kind="${escapeHtml(kind)}"${startOpen ? " open" : ""}>
@@ -8023,7 +7711,7 @@ function _renderConfigurationAssets(assets) {
             ? `<span class="cfg-asset-bad">${unreadable.length} unreadable</span>` : ""}
         </summary>
         <div class="cfg-asset-body">
-          <p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>
+          ${purpose ? `<p class="cfg-asset-purpose">${escapeHtml(purpose)}</p>` : ""}
           <p class="cfg-asset-path"><code>${escapeHtml(root)}</code></p>
           ${search}
           <p class="cfg-asset-nomatch" hidden>Nothing matches that.</p>
@@ -8058,19 +7746,11 @@ document.addEventListener("input", (event) => {
   if (needle && group.tagName === "DETAILS") group.open = true;
 });
 
-/* Availability, read from the sentence the backend already writes.
-
-   The backend's wording is the source of truth and is not duplicated here:
-   anything that opens with "Not configured" is off, everything else is on.
-   Guessing from keywords would drift the moment the backend rephrases. */
 function _capabilityIsOn(value) {
   const text = String(value ?? "").trim().toLowerCase();
   return text !== "" && !text.startsWith("not configured") && !text.startsWith("not available");
 }
 
-/* What is left once the state has been said separately. "Available for
-   readable maps" becomes "for readable maps"; a bare "Available" leaves
-   nothing, which is correct -- there was nothing more to say. */
 function _capabilityDetail(value, on) {
   let text = String(value ?? "").trim();
   if (!on) {
@@ -8084,10 +7764,6 @@ function _capabilityDetail(value, on) {
 function _renderConfigurationCapabilities(rows) {
   const target = el("config-manager-capabilities");
   if (!target) return;
-  /* Eight rows per challenge, most of them reading "Not configured" in the
-     same grey as the ones that say something. The state is the answer here,
-     so it leads: a dot and a word tell you availability at a glance, and the
-     detail sits behind it for the rows where there is detail. */
   const CAPABILITIES = [
     ["QC & previews", "map_qc"],
     ["ROI statistics", "roi_statistics"],
@@ -8144,23 +7820,17 @@ function _closeConfigurationModal(modal = null) {
   _renderConfigurationSummaries();
   const opener = _configurationManagerModalOpener;
   _configurationManagerModalOpener = null;
+  if (_assetsAddedSinceOpen && target.id === "config-modal-assets") {
+    // New reference data: fold the settings away so the results are in view.
+    _assetsAddedSinceOpen = false;
+    const settings = el("scoring-admin-panel");
+    if (settings) settings.open = false;
+    _refreshScoreStepAfterAssets();
+    return;
+  }
   if (opener?.isConnected) opener.focus();
 }
 
-/* ── Telling an organiser what they just changed ──────────────────────────
-
-   Nothing in this panel used to acknowledge an edit. You could switch a map
-   from required to unused, close the section, and the page looked exactly as
-   it had before. The only way to find out whether a change had registered was
-   to save a version and read it back, which is a poor thing to have to do to
-   answer "did that click work".
-
-   So the loaded configuration is kept as a baseline and the draft is compared
-   against it after every interaction. The comparison produces sentences naming
-   the old and new value, not a count and not a bare "modified" flag: "CBF:
-   Not used to Required" tells an organiser whether they clicked the thing they
-   meant to. A count would not.
-*/
 
 let _configurationBaseline = null;
 
@@ -8394,9 +8064,6 @@ async function _testConfigurationManager() {
   } catch (error) { _configurationManagerShow(error.message, false); }
 }
 
-/* Field paths from the server read as code. These are what a reviewer calls
-   the same things. Anything unmatched falls through to a tidied path rather
-   than being hidden, so a new setting is still reported. */
 const PREVIEW_FIELD_LABELS = {
   "code_execution_required": "Participant code must run",
   "scoring.mode": "Analysis provider",
@@ -8526,10 +8193,6 @@ function _wireConfigurationManager() {
   });
   el("config-manager-editor")?.addEventListener("input", () => _renderConfigurationSummaries());
   el("config-manager-editor")?.addEventListener("change", () => _renderConfigurationSummaries());
-  el("config-manager-asset-file")?.addEventListener("change", (event) => {
-    const target = el("config-manager-asset-file-name");
-    if (target) target.textContent = event.target.files?.[0]?.name || "No file selected";
-  });
   el("config-manager-export")?.addEventListener("click", () => {
     window.location.href = `${API}/api/configuration-manager/export?challenge_type=${encodeURIComponent(_configurationManagerChallenge())}`;
   });
@@ -8546,22 +8209,21 @@ function _wireConfigurationManager() {
     } catch (error) { _configurationManagerShow(error.message, false); }
     event.target.value = "";
   });
-  el("config-manager-asset-upload")?.addEventListener("click", async () => {
-    const file = el("config-manager-asset-file")?.files?.[0];
-    if (!file) return _configurationManagerShow("Choose a NIfTI asset first.", false);
-    const body = new FormData();
-    body.append("challenge_type", _configurationManagerChallenge());
-    body.append("asset_kind", el("config-manager-asset-kind")?.value || "reference");
-    body.append("file", file);
-    try {
-      const response = await fetch(`${API}/api/configuration-manager/assets/upload`, { method: "POST", body });
-      const data = await response.json();
-      if (!response.ok) throw new Error(apiErrorText(data.detail, "Asset upload failed."));
-      _configurationManagerShow(`${data.asset.name} added to local private assets.`, true);
-      el("config-manager-asset-file").value = "";
-      if (el("config-manager-asset-file-name")) el("config-manager-asset-file-name").textContent = "No file selected";
-      await _loadConfigurationManager(_configurationManagerChallenge());
-    } catch (error) { _configurationManagerShow(error.message, false); }
+  el("config-manager-asset-folder-upload")?.addEventListener("click", () => el("config-manager-asset-folder")?.click());
+  el("config-manager-asset-upload")?.addEventListener("click", () => el("config-manager-asset-file")?.click());
+  el("config-manager-asset-folder")?.addEventListener("change", (event) => {
+    const picked = _assetFolderEntries(event.target.files);
+    event.target.value = "";
+    if (!picked.files.length) return _assetFolderStatus("That folder has no NIfTI files.", false);
+    _uploadPrivateAssets(picked.files, picked.folder, el("config-manager-asset-folder-upload"), "Add folder");
+  });
+  el("config-manager-asset-file")?.addEventListener("change", (event) => {
+    const files = Array.from(event.target.files || [])
+      .filter((file) => /\.nii(\.gz)?$/i.test(file.name))
+      .map((file) => ({ file, path: file.name }));
+    event.target.value = "";
+    if (!files.length) return _assetFolderStatus("Choose .nii or .nii.gz files.", false);
+    _uploadPrivateAssets(files, "", el("config-manager-asset-upload"), "Add files");
   });
 }
 
@@ -8758,9 +8420,6 @@ async function _loadInstalledPackages(challengeType, activePackageId) {
         ${escapeHtml(pkg.name)} v${escapeHtml(pkg.version)} (${escapeHtml(pkg.challenge_type.toUpperCase())})
       </option>`
     ).join("");
-      // Shown only when there is a choice to make: with one package installed
-      // the panel listed it three times over, as a card, as the only option
-      // in a dropdown, and again as a line of text beneath.
       if (wrapEl) wrapEl.style.display = packages.length > 1 ? "" : "none";
     _renderScoringPackageSelectionDetail();
   }
@@ -8911,10 +8570,6 @@ async function _reloadChallengeRules() {
     const r = await fetch(`${API}/api/config/reload`, { method: "POST" });
     const d = await r.json();
 
-    // A rejected config is a normal answer here, not a failure to reach the
-    // server: the person is expected to fix the file and press the button
-    // again. Say which configuration is actually running so they are not left
-    // wondering whether they have broken the pipeline.
     if (!r.ok) throw new Error(apiErrorText(d.detail, "Request failed"));
     if (!d.reloaded) {
       show(`${d.error} ${d.detail || ""}`.trim(), false);
@@ -8924,9 +8579,6 @@ async function _reloadChallengeRules() {
     const challenges = (d.challenges || []).join(", ") || "none";
     show(`Rules reloaded. Challenges: ${challenges}.`, true);
 
-    // The challenge dropdown and map pills were built from the old config, so
-    // re-pull them. Without this the server has the new rules and the screen
-    // still shows the old ones.
     await hydrateAppConfig();
   } catch (err) {
     show(`Could not reload: ${err.message}`, false);
@@ -8941,10 +8593,6 @@ async function renderScoreStep() {
   unlockStep("score");
   loadLeaderboard();
 
-  // Hidden up front, revealed only once it has been given something to show.
-  // Doing it the other way round left an expander whose entire contents were
-  // the words "No providers found" on the path where scoring is not
-  // configured, because that path returns before the populating code runs.
   const providerDetails = el("score-provider-details");
   if (providerDetails) {
     providerDetails.hidden = true;
@@ -8986,15 +8634,7 @@ async function renderScoreStep() {
     providerName: activeIsOfficial ? (activePackageName || "Official Scoring & Preview") : "",
   });
 
-  /* No provider configured. That used to end the step here, with the card and
-     the table hidden and the button dead — which is wrong whenever the
-     organisers' reference data is present, because the comparison against
-     ground truth needs no provider. Ask the submissions what the comparison
-     actually produced, then decide. */
   let referenceSummary = null;
-  /* Every status fetch re-runs the comparison for that submission, which on a
-     cold cache is the expensive part of this step. The rows below are filled
-     from what was already fetched here rather than asking again. */
   const prefetchedStatus = new Map();
   if (activeMode === "none") {
     if (notConfiguredCard) {
@@ -9017,10 +8657,6 @@ async function renderScoreStep() {
     referenceSummary = _referenceComparisonSummary(payloads.filter(Boolean));
 
     if (!referenceSummary.possible) {
-      /* Nothing to compare against either. The card is shown rather than
-         hidden so the step says why it is empty; hiding it left "QC and
-         previews are available" as the only thing on screen, which answers a
-         question nobody asked. */
       if (statusCard) statusCard.style.display = "";
       if (tableCard)  tableCard.style.display  = "none";
       _updateScoreStatusCard([], "none", null, false, referenceSummary);
@@ -9157,10 +8793,6 @@ function _applyScoreStatus(sid, data) {
   const isOfficial = _scorePayload(data).official === true;
   row.dataset.scoreStatus = status;
 
-  /* "not_configured" describes the provider, not the run. With reference data
-     loaded the comparison against ground truth has already happened, and
-     labelling that row "Needs setup" hides a completed result behind a
-     complaint about an unrelated, optional step. */
   const referenceCompared = _REFERENCE_COMPARED_STATUSES.has(
     String(_referenceScoringOf(data).status || ""));
 
@@ -9227,7 +8859,6 @@ function _applyScoreStatus(sid, data) {
       detail.innerHTML = msg ? `<p style="font-size:0.73rem;margin:0 0 4px">${escapeHtml(msg)}</p>${misHtml}` : misHtml;
       if (detailRow) detailRow.style.display = "";
     } else if (referenceCompared) {
-      /* Say what did run, so an empty metrics cell is not read as a failure. */
       detail.innerHTML = `<p style="font-size:0.73rem;margin:0">`
         + `Compared against the reference data. Bias, RMSE, error CoV and the ROI `
         + `tables are in the report and the CSV exports. No scoring provider is `
@@ -9256,9 +8887,6 @@ function _applyMetrics(sid, metrics) {
   })();
   if (!metRow) return;
 
-  // Show ONLY numeric metric values (RMSE, CoV, finite %, …). String metadata
-  // such as "package" is never shown as a metric. Works for both the official
-  // Official-provider metrics and flattened QC/demo metrics from custom packages.
   const numeric = _numericMetricEntries(metrics);
 
   if (numeric.length === 0) {
@@ -9340,9 +8968,6 @@ async function _runSingleScore(btn, subId, challenge, mapType) {
     const data = await resp.json();
     _updateScoreRow(subId, data);
     _tickScoreProgress(_scoreOfficialMode ? data.status === "scored" : _analysisComplete(data), data.status === "not_configured");
-    // Returned so a caller running several submissions can say what happened.
-    // Without this the loop finished silently and the button simply went back
-    // to reading "Run Analysis", which looks identical to never having run.
     return String(data.status || "failed");
   } catch (err) {
     _updateScoreRow(subId, { status: "failed", message: "Network error: " + err.message, metrics: {} });
@@ -9461,13 +9086,17 @@ function renderScorePreviewPanel() {
   // Keep the action row in sync so Continue to Export is enabled on Step 5.
   if (typeof _refreshWizardFooter === "function") _refreshWizardFooter();
 
-  // ROI parameter-map statistics come from the canonical scoring result already in
-  // the cache. Rendered here because this is the one function every entry
-  // point funnels through, initial render, each async status resolution,
-  // step navigation, and session restore, so the section updates without a
-  // page reload and without a second request.
   renderRoiDescriptiveStatistics(..._roiDescriptivePayload());
   renderIccStatistics(_niftiAnalysisEntries());
+  // Until reference data is loaded these sections would only say "not available".
+  const compared = _niftiAnalysisEntries().some((analysis) => _REFERENCE_COMPARED_STATUSES.has(
+    String((analysis.reference_scoring || {}).status || "")));
+  if (!compared) {
+    ["roi-descriptive-card", "icc-results-card"].forEach((id) => {
+      const card = el(id);
+      if (card) card.style.display = "none";
+    });
+  }
 
   const container = el("score-preview-panel");
   if (!container) return;
@@ -9821,12 +9450,6 @@ function _makeCombinedJsonExportHandler(btn, blinded = true) {
   });
 }
 
-/* Which exports would actually contain something.
-
-   Every row used to be clickable regardless. Downloading a file that turns
-   out to hold nothing but a header row is a worse answer than being told in
-   advance why it is empty, so a row with no data to put in it is disabled and
-   says what is missing. */
 function _exportAvailability() {
   const [roiRows] = _roiDescriptivePayload();
   const analyses = _niftiAnalysisEntries();
@@ -9914,12 +9537,6 @@ function _renderExportRows() {
 }
 _renderExportRows();
 
-/* Wiring lives in a function because the rows it wires are rebuilt.
-   These handlers used to be attached once at load, to buttons rendered once
-   at load, when no submission existed yet. Every row therefore said "Nothing
-   has been reviewed yet" for the rest of the session, however much work had
-   since been done. The rows are now re-rendered whenever the Export step is
-   opened, which replaces the elements, so the handlers must go back on. */
 function _wireExportRows() {
   // ROI descriptive CSV. Reads records already computed during scoring, the
   // download never triggers a recalculation.
@@ -10016,13 +9633,6 @@ document.body.dataset.step = wf.step;
 _syncWfNav();
 _updateWizardFooter(wf.step);
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Session restore: startup check
-//   1. Reload in the same tab (sessionStorage wizard state or URL hash present)
-//      → auto-restore straight to the last valid step.
-//   2. Fresh tab with an older localStorage session → subtle notice, manual
-//      restore via the existing chip (unchanged behavior).
-// ══════════════════════════════════════════════════════════════════════════════
 
 // Hash navigation: allow #step jumps between already-unlocked steps only.
 window.addEventListener("hashchange", () => {
@@ -10095,12 +9705,7 @@ window.addEventListener("hashchange", () => {
   });
 })();
 
-/* ── ROI statistics / configured parameter maps ──────────────────────
-   Renders the canonical records computed once during scoring. Nothing here
-   recalculates a statistic: CoV arrives as a ratio and is only formatted
-   for display, and unavailable values are never shown as zero.
-   These are within-scan spatial summaries, not repeatability,
-   reproducibility, or accuracy.                                          */
+/* ── ROI statistics / configured parameter maps ── */
 
 const ROI_UNAVAILABLE_MESSAGES = {
   no_roi_configured: "ROI parameter-map statistics are unavailable because no ROI masks were configured.",
@@ -10119,7 +9724,6 @@ const ROI_REASON_LABELS = {
 };
 
 function _roiNumber(value, digits = 4) {
-  // Unavailable is unavailable. Rendering it as 0 would read as a measurement.
   if (value === null || value === undefined || Number.isNaN(value)) return "Unavailable";
   const n = Number(value);
   if (!Number.isFinite(n)) return "Unavailable";
@@ -10169,25 +9773,12 @@ function _renderRoiScope(pairs) {
    the header and the body keep the same number of columns. */
 function _setRoiIdentityColumns(varying) {
   const table = el("roi-descriptive-table");
-  // Rendering the rows matters more than styling the header, so a host that
-  // cannot be queried is skipped rather than allowed to throw and take the
-  // whole table with it.
   if (!table || typeof table.querySelectorAll !== "function") return;
   table.querySelectorAll("th[data-roi-identity]").forEach((cell) => {
     cell.hidden = !varying.has(cell.dataset.roiIdentity);
   });
 }
 
-/* ── Finding one row in a table of hundreds ───────────────────────────────
-
-   One participant of the DCE set is six scans; ten participants across three
-   sites is sixty, and every scan contributes a row per map per region. Nothing
-   is wrong with that table except that a reviewer looking for "site 2, grey
-   matter" has to scroll it.
-
-   This filters the rows already on screen. It is deliberately not a query
-   against the data: the records, the counts and every CSV export are untouched,
-   so a filtered view can never turn into a partial export. */
 
 /* Enough rows that scrolling is worse than typing. Below this a filter is one
    more control to ignore. */
@@ -10245,9 +9836,6 @@ function _applyRoiFilter() {
   const table = el("roi-descriptive-table");
   if (table) table.style.display = needle && shown === 0 ? "none" : "";
 
-  // The count chip keeps saying how many rows exist; the filter says how many
-  // of them you are looking at. Conflating the two would make a filtered view
-  // look like a smaller result.
   const label = el("roi-descriptive-shown");
   if (label) {
     label.textContent = needle
@@ -10286,9 +9874,6 @@ function renderRoiDescriptiveStatistics(records, status) {
   if (count) count.textContent = String(rows.length);
 
   if (!rows.length) {
-    // Clear, don't just hide. Hiding leaves the previous submission's rows in
-    // the DOM, so opening a new submission or a result without ROI data would carry
-    // stale values forward the moment the table was shown again.
     if (body) body.innerHTML = "";
     if (table) table.style.display = "none";
     if (empty) {
@@ -10303,11 +9888,6 @@ function renderRoiDescriptiveStatistics(records, status) {
   if (empty) empty.style.display = "none";
   if (table) table.style.display = "";
 
-  // Identity columns that never vary carry no information per row. A single
-  // scan submission filled Dataset, Participant, Repeat and Site with four
-  // dashes on every row, taking a third of the width and pushing Status off
-  // the right edge. They are lifted into one line above the table instead.
-  // The CSV export is built from the records and keeps every column.
   const IDENTITY = [
     ["dataset", "Dataset", (r) => _roiDatasetLabel(r.dataset)],
     ["participant", "Participant", (r) => _roiIdentity(r.participant)],

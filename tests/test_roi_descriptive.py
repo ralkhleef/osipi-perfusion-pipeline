@@ -1,13 +1,4 @@
-"""Within-ROI descriptive statistics.
-
-Scope is one map, one ROI, one scan. Nothing here compares across scans,
-no repeatability, reproducibility, or inter-participant variability, and no
-accuracy, deviance, or RSS is computed here.
-
-Formula tests run directly on arrays; only the masking and geometry tests
-need file-shaped fixtures, and those use in-memory dicts rather than NIfTI
-files.
-"""
+"""Within-ROI descriptive statistics."""
 
 from __future__ import annotations
 
@@ -419,13 +410,7 @@ def test_asl_cbf_is_selected_for_roi_output() -> None:
 
 
 def test_an_unconfigured_challenge_produces_no_roi_output() -> None:
-    """Eligibility comes from configuration, never from a built-in default.
-
-    This used to use DSC, which was the unconfigured challenge at the time.
-    DSC now has descriptive statistics configured, so the example moved to a
-    challenge that does not exist. The rule under test is unchanged: a
-    challenge nobody configured yields nothing rather than guessing.
-    """
+    """Eligibility comes from configuration, never from a built-in default."""
     cbf = SubmissionArtifact(path="cbf.nii.gz", role="parameter_map",
                              challenge="not_a_configured_challenge",
                              map_type="cbf", participant="1", dimensions=3)
@@ -567,13 +552,6 @@ def test_attach_degrades_without_losing_reference_metrics() -> None:
 # ── Region labels the DCE challenge actually ships ────────────────────────
 
 def test_the_shipped_dce_mask_names_all_resolve_to_readable_labels() -> None:
-    """`Hipp_mask.nii.gz` used to fall through to its filename stem.
-
-    The DCE lead's shared_masks archive ships GM, WM and Hipp per site. A
-    report row reading "site 1 hipp ma" instead of "hippocampus" is the kind
-    of detail that makes a table look unfinished in front of the people whose
-    data it is.
-    """
     import sys
     from pathlib import Path
 
@@ -590,12 +568,7 @@ def test_the_shipped_dce_mask_names_all_resolve_to_readable_labels() -> None:
 
 
 def test_the_hippocampus_rule_does_not_swallow_more_specific_names() -> None:
-    """`left_hippocampus.nii.gz` must stay distinguishable from the right one.
-
-    The rule exists for the abbreviation the challenge ships. A broader `hipp`
-    pattern would collapse every hippocampal ROI into one label, which is a
-    worse table than the filename fallback it replaced.
-    """
+    """`left_hippocampus.nii.gz` must stay distinguishable from the right one."""
     import sys
     from pathlib import Path
 

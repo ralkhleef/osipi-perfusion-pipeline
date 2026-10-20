@@ -1,22 +1,4 @@
 #!/usr/bin/env node
-/**
- * The Score step runs on reference data alone.
- *
- * A scoring provider and a comparison against the organisers' ground truth are
- * two different things, and only the first one needs configuring. The DCE
- * challenge has reference maps and masks and no provider, and in that state
- * the pipeline still produces bias, RMSE, error CoV and the ROI descriptive
- * tables. The Score step used to hide its card, hide its table, and answer a
- * press of Run Analysis with "there is nothing for this button to run" -- a
- * statement that was simply false, and that a reviewer had no way to see past.
- *
- * The payload in tests/fixtures_no_provider_status.json is not invented: it
- * was recorded from the real API by scripts/verify_run_without_provider.py,
- * which drives an upload through validation and scoring with mode="none" and
- * checks that the injected bias comes back out.
- *
- * Run: node tests/frontend_reference_run_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -135,12 +117,9 @@ console.log("\nThe payload is read wherever the API puts it");
 
 console.log("\nThe step footer says which button comes first");
 {
-  /* Run Analysis and Continue to Export sit side by side, and Continue is the
-     one that reads as the next step. Without an order stated, it was pressed
-     first and the export described a run that had not happened. */
   const guidance = extractFunction("_scoreStepGuidance");
   check("nothing runnable does not demand a run",
-    /QC and previews are ready/.test(guidance), guidance);
+    /if \(!_scoreRunIsLive \|\| _scoreAlreadyRan\(\)\) return "";/.test(guidance), guidance);
   check("a runnable step names the order",
     /Run analysis before continuing/.test(guidance), guidance);
   check("it stops saying so once the run has happened",

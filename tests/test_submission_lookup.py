@@ -82,7 +82,6 @@ def test_ids_that_are_not_submissions_match_nothing(outputs, sid: str) -> None:
 
 
 def test_no_id_still_lists_every_result(outputs) -> None:
-    """The unfiltered mode /api/outputs relies on is deliberately unchanged."""
     assert len(outputs._find_validation_files()) == 2
     assert len(outputs._find_validation_files("")) == 2
 
@@ -112,12 +111,7 @@ def test_a_scored_submission_without_validation_still_exists(outputs, monkeypatc
 
 
 def test_existence_uses_a_real_scoring_lookup(outputs) -> None:
-    """Guards against the lookup being swallowed by a bare except.
-
-    ``_scoring_result_path`` is not in this module's namespace; calling it
-    would raise NameError, and a try/except would have turned every
-    scored-but-unvalidated submission into 'not found' silently.
-    """
+    """Guards against the lookup being swallowed by a bare except."""
     assert callable(outputs.load_scoring_result)
     assert not hasattr(outputs, "_scoring_result_path")
 

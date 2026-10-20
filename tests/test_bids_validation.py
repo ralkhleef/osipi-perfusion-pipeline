@@ -1,14 +1,4 @@
-"""Structural BIDS checks.
-
-The proposal named BIDS twice and the code mentioned it only in a disclaimer
-saying NIfTI QC is not BIDS validation. That was true, which was the problem.
-
-What is checked is a subset: layout and naming, the part that lets a reader
-work out which subject, session and run a file belongs to. The tests below
-pin both halves of that claim, the rules that are enforced and the fact that
-nothing runs unless a challenge asks for it, because a check that silently
-starts rejecting submissions is worse than no check.
-"""
+"""Structural BIDS checks."""
 
 from __future__ import annotations
 
@@ -230,12 +220,7 @@ def _bids_codes(result) -> list[str]:
 def test_nothing_runs_when_the_challenge_has_not_asked(
     tmp_path: Path, challenge_bids,
 ) -> None:
-    """A challenge that has switched BIDS off gets no BIDS findings at all.
-
-    This used to read the shipped configuration, which had the checks off for
-    every challenge. They are now on, so the off state has to be configured
-    explicitly here; the behaviour under test is unchanged.
-    """
+    """A challenge that has switched BIDS off gets no BIDS findings at all."""
     challenge_bids(enabled=False, severity="warning", require_layout=False)
     root = bids_root(tmp_path)
     add(root, "run-1_sub-01_cbf.nii.gz")
@@ -244,14 +229,7 @@ def test_nothing_runs_when_the_challenge_has_not_asked(
 
 
 def test_every_shipped_challenge_enables_bids_advisorily() -> None:
-    """The shipped posture, pinned so a silent flip in either direction shows up.
-
-    On, at warning severity, without ``require_layout``: findings are reported
-    for submissions that are already BIDS-shaped and nothing is rejected for
-    not using BIDS. Turning this into an error, or requiring the layout, is a
-    decision about what participants must supply, so it should have to break a
-    test rather than slip through as a config tweak.
-    """
+    """The shipped posture, pinned so a silent flip in either direction shows up."""
     settings = rules.bids_validation_by_challenge()
     assert settings, "no challenges are configured"
     for challenge, block in sorted(settings.items()):
@@ -267,13 +245,7 @@ def test_every_shipped_challenge_enables_bids_advisorily() -> None:
 def test_a_submission_that_is_not_bids_is_left_alone_by_the_shipped_config(
     tmp_path: Path,
 ) -> None:
-    """Enabling the checks must not start reporting ordinary submissions.
-
-    A folder with no ``dataset_description.json`` and no ``sub-<label>``
-    directory is not a broken BIDS dataset; it is not one. Reporting it would
-    make the finding list noisier for every participant who never opted in,
-    which is the cost that kept these checks switched off.
-    """
+    """Enabling the checks must not start reporting ordinary submissions."""
     root = tmp_path / "team_gamma"
     (root / "results" / "maps").mkdir(parents=True)
     (root / "results" / "maps" / "cbf_map.nii.gz").write_bytes(b"not really a nifti")

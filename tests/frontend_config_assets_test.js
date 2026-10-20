@@ -1,18 +1,4 @@
 #!/usr/bin/env node
-/**
- * The Private Reference Assets panel.
- *
- * It showed a count line and a flat list of filenames, which left the obvious
- * question unanswered: where do these files live, and where does mine go. The
- * panel is now one group per kind, each naming its purpose and its folder, so
- * an empty group still tells an organiser something.
- *
- * The folder path is the part that has to be exactly right, because someone
- * will copy files into it by hand. It is asserted per kind below, including
- * that it follows the challenge rather than being hardcoded.
- *
- * Run: node tests/frontend_config_assets_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -55,9 +41,6 @@ vm.createContext(sandbox);
 vm.runInContext([
   extractFunction("escapeHtml"),
   extractConst("ASSET_KINDS"),
-  // The renderer now groups files by the scan their folder names and prints
-  // the shared root once instead of sixty sibling paths, so it leans on these.
-  // The renderer decides its own open state from this threshold.
   (() => {
     const start = appJs.indexOf("const _ASSET_COLLAPSE_ABOVE =");
     return appJs.slice(start, appJs.indexOf(";", start) + 1);
@@ -90,13 +73,9 @@ check("signals name their folder",
 const dce = render({ challenge_type: "dce", items: [] });
 check("the path follows the challenge, not a hardcoded one",
   dce.includes("data/reference_data/dce/maps/") && !dce.includes("/asl/"));
-check("an empty group still tells you where to put a file",
-  empty.includes("copy files") || empty.includes("this folder"));
-
-console.log("\nEach kind explains what it is for");
-check("reference maps explain themselves", empty.includes("Ground truth"));
-check("masks explain themselves", empty.includes("Regions to report statistics"));
-check("signals explain themselves", empty.includes("measured curve"));
+check("an empty group says it is empty", empty.includes("None yet."));
+check("each kind is named", empty.includes("Reference maps") && empty.includes("ROI masks")
+  && empty.includes("Measured signal-time curves"));
 
 console.log("\nFiles are listed under the right kind");
 const filled = render({
@@ -137,10 +116,6 @@ check("a missing challenge does not print undefined in the path",
 check("an unknown kind does not break the render",
   render({ challenge_type: "asl", items: [{ kind: "mystery", name: "x.nii" }] })
     .includes("Reference maps"));
-// Counted on the opening tag, not the class name: cfg-asset-groups is the
-// wrapper and contains cfg-asset-group as a substring, so a loose count says
-// four and is wrong for a reason that is invisible. Each kind is a <details>
-// so that a long list can be collapsed to its count.
 const noPayload = render({});
 check("no payload at all still renders the three groups",
   (noPayload.match(/<details class="cfg-asset-group"/g) || []).length === 3,
@@ -152,13 +127,10 @@ check("a missing challenge reads as a template, not a broken path",
 
 console.log("\nThe add control explains where the file goes");
 const indexHtml = fs.readFileSync(path.resolve(__dirname, "../frontend/index.html"), "utf8");
-check("the add row is labelled", indexHtml.includes("Add a file"));
-check("it says the file is copied into the folder for the chosen type",
-  indexHtml.includes("copied into the folder"));
-check("it repeats that nothing leaves the machine",
-  indexHtml.includes("Nothing leaves this machine"));
-check("the type select has a visible label, not only aria-label",
-  indexHtml.includes('class="cfg-asset-field">Type'));
+check("files can be added", indexHtml.includes(">Add files</button>"));
+check("a whole folder can be added", indexHtml.includes(">Add folder</button>")
+  && indexHtml.includes('id="config-manager-asset-folder" webkitdirectory'));
+check("the type is detected, so there is no type select", !indexHtml.includes('id="config-manager-asset-kind"'));
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);

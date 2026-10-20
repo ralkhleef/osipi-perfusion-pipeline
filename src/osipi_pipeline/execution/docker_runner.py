@@ -11,31 +11,15 @@ from pathlib import Path
 
 from osipi_pipeline.execution.models import ExecutionResult
 
-# ---------------------------------------------------------------------------
-# Defaults: can be overridden per call or via run_config.json
-# ---------------------------------------------------------------------------
 
 DEFAULT_FALLBACK_DOCKERFILE = Path(__file__).with_name("Dockerfile.example")
 DEFAULT_EXECUTION_DIR       = Path("data/outputs/execution")
 DEFAULT_RUN_COMMAND         = "python3 run.py"
 DEFAULT_TIMEOUT_SECONDS     = 300   # 5 minutes
-# The *run* timeout bounds participant code; this one bounds `docker build`.
-# Without it a Dockerfile that hangs (an unreachable package index, an
-# interactive prompt, a `RUN sleep`) blocks the request thread indefinitely,
-# with no log written and no result returned. A build is mostly downloading,
-# so it gets more room than the default run.
 DEFAULT_BUILD_TIMEOUT_SECONDS = 1800  # 30 minutes
 DEFAULT_MEMORY_LIMIT        = "4g"
 DEFAULT_CPU_LIMIT           = "2.0"
-# --memory and --cpus do not bound process *count*. A fork bomb in participant
-# code exhausts the host's process table while sitting inside both other caps,
-# taking the reviewer's machine down with it. 512 is far above what a fitting
-# script needs and far below anything that threatens the host.
 DEFAULT_PIDS_LIMIT          = "512"
-# Every submission builds an image. Without removal a challenge round leaves
-# one per submission behind, and the reviewer discovers it as a full disk
-# rather than as anything this tool said. Removal is best-effort: a failure to
-# clean up must never change the reported outcome of the run.
 DEFAULT_REMOVE_IMAGE        = True
 
 # ---------------------------------------------------------------------------
@@ -59,11 +43,7 @@ _DOOD_MAP: list[tuple[Path, str]] = [
 
 
 def _to_host_path(container_path: Path) -> Path:
-    """Translate a container-internal path to its host-visible equivalent.
-
-    Uses the ``HOST_*`` env vars injected by docker-compose.  Falls back to
-    the original path when the env vars are not set (bare-metal / local dev).
-    """
+    """Translate a container-internal path to its host-visible equivalent."""
     resolved = container_path.resolve()
     for container_root, env_var in _DOOD_MAP:
         host_root_str = os.environ.get(env_var, "").strip()
@@ -89,11 +69,6 @@ class DockerExecutionError(RuntimeError):
     """Raised for pre-flight failures such as unavailable Docker or bad paths."""
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def execute_submission(
     submission_path: str | Path,
     *,
@@ -109,50 +84,7 @@ def execute_submission(
     remove_image: bool = DEFAULT_REMOVE_IMAGE,
     input_dir: str | Path | None = None,
 ) -> ExecutionResult:
-    """Build a Docker image from the submission, run it, and save all artefacts.
-
-    Directory layout created under ``output_dir``:
-
-        {output_dir}/{challenge_type}_{submission_name}/
-            execution_stdout.log  , combined build + run stdout
-            execution_stderr.log  , combined build + run stderr
-            outputs/              , mounted at /output inside the container
-                <any files>       , all files written by the submission
-
-    Pre-flight failures (Docker not installed, bad path) raise
-    :class:`DockerExecutionError`.
-
-    Build failures do **not** raise: they return an ``ExecutionResult`` with
-    ``build_failed=True`` and ``passed=False``.  Log files are written so the
-    caller can show build output to the user.
-
-    Args:
-        submission_path:     Path to the already-ingested submission folder.
-        challenge_type:      Configured challenge identifier.
-        command:             Shell command to run inside the container.  ``None``
-                             means auto-resolve from ``run_config.json``, then
-                             fall back to ``DEFAULT_RUN_COMMAND``.
-        output_dir:          Parent directory for execution artefacts.
-        fallback_dockerfile: Dockerfile to use when the submission has none.
-        timeout_seconds:     Kill the container run after this many seconds.
-                             ``run_config.json`` ``timeout_seconds`` can override
-                             the code default when ``command`` is also auto-resolved.
-        build_timeout_seconds: Kill ``docker build`` after this many seconds.
-                             Expiry is returned as a build failure, not raised.
-        memory_limit:        Docker ``--memory`` value (e.g. ``"4g"``).
-        cpu_limit:           Docker ``--cpus`` value (e.g. ``"2.0"``).
-        pids_limit:          Docker ``--pids-limit`` value, capping how many
-                             processes the container may create at once.
-        remove_image:        Delete the built image once the run finishes, so a
-                             challenge round does not fill the disk. Best
-                             effort; a failed removal never changes the result.
-
-    Returns:
-        An :class:`ExecutionResult` describing the outcome.
-
-    Raises:
-        DockerExecutionError: Docker not installed, path invalid.
-    """
+    """Build a Docker image from the submission, run it, and save all artefacts."""
     submission = Path(submission_path).expanduser()
     if not submission.exists():
         raise DockerExecutionError(f"Submission folder does not exist: {submission}")
@@ -298,33 +230,8 @@ def detect_dockerfile(
     )
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
 def _read_run_config(submission: Path) -> dict:
-    """Parse ``run_config.json`` from the submission folder.
-
-    Recognised keys:
-
-    ``command``
-        Shell command to run inside the container.
-        Default: ``None`` (falls back to ``DEFAULT_RUN_COMMAND``).
-
-    ``timeout_seconds``
-        Integer number of seconds before the container is killed.
-        Default: ``None`` (falls back to ``DEFAULT_TIMEOUT_SECONDS``).
-
-    Example ``run_config.json``::
-
-        {
-            "command": "python /submission/run.py --output /output",
-            "timeout_seconds": 600
-        }
-
-    Unknown keys are silently ignored.  Parse errors return empty config.
-    """
+    """Parse ``run_config.json`` from the submission folder."""
     config_path = submission / "run_config.json"
     result: dict = {"command": None, "timeout_seconds": None}
     if not config_path.is_file():
@@ -352,13 +259,7 @@ def _run_docker_build(
     *,
     timeout_seconds: int = DEFAULT_BUILD_TIMEOUT_SECONDS,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """Build the Docker image and return (result, command_list).
-
-    A build that exceeds ``timeout_seconds`` is reported as an ordinary build
-    failure carrying :data:`_BUILD_TIMEOUT_EXIT_CODE`, not as an exception, so
-    the caller still writes logs and returns an ``ExecutionResult`` the
-    reviewer can read. Partial output captured before the kill is preserved.
-    """
+    """Build the Docker image and return (result, command_list)."""
     cmd = [
         "docker", "build",
         "-t", image_name,
@@ -402,26 +303,7 @@ def _run_docker_container(
     pids_limit: str = DEFAULT_PIDS_LIMIT,
     input_host_path: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    """Run the Docker container with security and resource constraints.
-
-    Mounts:
-        ``/submission``, read-only view of the submission folder.
-        ``/output``    , read-write directory for submission outputs.
-        ``/input``     , read-only challenge input data (when provided).
-
-    Security:
-        ``--network none``              , no outbound network access.
-        ``--security-opt no-new-privileges``, prevent privilege escalation.
-        ``--pids-limit``                , cap concurrent processes, so a fork
-                                          bomb cannot exhaust the host while
-                                          staying inside the memory and CPU caps.
-
-    DooD path translation:
-        Paths are translated from container-internal paths to host-visible
-        equivalents via ``_to_host_path()`` before being passed to docker run,
-        because the Docker daemon receiving the command runs on the *host*
-        machine and does not know the backend container's internal filesystem.
-    """
+    """Run the Docker container with security and resource constraints."""
     # Translate container paths → host paths for the volume mounts
     host_submission   = _to_host_path(submission.resolve())
     host_output       = _to_host_path(output_host_path.resolve())
@@ -459,14 +341,7 @@ def _run_docker_container(
 
 
 def _remove_image(image_name: str) -> bool:
-    """Delete the built image. Returns whether Docker reported success.
-
-    Best effort by design. The run has already finished and its outputs are on
-    disk, so a failure here, Docker gone, the image still in use by another
-    container, a daemon that has stopped, is a housekeeping problem and must
-    not change what the caller is told about the submission. A short timeout
-    keeps cleanup from becoming the thing that hangs the request.
-    """
+    """Delete the built image."""
     try:
         result = subprocess.run(
             ["docker", "image", "rm", "-f", image_name],
@@ -478,11 +353,7 @@ def _remove_image(image_name: str) -> bool:
 
 
 def _collect_output_files(output_dir: Path) -> list[str]:
-    """Return all file paths found in the output directory, relative to it.
-
-    Collects every file written by the submission (not just NIfTI), so the
-    caller can report what was produced.
-    """
+    """Return all file paths found in the output directory, relative to it."""
     if not output_dir.exists():
         return []
     return sorted(

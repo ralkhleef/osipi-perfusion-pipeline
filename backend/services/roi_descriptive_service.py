@@ -1,14 +1,4 @@
-"""Compute within-ROI descriptive statistics for submitted parameter maps.
-
-Orchestration only. The formulas live in
-``osipi_pipeline.scoring.descriptive_statistics`` where they can be tested
-directly from arrays; ROI discovery, mask loading, and geometry checks reuse
-the helpers already in ``backend.scoring`` rather than opening a second
-ROI-loading path.
-
-Computed once per scoring run. The resulting records are passed forward to
-the API, JSON, CSV, and the report model, no output format recomputes them.
-"""
+"""Compute within-ROI descriptive statistics for submitted parameter maps."""
 
 from __future__ import annotations
 
@@ -36,12 +26,7 @@ logger = logging.getLogger(__name__)
 _MISSING = object()
 
 def roi_definitions_from_masks(masks: Iterable[Mapping[str, Any]]) -> list[RoiDefinition]:
-    """Adapt the existing reference-mask records into ROI definitions.
-
-    ``backend.scoring._reference_masks`` already yields ``{name, label,
-    path}``; this keeps that as the single ROI source rather than inventing
-    a parallel discovery mechanism.
-    """
+    """Adapt the existing reference-mask records into ROI definitions."""
     definitions: list[RoiDefinition] = []
     for mask in masks or ():
         name = str(mask.get("name") or "")
@@ -87,13 +72,7 @@ def _units_for(map_type: str | None) -> str | None:
 def eligible_artifacts(
     artifacts: Sequence[Any], *, challenge: str
 ) -> list[Any]:
-    """Artifacts this phase computes statistics for.
-
-    Only parameter maps of the configured type, only with a readable
-    dimensionality matching the configuration. Missing scan identity does
-    not prevent a valid within-image calculation; the corresponding identity
-    columns remain explicitly blank in the result.
-    """
+    """Artifacts this phase computes statistics for."""
     challenge = (challenge or "").strip().lower()
     analysis = analysis_by_challenge().get(challenge, {})
     roi_config = analysis.get("roi_descriptive") or {}
@@ -127,13 +106,7 @@ def compute_roi_descriptive_statistics(
     root: Path | None = None,
     load_values=None,
 ) -> tuple[RoiDescriptiveResult, ...]:
-    """Statistics for every eligible map against every ROI.
-
-    ``load_values`` defaults to the loader already used by reference scoring;
-    it is injectable so the formulas can be exercised without NIfTI fixtures.
-    Each mask is loaded at most once for the whole run, and each map once
-    across all of its ROIs.
-    """
+    """Statistics for every eligible map against every ROI."""
     selected = eligible_artifacts(artifacts, challenge=challenge)
     if not selected or not roi_definitions:
         return ()
@@ -165,9 +138,6 @@ def compute_roi_descriptive_statistics(
             continue
 
         for roi in applicable_rois:
-            # Identity sentinel, not equality: the cached payloads hold NumPy
-            # arrays, and `payload == "__missing__"` on one raises rather than
-            # returning False.
             mask_key = (roi.mask_path, tuple(roi.excluded_mask_paths))
             mask_data = mask_cache.get(mask_key, _MISSING)
             if mask_data is _MISSING:
@@ -190,9 +160,6 @@ def compute_roi_descriptive_statistics(
                     status=STATUS_MASK_UNREADABLE, units=units))
                 continue
 
-            # Geometry: matching shape and physical grid are required and
-            # nothing is silently resampled. One bad ROI must not stop the
-            # others.
             mask_shape = mask_data.get("shape")
             map_shape = map_data.get("shape")
             if list(mask_shape or []) != list(map_shape or []):
@@ -206,9 +173,6 @@ def compute_roi_descriptive_statistics(
                     status=STATUS_GEOMETRY_MISMATCH, units=units))
                 continue
 
-            # Explicit None checks: `values or []` raises ValueError when
-            # `values` is a NumPy array, which is what the real loader
-            # returns. Plain-list fixtures never surfaced this.
             map_values = map_data.get("values")
             mask_values = mask_data.get("values")
             selected_values, mask_count = _apply_mask(
@@ -223,12 +187,7 @@ def compute_roi_descriptive_statistics(
 
 
 def _roi_applies_to_artifact(roi: RoiDefinition, artifact: Any) -> bool:
-    """Whether a scoped mask belongs to this scan.
-
-    A mask without identity is shared. When its path supplies an identity
-    (for example ``site_2/GM_mask.nii.gz``), every supplied field must match
-    the submitted artifact. Missing identity is never guessed from geometry.
-    """
+    """Whether a scoped mask belongs to this scan."""
     for field in ("dataset", "participant", "repeat", "site"):
         expected = getattr(roi, field, None)
         if expected is not None and str(getattr(artifact, field, None)) != str(expected):
@@ -239,12 +198,7 @@ def _roi_applies_to_artifact(roi: RoiDefinition, artifact: Any) -> bool:
 def _physical_grids_compatible(
     map_data: Mapping[str, Any], mask_data: Mapping[str, Any]
 ) -> bool:
-    """Reject a known affine/voxel-size mismatch; allow missing metadata.
-
-    Production NIfTI payloads include affine and voxel size. Array-only test
-    fixtures and legacy providers may omit them, in which case shape remains
-    the strongest available check.
-    """
+    """Reject a known affine/voxel-size mismatch; allow missing metadata."""
     try:
         from scoring import _grids_compatible
 
@@ -254,11 +208,7 @@ def _physical_grids_compatible(
 
 
 def _apply_mask(values: Sequence[Any], mask: Sequence[Any]) -> tuple[list[Any], int]:
-    """Select map values where the mask is non-zero.
-
-    Matches the existing mask policy: any non-zero, finite mask value counts
-    as inside the ROI, so a non-binary mask is not silently rejected.
-    """
+    """Select map values where the mask is non-zero."""
     try:
         import numpy as np
 

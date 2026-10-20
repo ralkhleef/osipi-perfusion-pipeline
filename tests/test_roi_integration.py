@@ -1,9 +1,4 @@
-"""ROI descriptive statistics integrated with reports and exports.
-
-Integration and presentation only. The formulas are covered by
-``test_roi_descriptive.py`` and are not re-tested here; these tests assert
-that the canonical records reach every output *once*, identically.
-"""
+"""ROI descriptive statistics integrated with reports and exports."""
 
 from __future__ import annotations
 
@@ -224,11 +219,7 @@ def test_hostile_units_and_labels_are_escaped(monkeypatch) -> None:
 # ── Duplicate computation ─────────────────────────────────────────────────
 
 def test_outputs_never_recompute_roi_statistics(monkeypatch) -> None:
-    """The architectural guarantee: compute once, read many.
-
-    Any output format calling the calculator would mean the same voxels are
-    re-read per export, and worse, that two formats could disagree.
-    """
+    """The architectural guarantee: compute once, read many."""
     import services.roi_descriptive_service as svc
 
     calls = {"n": 0}
@@ -324,9 +315,6 @@ def test_roi_failure_preserves_existing_reference_metrics(monkeypatch) -> None:
     """A broken ROI layer must not take the reference metrics with it."""
     import scoring
 
-    # No masks anywhere, which is the condition under test. Stubbing the
-    # discovery keeps this independent of whether the machine running the
-    # suite happens to have organiser reference data on disk.
     monkeypatch.setattr(scoring, "masks_for_submission", lambda sid, challenge: [])
     result = {"summary": {"mean_rmse": 1.23}, "reference_root": None}
     scoring._attach_roi_descriptives(result, "does-not-exist", "dce")
@@ -352,11 +340,7 @@ def test_production_scoring_path_invokes_the_roi_layer(monkeypatch, tmp_path) ->
 
 
 def _mixed_records():
-    """One available and one unavailable ROI, with single-token labels.
-
-    ReportLab emits each wrapped line as its own text operator, so a
-    multi-word label is never contiguous in the PDF byte stream.
-    """
+    """One available and one unavailable ROI, with single-token labels."""
     return [
         _roi_record(roi_id="tumour", roi_label="Tumour"),
         _roi_record(roi_id="necrosis", roi_label="Necrosis",
@@ -390,17 +374,6 @@ def test_other_challenges_get_no_roi_rows(challenge: str) -> None:
     assert model["roi_descriptive_rows"] == []
 
 
-# ── The three ROI annotations must stay independent ───────────────────────
-#
-# Grouped statistics, ICC and advisory thresholds each annotate the same
-# per-scan ROI rows, and each has its own enable switch. Nesting one call
-# inside another makes the inner one inherit the outer function's early
-# returns, so it silently stops running in exactly the configurations where
-# the outer feature is off. That happened twice: ICC was nested inside the
-# grouping (so it vanished whenever grouping was disabled) and thresholds were
-# nested inside ICC (so they never ran at all, since no challenge configures an
-# ICC model). Both only surfaced by rendering a real report.
-
 def _annotation_keys(result: dict) -> set[str]:
     return {k for k in result if k.startswith(("grouped_roi", "icc_", "threshold"))}
 
@@ -422,7 +395,6 @@ def test_all_three_roi_annotations_run_on_the_production_path(monkeypatch, tmp_p
 
 
 def test_disabling_grouping_does_not_remove_icc_or_thresholds(monkeypatch) -> None:
-    """The exact shape of the first bug: ICC disappeared with grouping."""
     import scoring
 
     monkeypatch.setattr(
@@ -442,12 +414,7 @@ def test_disabling_grouping_does_not_remove_icc_or_thresholds(monkeypatch) -> No
 
 
 def test_no_annotation_helper_calls_another(monkeypatch) -> None:
-    """Structural guard: keep them siblings, not nested.
-
-    Reading the source is blunt, but it is the only check that fails at the
-    moment someone re-nests these rather than months later when a reader
-    notices a column is always empty.
-    """
+    """Structural guard: keep them siblings, not nested."""
     import inspect
 
     import scoring

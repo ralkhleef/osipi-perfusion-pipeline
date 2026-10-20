@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""Check the application is ready to demonstrate, before you need it to be.
-
-Run this half an hour before a meeting. It walks a real submission through
-all six steps against the running application and prints one line per step,
-so a failure is found while there is still time to do something about it
-rather than in front of an audience.
-
-    python3 scripts/preflight.py                    # against localhost:8000
-    python3 scripts/preflight.py --url http://...   # somewhere else
-    python3 scripts/preflight.py --keep             # leave the submission
-
-Everything it uploads is generated here. Runs against the local Compose app
-are removed afterwards unless ``--keep`` is used; remote servers retain the
-generated submission because the application has no deletion API. No real or
-private data is involved.
-"""
+"""Check the application is ready to demonstrate, before you need it to be."""
 
 from __future__ import annotations
 
@@ -79,12 +64,7 @@ def build_submission(destination: Path) -> bool:
 
 
 def cleanup_local_submission(base: str, submission_id: str, archive_name: str) -> bool:
-    """Remove artifacts made by this script against the local Compose app.
-
-    The application has no submission-deletion API. Keep cleanup deliberately
-    narrow: it is available only for the repository's local server and only
-    for the unique ``preflight_asl_*`` identifier created below.
-    """
+    """Remove artifacts made by this script against the local Compose app."""
     if base not in {"http://localhost:8000", "http://127.0.0.1:8000"}:
         return False
     if not submission_id.startswith("preflight_asl_") or not all(

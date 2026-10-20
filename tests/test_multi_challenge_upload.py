@@ -1,9 +1,4 @@
-"""Multi-ZIP upload + per-submission challenge tagging/validation.
-
-Verifies that several ZIPs can be uploaded at once, that each submission keeps
-its own detected challenge, and that a mixed batch validates each submission
-under its own challenge without merging challenges.
-"""
+"""Multi-ZIP upload + per-submission challenge tagging/validation."""
 from __future__ import annotations
 
 import io
@@ -174,9 +169,6 @@ def test_mixed_report_grouped_by_challenge_no_cross_total(client):
     # report was restyled; assert the meaning, not the old phrasing.
     assert "spans more than one challenge" in html
     assert "reported per challenge" in html
-    # With no compatible references, do not render a table made entirely of
-    # unavailable per-challenge values. The summary above carries the scope
-    # caveat, and structured exports retain the challenge records.
     assert "ASL RMSE" not in html and "DCE RMSE" not in html
     # No single global RMSE row that would pool challenges:
     assert "<td>RMSE</td>" not in html

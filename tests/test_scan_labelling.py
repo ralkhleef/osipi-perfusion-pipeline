@@ -1,17 +1,4 @@
-"""Every row says which scan it came from.
-
-The DCE-2026 layout gives every scan the same filenames by design:
-``Ktrans.nii.gz`` and ``Ct.nii.gz`` appear once in each of sixty scan
-directories. A results table keyed on the filename therefore prints
-"Ktrans.nii.gz" sixty times and tells a reader nothing at all -- and the
-reference-comparison table is the worst case, because it has one row per map
-per region per scan, so a single participant already fills it with rows that
-look identical.
-
-The identity is not missing: ingestion resolves dataset, participant, repeat
-and site for every file. It was simply not carried through to the results. These
-tests hold it there, in the row data, in the CSV export and in the report.
-"""
+"""Every row says which scan it came from."""
 
 from __future__ import annotations
 
@@ -43,16 +30,13 @@ def test_the_order_is_participant_site_repeat() -> None:
 
 
 def test_a_partial_identity_omits_what_it_does_not_know() -> None:
-    """"P1 - Site 2" is honest about a missing repeat in a way that
-    "P1 - Site 2 - Repeat ?" is not."""
     label = backend_scoring._scan_label("Clinical", "1", None, "2")
     assert "Repeat" not in label
     assert "P1" in label and "Site 2" in label
 
 
 def test_nothing_identifying_produces_no_label_rather_than_a_blank_one() -> None:
-    """A row that cannot be placed must say so, not print an empty cell that
-    looks like a rendering fault."""
+    """A row that cannot be placed must say so, not print an empty cell that looks like a rendering fault."""
     assert backend_scoring._scan_label(None, None, None, None) is None
     assert backend_scoring._scan_label("", "", "", "") is None
 
@@ -113,8 +97,7 @@ def test_two_scans_with_one_filename_are_told_apart(compared) -> None:
 
 
 def test_the_parts_are_kept_separately_as_well_as_joined(compared) -> None:
-    """A label is for reading; the fields are for sorting and filtering, and a
-    spreadsheet needs the second kind."""
+    """A label is for reading; the fields are for sorting and filtering, and a spreadsheet needs the second kind."""
     result, _ = compared
     for row in result["maps"]:
         assert row["participant"] == "1"
@@ -227,9 +210,7 @@ def test_a_column_that_would_say_the_same_thing_on_every_row_is_not_added() -> N
 
 
 def test_a_file_that_was_never_a_parameter_map_is_not_called_unknown() -> None:
-    """The 4-D fitted curve. It read "Unknown" with every metric "Not
-    available", which looks like a failure rather than a file that map
-    detection correctly declined to name."""
+    """The 4-D fitted curve."""
     rows = _two_scans()
     rows[0]["detected_map_type"] = "Unknown"
     rows[0]["role_label"] = "Fitted signal (4-D)"

@@ -1,11 +1,4 @@
-"""Importing a submission from GitHub or Zenodo.
-
-Both modules take a string a stranger typed and turn it into a network
-request and a file on disk, and both sat near 17 percent covered. Nothing
-here reaches the network: ``requests`` is replaced with a stub, so what gets
-checked is the part that is ours, which URLs are accepted, which are refused,
-what happens when the far end misbehaves, and whether the size limit holds.
-"""
+"""Importing a submission from GitHub or Zenodo."""
 
 from __future__ import annotations
 
@@ -39,11 +32,7 @@ def test_a_real_repository_url_resolves_to_owner_and_repo(url, expected):
     "https://evil.example.com/github.com/org/repo",
 ])
 def test_anything_that_is_not_a_github_repository_is_refused(url):
-    """The host is checked, not merely searched for.
-
-    A URL like https://evil.example.com/github.com/org/repo contains the
-    string "github.com" and must still be refused.
-    """
+    """The host is checked, not merely searched for."""
     from services.github_service import _parse_github_url
     assert _parse_github_url(url) is None
 
@@ -84,7 +73,6 @@ def _zip_bytes() -> bytes:
 
 
 def _stub_requests(monkeypatch, module, handler):
-    """Install a fake requests module that records the URLs asked for."""
     seen: list[str] = []
 
     class ConnectionError_(Exception):
@@ -177,11 +165,7 @@ def test_a_server_error_is_reported_with_its_status(monkeypatch, tmp_path):
 
 
 def test_an_oversized_archive_is_refused_while_still_streaming(monkeypatch, tmp_path):
-    """The limit has to bite during the download, not after it.
-
-    Checking afterwards would mean writing the whole thing to disk first,
-    which is the failure mode the limit exists to prevent.
-    """
+    """The limit has to bite during the download, not after it."""
     import services.github_service as github_service
 
     monkeypatch.setattr(github_service, "INCOMING_DIR", tmp_path)
@@ -405,9 +389,6 @@ def test_a_missing_record_is_reported_by_number(monkeypatch, tmp_path):
 
     out = zenodo_service.download_zenodo_record("12345678", tmp_path, "zenodo")
     assert out["success"] is False
-    # Zenodo reports failures in `errors`, GitHub in `message`. The API layer
-    # reads `errors` first and falls back to `message`, so both shapes have to
-    # keep working; this pins the Zenodo half of that contract.
     assert any("12345678" in e for e in out["errors"])
 
 

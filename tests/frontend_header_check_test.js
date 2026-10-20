@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/**
- * Executes the header and orientation check renderer.
- *
- * The Python side proves the check is computed and that both report formats
- * render it. This proves the third surface, the interface, does too. All
- * three were added together because the check existed and was invisible for
- * a while, which is the failure worth guarding against.
- *
- * The functions are extracted and run rather than grepped for, so what is
- * asserted is the HTML a reviewer would actually see.
- *
- * Run: node tests/frontend_header_check_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -56,9 +43,6 @@ function extractConst(name) {
   return appJs.slice(start, end + 2);
 }
 
-// statusPill is defined elsewhere in app.js and does browser work; a stub
-// keeps this suite on the renderer under test while still proving the
-// verdict text reaches it.
 const sandbox = {
   console,
   statusPill: (label, tone) => `<span data-tone="${tone}">${label}</span>`,

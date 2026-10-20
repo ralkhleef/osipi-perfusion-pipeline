@@ -1,9 +1,4 @@
-"""Resolve and prepare ingestion sources.
-
-A source is where the submission comes from: a local folder, local zip file, or
-GitHub repository URL. This module turns that source into a local working copy
-that the rest of ingestion can scan.
-"""
+"""Resolve and prepare ingestion sources."""
 
 from __future__ import annotations
 
@@ -19,12 +14,7 @@ CLONE_TIMEOUT_SECONDS = 120
 
 @dataclass(frozen=True)
 class SubmissionSource:
-    """A normalized description of where a submission came from.
-
-    ``kind`` is the source type, such as ``folder``, ``zip``, or ``github``.
-    ``original`` keeps the user-provided path or URL for the manifest.
-    ``submission_id`` is a filesystem-safe name used for output folders.
-    """
+    """A normalized description of where a submission came from."""
 
     kind: str
     original: str

@@ -1,12 +1,4 @@
-"""Residual Sum of Squares for measured and modelled 4-D signal curves.
-
-RSS is computed independently at every spatial voxel across the time axis::
-
-    RSS = sum_t((S_measured,t - S_modelled,t) ** 2)
-
-This is named RSS, not deviance. It is an unnormalised,
-descriptive prototype measure and is not an official OSIPI score.
-"""
+"""Residual Sum of Squares for measured and modelled 4-D signal curves."""
 
 from __future__ import annotations
 
@@ -45,19 +37,11 @@ def voxelwise_rss(
     return np.where(finite, rss, np.nan)
 
 
-#: Voxels per read when streaming a 4-D pair.  RSS holds measured, modelled and
-#: residual slabs at once, unlike validation's one slab, so its budget is
-#: deliberately smaller.  On the supplied DCE curves 8M was also faster than
-#: 32M while reducing peak memory enough for several analyses to coexist.
 MAX_VOXELS_PER_READ = 8 * 1024 * 1024
 
 
 def _time_chunks(shape: Sequence[int], max_voxels: int):
-    """Yield (start, stop) along the time axis, each at most ``max_voxels``.
-
-    A chunk is a whole number of timepoints, never a partial volume, so the
-    per-voxel accumulation below stays exact.
-    """
+    """Yield (start, stop) along the time axis, each at most ``max_voxels``."""
     last = int(shape[-1])
     plane = 1
     for dim in shape[:-1]:
@@ -75,24 +59,7 @@ def streaming_voxelwise_rss(
     shape: Sequence[int],
     max_voxels: int = MAX_VOXELS_PER_READ,
 ) -> np.ndarray:
-    """Voxelwise RSS from two 4-D array proxies, without loading either whole.
-
-    RSS sums over time, so it accumulates: the running total is one 3-D array
-    and only a slab of timepoints is resident at once. Peak memory becomes
-    proportional to the *spatial* size rather than to spatial x time.
-
-    That distinction is not academic. A real DCE concentration curve from the
-    challenge lead is 121 x 145 x 91 x 157, which is 1 GB as float32 and 2 GB
-    as float64. The previous implementation materialised both the measured and
-    the modelled volume in float64 and then their residual, so scoring one scan
-    pair asked for about 6 GB and the kernel killed the process on an ordinary
-    laptop. Streaming the same arithmetic needs about 13 MB of accumulator plus
-    one slab.
-
-    Results are identical to :func:`voxelwise_rss`, including the rule that a
-    voxel is NaN when *any* timepoint is non-finite on either side; validity is
-    tracked across chunks rather than decided within one.
-    """
+    """Voxelwise RSS from two 4-D array proxies, without loading either whole."""
     dims = tuple(int(value) for value in shape)
     if len(dims) != 4:
         raise ValueError("RSS requires measured and modelled 4-D signals")
@@ -107,11 +74,9 @@ def streaming_voxelwise_rss(
         finite = np.isfinite(measured).all(axis=-1) & np.isfinite(modelled).all(axis=-1)
         valid &= finite
         residual = measured - modelled
-        # A non-finite voxel would poison the running total with NaN or inf and
-        # there is no way back from that, so it contributes zero here and is
-        # masked out at the end by `valid`.
         np.multiply(residual, residual, out=residual)
-        np.nan_to_num(residual, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        if not finite.all():
+            np.nan_to_num(residual, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         total += residual.sum(axis=-1)
         del measured, modelled, residual, finite
 

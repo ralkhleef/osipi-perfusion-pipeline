@@ -16,13 +16,7 @@ def detect_challenge_type(
     path: Path,
     challenge_config: dict[str, dict[str, tuple[str, ...]]] | None = None,
 ) -> str:
-    """Return the best matching challenge type for a submission folder.
-
-    Folder/README words are useful hints, but real uploads commonly use a
-    neutral team name. Recognized NIfTI map types therefore provide stronger
-    evidence. A shared map such as CBF cannot choose between ASL and DSC by
-    itself; tied evidence returns ``unknown`` so the reviewer can decide.
-    """
+    """Return the best matching challenge type for a submission folder."""
 
     challenge_config = challenge_config or challenge_keyword_config()
     haystack = _path_text(path)

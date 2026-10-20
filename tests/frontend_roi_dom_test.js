@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * Executes the ROI renderer against a minimal DOM stub.
- *
- * The main smoke suite inspects source text. This one actually *runs*
- * renderRoiDescriptiveStatistics() and inspects the DOM it produces, so
- * formatting and clearing behaviour are verified rather than assumed.
- *
- * Only the ROI block and its escaping helper are evaluated — app.js as a
- * whole performs browser-only work at load time.
- *
- * Run: node tests/frontend_roi_dom_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -146,9 +134,6 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
   check("range displayed", html.includes("0.1000 to 0.5000"));
   check("map type displayed", html.includes("KTRANS"));
   check("ROI label displayed", html.includes("Tumour"));
-  // Identity that is the same on every row is stated once above the table
-  // rather than repeated down a column. With a single row that is always all
-  // of it, so the dataset moves to the scope line but must still be shown.
   check("dataset title-cased for display",
         nodes["roi-descriptive-scope"].innerHTML.includes("Synthetic"),
         nodes["roi-descriptive-scope"].innerHTML);
@@ -285,9 +270,6 @@ console.log("\n=== ROI renderer: executed DOM behaviour ===\n");
         nodes["roi-descriptive-body"].innerHTML.includes("1250 of 1300"));
 }
 
-// ── Canonical payload helper, executed ───────────────────────────────────
-// Static assertions alone let a wrong key path or a dropped status slip
-// through, because nothing was running this function.
 const payloadSrc = extractFunction("_roiDescriptivePayload");
 
 function runPayload(analyses) {
@@ -367,13 +349,6 @@ console.log("\n=== Canonical payload helper ===\n");
 }
 
 
-
-/* ── Finding one row in a table of hundreds ───────────────────────────────
-   One participant of the DCE set is six scans; ten across three sites is
-   sixty, each contributing a row per map per region. The table is correct and
-   unreadable. The filter narrows what is on screen and nothing else -- the
-   count chip keeps stating the real total and the CSV is built from the
-   records, so a filtered view can never become a partial export. */
 console.log("\n=== ROI filter ===\n");
 
 function makeFilterDom(records) {

@@ -1,8 +1,4 @@
-"""Tests for nifti_validator.py.
-
-Covers: valid files pass, fake files fail, NaN/inf produce warnings not errors,
-result dict always includes shape/dtype/stats.
-"""
+"""Tests for nifti_validator.py."""
 
 from __future__ import annotations
 

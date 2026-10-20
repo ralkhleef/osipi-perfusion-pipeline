@@ -72,15 +72,11 @@ test-results/
 !tests/**/*.zip
 
 # Local preview and audit files
-/.codex-ui-audit/
 /docs-preview.png
 /video-preview.png
 
-# Personal meeting prep. Not for publication.
 /MEETING_NOTES.md
 
-# Generated manifest caches. These are rebuilt from the files they describe,
-# and one was committed by accident because it sits under a data folder.
 .osipi_manifest.json
 
 # Generated reports written to the project root while testing.

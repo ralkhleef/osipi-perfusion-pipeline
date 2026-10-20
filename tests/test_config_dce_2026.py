@@ -88,7 +88,6 @@ def test_required_and_optional_maps_load(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_ve_is_an_optional_dce_map(tmp_path: Path, monkeypatch) -> None:
-    """ve already existed in map_types but was missing from DCE."""
     cfg = _loaded(tmp_path, monkeypatch)
     assert "ve" in cfg.optional_maps_by_challenge()["dce"]
 
@@ -188,10 +187,6 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
     assert analysis["mask_exclusions"] == {
         "gray matter": ["hippocampus"],
     }
-    # ASL now enables the same 4-D fitted-model comparison as DCE: participants
-    # submit what they fitted to obtain CBF and ATT, and it is compared against
-    # the ground-truth 4-D ASL signal. The analysis was always generic; only
-    # the configuration block is new.
     assert cfg.analysis_by_challenge()["asl"] == {
         "thresholds": {},
         "roi_descriptive": {
@@ -208,10 +203,6 @@ def test_dce_analysis_enablement_is_configuration_driven() -> None:
             "measured_artifact": "measured_st",
         },
     }
-    # DSC carries the same descriptive statistics. Mean, median, SD, range
-    # and CoV inside a supplied mask need no definition from the challenge
-    # leads, unlike accuracy, deviance or a pass threshold, so they are set
-    # provisionally rather than leaving DSC reporting nothing.
     assert cfg.analysis_by_challenge()["dsc"] == {
         "thresholds": {},
         "roi_descriptive": {
@@ -233,20 +224,12 @@ def test_asl_and_dsc_declare_the_maps_they_exist_to_collect() -> None:
     assert set(required["asl"]) == {"cbf", "att"}
     assert set(required["dsc"]) == {"cbv", "cbf", "mtt"}
 
-    # Nothing beyond the maps is mandatory until the challenge leads say so.
     artifacts = config_rules.required_artifacts_by_challenge()
     assert artifacts["asl"] == () and artifacts["dsc"] == ()
 
 
 def test_asl_and_dsc_declare_no_dataset_grid() -> None:
-    """Their layout has not been stated, so none is invented here.
-
-    A dataset name is not inert. Ingestion reads these names to decide
-    whether a top-level directory partitions one submission or separates two
-    teams, so inventing a placeholder dataset would change how real archives
-    are unpacked. The schema accepts null counts now, so a grid can be added
-    as soon as one exists, without another schema change.
-    """
+    """Their layout has not been stated, so none is invented here."""
     config_rules.clear_config_cache()
     grids = config_rules.datasets_by_challenge()
     assert grids["asl"] == {} and grids["dsc"] == {}

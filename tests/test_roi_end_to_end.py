@@ -1,19 +1,4 @@
-"""ROI statistics through the production path using real NIfTI files.
-
-Everything here uses genuine NIfTI files written to disk and the actual
-scoring entry point. Masks are discovered by the production
-``_reference_masks()`` search, never handed to the calculator directly,
-so this proves the discovery and association path, not just the arithmetic.
-
-Expected values are hand-calculated from a four-voxel ROI:
-
-    selected values : 0.1, 0.2, 0.3, 0.4
-    mean            : 0.25
-    median          : 0.25
-    population SD   : sqrt(((0.15)^2+(0.05)^2+(0.05)^2+(0.15)^2)/4)
-                    = sqrt(0.0125) = 0.1118033988...
-    CoV             : SD / 0.25 = 0.4472135955...
-"""
+"""ROI statistics through the production path using real NIfTI files."""
 
 from __future__ import annotations
 
@@ -66,12 +51,7 @@ SHAPE = (2, 2, 2)
 
 @pytest.fixture()
 def dce_submission(tmp_path, monkeypatch):
-    """A structured DCE submission plus a discoverable reference ROI mask.
-
-    The dataset configuration is overridden to 1 participant x 1 repeat x
-    1 site so a small fixture satisfies completeness, production validation
-    is not weakened, the *test challenge* is simply smaller.
-    """
+    """A structured DCE submission plus a discoverable reference ROI mask."""
     import scoring
     from osipi_pipeline.config import rules as config_rules
 
@@ -92,12 +72,6 @@ def dce_submission(tmp_path, monkeypatch):
     import services.path_config as path_config
     monkeypatch.setattr(path_config, "EXTRACTED_DIR", extracted, raising=False)
 
-    # Masks are discovered across *every* reference root, not only the one
-    # holding the ground-truth maps, so the organiser-wide roots have to be
-    # pinned inside tmp. Without this the developer's own
-    # data/reference_data/masks is picked up and the fixture's mask is no
-    # longer the only one, which is a real difference between this machine
-    # and a clean checkout.
     for name in ("REFERENCE_DATA_DIR", "SCORING_DIR"):
         monkeypatch.setattr(scoring, name, tmp_path / "organiser" / name.lower())
 

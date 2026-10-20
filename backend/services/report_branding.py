@@ -1,27 +1,4 @@
-"""Shared visual identity for OSIPI reports (HTML and PDF).
-
-The reports are typeset in a scientific-journal register rather than a
-dashboard one, because the audience reads Radiology and Nature Methods all
-day and that is the convention they trust. Concretely:
-
-  * Rules, never boxes. Hierarchy comes from scale, weight, and case.
-  * Tables follow LaTeX ``booktabs``: horizontal rules only, no vertical
-    rules, no zebra striping, no fills.
-  * Colour encodes data and nothing else. There is no decorative colour;
-    the only hues in the document are the logo and three status inks.
-  * Numerals are tabular and right-aligned so columns compare vertically.
-
-Both renderers: the HTML report in ``backend/main.py`` and the ReportLab
-PDF in ``services/pdf_report_service.py``, import their palette, logo, and
-status logic from here so the two stay identical.
-
-The logo asset is ``frontend/assets/logo.svg``, which is really a thin SVG
-wrapper around two embedded PNGs: a colour layer and a greyscale luminance
-layer used as a mask. ReportLab cannot render SVG, so :func:`logo_png_bytes`
-recombines those layers into one RGBA PNG. Results are cached per width, and
-every entry point returns ``None`` rather than raising, so a missing or
-unreadable logo degrades to a text-only masthead instead of breaking a report.
-"""
+"""Shared visual identity for OSIPI reports (HTML and PDF)."""
 
 from __future__ import annotations
 
@@ -35,10 +12,6 @@ from services.path_config import FRONTEND_DIR
 
 LOGO_SVG_PATH = FRONTEND_DIR / "assets" / "logo.svg"
 
-# The full lockup, for the page-1 masthead. On white rather than transparent,
-# which suits a white page and avoids keying out the coral's soft edges. The
-# mark-only SVG is used for running heads, where the tagline is too small to
-# read anyway.
 LOGO_LOCKUP_PATH = FRONTEND_DIR / "assets" / "logo-lockup.png"
 
 # ── Palette ───────────────────────────────────────────────────────────────
@@ -57,8 +30,6 @@ BRAND = {
     # Logo: used only for the mark itself
     "logo_plum":  "#830087",
     "logo_coral": "#fe575f",
-    # Status inks. Dark enough to read as text on paper, and to survive a
-    # monochrome print as distinguishable greys.
     "ok":         "#3b6d11",
     "warn":       "#854f0b",
     "bad":        "#a32d2d",
@@ -95,9 +66,6 @@ _TONE_RULES: tuple[tuple[str, str], ...] = (
     ("scored", "ok"),
 )
 
-# Only base-14 PDF fonts and their system equivalents. A report is downloaded
-# and emailed, so a webfont has no network to load from, and the HTML and the
-# PDF have to look like the same document.
 SERIF_STACK = "'Times New Roman', Times, serif"
 SANS_STACK = "Helvetica, Arial, 'Helvetica Neue', sans-serif"
 MONO_STACK = "'Courier New', Courier, monospace"
@@ -111,11 +79,7 @@ PDF_MONO_BOLD = "Courier-Bold"
 
 
 def status_tone(value: object) -> str:
-    """Classify a status string as ``ok`` / ``warn`` / ``bad`` / ``neutral``.
-
-    Unrecognised values fall back to ``neutral``, so a new status string can
-    never render as a misleading green or red.
-    """
+    """Classify a status string as ``ok`` / ``warn`` / ``bad`` / ``neutral``."""
     text = str(value or "").strip().lower()
     if not text:
         return "neutral"
@@ -125,15 +89,9 @@ def status_tone(value: object) -> str:
     return "neutral"
 
 
-
-
 @lru_cache(maxsize=1)
 def _logo_layers() -> tuple[object, object] | None:
-    """Decode the colour and mask PNGs embedded in the logo SVG.
-
-    Returns ``None`` if the file is missing, malformed, or Pillow is
-    unavailable. Cached because the base64 payloads total roughly 60 KB.
-    """
+    """Decode the colour and mask PNGs embedded in the logo SVG."""
     try:
         from PIL import Image
     except Exception:
@@ -159,11 +117,7 @@ def _logo_layers() -> tuple[object, object] | None:
 
 @lru_cache(maxsize=8)
 def logo_png_bytes(width: int = 220) -> bytes | None:
-    """Composite the logo into a transparent PNG ``width`` pixels wide.
-
-    Alpha comes from the SVG's luminance mask. Transparent margins are
-    trimmed so the mark sits flush against the masthead rule.
-    """
+    """Composite the logo into a transparent PNG ``width`` pixels wide."""
     layers = _logo_layers()
     if layers is None:
         return None
@@ -188,12 +142,7 @@ def logo_png_bytes(width: int = 220) -> bytes | None:
 
 @lru_cache(maxsize=8)
 def logo_data_uri(width: int = 220) -> str | None:
-    """Return the logo as a ``data:image/png;base64,...`` URI, or ``None``.
-
-    HTML reports get downloaded and emailed as standalone files, so a
-    ``/static/...`` reference would break the moment the file left the
-    server. Embedding keeps the report self-contained.
-    """
+    """Return the logo as a ``data:image/png;base64,...`` URI, or ``None``."""
     png = logo_png_bytes(width)
     if png is None:
         return None
@@ -260,11 +209,7 @@ def lockup_reportlab_path() -> str | None:
 
 @lru_cache(maxsize=1)
 def logo_reportlab_path() -> str | None:
-    """Write the PDF-sized logo to a temp file and return its path.
-
-    ReportLab's ``drawImage`` takes a path; writing once and reusing avoids
-    re-compositing the PNG on every page of every report.
-    """
+    """Write the PDF-sized logo to a temp file and return its path."""
     png = logo_png_bytes(320)
     if png is None:
         return None

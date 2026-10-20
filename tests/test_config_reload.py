@@ -50,12 +50,7 @@ def test_reload_picks_up_an_edit_without_a_restart(api, tmp_path, monkeypatch) -
 
 def test_a_broken_edit_is_reported_and_the_old_config_keeps_running(
         api, tmp_path, monkeypatch) -> None:
-    """A typo must not take the pipeline down or show a stack trace.
-
-    Someone who is not a developer has to be able to fix the file and press
-    the button again, which means the failure has to be readable and the
-    running configuration has to survive it.
-    """
+    """A typo must not take the pipeline down or show a stack trace."""
     from osipi_pipeline.config import rules as config_rules
 
     broken = tmp_path / "validation_rules.yaml"
@@ -87,9 +82,6 @@ def test_the_button_and_its_handler_are_wired_up() -> None:
     assert 'id="config-reload-msg"' in html
     assert "config-reload-btn" in app_js and "/api/config/reload" in app_js
 
-    # Read the handler's own body by brace matching. Searching the whole file
-    # for hydrateAppConfig() passes on any other call site, which is how the
-    # first version of this check missed the refresh being deleted.
     start = app_js.index("async function _reloadChallengeRules")
     depth, end = 0, start
     for index in range(app_js.index("{", start), len(app_js)):

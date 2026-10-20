@@ -1,20 +1,4 @@
-"""The browser must never serve a stale script.
-
-The page carried hand-written cache-busting numbers, ``app.js?v=91`` and
-``styles.css?v=102``. Nobody bumps a number by hand, so they stopped changing
-while the files kept changing, and browsers went on serving a cached script for
-weeks. Every symptom of that looks like a bug in the application rather than a
-stale file, and it cost most of a day: rebuilding the image changes nothing when
-the URL is identical.
-
-The version is now a hash of the file's own bytes, computed when the page is
-served. Same file, same URL, cached. Changed file, new URL, fetched.
-
-Two properties have to hold together, and testing either alone would miss the
-failure: the URL must change when the file changes, and it must NOT change when
-the file does not, or caching is defeated entirely and every page load
-re-downloads everything.
-"""
+"""The browser must never serve a stale script."""
 
 from __future__ import annotations
 
@@ -89,11 +73,7 @@ def test_the_html_itself_is_not_cached(client) -> None:
 
 
 def test_an_unreadable_asset_still_serves_a_page(monkeypatch) -> None:
-    """A missing file is the static mount's problem to report, not a 500 here.
-
-    The fallback is per-process rather than constant, so it still cannot pin a
-    browser to a stale copy indefinitely.
-    """
+    """A missing file is the static mount's problem to report, not a 500 here."""
     import main
     monkeypatch.setattr(main, "FRONTEND_DIR", Path("/nonexistent"), raising=False)
     first = main._asset_fingerprint("app.js")

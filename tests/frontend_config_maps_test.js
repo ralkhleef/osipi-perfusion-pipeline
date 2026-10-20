@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-/**
- * The Configuration Manager maps and artifacts panels.
- *
- * These are edited by challenge organisers, who are researchers rather than
- * developers, so the panel was rebuilt around the one decision they actually
- * make: whether a map is required. Filename aliases became chips instead of a
- * comma separated textarea, and the reference detail collapses.
- *
- * The risk in a rewrite like that is silent: the panel can look correct and
- * save nothing. `_collectConfigurationDraft` reads `.config-map-state`,
- * `.config-map-dimensions` and `.config-map-aliases` by class name and
- * expects aliases as a comma joined string. Those survive as hidden inputs,
- * and the first group below asserts on exactly the shape the save path reads.
- *
- * No DOM library is used, in keeping with the other suites here. The markup
- * is checked as markup, and the fiddly part, deciding which typed names are
- * actually new, lives in `_newAliases`, which takes and returns plain arrays
- * so it can be exercised directly.
- *
- * Run: node tests/frontend_config_maps_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -205,10 +184,6 @@ check("an alias cannot break out of the hidden input",
   !/value="[^"]*"\s+onerror=/.test(hostile), hostile.slice(0, 300));
 check("an alias cannot break out of a chip's remove button",
   !/data-alias="[^"]*"\s+onerror=/.test(hostile));
-// Asserting on data-state alone is not enough: every segment button carries
-// one too, so a bad row state still matches somewhere in the markup. Check
-// the row's own attribute, the hidden input the save path reads, and that a
-// segment is still selected.
 const odd = sandbox._configurationMapsMarkup([{ id: "a", display: "A", label: "l",
   state: "nonsense", aliases: [] }]);
 check("an unrecognised state does not reach the row",
@@ -224,12 +199,6 @@ check("no artifacts renders a message",
   sandbox._configurationArtifactsMarkup([]).includes("No artifact types are configured"));
 
 
-
-/* ── Capabilities: state first, detail second ─────────────────────────────
-   Eight rows per challenge, five of them reading "Not configured" in the same
-   grey as the rows that said something. The one question the panel answers --
-   what can this challenge do right now -- took reading twenty-four lines of
-   near-identical text. */
 console.log("\nCapabilities read at a glance");
 {
   const capSandbox = { console, el: () => capHost };
@@ -249,9 +218,6 @@ console.log("\nCapabilities read at a glance");
   check("Not available is off", on("Not available") === false);
   check("an empty value is off, not on by default", on("") === false);
   check("and so is a missing one", on(undefined) === false);
-  /* The backend's wording is the source of truth. Guessing from keywords
-     would drift the moment it rephrases, so anything that is not explicitly
-     negative counts as available. */
   check("a configured provider is on", on("Configured: ASL example scoring package"));
 
   const detail = capSandbox._capabilityDetail;

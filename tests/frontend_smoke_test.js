@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * DOM smoke test for frontend/index.html
- * Uses only Node.js stdlib — no external packages required.
- * Run: node tests/frontend_smoke_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -270,7 +265,7 @@ checkNotContains("Step 6 no longer shows generic Finish label", footerConfigBloc
 checkContains("Blocked-step reason helper", appJs, "function _stepBlockedReason");
 checkContains("Validate Continue gates on error count (warnings don't block)", appJs, 'issueCount(r, "errors") === 0');
 checkContains("Action row disabled when blocked", appJs, "primaryBtn.disabled = !canProceed");
-checkContains("Blocked reason stays on disabled action instead of visible footer copy", appJs, "guidance.hidden = !!blockedReason");
+checkContains("Blocked reason stays on disabled action instead of visible footer copy", appJs, 'guidance.textContent = blockedReason ? "" :');
 checkContains("Restored sessions sync in-card actions", appJs, "_syncStepActionRow(step)");
 checkContains("Progress sync helper", appJs, "function _syncCompactProgress");
 checkContains("Step shell card styling", css, ".step-shell {");
@@ -326,12 +321,6 @@ checkContains("Items-to-review list is neutral gray", css, ".issue-list li.revie
 checkContains("Run notice hides success icon", css, "#step-run .run-skipped-notice .rsn-icon { display: none; }");
 checkContains("Run completion banner stays neutral", css, "#run-completion-banner.step-completion-banner");
 checkNotContains("Validate subtitle no longer repeats run readiness", section("step-validate"), "run readiness, and output-map");
-/* These two used to pin the exact numbers in styles.css?v=102 and app.js?v=91,
-   which asserted that somebody had remembered to bump a version by hand. Nobody
-   did, the numbers stopped changing while the files kept changing, and browsers
-   served a cached script for weeks. The version is now a hash of the file's
-   contents, computed when the page is served, so what is worth testing is that
-   the mechanism is in place rather than what today's number happens to be. */
 checkContains("Stylesheet carries a cache-busting placeholder", html, "styles.css?v=");
 checkNotContains("Step 5 capability strip removed", html, "analysis-scope-bar");
 checkNotContains("Step 5 capability strip CSS removed", css, ".analysis-scope-bar");
@@ -569,7 +558,7 @@ checkNotContains("Review toolbar omits separate clear-filters button", indexFilt
 checkNotContains("Review list no longer uses nested collapsible section", appJs, '_renderCollapsibleSection("index"');
 checkContains("Review summary line uses card subtitle like Validate", appJs, "desc.textContent = summaryText");
 checkContains("Review summary is simple detected/selected copy", renderBatchBlock, '`${safeSubmissions.length} submissions · ${selectedCount} selected`');
-checkContains("Review single summary is simple detected copy", renderBatchBlock, '`${safeSubmissions.length} submission detected`');
+checkContains("Review single summary does not repeat the count", renderBatchBlock, ': "";');
 checkNotContains("Review summary does not show misleading ready count", renderBatchBlock, "ready ·");
 checkNotContains("Review summary does not show misleading warning count", renderBatchBlock, "warning${warnings");
 checkNotContains("Review summary does not show misleading error count", renderBatchBlock, "error${errors");
@@ -712,7 +701,7 @@ check("Score not-configured compatibility mount", "score-not-configured-card");
 check("Score status card",         "score-status-card");
 check("Score table card",          "score-table-card");
 check("Run analysis button",        "btn-score-all");
-checkContains("Configured analysis action", html, "Run Analysis");
+checkContains("Configured analysis action", html, ">Run analysis</button>");
 checkContains("Score duplicate continue hidden", css, "#btn-score-continue");
 checkContains("Score not-configured mount is hidden in markup", section("step-score"), '<div id="score-not-configured-card" hidden style="display:none"></div>');
 checkNotContains("Score not configured text removed from visible UI", section("step-score"), "Scoring not configured");
@@ -747,9 +736,6 @@ checkContains("Capabilities details modal", html, 'id="config-modal-capabilities
 checkContains("Versions details modal", html, 'id="config-modal-versions"');
 checkContains("Modal open behavior", appJs, "function _openConfigurationModal");
 checkContains("Modal close behavior", appJs, "function _closeConfigurationModal");
-/* The guarantee is that closing a section is not saving and saving is not
-   activating. It used to be a three-line grey paragraph on the page; it is now
-   one line plus the "?" the rest of the app uses for detail. */
 checkContains("Closing a section is not saving", html,
   "Closing a section keeps its draft values");
 checkContains("and saving is not activating", html,
@@ -760,17 +746,13 @@ checkContains("Responsive modal width", css, ".config-manager-modal-dialog-wide 
 checkContains("Modal body vertical scroll", css, "overflow-y: auto;");
 checkContains("Configuration values wrap", css, ".config-manager dd { overflow-wrap: anywhere; }");
 checkContains("Map units shown in manager", appJs, "_configurationMapUnit(item.id)");
-// Aliases used to be a comma separated textarea, which wrapped but asked an
-// organiser to punctuate a list correctly. They are chips now; the original
-// concern was that a long list must not overflow its container, so that is
-// what is checked, along with the hidden input the save path still reads.
 checkContains("Long map aliases wrap rather than overflow", css, ".cfg-chips {");
 checkContains("Long map aliases wrap rather than overflow (flex-wrap)", css, "flex-wrap: wrap");
 checkContains("Map aliases still reach the save path", appJs, 'class="config-map-aliases"');
 checkContains("Long package names get wrapping detail text", html, 'id="config-manager-package-detail"');
-checkContains("Private assets local-only warning", html, "These files remain local and are not included in GitHub or configuration exports.");
-checkContains("Private asset file chooser is visible", html, "Choose NIfTI file");
-checkContains("Private asset filename feedback", html, 'id="config-manager-asset-file-name"');
+checkContains("Private assets folder upload", html, 'id="config-manager-asset-folder-upload"');
+checkContains("Private asset file chooser is visible", html, ">Add files</button>");
+checkContains("Private asset upload status", html, 'id="config-manager-asset-folder-status"');
 checkContains("Long private asset filenames wrap", css, ".config-manager-selected-file {");
 checkContains("Configuration Manager API", appJs, "/api/configuration-manager");
 checkContains("Official ranking is a capability row", appJs, '["Official ranking", "official_ranking"]');
@@ -869,28 +851,6 @@ checkContains("Reusable list summary strip CSS", css, ".list-summary-strip");
 checkContains("Filter menu CSS", css, ".filter-menu");
 checkContains("Filter pill CSS", css, ".filter-pill");
 
-/* ── Step headers say less ────────────────────────────────────────────────
-   Every step opened with a grey sentence explaining itself, above content that
-   then explained itself again. The sentences are still there, one hover away,
-   behind the same "?" the rest of the app uses. */
-/* ── Tooltips are not clipped by the card they sit in ─────────────────────
-   Every "?" opens its bubble with CSS alone, absolutely positioned against
-   the button. Every card in this interface sets `overflow: hidden` to clip
-   children to its rounded corners, so near the top of a card the bubble was
-   cut off entirely: a help affordance that shows nothing when pressed.
-
-   `position: fixed` escapes overflow but not a transformed ancestor, which
-   becomes the containing block for fixed descendants -- that put one bubble
-   ninety pixels below the fold while its inline `top` read 477. Moving the
-   bubble to <body> while it is open removes every ancestor at once. */
-/* ── A way out to the guide ───────────────────────────────────────────────
-   "What does Error CoV mean" and "what is this compared against" had no
-   answer anywhere on screen. The guide is one page on the documentation site;
-   the link sits on the two steps where the numbers appear and where they
-   leave the app. */
-/* ── Filtering the ROI table ──────────────────────────────────────────────
-   Sixty scans contribute a row per map per region. The table is correct and
-   too long to read, so the filter narrows the view -- and only the view. */
 console.log("\n[ ROI filter ]");
 {
   const roiSection = section("step-score");
@@ -976,9 +936,6 @@ const scorePreviewBlock = appJs.slice(
 checkContains("Step 5 label is QC & Preview", scoreSection, "Step 5 of 6: QC &amp; Preview");
 checkContains("Step 5 title is QC & Preview", scoreSection, '<h1 class="card-title" id="score-step-title">QC &amp; Preview');
 checkContains("Step 5 generic QC wording", scoreSection, "Review QC, previews, and available analyses.");
-/* The wording moved into the "?" the app already uses for detail. Setting
-   textContent on the heading would delete that button, so the runtime helper
-   must rewrite only the heading's own text node. */
 checkContains("Step 5 wording lives in the tooltip, not a line under the title",
   scoreSection, '<span class="tooltip-text" id="score-step-desc">');
 checkContains("Rewriting the title does not delete the help button",
@@ -1280,11 +1237,6 @@ checkNotContains("Wizard state stores no files", wizardSaveBlock, "pendingLocalF
 checkNotContains("Wizard state stores no validation payloads", wizardSaveBlock, "validationData");
 checkNotContains("Wizard state stores no score results", wizardSaveBlock, "_scoreCache");
 
-/* ── The methods document is asked about, not demanded ────────────────────
-   It used to block a DCE upload outright. The challenge leads said it is not
-   needed for the runs being done now, so the question replaced the rule: the
-   answer is recorded, no answer blocks anything, and saying no offers a blank
-   template rather than a dead end. */
 console.log("\n[ Methods document ]");
 {
   const uploadSection = section("step-upload");
@@ -1302,20 +1254,12 @@ console.log("\n[ Methods document ]");
     uploadSection, "Describes the software, model, and settings used.");
   checkContains("The question is labelled for screen readers",
     uploadSection, 'aria-labelledby="methods-doc-label"');
-  /* The question is the whole interaction: two pills and an optional
-     download. Anything explaining what each answer does was prose nobody
-     needed twice, so it is gone rather than merely shortened. */
   checkNotContains("Answering does not print an explanation of the answer",
     appJs, "_METHODS_ANSWER_NOTES");
   checkNotContains("and there is no note element left behind",
     uploadSection, "methods-doc-note");
-  /* An earlier version inserted a blank template into any submission that
-     declared no document. Withdrawn: a team with their own document, or with
-     none, has to move through the pipeline untouched. */
   checkNotContains("No template is inserted into anyone's submission",
     appJs, "A blank template is added to the submission");
-  /* The Score card said what running produces and that a provider is a
-     separate step. Both true, neither news on every render. */
   checkContains("The reference card states the fact and stops",
     appJs, "`Ground truth is loaded${masks}.`");
   checkNotContains("It does not re-explain what an analysis produces",
@@ -1370,13 +1314,6 @@ checkNotContains("Main copy avoids internal organizer wording", mainExportOption
 checkNotContains("Main copy avoids long identifier disclaimer", mainExportOptions, "original submission identifiers");
 checkContains("Main report button label", mainExportOptions, ">Open report</button>");
 
-/* The Export step used to look untouched however much work had been done.
-   `_renderExportRows` decides each row's availability from the submissions and
-   analyses that exist at the moment it runs, and it ran exactly once, at page
-   load, when there were none of either. Every row was therefore stamped
-   "Nothing has been reviewed yet" and stayed that way for the whole session.
-   Redrawing on the way in is the fix; re-attaching the handlers afterwards is
-   what stops the fix from leaving six dead buttons behind. */
 const syncExportBlock = appJs.slice(
   appJs.indexOf("function _syncExportStep"),
   appJs.indexOf("// ── Batch validation export"),
@@ -1391,9 +1328,6 @@ checkContains("The handlers are in a function so they can be re-attached",
 checkContains("The unavailable rows still say what is missing",
   mainExportOptions, "Nothing has been reviewed yet.");
 
-/* The checks above pin the wiring. This one runs the renderer, because the bug
-   was not a missing string but a value read at the wrong moment, and only
-   executing it twice against different state can show the difference. */
 {
   const vm = require("vm");
   const extract = (name, kind = "function") => {
@@ -1591,7 +1525,6 @@ check("Restore banner",            "restore-banner");
 checkNotContains("Old sidebar collapse JS removed", appJs, "initSidebarCollapse");
 
 console.log("\n[ CSS class presence ]");
-// The application no longer uses a topbar.
 checkCls("Upload form card",  "upload-form-card");
 checkContains("Button base class", css, ".btn,");
 checkContains("Button primary class", css, ".btn-primary");
@@ -1607,7 +1540,6 @@ checkContains("Focus-visible styles", css, ":focus-visible");
 checkContains("Loading class toggled in JS", appJs, "classList.add(\"btn-loading\")");
 
 console.log("\n[ Top step nav must be absent ]");
-// The top step nav was removed — verify it is NOT in the HTML
 if (!hasId("top-step-nav")) {
   console.log("  OK  top-step-nav absent (correct -- removed by design)");
   passed++;
@@ -1749,9 +1681,6 @@ checkContains("Empty-state text is actually looked up by status", appJs,
 checkContains("Methodology text present", appJs, "population SD");
 checkContains("States CoV is stored as a ratio", appJs, "stored as a ratio");
 
-// Safety: every dynamic field escaped. The identity cells are emitted through
-// one shared reader now that they can be dropped per submission, so that path
-// is checked once rather than per field.
 ["r.roi_label || r.roi_id", "_roiNumber(r.roi_median)",
  "_roiPercent(r.roi_within_scan_cov)"].forEach((expr) => {
   checkContains(`ROI field escaped: ${expr}`, appJs, `escapeHtml(${expr}`);
@@ -1773,20 +1702,12 @@ const roiCardHtml = html.slice(roiCardStart, html.indexOf("leaderboard-card", ro
 });
 
 
-// ROI renderer integration with the Results Summary lifecycle
-// The call must live inside the central renderer, not merely exist somewhere.
-// Bounded by the NEXT top-level function after it. An end-marker search is
-// unsafe: the obvious sentinels appear earlier in the file, so the slice
-// silently ran to end-of-file and matched unrelated code.
 const previewPanelStart = appJs.indexOf("function renderScorePreviewPanel()");
 const previewPanelEnd = appJs.indexOf("\nfunction ", previewPanelStart + 1);
 const previewPanelSrc = appJs.slice(
   previewPanelStart, previewPanelEnd > 0 ? previewPanelEnd : appJs.length);
 checkContains("Central Results Summary renderer calls the ROI renderer",
   previewPanelSrc, "renderRoiDescriptiveStatistics(");
-// Spread, so BOTH rows and status reach the renderer. Passing only
-// `_roiDescriptivePayload()[0]` would drop the status that explains an
-// empty table, and the static check would otherwise still pass.
 checkContains("ROI call passes rows AND status",
   previewPanelSrc, "renderRoiDescriptiveStatistics(..._roiDescriptivePayload())");
 
@@ -1813,18 +1734,8 @@ checkNotContains("Central renderer does not re-trigger scoring",
 checkContains("Empty render clears the table body", appJs, 'if (body) body.innerHTML = "";');
 
 
-/* ── One accent colour ────────────────────────────────────────────────────
-   The Run step had a dark green primary button and a blue progress panel
-   while every other primary action in the app is purple. Three accent
-   families is not a palette, and green already means something here: it is
-   the colour of a passed check, so a green "Run processing" button read as a
-   result rather than as the thing you press to get one. */
 console.log("\n[ Accent colour ]");
 {
-  /* The LAST rule for a selector is the one that applies. Reading the first
-     would have passed against the original green while the override sat
-     unread further down the file -- which is exactly what this check exists
-     to catch. */
   const solidFill = (selector) => {
     const at = css.lastIndexOf(selector + " {");
     if (at < 0) return null;

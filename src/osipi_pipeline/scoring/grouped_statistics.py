@@ -102,9 +102,6 @@ class GroupedResult:
     unavailable_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        # `varied_over` is a tuple so the dataclass stays hashable and
-        # immutable, but JSON has no tuple: without this the record would not
-        # survive a write-and-read round trip, which every export depends on.
         data = asdict(self)
         data["varied_over"] = list(self.varied_over)
         return data
@@ -176,16 +173,7 @@ def compute_grouped_statistics(
     source: str = "roi_median",
     minimum_group_size: int = MIN_GROUP_SIZE,
 ) -> list[GroupedResult]:
-    """Aggregate per-scan ROI statistics along each requested axis.
-
-    ``roi_rows`` are the records the within-scan layer already produced, as
-    dicts or dataclasses; every field needed is on them, so no file is read
-    here and no geometry is recomputed.
-
-    Groups smaller than ``minimum_group_size`` are reported with an explicit
-    status rather than omitted, a reviewer needs to see that a participant had
-    only one repeat, not silently find them missing from the table.
-    """
+    """Aggregate per-scan ROI statistics along each requested axis."""
     rows = [row for row in roi_rows if _field(row, "roi_id")]
     results: list[GroupedResult] = []
 
@@ -245,9 +233,6 @@ def compute_grouped_statistics(
             paired_difference = None
             paired_from = None
             paired_to = None
-            # A signed paired difference is meaningful only when exactly two
-            # repeats or sites are present while all other identity fields are
-            # held fixed. Participants are a population, not an ordered pair.
             if axis in {AXIS_REPEAT, AXIS_SITE} and len(varied) == 2:
                 by_axis = {
                     str(_field(member, varies)): _value_of(member, source)

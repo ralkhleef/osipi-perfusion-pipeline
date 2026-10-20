@@ -1,17 +1,4 @@
-"""The service layer around Docker execution.
-
-This is the module that decides what gets run, for how long, and what the
-caller is told afterwards. It was also the least covered module in the
-project at 17 percent, which is the wrong way round: it is the only place
-that hands participant-supplied code to a container.
-
-Docker itself is not exercised here. ``execute_submission`` is replaced with
-a stub so the decisions this layer makes can be checked without a daemon:
-which directory becomes the build context, which timeout wins, what happens
-when the container will not start, and what reaches the caller when
-something fails. The container sandbox flags are covered separately in
-``test_execution.py``.
-"""
+"""The service layer around Docker execution."""
 
 from __future__ import annotations
 
@@ -207,10 +194,7 @@ def runnable(service):
 
 
 def test_a_failing_container_is_still_a_successful_call(runnable, monkeypatch, tmp_path):
-    """`success` means the pipeline ran, not that the submission passed.
-
-    Conflating the two would report a broken submission as a broken pipeline.
-    """
+    """`success` means the pipeline ran, not that the submission passed."""
     module, _ = runnable
     _capture(monkeypatch, module, tmp_path, exit_code=1, passed=False)
     out = module.run_submission("sub", challenge_type="dce")
@@ -248,11 +232,7 @@ def test_an_unexpected_error_does_not_escape_the_service(runnable, monkeypatch):
 
 def test_a_container_that_would_not_start_is_flagged_separately(runnable, monkeypatch,
                                                                 tmp_path):
-    """Exit 125 is Docker refusing, not the submission failing.
-
-    The interface shows a different explanation for each, so the two must not
-    be reported the same way.
-    """
+    """Exit 125 is Docker refusing, not the submission failing."""
     module, _ = runnable
     _capture(monkeypatch, module, tmp_path, exit_code=125, passed=False)
     out = module.run_submission("sub", challenge_type="dce")

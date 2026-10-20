@@ -7,9 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<!-- The ?v= value is replaced at serve time with a hash of the file's
-     contents, so it never needs bumping by hand. It used to, nobody did, and
-     browsers served a cached script for weeks while the file kept changing. -->
 <link rel="stylesheet" href="/static/styles.css?v=dev" />
 </head>
 <body data-step="upload">
@@ -58,9 +55,7 @@
       </div>
     </div>
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 1, Upload
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 1, Upload -->
     <section id="step-upload" class="step-panel step-panel-upload">
 
       <div class="form-card upload-form-card">
@@ -90,7 +85,6 @@
         <!-- Submission Information -->
         <div class="form-section">
           <h2 class="section-heading">Reviewer details</h2>
-          <p class="section-intro">Stored locally and excluded from blinded reports.</p>
           <div class="field-row-2">
             <div class="form-group">
               <label class="label" for="team-name">Team name <span class="req">*</span></label>
@@ -141,19 +135,11 @@
           </details>
         </div>
 
-        <!-- Methods document.
-             The challenge leads said a methods document is not needed for the
-             runs being done now, so nothing here blocks an upload. The question
-             is asked so that "no document" is recorded as an answer rather than
-             left as a silence a reader has to interpret, and so that a
-             submitter who says yes and sends none is told. -->
+        <!-- Methods document -->
         <div class="form-section methods-section">
           <h2 class="section-heading">Methods document <span class="optional-tag">Optional</span></h2>
-          <p class="section-intro">Included in the report when provided.</p>
 
           <div class="form-group answer-group">
-            <!-- The download sits on the question's own line. Under the answers
-                 it read as a third option in the same group of pills. -->
             <div class="field-label-row field-label-row--split">
               <span class="field-label-lead">
                 <label class="label" id="methods-doc-label">Included?</label>
@@ -264,9 +250,7 @@
     </section>
 
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 2, Index
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 2, Index -->
     <section id="step-index" class="step-panel step-shell" hidden>
       <header class="form-header step-shell-header">
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
@@ -303,9 +287,6 @@
           </div>
           <div id="batch-validate-status" class="submit-status" style="display:none;margin-top:10px;"></div>
 
-          <!-- Whether P01..P10 are participants of one submission or ten
-               separate submissions cannot be told from the files. Detection
-               guesses; this is where the guess is shown and can be corrected. -->
           <div class="grouping-note" id="grouping-note" hidden>
             <div class="grouping-note-body">
               <p class="grouping-note-text" id="grouping-note-text"></p>
@@ -333,9 +314,7 @@
     </section>
 
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 3, Validate
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 3, Validate -->
     <section id="step-validate" class="step-panel step-shell" hidden>
       <header class="form-header step-shell-header">
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
@@ -406,9 +385,7 @@
     </section>
 
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 4, Run
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 4, Run -->
     <section id="step-run" class="step-panel step-shell" hidden>
       <header class="form-header step-shell-header">
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
@@ -516,9 +493,7 @@
     </section>
 
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 5, Score & Preview
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 5, Score & Preview -->
     <section id="step-score" class="step-panel step-shell" hidden>
       <header class="form-header step-shell-header">
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />
@@ -557,28 +532,17 @@
             <button id="btn-score-all" class="btn btn-primary" type="button">Run analysis</button>
             <button id="btn-score-continue" class="btn btn-secondary" type="button">Continue</button>
           </div>
-          <!-- Declared here rather than created in script. When this was built
-               on demand it lived only until the next re-render of the card, so
-               the one message telling you the run had happened could vanish
-               between the run finishing and you looking at it. -->
           <p class="score-run-outcome" id="score-run-outcome" role="status" aria-live="polite" style="display:none"></p>
           <p class="smc-hint" id="score-status-hint"></p>
         </div>
       </div>
 
-      <!-- Progress while the wizard runs the steps that need no decision.
-           Declared here rather than built in script, for the same reason as
-           the run outcome banner: anything created on demand lives only until
-           the next re-render of the step it was attached to. -->
       <div class="auto-advance" id="auto-advance" hidden role="status" aria-live="polite">
         <span class="auto-advance-dot" aria-hidden="true"></span>
         <span class="auto-advance-text" id="auto-advance-text"></span>
         <button type="button" class="auto-advance-stop" id="auto-advance-stop">Stop</button>
       </div>
 
-      <!-- Confirmation that a run happened. A banner alone was missed, because
-           the button returns to reading "Run Analysis" either way and the card
-           looks identical to how it looked beforehand. -->
       <div class="run-result-modal" id="run-result-modal" hidden aria-hidden="true">
         <div class="run-result-dialog" role="dialog" aria-modal="true" aria-labelledby="run-result-title">
           <span class="run-result-icon" id="run-result-icon" aria-hidden="true">Done</span>
@@ -600,18 +564,11 @@
           <span class="scoring-admin-badge" id="scoring-admin-badge">Not configured</span>
         </summary>
         <div class="scoring-admin-body">
-          <p class="scoring-admin-desc">
-            Manage rules, private assets, and analysis providers.
-            <button type="button" class="help-tooltip" aria-label="Scoring package help">?
-              <span class="tooltip-text">A trusted ZIP containing scoring code and optional reference data.</span>
-            </button>
-          </p>
 
           <section class="config-manager" id="configuration-manager">
             <div class="config-manager-heading">
               <div>
                 <h3>Challenge configuration</h3>
-                <p>Edit, test, version, and activate challenge rules.</p>
               </div>
               <label class="config-manager-challenge" for="config-manager-challenge">
                 Challenge
@@ -626,7 +583,6 @@
                   <div class="config-manager-section-heading">
                     <div>
                       <h4 id="config-manager-rules-title">Challenge rules</h4>
-                      <p>What a valid submission must contain.</p>
                     </div>
                   </div>
                   <div class="config-manager-summary-grid" aria-label="Challenge rule sections">
@@ -665,7 +621,6 @@
                   <div class="config-manager-section-heading">
                     <div>
                       <h4 id="config-manager-analysis-title">Analysis and data</h4>
-                      <p>Optional providers, private inputs, and the analyses currently available.</p>
                     </div>
                   </div>
                   <div class="config-manager-summary-grid" aria-label="Analysis and data sections">
@@ -697,7 +652,6 @@
                   <div class="config-manager-section-heading">
                     <div>
                       <h4 id="config-manager-history-title">Version history</h4>
-                      <p>Review, activate, restore, export, or import saved configurations.</p>
                     </div>
                   </div>
                   <div class="config-manager-summary-grid config-manager-summary-grid-single" aria-label="Configuration history">
@@ -712,8 +666,6 @@
                 </section>
               </div>
 
-              <!-- Everything edited but not yet saved, named rather than
-                   counted. Populated by _refreshConfigurationChanges(). -->
               <div id="config-manager-changes" class="config-manager-changes"
                    role="status" aria-live="polite" hidden></div>
 
@@ -815,29 +767,20 @@
               <div class="config-manager-modal" id="config-modal-assets" hidden aria-hidden="true">
                 <div class="config-manager-modal-dialog config-manager-modal-dialog-wide" role="dialog" aria-modal="true" aria-labelledby="config-modal-assets-title">
                   <div class="config-manager-modal-header">
-                    <div><h4 id="config-modal-assets-title">Private Reference Assets</h4><p>Private organiser data. These files remain local and are not included in GitHub or configuration exports.</p></div>
+                    <div><h4 id="config-modal-assets-title">Private Reference Assets</h4></div>
                     <button type="button" class="config-manager-modal-close" data-config-modal-close aria-label="Close Private Reference Assets">Close</button>
                   </div>
                   <div class="config-manager-modal-body">
                     <div id="config-manager-assets-status"></div>
 
                     <div class="cfg-asset-add">
-                      <h5>Add a file</h5>
-                      <p class="cfg-asset-add-note">It is copied into the folder for the
-                        type you pick above. Nothing leaves this machine.</p>
-                      <div class="config-manager-asset-upload">
-                        <label class="cfg-asset-field">Type
-                          <select id="config-manager-asset-kind" aria-label="Private asset type">
-                            <option value="reference">Reference map</option>
-                            <option value="mask">ROI mask</option>
-                            <option value="measured_signal">Measured signal-time curve</option>
-                          </select>
-                        </label>
-                        <label class="btn btn-secondary btn-sm" for="config-manager-asset-file">Choose NIfTI file</label>
-                        <input type="file" id="config-manager-asset-file" accept=".nii,.nii.gz">
-                        <span class="config-manager-selected-file" id="config-manager-asset-file-name">No file selected</span>
-                        <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add local asset</button>
+                      <div class="cfg-asset-actions">
+                        <button type="button" id="config-manager-asset-folder-upload" class="btn btn-primary btn-sm">Add folder</button>
+                        <button type="button" id="config-manager-asset-upload" class="btn btn-secondary btn-sm">Add files</button>
+                        <input type="file" id="config-manager-asset-folder" webkitdirectory directory multiple>
+                        <input type="file" id="config-manager-asset-file" accept=".nii,.gz" multiple>
                       </div>
+                      <p id="config-manager-asset-folder-status" class="config-manager-results" style="display:none" aria-live="polite"></p>
                     </div>
                   </div>
                 </div>
@@ -973,11 +916,6 @@
             </div>
           </details>
 
-          <!-- Reloading challenge rules. Editing config/validation_rules.yaml
-               otherwise means restarting the container, which means a
-               terminal. This is the same read-and-validate the app does at
-               startup, so a typo is reported here instead of as a container
-               that will not start. -->
           <div class="config-reload">
             <div class="config-reload-text">
               <strong>Challenge rules</strong>
@@ -1014,27 +952,15 @@
         </table>
       </details>
 
-      <!-- ROI parameter-map statistics: within-scan descriptive values per ROI.
-           Rendered from the canonical records already computed during
-           scoring; the frontend never recalculates them. -->
-      <!-- A details element so the table folds away. It is the tallest thing
-           on the step, and a reviewer who has read it wants it out of the
-           way rather than scrolling past it every time. Open by default,
-           because it is the point of the step. -->
       <details class="pg-card qc-fold" id="roi-descriptive-card" open style="margin-top:16px;display:none">
         <summary class="pg-card-header">
           <div>
             <div class="pg-card-title">ROI statistics <span class="collapsible-count section-count" id="roi-descriptive-count">0</span></div>
-            <div class="pg-card-sub" id="roi-descriptive-sub">Values calculated inside each configured ROI</div>
+            <div class="pg-card-sub" id="roi-descriptive-sub"></div>
           </div>
         </summary>
         <div id="roi-descriptive-empty" class="smc-hint" style="display:none"></div>
-        <!-- Identity shared by every row, so it is not repeated down the table.
-             Filled by _renderRoiScope(). -->
         <div id="roi-descriptive-scope" class="roi-scope" hidden></div>
-        <!-- A filter, not a second source of truth: it hides rows in this
-             table and changes nothing about the records or the CSV export.
-             Shown only when there are enough rows to be worth searching. -->
         <div class="roi-filter" id="roi-descriptive-filter" hidden>
           <label class="roi-filter-field">
             <span class="visually-hidden">Filter ROI statistics</span>
@@ -1073,7 +999,6 @@
 
       <details class="pg-card qc-fold" id="icc-results-card" style="margin-top:16px;display:none" open>
         <summary class="pg-card-header"><span class="pg-card-title">ICC results</span></summary>
-        <p class="smc-hint">Each configured ICC model is shown separately.</p>
         <div class="roi-table-wrap">
           <table class="sc-table roi-table">
             <thead><tr><th>Scope</th><th>ROI</th><th>Model</th><th>ICC</th><th>Interval</th><th>Participants</th><th>Sessions</th><th>Status</th></tr></thead>
@@ -1120,9 +1045,7 @@
     </section>
 
 
-    <!-- ════════════════════════════════════════════════════════
-         Step 6, Export
-         ════════════════════════════════════════════════════════ -->
+    <!-- Step 6, Export -->
     <section id="step-export" class="step-panel step-shell" hidden>
       <header class="form-header step-shell-header">
         <img src="/static/assets/logo.svg" alt="OSIPI logo" class="brand-logo" />

@@ -42,7 +42,7 @@ test.describe("OSIPI acceptance — full workflow", () => {
     await shot(page, "01_startup");
   });
 
-  test("Lena single: upload → detect → validate → QC → export", async ({ page }) => {
+  test("ASL single: upload → detect → validate → QC → export", async ({ page }) => {
     await page.goto(BASE_URL);
     await uploadZip(page, LENA_SINGLE);
     // Upload & Detect

@@ -1,23 +1,4 @@
-"""The NumPy and pure-Python metric paths must agree, voxel for voxel.
-
-``scoring._comparison_metrics`` computes bias, MAE, RMSE, error SD, error CoV
-and Pearson correlation with NumPy, and falls back to
-``scoring._comparison_metrics_py`` when NumPy cannot be imported. Its docstring
-claims the two paths "compute the identical statistics (verified by the
-reference-scoring tests)", but no test referenced the fallback at all: it sat
-at zero coverage while the claim stood. A machine without NumPy would have
-scored submissions through untested arithmetic, and a divergence would have
-surfaced as two reviewers disagreeing about a submission rather than as a
-failing test.
-
-These are differential tests. They assert nothing about what the right answer
-*is*, only that both implementations give the same one, which is exactly the
-promise the fallback makes. The edge cases are the ones that actually separate
-a vectorised implementation from a loop: NaN and infinity on either side, an
-ROI selector that excludes voxels, no finite overlap at all, a zero reference
-mean (CoV undefined), a constant map (correlation undefined), and a single
-voxel (correlation needs two).
-"""
+"""The NumPy and pure-Python metric paths must agree, voxel for voxel."""
 
 from __future__ import annotations
 

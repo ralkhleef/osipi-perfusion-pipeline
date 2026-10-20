@@ -31,30 +31,13 @@ Windows launchers for reviewers who prefer not to type Docker commands.
 
 ## Testing with the DCE test data
 
-The DCE test data contains three folders. Only `submission/` is uploaded in
-the app. Copy the other two into `data/reference_data/` first:
+The DCE test data contains three folders:
 
-| Folder in the test data | Where it goes | Uploaded in the app? |
+| Folder | What it is | How it is added |
 |---|---|---|
-| `hidden_ground_truth/` (`P01/ … P10/`) | copy its `P01 … P10` folders into `data/reference_data/maps/` | No |
-| `shared_masks/` (`site_1/ … site_3/`) | copy its `site_*` folders into `data/reference_data/dce/masks/` | No |
-| `submission/` | — | Yes |
-
-After copying, the layout inside the repository is:
-
-```text
-osipi-perfusion-pipeline/
-└── data/
-    └── reference_data/
-        ├── maps/
-        │   ├── P01/site_1/scan_1/{Ct,Ktrans,vp}.nii.gz
-        │   └── ...
-        └── dce/
-            └── masks/
-                ├── site_1/*_mask.nii.gz
-                ├── site_2/*_mask.nii.gz
-                └── site_3/*_mask.nii.gz
-```
+| `submission/` | a participant submission | uploaded in step 1 |
+| `hidden_ground_truth/` | organiser reference maps | added in step 5, Reviewer settings |
+| `shared_masks/` | organiser ROI masks | added in step 5, Reviewer settings |
 
 Start the app:
 
@@ -68,15 +51,24 @@ builds the image, which takes a few minutes. The app then opens at
 http://localhost:8000. In the app:
 
 1. Upload: enter a team name and email, choose *Select folder*, and select
-   the `submission` folder.
-2. Review: press *Validate*.
-3. Validate: press *Continue*.
-4. Run: press *Continue*.
-5. QC & Preview: wait for "Ground truth is loaded", then press *Run analysis*.
-6. Export: download the CSV, JSON, HTML or PDF results.
+   the `submission` folder. The app refuses the ground truth and mask folders
+   here.
+2. Review: press *Validate*. When validation passes, the app moves on to
+   QC & Preview by itself.
+3. QC & Preview: open *Reviewer settings*, then *Private reference assets*.
+   Click *Add folder* and choose `hidden_ground_truth`, then *Add folder*
+   again and choose `shared_masks`. Files keep their participant, site and
+   scan folders. Close the window and the analysis starts by itself; it can
+   take a few minutes.
+4. Export: download the CSV, JSON, HTML or PDF results.
+
+Reference data only needs to be added once; it is stored in
+`data/reference_data/`, which is ignored by Git. It can also be copied there
+by hand: `hidden_ground_truth/P01 … P10` into `data/reference_data/dce/maps/` and
+`shared_masks/site_*` into `data/reference_data/dce/masks/`.
 
 macOS `._*` and `__MACOSX` files are ignored, so they do not need to be
-deleted. `data/reference_data/` is ignored by Git.
+deleted.
 
 ## Repository guide
 

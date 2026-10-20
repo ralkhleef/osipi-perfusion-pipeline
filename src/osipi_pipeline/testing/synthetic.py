@@ -75,12 +75,7 @@ def build_dce_submission(
     datasets: Iterable[str] = ("Clinical", "Synthetic"),
     methods: bool = True,
 ) -> Path:
-    """Create the submission layout DCE-2026 describes, under ``root``.
-
-    Returns the submission directory. Each scan gets the parameter maps plus a
-    4-D modelled signal; the methods document sits at the submission root,
-    where it belongs to the submission as a whole rather than to one dataset.
-    """
+    """Create the submission layout DCE-2026 describes, under ``root``."""
     scans_by_dataset = {"Clinical": CLINICAL_SCANS, "Synthetic": SYNTHETIC_SCANS}
     submission = root / name
     for dataset in datasets:

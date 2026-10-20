@@ -26,7 +26,6 @@ from pydantic import BaseModel
 
 import logging
 
-from osipi_pipeline.ingestion.manifest import refresh_manifest
 from services import methods_declaration_service as methods_declaration
 from services.github_service import import_github_repo
 from services.ingest_service import (
@@ -77,6 +76,7 @@ from services.configuration_manager_service import (
     preview_configuration,
     save_version,
     store_private_asset,
+    store_private_folder,
     test_configuration,
 )
 from services.provenance_service import analysis_provenance
@@ -141,11 +141,6 @@ DEFAULT_SCORING_MAP_TYPE = default_scoring_map_type()
 KNOWN_CHALLENGE_TYPES = tuple(challenge_types())
 
 
-# ---------------------------------------------------------------------------
-# App startup: ensure all required directories exist
-# ---------------------------------------------------------------------------
-
-
 @asynccontextmanager
 async def lifespan(app):
     for directory in [
@@ -169,13 +164,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConfiguredMultipartRoute(APIRoute):
-    """Apply the pipeline's configured file limit before FastAPI parses forms.
-
-    Starlette otherwise applies its independent 1,000-file default while the
-    pipeline advertises and enforces ``EXTRACT_MAX_FILES`` (10,000 by default).
-    Pre-parsing on the same request caches the form for FastAPI's dependency
-    layer, so there is one parser and one source of truth for the limit.
-    """
+    """Apply the pipeline's configured file limit before FastAPI parses forms."""
 
     def get_route_handler(self):
         original = super().get_route_handler()
@@ -206,25 +195,10 @@ app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 def _asset_fingerprint(name: str) -> str:
-    """A short hash of a frontend file's current contents.
-
-    The page used to carry hand-written cache-busting numbers, ``app.js?v=91``
-    and ``styles.css?v=102``. Nobody remembers to bump a number by hand, so
-    they stopped changing while the files kept changing, and browsers went on
-    serving a cached script for weeks. Every symptom of that looks like a bug
-    in the application rather than a stale file, which is exactly how it wasted
-    an afternoon: rebuilding the image changes nothing when the URL is
-    identical.
-
-    Deriving the version from the bytes means it cannot drift. Same file, same
-    URL, cached. Changed file, new URL, fetched.
-    """
+    """A short hash of a frontend file's current contents."""
     try:
         digest = hashlib.sha256((FRONTEND_DIR / name).read_bytes()).hexdigest()
     except OSError:
-        # An unreadable asset is the static mount's problem to report. Falling
-        # back to a per-process value keeps the page loading and, because it
-        # changes on restart, still cannot serve a stale file indefinitely.
         return uuid.uuid4().hex[:12]
     return digest[:12]
 
@@ -306,11 +280,6 @@ def app_config():
         "limits": settings.get("limits", {}),
         "reporting": settings.get("reporting", {}),
     }
-
-
-# ---------------------------------------------------------------------------
-# Reviewer Configuration Manager
-# ---------------------------------------------------------------------------
 
 
 @app.get("/api/configuration-manager")
@@ -403,6 +372,24 @@ async def configuration_manager_asset_upload(
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.post("/api/configuration-manager/assets/upload-folder")
+async def configuration_manager_asset_folder_upload(
+    challenge_type: str = Form(...),
+    asset_kind: str = Form("auto"),
+    source_folder: str = Form(""),
+    relative_paths: List[str] = Form(...),
+    files: List[UploadFile] = File(...),
+):
+    """Store a folder of private reference maps or masks in one request."""
+    if len(relative_paths) != len(files):
+        raise HTTPException(status_code=400, detail="Each file needs a relative path.")
+    entries = [(path, await upload.read()) for path, upload in zip(relative_paths, files)]
+    try:
+        return store_private_folder(challenge_type, asset_kind, source_folder, entries)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.get("/api/performance/timings")
 def performance_timings(limit: int = Query(50, ge=1, le=200)):
     """Return recent in-process timing samples for local performance review."""
@@ -462,11 +449,6 @@ def execution_status():
         }
 
 
-# ---------------------------------------------------------------------------
-# Submission intake: upload and extract a ZIP
-# ---------------------------------------------------------------------------
-
-
 class RegroupRequest(BaseModel):
     submission_ids: List[str]
     mode: str  # "split" or "merge"
@@ -474,13 +456,7 @@ class RegroupRequest(BaseModel):
 
 @app.post("/api/regroup-submissions")
 def regroup_submissions_endpoint(req: RegroupRequest):
-    """Overrule how an upload was grouped into submissions.
-
-    A ZIP containing P01..P10 is either one submission covering ten
-    participants or ten separate submissions, and nothing in the files
-    distinguishes them. Detection guesses; this is how a reviewer who can see
-    the folder names corrects it.
-    """
+    """Overrule how an upload was grouped into submissions."""
     result = regroup_submissions(req.submission_ids, req.mode)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error", "Regrouping failed."))
@@ -492,15 +468,7 @@ async def upload_submission(
     file: UploadFile = File(...),
     methods_document: Optional[str] = Form(None),
 ):
-    """Accept a ZIP, save it, extract it, and return a submission_id.
-
-    Streams the upload to disk in 64 KB chunks to avoid loading the entire
-    file into RAM.  The size limit is enforced while streaming.
-
-    ``methods_document`` is the submitter's answer to "does this submission
-    include a methods document": ``"yes"``, ``"no"``, or absent when they were
-    not asked. Absent is recorded as absent rather than guessed either way.
-    """
+    """Accept a ZIP, save it, extract it, and return a submission_id."""
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
@@ -532,9 +500,6 @@ async def upload_submission(
             result = save_and_extract_batch_from_path(final_path, file.filename)
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
-        # The flattened records are copies for a single-submission result, so
-        # the flags are copied back: the response says what happened to the
-        # submission the caller just uploaded.
         applied = _apply_methods_declaration(
             _flatten_upload_result(result, file.filename), methods_document)
         # The flattened records are copies for a single-submission result, so
@@ -557,13 +522,7 @@ async def upload_submission(
 
 @app.get("/api/methods-template")
 def methods_template():
-    """The blank methods template, for a submitter to fill in.
-
-    Offered on the upload screen so that "no methods document" has an obvious
-    next step rather than being a dead end. The prompts in it are a starting
-    point; what a methods document must contain is the challenge leads' to
-    decide, and the template says so in its own text.
-    """
+    """The blank methods template, for a submitter to fill in."""
     try:
         body = methods_declaration.template_text()
     except OSError:
@@ -576,20 +535,6 @@ def methods_template():
 
 
 def _apply_methods_declaration(records: List[dict], declared) -> List[dict]:
-    """Record what the submitter said about their methods document.
-
-    A methods document is no longer required outright -- the challenge leads
-    said it is not needed for the runs being done now. The upload form asks
-    whether one is included instead, and the answer is kept so that validation
-    can catch a submitter who said yes and sent none, and so that every report
-    can state which it was rather than leaving a silence that reads as either.
-
-    Nothing is written into the submission. An earlier version dropped a blank
-    template into any submission that declared no document; it was withdrawn
-    because a team that has no methods document, or has their own, must move
-    through the pipeline untouched. The template is a download on the upload
-    screen and nothing more.
-    """
     normalized = methods_declaration.normalize(declared)
     for record in records:
         sid = record.get("submission_id")
@@ -601,12 +546,7 @@ def _apply_methods_declaration(records: List[dict], declared) -> List[dict]:
 
 
 def _flatten_upload_result(result: dict, fallback_filename: str) -> List[dict]:
-    """Normalise a single-ZIP extraction result into a list of submission records.
-
-    A single-submission result is turned into one record; a batch result returns
-    its per-submission records unchanged. Each record already carries
-    ``detected_challenge_type`` (per-submission challenge) from ingestion.
-    """
+    """Normalise a single-ZIP extraction result into a list of submission records."""
     if result.get("batch"):
         return list(result.get("submissions") or [])
     return [{
@@ -626,15 +566,7 @@ async def upload_submissions(
     files: List[UploadFile] = File(...),
     methods_document: Optional[str] = Form(None),
 ):
-    """Accept several ZIPs at once and merge them into one batch.
-
-    Each ZIP is extracted independently (single- or multi-submission), then all
-    resulting submissions are merged into a single batch list. Every submission
-    keeps its own ``detected_challenge_type`` so a mixed upload (e.g. ASL + DCE)
-    stays correctly scoped downstream, the pipeline never merges challenges.
-
-    A per-file failure is reported in ``failed`` and does not abort the others.
-    """
+    """Accept several ZIPs at once and merge them into one batch."""
     if not files:
         raise HTTPException(status_code=400, detail="No files were uploaded.")
 
@@ -720,10 +652,7 @@ async def upload_submissions(
 
 @app.post("/api/upload-folder-submission")
 async def upload_folder_submission(files: List[UploadFile] = File(...)):
-    """Accept browser folder-upload files and return a submission_id.
-
-    Enforces file-count and cumulative-size limits before staging.
-    """
+    """Accept browser folder-upload files and return a submission_id."""
     if not files:
         raise HTTPException(status_code=400, detail="No files were uploaded.")
     if len(files) > EXTRACT_MAX_FILES:
@@ -767,13 +696,7 @@ async def upload_folder_batch(
     files: List[UploadFile] = File(...),
     methods_document: Optional[str] = Form(None),
 ):
-    """Accept browser folder-upload and auto-detect single vs. batch submissions.
-
-    Preserves ``webkitRelativePath`` relative paths so the backend can detect
-    nested submission folders.  Enforces file-count and cumulative-size limits
-    before staging.  Returns a batch result if multiple top-level directories
-    each contain NIfTI files; otherwise identical to ``/api/upload-folder-submission``.
-    """
+    """Accept browser folder-upload and auto-detect single vs."""
     if not files:
         raise HTTPException(status_code=400, detail="No files were uploaded.")
     if len(files) > EXTRACT_MAX_FILES:
@@ -820,11 +743,7 @@ class SubmissionZenodoRequest(BaseModel):
 
 @app.post("/api/import-submission-zenodo")
 def import_submission_zenodo(req: SubmissionZenodoRequest):
-    """Import participant/team submission files from Zenodo.
-
-    After download, runs the same batch-boundary detection as local ZIP uploads.
-    Returns ``batch: true`` if multiple submission folders are detected.
-    """
+    """Import participant/team submission files from Zenodo."""
     if not req.zenodo_input.strip():
         raise HTTPException(status_code=400, detail="Zenodo input cannot be empty.")
 
@@ -863,11 +782,7 @@ class GitHubSubmissionRequest(BaseModel):
 
 @app.post("/api/import-submission-github")
 def import_submission_github(req: GitHubSubmissionRequest):
-    """Import a public GitHub repository ZIP archive as a submission.
-
-    After download + extraction, runs batch-boundary detection.
-    Returns ``batch: true`` if multiple submission folders are found in the repo.
-    """
+    """Import a public GitHub repository ZIP archive as a submission."""
     if not req.repo_url.strip():
         raise HTTPException(status_code=400, detail="GitHub repository URL cannot be empty.")
 
@@ -879,11 +794,6 @@ def import_submission_github(req: GitHubSubmissionRequest):
         )
 
     return result
-
-
-# ---------------------------------------------------------------------------
-# Validation: accepts submission_id, resolves folder internally
-# ---------------------------------------------------------------------------
 
 
 class ValidateRequest(BaseModel):
@@ -898,7 +808,7 @@ class ValidateRequest(BaseModel):
     map_type: Optional[str] = None
     map_type_mode: Optional[str] = None
     notes: Optional[str] = None
-    mode: str = "auto"  # "auto" | "result_only" | "result_validation" | "reproducible" | "reproducible_execution"
+    mode: str = "auto"
     # Which declared dataset the submission belongs to, when its folders do not
     # say. Left unset, one is inferred if exactly one declared grid fits.
     dataset: Optional[str] = None
@@ -976,10 +886,6 @@ def preflight(req: PreflightRequest):
     )
 
 
-# ---------------------------------------------------------------------------
-# Shared helper: find validation JSON files in both storage locations
-# ---------------------------------------------------------------------------
-
 def _find_validation_files(submission_id: Optional[str] = None):
     """Return validation JSON files from data/outputs/validation/ and data/outputs/ (newest first)."""
     val_subdir = OUTPUTS_DIR / "validation"
@@ -1016,11 +922,6 @@ def _msg(item) -> str:
     return str(item or "")
 
 
-# ---------------------------------------------------------------------------
-# Outputs: list saved validation results
-# ---------------------------------------------------------------------------
-
-
 @app.get("/api/outputs")
 def list_outputs():
     """Return all saved validation results, newest first."""
@@ -1033,22 +934,13 @@ def list_outputs():
     return {"results": results, "count": len(results)}
 
 
-# ---------------------------------------------------------------------------
-# Export: validation results and manifests
-# ---------------------------------------------------------------------------
-
-
 @app.get("/api/export-validation")
 def export_validation(
     submission_id: str = Query(...),
     format: str = Query("json"),
     blinded: bool = Query(False, description="True to strip team_name and contact_email"),
 ):
-    """Export the saved validation result for a submission as JSON or CSV.
-
-    When ``blinded=True`` the CSV omits ``team_name`` and ``contact_email`` so
-    the file is safe for peer review or public release.
-    """
+    """Export the saved validation result for a submission as JSON or CSV."""
     safe_id = submission_id.replace("/", "_").replace("\\", "_")
     candidates = _find_validation_files(submission_id)
 
@@ -1195,19 +1087,9 @@ def export_manifest(submission_id: str = Query(...)):
     )
 
 
-# ---------------------------------------------------------------------------
-# Legacy validation-review ordering (not scientific scoring or ranking)
-# ---------------------------------------------------------------------------
-
-
 @app.get("/api/rankings")
 def get_rankings():
-    """Return the legacy validation review order.
-
-    The compatibility route name is retained for existing clients. Its order
-    is based only on validation state and must never be presented as an OSIPI
-    scientific score or challenge ranking.
-    """
+    """Return the legacy validation review order."""
     results = []
     for f in _find_validation_files():
         try:
@@ -1249,24 +1131,12 @@ def get_rankings():
     }
 
 
-# ---------------------------------------------------------------------------
-# Batch upload: auto-detects single vs. multi-submission ZIP
-# ---------------------------------------------------------------------------
-
-
 @app.post("/api/upload-batch")
 async def upload_batch(
     file: UploadFile = File(...),
     methods_document: Optional[str] = Form(None),
 ):
-    """Accept a ZIP that may contain multiple team submissions.
-
-    Streams the upload to disk in 64 KB chunks, the full file is never held
-    in RAM.  The size limit is enforced while streaming.  If the ZIP's top-level
-    structure contains several directories each holding NIfTI files, each
-    directory is treated as an independent submission and the response includes
-    a ``submissions`` list.
-    """
+    """Accept a ZIP that may contain multiple team submissions."""
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Only .zip files are accepted.")
 
@@ -1297,9 +1167,6 @@ async def upload_batch(
             result = save_and_extract_batch_from_path(final_path, file.filename)
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error", "Upload failed."))
-        # The flattened records are copies for a single-submission result, so
-        # the flags are copied back: the response says what happened to the
-        # submission the caller just uploaded.
         applied = _apply_methods_declaration(
             _flatten_upload_result(result, file.filename), methods_document)
         # The flattened records are copies for a single-submission result, so
@@ -1320,28 +1187,17 @@ async def upload_batch(
                 pass
 
 
-# ---------------------------------------------------------------------------
-# Batch validation: validate multiple submission IDs in one request
-# ---------------------------------------------------------------------------
-
-
 class BatchValidateRequest(BaseModel):
     submission_ids: List[str]
     challenge_type: str = DEFAULT_CHALLENGE_TYPE
-    # Optional per-submission challenge overrides ({submission_id: challenge}).
-    # Lets a mixed batch (e.g. ASL + DCE) validate each submission under its own
-    # challenge. Falls back to challenge_type for any submission not listed.
     challenge_types: Optional[Dict[str, str]] = None
     map_type: Optional[str] = None
     map_type_mode: Optional[str] = None
     notes: Optional[str] = None
     team_names: Optional[Dict[str, str]] = None
     contact_emails: Optional[Dict[str, str]] = None
-    # Which declared dataset these submissions belong to, when their folders do
-    # not say. One value for the batch: a batch is one upload, and a mixture
-    # would need the dataset to come from the folders anyway.
     dataset: Optional[str] = None
-    mode: str = "auto"  # "auto" | "result_only" | "result_validation" | "reproducible" | "reproducible_execution"
+    mode: str = "auto"
     qc_mode: str = "deep"
 
 
@@ -1371,22 +1227,12 @@ def validate_batch_endpoint(req: BatchValidateRequest):
     )
 
 
-# ---------------------------------------------------------------------------
-# Batch export: blinded and unblinded CSV
-# ---------------------------------------------------------------------------
-
-
 @app.get("/api/export-batch")
 def export_batch(
     batch_id: str = Query(..., description="batch_id returned by /api/validate-batch"),
     format: str = Query("csv", description="'csv' or 'json'"),
     blinded: bool = Query(False, description="True to strip team_name and contact_email"),
 ):
-    """Export a previously validated batch as CSV (blinded or unblinded) or JSON.
-
-    Unblinded CSV includes ``team_name`` and ``contact_email``.
-    Blinded CSV replaces them with the anonymous ``submission_id`` only.
-    """
     batch = find_batch_result(batch_id)
     if batch is None:
         raise HTTPException(
@@ -1477,10 +1323,6 @@ def _blind_batch(batch: dict) -> dict:
         r.pop("contact_email", None)
     return b
 
-
-# ---------------------------------------------------------------------------
-# NIfTI viewer: list and serve NIfTI files for browser-side rendering
-# ---------------------------------------------------------------------------
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 PRIVATE_NIFTI_PATH_PARTS = private_path_parts()
@@ -1716,11 +1558,6 @@ def full_preview_page(submission_id: str, map_id: str):
     return Response(content=_preview_page_html(submission_id, item), media_type="text/html")
 
 
-# ---------------------------------------------------------------------------
-# Docker execution: build image and run submission
-# ---------------------------------------------------------------------------
-
-
 class ExecuteRequest(BaseModel):
     submission_id: str
     challenge_type: str = DEFAULT_CHALLENGE_TYPE
@@ -1730,30 +1567,7 @@ class ExecuteRequest(BaseModel):
 
 @app.post("/api/execute")
 def execute_submission_endpoint(req: ExecuteRequest):
-    """Build a Docker image for the submission and run it inside a sandboxed container.
-
-    Resolves ``submission_id`` to the extracted folder path, checks that the
-    submission contains a ``Dockerfile``, then delegates to :func:`run_submission`.
-
-    Returns the full :class:`ExecutionResult` dict plus ``stdout_preview``,
-    ``stderr_preview`` (first 8 KB each), and ``output_file_count``.
-
-    **``success`` vs ``passed``**:
-
-    - ``success: false``, pre-flight error (no Dockerfile, bad submission_id,
-      Docker not installed).  Returns HTTP 400.
-    - ``success: true, passed: false``, execution ran but failed (build error,
-      non-zero exit, timeout).  Returns HTTP 200 with full result + logs so the
-      UI can display what went wrong.
-
-    Resource constraints applied to every container:
-
-    - ``--network none``, no outbound internet access.
-    - ``--security-opt no-new-privileges``, no privilege escalation.
-    - ``--memory 4g`` and ``--cpus 2.0``, resource limits.
-    - Submission mounted at ``/submission:ro``.
-    - Output directory mounted at ``/output:rw``.
-    """
+    """Build a Docker image for the submission and run it inside a sandboxed container."""
     if not req.submission_id.strip():
         raise HTTPException(status_code=400, detail="submission_id is required.")
     if req.timeout_seconds is not None and (
@@ -1785,10 +1599,6 @@ def execute_submission_endpoint(req: ExecuteRequest):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Execution result persistence helpers
-# ---------------------------------------------------------------------------
-
 def _exec_result_path(submission_id: str) -> Path:
     """Return the path where an execution result JSON is stored."""
     safe_id = make_safe_id(submission_id)
@@ -1807,7 +1617,6 @@ def _save_execution_result(submission_id: str, result: dict) -> None:
 
 
 def _load_execution_result(submission_id: str) -> Optional[dict]:
-    """Load a previously saved execution result, or None if not found."""
     path = _exec_result_path(submission_id)
     if not path.exists():
         return None
@@ -1816,10 +1625,6 @@ def _load_execution_result(submission_id: str) -> Optional[dict]:
     except Exception:
         return None
 
-
-# ---------------------------------------------------------------------------
-# Execution exports: blinded and unblinded CSV
-# ---------------------------------------------------------------------------
 
 def _exec_result_to_row(r: dict, blinded: bool) -> list:
     """Convert a single execution result dict to a CSV row list."""
@@ -1884,11 +1689,7 @@ def export_execution(
     submission_id: str = Query(..., description="submission_id returned by /api/execute"),
     blinded: bool = Query(False, description="True to strip team_name and contact_email"),
 ):
-    """Export the execution result for a single submission as CSV.
-
-    Requires that /api/execute has been called first for the same submission_id.
-    Blinded CSV strips team_name and contact_email.
-    """
+    """Export the execution result for a single submission as CSV."""
     result = _load_execution_result(submission_id)
     if result is None:
         raise HTTPException(
@@ -1925,11 +1726,7 @@ def export_batch_execution(
     batch_id: str = Query(..., description="batch_id returned by /api/validate-batch"),
     blinded: bool = Query(False, description="True to strip team_name and contact_email"),
 ):
-    """Export execution results for all submissions in a batch as a single CSV.
-
-    Includes only submissions that have been run via /api/execute.
-    Submissions not yet run appear as rows with run_status=NOT_RUN.
-    """
+    """Export execution results for all submissions in a batch as a single CSV."""
     batch = find_batch_result(batch_id)
     if batch is None:
         raise HTTPException(
@@ -1982,10 +1779,6 @@ def export_batch_execution(
     )
 
 
-# ===========================================================================
-# ── Scoring endpoints ────────────────────────────────────────────────────────
-# ===========================================================================
-
 class ScoreRequest(BaseModel):
     submission_id:  str
     provider_id:    Optional[str] = None   # preferred; if set, challenge_type/map_type are ignored
@@ -2031,19 +1824,7 @@ def get_scoring_status(
     map_type:       str           = Query(DEFAULT_SCORING_MAP_TYPE),
     batch_id:       Optional[str] = Query(None),
 ):
-    """Return scoring status for a single submission, a batch, or all providers.
-
-    Calling with no parameters returns the ``providers`` infrastructure snapshot
-    for all registered scoring providers, useful for the Score step UI to show
-    provider cards without needing a specific submission.
-
-    If ``batch_id`` is provided, returns aggregated status for all submissions
-    in that batch.  If ``submission_id`` is provided, returns single-submission
-    status.  Both responses also include a ``providers`` key.
-
-    This endpoint NEVER returns fake scores. Missing prerequisites are reported
-    via ``status="not_configured"`` and a ``missing`` list.
-    """
+    """Return scoring status for a single submission, a batch, or all providers."""
     if batch_id:
         batch_result = find_batch_result(batch_id)
         if not batch_result:
@@ -2075,11 +1856,7 @@ class ScoringStatusRequest(BaseModel):
 
 @app.post("/api/scoring-status")
 def post_scoring_status(req: ScoringStatusRequest):
-    """POST variant of :func:`get_scoring_status` accepting a JSON body.
-
-    Convenience for clients that prefer POST + JSON over query parameters.
-    Delegates to the exact same logic so behaviour is identical.
-    """
+    """POST variant of :func:`get_scoring_status` accepting a JSON body."""
     return get_scoring_status(
         submission_id=req.submission_id,
         provider_id=req.provider_id,
@@ -2091,12 +1868,7 @@ def post_scoring_status(req: ScoringStatusRequest):
 
 @app.post("/api/score")
 def score_single(req: ScoreRequest):
-    """Run scoring for a single submission.
-
-    Prerequisites: execution must have already produced outputs, the OSIPI
-    scoring script must be present, and reference data + mask files must exist.
-    Returns status="not_configured" (HTTP 200) if any prerequisite is missing.
-    """
+    """Run scoring for a single submission."""
     with timed("scoring.single", submission_id=req.submission_id, challenge_type=req.challenge_type):
         result = score_submission(
             req.submission_id.strip(),
@@ -2109,21 +1881,13 @@ def score_single(req: ScoreRequest):
 
 @app.post("/api/score-single")
 def score_single_legacy(req: ScoreRequest):
-    """Backwards-compatible alias for ``POST /api/score``.
-
-    Older clients/tests call ``/api/score-single``; it delegates to the same
-    single-submission scoring logic so behaviour is identical.
-    """
+    """Backwards-compatible alias for ``POST /api/score``."""
     return score_single(req)
 
 
 @app.post("/api/score-batch")
 def score_batch_endpoint(req: ScoreBatchRequest):
-    """Run scoring for a list of submissions sequentially.
-
-    Each submission is scored independently. Submissions that fail their
-    prerequisite check are returned with status="not_configured".
-    """
+    """Run scoring for a list of submissions sequentially."""
     if not req.submission_ids:
         raise HTTPException(status_code=400, detail="submission_ids is required.")
     results = score_batch(req.submission_ids, req.challenge_type, req.map_type, provider_id=req.provider_id)
@@ -2138,11 +1902,7 @@ def score_batch_endpoint(req: ScoreBatchRequest):
 
 @app.get("/api/leaderboard")
 def get_leaderboard():
-    """Return submissions with stored analysis results (summary, no ranking).
-
-    Reads every ``*_score.json`` file from the scoring outputs directory and
-    returns them sorted by ``scored_at`` descending (most recent first).
-    """
+    """Return submissions with stored analysis results (summary, no ranking)."""
     from services.path_config import SCORING_OUTPUTS_DIR
     entries = []
     if SCORING_OUTPUTS_DIR.exists():
@@ -2175,19 +1935,9 @@ def get_leaderboard():
     return {"count": len(entries), "entries": entries}
 
 
-# ---------------------------------------------------------------------------
-# Scoring Package Management: admin/reviewer endpoints
-# ---------------------------------------------------------------------------
-
-
 @app.get("/api/scoring/packages")
 def scoring_packages_list():
-    """List all installed scoring packages with their manifests and readiness.
-
-    Returns a JSON array of package objects (each with ``package_id``). The
-    array shape is the stable, backwards-compatible contract clients/tests rely
-    on; the frontend handles both an array and a legacy ``{packages: [...]}``.
-    """
+    """List all installed scoring packages with their manifests and readiness."""
     return list_packages()
 
 
@@ -2236,10 +1986,7 @@ async def scoring_package_upload(file: UploadFile = File(...)):
 
 @app.delete("/api/scoring/packages/{package_id}")
 def scoring_package_remove(package_id: str):
-    """Remove an installed scoring package.
-
-    Also clears any active-config entries pointing to this package.
-    """
+    """Remove an installed scoring package."""
     if not package_id or not package_id.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid package_id.")
     result = remove_package(package_id)
@@ -2250,12 +1997,7 @@ def scoring_package_remove(package_id: str):
 
 @app.get("/api/scoring/active-config")
 def scoring_active_config():
-    """Return the current active scoring configuration for all challenge types.
-
-    Exposes the config under both ``active`` (stable/expected key) and
-    ``active_config`` (legacy key the frontend reads) so older and newer
-    clients keep working.
-    """
+    """Return the current active scoring configuration for all challenge types."""
     cfg = load_active_config()
     providers = all_providers_status()
     enriched: dict[str, dict] = {}
@@ -2326,15 +2068,7 @@ def export_roi_descriptive(
     batch_id:      Optional[str] = Query(None),
     blinded:       bool          = Query(False, description="True to use a neutral download filename"),
 ):
-    """Export within-ROI parameter-map descriptive statistics as CSV.
-
-    One row per scan and ROI. Values are the canonical records computed once
-    during scoring, this endpoint reads them, it does not recompute.
-
-    Kept separate from the reference-error CSV: within-scan spatial spread
-    and error-against-reference are different quantities, and merging them
-    into one file would invite them being read as the same thing.
-    """
+    """Export within-ROI parameter-map descriptive statistics as CSV."""
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(list(ROI_CSV_COLUMNS))
@@ -2347,9 +2081,6 @@ def export_roi_descriptive(
                 for column in ROI_CSV_COLUMNS
             ])
 
-    # The ROI columns carry scan identity only (dataset/participant/repeat/site),
-    # never team identity, so the rows are safe in either mode; ``blinded`` only
-    # governs the download filename.
     tag = report_filename_tag(
         (batch_id or submission_id or "export").replace("/", "_"), blinded=blinded)
     # A header-only CSV is returned when there are no records, rather than a
@@ -2382,22 +2113,7 @@ def export_scoring(
     batch_id:       Optional[str] = Query(None),
     blinded:        bool          = Query(False),
 ):
-    """Export scoring results as CSV.
-
-    Fields (blinded):
-        submission_id, provider_id, challenge_type, map_type,
-        scoring_status, score_available, metrics_json,
-        reference_based_scoring_available, reference_scoring_status,
-        reference_map_count, reference_compared_map_count,
-        reference_mean_rmse, reference_mean_mae, reference_mean_bias,
-        reference_mean_coefficient_of_variation, reference_metrics_json,
-        overall_qc_summary_json, per_map_metadata_json, per_map_stats_json,
-        artifact_count, artifacts, errors, warnings, scored_at
-
-    Unblinded adds: team_name, contact_email
-
-    Returns HTTP 404 if no scoring results are found.
-    """
+    """Export scoring results as CSV."""
     rows: list[list] = []
 
     _SCORING_HEADER_BLINDED = [
@@ -2508,17 +2224,8 @@ def export_scoring(
     )
 
 
-# ---------------------------------------------------------------------------
-# Combined summary export + HTML report
-# ---------------------------------------------------------------------------
-
 def submission_exists(submission_id: str) -> bool:
-    """True when anything on disk belongs to this exact submission id.
-
-    A submission counts as present if it has been extracted, validated,
-    executed, or scored. Any one of those is enough, an export may legitimately
-    run before some stages have.
-    """
+    """True when anything on disk belongs to this exact submission id."""
     sid = (submission_id or "").strip()
     if not sid:
         return False
@@ -2606,8 +2313,6 @@ _FRIENDLY_METRIC_LABELS = {
 }
 
 
-
-
 def _fmt_report_num(value, digits: int = 3) -> str:
     if value is None:
         return "not available"
@@ -2644,8 +2349,6 @@ def _fmt_export_cell(value, digits: int = 3) -> str:
 def _fmt_report_cell(value, digits: int = 3) -> str:
     text = _fmt_export_cell(value, digits=digits)
     return text if text != "" else "Not available"
-
-
 
 
 def _weighted_percent(numerators, denominators) -> Optional[float]:
@@ -2870,9 +2573,6 @@ def _gather_summary(sid: str) -> dict:
         "analysis_fields": analysis_fields,
         "has_validation":  val is not None,
         "has_scoring":     score is not None,
-        # What the submitter said about a methods document. Carried through
-        # rather than recomputed, so the report states the same thing the
-        # validation run recorded.
         "methods_document": (val or {}).get("methods_document") or {},
     }
 
@@ -2900,15 +2600,6 @@ def _combined_header_unblinded() -> list[str]:
     ] + _combined_header_blinded()
 
 
-# ---------------------------------------------------------------------------
-# Long-format (tidy) researcher CSV, one row per
-#   submission × subject × session/repeat × map × ROI × metric
-# ---------------------------------------------------------------------------
-
-# Scientific metrics emitted per (map, ROI). Accuracy metrics carry the computed
-# value (or blank when a comparison did not run); repeatability CoV and ICC are
-# always emitted as explicitly unavailable (they need repeated noise-varied
-# datasets), because that "unavailable" status is useful to the researcher.
 _LONG_ACCURACY_METRICS = [
     ("rmse", "rmse"),
     ("mae", "mae"),
@@ -2988,13 +2679,7 @@ def _long_metric_status(region_status: str, value) -> str:
 
 
 def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[list, list]:
-    """Return (header, rows) for the tidy long-format researcher CSV.
-
-    One row per submission × subject × session/repeat × map × ROI × metric.
-    CBF and ATT stay in separate rows; each ROI is a separate row; each metric is
-    a separate row. Missing metric values are left blank (never zero). No
-    cross-map or cross-challenge aggregation is performed.
-    """
+    """Return (header, rows) for the tidy long-format researcher CSV."""
     header = (([] if blinded else list(_LONG_IDENTITY_COLUMNS)) + list(_LONG_SCIENTIFIC_COLUMNS))
     pipeline_version = _pipeline_version()
     config_version = _configuration_version()
@@ -3104,11 +2789,6 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                         value = None  # no comparison → blank, never zero
                     _emit(metric_name, value, status)
 
-        # ICC rows, one per participant x session table the submission
-        # supported. A challenge that has configured a model and a submission
-        # with repeated scans produce real values here; everything else falls
-        # through to the submission-level unavailable row below, which states
-        # *why* rather than leaving an empty cell to interpret.
         icc_rows = ref.get("icc_statistics") if isinstance(ref, dict) else None
         emitted_icc = False
         for icc_row in icc_rows or []:
@@ -3138,10 +2818,6 @@ def _long_csv_rows(gathered_by_sid: dict, sids: list, blinded: bool) -> tuple[li
                 str(icc_row.get("dataset") or ""), "", str(held.get("repeat") or ""), str(held.get("site") or ""), "",
             ])
 
-        # Repeatability CoV, and ICC when it could not be computed, are
-        # unavailable for the whole submission. Emit ONE submission-level row
-        # each rather than repeating an identical unavailable row per map/ROI,
-        # keeping the tidy table machine-readable without noise.
         icc_reason = (
             str(ref.get("icc_unavailable_reason") or "")
             if isinstance(ref, dict) else ""
@@ -3197,9 +2873,6 @@ def export_combined(
     if csv_shape not in {"wide", "long"}:
         raise HTTPException(status_code=400, detail="shape must be 'wide' or 'long'.")
 
-    # Gather once and group submissions by challenge (stable within a challenge)
-    # so exports are challenge-grouped. Every row/object carries its own
-    # challenge_type; there is no cross-challenge aggregate row.
     gathered_by_sid = {sid: _gather_summary(sid) for sid in sids}
     sids = sorted(sids, key=lambda sid: str(gathered_by_sid[sid].get("challenge_type") or "").strip().upper())
 
@@ -3384,8 +3057,6 @@ def _status_chip_html(label: str, tone: str | None = None) -> str:
     )
 
 
-
-
 def _issue_rows_html(issue_rows: list[list[str]]) -> str:
     rows: list[str] = []
     for severity, label, text, affected, action in issue_rows:
@@ -3456,8 +3127,6 @@ def export_report(
     )
 
 
-    # No QC bar charts and no map thumbnails: the researchers asked for a
-    # table-focused printable report. Previews stay in the interactive app.
     issues_html = _issue_rows_html(report_model.get("issues") or [])
 
     reference_comparison_rows_html = []
@@ -3499,9 +3168,6 @@ def export_report(
     )
     reference_comparison_html = (
         '<div class="table-wrap"><table><thead><tr>'
-        # "Scan" earns its place here: this table has one row per map per
-        # region per scan, and the DCE layout gives every scan the same
-        # filenames, so without it a hundred rows are indistinguishable.
         '<th>Submission</th><th>Scan</th><th>Map</th><th>ROI</th><th>RMSE</th>'
         '<th>MAE</th><th>Bias</th><th>Error CoV</th><th>Corr.</th><th>Valid voxels</th>'
         '</tr></thead><tbody>'
@@ -3534,9 +3200,6 @@ def export_report(
 
     blind_label = "Blinded report" if blinded else "Unblinded report"
 
-    # Embedded as a data URI, not linked to /static, because the report is
-    # downloaded and emailed and a link would 404 once it leaves the server.
-    # Full lockup first, then the mark, then a text masthead.
     lockup_uri = lockup_data_uri(760)
     logo_uri = None if lockup_uri else logo_data_uri(300)
     if lockup_uri:
@@ -3552,12 +3215,6 @@ def export_report(
     else:
         logo_html = '<div class="wordmark">OSIPI<span>Perfusion pipeline</span></div>'
 
-    # Rendered from the same pre-formatted records summarized by the PDF.
-    # Nothing is recomputed or refiltered here; HTML keeps the complete table
-    # while the printable report carries a compact availability summary.
-    # Display rows, not the full rows: columns whose value never varies are
-    # lifted into a caption instead of repeating identically down the table.
-    # The CSV export is built separately from the records and keeps everything.
     _roi_rows = report_model.get("roi_descriptive_display_rows") or []
     _roi_headers = report_model.get("roi_descriptive_display_headers") or []
     _roi_scope = report_model.get("roi_descriptive_scope") or {}
@@ -3570,9 +3227,6 @@ def export_report(
         "Within-ROI parameter-map statistics. None were available for this "
         "submission. "
     ) + ROI_METHOD_TEXT
-    # Resolved by name. Fixed offsets were wrong the moment a column could be
-    # dropped, and the configurable metric list already changes both the count
-    # and the order of these columns.
     _ROI_TEXT_COLUMNS = {"Dataset", "Participant", "Repeat", "Site",
                          "Map", "ROI", "Units", "Status"}
     _roi_numeric = {
@@ -3585,7 +3239,6 @@ def export_report(
         attr = _num_attr if index in _roi_numeric else ""
         return f"<{tag}{attr}>{_esc(value)}</{tag}>"
 
-    # Whatever was identical on every row, said once instead of repeated.
     _roi_scope_html = (
         '<p class="roi-scope">'
         + " · ".join(f"{_esc(label)}: <strong>{_esc(value)}</strong>"
@@ -3677,9 +3330,6 @@ def export_report(
         ("Generated", generated),
     ]
     if not blinded and len(summaries) == 1:
-        # A single-submission report does not render the batch overview table,
-        # so organiser identity belongs in the metadata block.  Blinded output
-        # never enters this branch.
         meta_items[1:1] = [
             ("Team", summaries[0].get("team_name") or "Not provided"),
             ("Contact", summaries[0].get("contact_email") or "Not provided"),
@@ -3717,11 +3367,6 @@ def export_report(
 
     # ── Figures ───────────────────────────────────────────────────────────
     _figure_blocks = []
-    # One figure per parameter: Bland-Altman. The RMSE/MAE dot plot, the
-    # identity plot, and the finite-voxel plot were cut, the first two
-    # restate what this figure and the results table already show, and a
-    # three-point plot of values between 98% and 99% earns nothing.
-    # Reuse the model's points and units rather than recomputing them.
     _units_by_map = report_model.get("map_units") or {}
     for _map_type, _pts in (report_model.get("agreement_points") or {}).items():
         _units = _units_by_map.get(_map_type, "map units")

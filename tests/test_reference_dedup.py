@@ -25,12 +25,7 @@ def _reference_tree(root: Path) -> Path:
 
 
 def _alias(root: Path, real: str, alias: str) -> bool:
-    """Make ``alias`` name the same directory as ``real``.
-
-    On a case-insensitive filesystem the alias already exists and nothing is
-    created. On a case-sensitive one a symlink reproduces the same condition:
-    two paths, one inode.
-    """
+    """Make ``alias`` name the same directory as ``real``."""
     target = root / alias
     if target.exists():
         return True
@@ -111,13 +106,7 @@ def test_case_sensitive_filesystem_keeps_both_directories(tmp_path: Path) -> Non
 
 
 def test_an_aliased_directory_is_only_scanned_once(tmp_path: Path, monkeypatch) -> None:
-    """Deduplicating the directory list is a real saving, not decoration.
-
-    Filtering the file results alone would produce the right answer, so
-    without this the directory-level guard could be deleted unnoticed. Each
-    scan refreshes a manifest, so scanning one directory twice is genuine
-    duplicated I/O on a large reference tree.
-    """
+    """Deduplicating the directory list is a real saving, not decoration."""
     import scoring
 
     root = _reference_tree(tmp_path / "reference")
@@ -185,12 +174,7 @@ def test_reference_roots_collapse_aliased_directories(tmp_path: Path, monkeypatc
 # ── The count that reaches the user ───────────────────────────────────────
 
 def test_sixteen_scans_and_two_masks_give_exactly_thirty_two_rows(tmp_path: Path) -> None:
-    """16 scans x 2 ROIs = 32 rows, the number a reviewer reads.
-
-    Runs the real calculator against masks discovered by the real production
-    search, with the aliased directory present, so a regression in either the
-    discovery or the deduplication shows up as a wrong row count.
-    """
+    """16 scans x 2 ROIs = 32 rows, the number a reviewer reads."""
     import scoring
     from services.roi_descriptive_service import (
         compute_roi_descriptive_statistics,

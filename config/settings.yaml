@@ -16,31 +16,11 @@ reporting:
   include_pdf_export: true
 
 performance:
-  # Applies to the small 3-D parameter maps, where threads measurably help:
-  # four workers over sixteen real Ktrans maps is 2.5x faster than serial.
-  #
-  # It does NOT apply to large 4-D files. An earlier version of this comment
-  # claimed decompression releases the GIL so more threads always help. That
-  # is true of one big `decompress` call and false for the many small reads
-  # nibabel actually makes: four threads over four real 1 GB concentration
-  # curves measured 1.8x *slower* than reading them one at a time. The
-  # validator now picks by file size, so large files are read serially however
-  # this is set, and raising it cannot reintroduce that slowdown.
-  #
-  # Capped at 6 in code, and further capped by the CPU count, so setting this
-  # higher than the machine has cores does nothing. Lower it if validation is
-  # competing with something else for the machine.
   nifti_validation_workers: 6
   batch_validation_workers: 2
   validation_cache_enabled: true
   manifest_cache_enabled: true
   preview_cache_enabled: true
-  # The analysis is what the report, every export and the frontend all ask
-  # for. A fresh full-cohort DCE run processes 60 compressed 4-D signal pairs
-  # and takes several minutes, so repeating it per reader is not acceptable.
-  # It is memoised on the submitted maps, ground truth, masks and configuration:
-  # changing any of them recomputes, while changing none of them does not.
-  # Turn this off only to force a fresh read every time.
   analysis_cache_enabled: true
 
 paths:
@@ -75,13 +55,8 @@ paths:
     - label: brain mask
       patterns:
         - brain
-    # Before the generic `roi` rule: the first match wins, so a file named
-    # lesion_roi_mask.nii.gz would otherwise be labelled "ROI" and a reader
-    # could not tell which region a row referred to.
-    # Matches the abbreviation the DCE challenge ships (Hipp_mask.nii.gz) and
-    # nothing more. A plain `hipp` would swallow left_hippocampus.nii.gz and
-    # right_hippocampus.nii.gz into one indistinguishable label; those names
-    # already read well through the filename fallback and are left alone.
+    # Listed before the generic `roi` rule so lesion_roi_mask.nii.gz is not labelled "ROI".
+    # left_hippocampus.nii.gz and right_hippocampus.nii.gz use the filename fallback.
     - label: hippocampus
       patterns:
         - hipp_mask

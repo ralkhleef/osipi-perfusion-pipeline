@@ -1,33 +1,4 @@
-"""Advisory thresholds for reported metrics.
-
-A challenge lead mentioned using "a rough threshold of acceptable performance
-as having a CoV below 15%". That is a useful thing for a reviewer to see at a
-glance, and a dangerous thing to hard-code: the same sentence also said there
-is no pass/fail and no ranking in these challenges, so a threshold here marks a
-row for a human to look at and nothing more.
-
-The distinction is carried in the vocabulary rather than left to convention.
-Nothing in this module returns a boolean "pass": a value is either
-:data:`WITHIN` the threshold, :data:`ABOVE` it, or :data:`NOT_ASSESSED`. A row
-that exceeds a threshold is *flagged for attention*, never failed, never
-excluded, never ranked.
-
-Thresholds are configuration and no challenge ships one, so by default every
-metric is ``NOT_ASSESSED`` and reports look exactly as they did. A challenge
-opts in per metric::
-
-    analysis:
-      thresholds:
-        roi_within_scan_cov:
-          warn_above: 0.15
-          note: Rough guide only; not a pass/fail criterion.
-
-Units follow the stored data, so a CoV threshold is the ratio ``0.15``, not
-``15``. Percentages are a presentation concern everywhere else in the pipeline
-and this is no exception; a threshold written as ``15`` would silently never
-fire, so values above 1 for a ratio metric are rejected by the schema rather
-than accepted and quietly ignored.
-"""
+"""Advisory thresholds for reported metrics."""
 
 from __future__ import annotations
 
@@ -86,12 +57,7 @@ class ThresholdAssessment:
 def assess(
     metric: str, value: Any, thresholds: Mapping[str, Any] | None,
 ) -> ThresholdAssessment:
-    """Compare one metric value against the challenge's threshold for it.
-
-    An unavailable value is ``NOT_ASSESSED``, never ``WITHIN``: a metric that
-    could not be computed has not demonstrated anything, and treating absence
-    as compliance is the one reading that would mislead a reviewer.
-    """
+    """Compare one metric value against the challenge's threshold for it."""
     spec = (thresholds or {}).get(metric) or {}
     warn_above = spec.get("warn_above")
     note = spec.get("note")
@@ -117,11 +83,7 @@ def assess(
 def assess_row(
     row: Mapping[str, Any], thresholds: Mapping[str, Any] | None,
 ) -> dict[str, dict[str, Any]]:
-    """Every configured threshold applied to one result row.
-
-    Returns ``{}`` when the challenge configures none, so a caller can treat
-    "no thresholds" as "nothing to render" without inspecting statuses.
-    """
+    """Every configured threshold applied to one result row."""
     if not thresholds:
         return {}
     return {
@@ -139,11 +101,7 @@ def flagged_metrics(assessments: Mapping[str, Mapping[str, Any]]) -> list[str]:
 
 
 def summarize(rows: Iterable[Mapping[str, Any]], thresholds: Mapping[str, Any] | None) -> dict:
-    """How many rows a reviewer should look at, and for which metrics.
-
-    Deliberately a count of rows *to look at*, not a score, a percentage
-    passed, or anything that could be ordered between submissions.
-    """
+    """How many rows a reviewer should look at, and for which metrics."""
     if not thresholds:
         return {"configured": False, "assessed_rows": 0, "flagged_rows": 0,
                 "flagged_metrics": {}}

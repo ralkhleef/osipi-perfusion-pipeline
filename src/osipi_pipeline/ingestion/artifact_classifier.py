@@ -1,16 +1,4 @@
-"""Classify a submitted file into a normalized role and map type.
-
-Matching is **token-based, not substring-based**. The legacy detector in
-``manifest.py`` (``_detect_parameter_map_id``) asks whether a configured
-pattern appears anywhere in the filename, which means ``curve.nii.gz``
-matches the ``ve`` pattern and ``developer.nii.gz`` matches it twice. That
-behaviour is left untouched for backward compatibility, but it is not
-reproduced here: this classifier splits the filename on separators and
-requires a whole-token match.
-
-Where several map types match, the longest pattern wins, so a file named
-``ktrans_ve.nii.gz`` resolves deterministically rather than by dict order.
-"""
+"""Classify a submitted file into a normalized role and map type."""
 
 from __future__ import annotations
 
@@ -31,9 +19,6 @@ from osipi_pipeline.ingestion.models import (
     ROLE_UNKNOWN,
 )
 
-# Filenames are split on anything that is not a letter or digit, then digit
-# runs are split off so "sub001" yields ("sub", "001") and "Ktrans" yields
-# ("ktrans",).
 _SPLIT_RE = re.compile(r"[^a-z0-9]+")
 _ALPHA_NUM_RE = re.compile(r"[a-z]+|[0-9]+")
 
@@ -54,11 +39,7 @@ def _tokens(stem: str) -> frozenset[str]:
 
 @lru_cache(maxsize=1)
 def _map_pattern_index() -> tuple[tuple[str, str], ...]:
-    """(pattern, map_id) pairs, longest pattern first.
-
-    Patterns are normalized the same way filenames are, so a configured
-    ``k-trans`` matches a file named ``k_trans``.
-    """
+    """(pattern, map_id) pairs, longest pattern first."""
     index: list[tuple[str, str]] = []
     for map_id, patterns in map_type_patterns().items():
         for pattern in patterns:
@@ -89,10 +70,7 @@ def _collapsed(stem: str) -> str:
 
 
 def detect_map_type(filename: str) -> str | None:
-    """Map-type id for a filename, or ``None``.
-
-    Requires a whole-token match: ``curve.nii.gz`` does not match ``ve``.
-    """
+    """Map-type id for a filename, or ``None``."""
     stem = strip_nifti_suffix(filename)
     tokens = _tokens(stem)
     collapsed = _collapsed(stem)
@@ -105,11 +83,7 @@ def detect_map_type(filename: str) -> str | None:
 
 
 def detect_artifact_type(filename: str) -> tuple[str, str] | None:
-    """``(artifact_id, role)`` for a configured non-map artifact, or ``None``.
-
-    Both the pattern *and* one of the artifact's configured suffixes must
-    match, so an arbitrary ``notes.txt`` never becomes a methods document.
-    """
+    """``(artifact_id, role)`` for a configured non-map artifact, or ``None``."""
     lowered = filename.lower()
     stem = strip_nifti_suffix(filename)
     tokens = _tokens(stem)
@@ -135,12 +109,7 @@ def classify(
     is_metadata: bool = False,
     is_code: bool = False,
 ) -> tuple[str, str | None, str | None]:
-    """Return ``(role, map_type, artifact_type)`` for one file.
-
-    Configured artifacts are checked before the legacy categories so a
-    ``methods.txt`` is a methods document rather than generic metadata, but
-    README detection keeps priority: existing README behaviour is unchanged.
-    """
+    """Return ``(role, map_type, artifact_type)`` for one file."""
     if is_readme:
         return ROLE_README, None, None
 

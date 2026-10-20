@@ -1,18 +1,4 @@
-"""Mask overlays, and the fact that masks are private.
-
-A mask and a ground-truth map belong to the organiser. Teams must never see
-them, and they must never reach a public artifact. The overlay feature exists
-to let a reviewer confirm a submission is oriented correctly, which means
-deliberately rendering a private asset onto the screen. That makes it the one
-place in the pipeline where private data is drawn on purpose, so the
-boundaries around it are worth pinning rather than assuming.
-
-What is allowed: a rendered slice, on the organiser's own machine, labelled
-with the same words the scoring tables use.
-
-What is not: the mask filename or path reaching the browser, the rendered
-image reaching a report, a published bundle, or version control.
-"""
+"""Mask overlays, and the fact that masks are private."""
 
 from __future__ import annotations
 
@@ -98,13 +84,7 @@ def test_a_mask_of_the_wrong_shape_is_refused(tmp_path):
     ("translated", np.array([[1.0, 0, 0, 30.0], [0, 1.0, 0, 0], [0, 0, 1.0, 0], [0, 0, 0, 1.0]])),
 ])
 def test_a_mask_that_shares_the_shape_but_not_the_grid_is_refused(tmp_path, label, affine):
-    """The case a shape check cannot see, and the reason the overlay exists.
-
-    A mask with the right dimensions but the wrong affine draws a perfectly
-    plausible picture over the wrong anatomy. A reviewer looking at it to
-    confirm alignment would be reassured by an image that proves nothing.
-    Refusing to draw is the only honest answer.
-    """
+    """The case a shape check cannot see, and the reason the overlay exists."""
     item = _overlay_with_mask(tmp_path, affine)
     assert item["mask_overlay_status"] == "no_compatible_mask", \
         f"a {label} mask was drawn as if it aligned"
@@ -123,16 +103,9 @@ def test_a_stale_overlay_does_not_survive_the_mask_being_removed(overlaid):
 # ── Privacy ───────────────────────────────────────────────────────────────
 
 def test_no_mask_filename_or_path_reaches_the_client(overlaid):
-    """The browser gets a picture and a label, never an organiser filename.
-
-    The filename is itself private information: it tells a reader what masks
-    exist and what they are called.
-    """
+    """The browser gets a picture and a label, never an organiser filename."""
     item, mask_path = overlaid
 
-    # Only what the client is actually sent. `source_path` is an internal
-    # field the API strips before responding, and asserting against it here
-    # would test the fixture rather than the boundary.
     sent = repr({key: item[key] for key in
                  ("mask_overlays", "mask_overlay_url", "mask_overlay_label",
                   "mask_overlay_status")})
@@ -140,9 +113,6 @@ def test_no_mask_filename_or_path_reaches_the_client(overlaid):
     assert MASK_FILENAME not in sent, "the mask filename is exposed"
     assert str(mask_path) not in sent, "the mask path is exposed"
 
-    # Also in the hyphenated, slugified form a URL would carry. This is the
-    # one that actually leaked: "gm_mask.nii.gz" became "gm-mask" in the
-    # overlay id, so a probe for the raw filename came back clean.
     for fragment in ("gm-mask", "gm_mask", "gm mask"):
         assert fragment not in sent, f"the mask filename leaks as {fragment!r}"
 
@@ -156,11 +126,7 @@ def test_the_plane_id_is_a_digest_not_a_reversible_name(overlaid):
 
 
 def test_overlays_are_written_only_under_the_ignored_outputs_directory(overlaid):
-    """Rendered private data must land somewhere git will not take it.
-
-    `.gitignore` excludes `/data/outputs/*`. If overlays were ever written
-    elsewhere, a rendered mask could be committed and published.
-    """
+    """Rendered private data must land somewhere git will not take it."""
     item, _ = overlaid
     plane = item["mask_overlays"][0]["plane"]
     written = preview._mask_overlay_path("SUB", item["map_id"], plane)
@@ -203,12 +169,7 @@ def test_the_published_example_bundle_carries_no_rendered_imagery() -> None:
 
 
 def test_plain_previews_never_render_a_mask_on_its_own(tmp_path) -> None:
-    """A mask must not be previewable as an image in its own right.
-
-    The overlay draws a mask *over* a submitted map, which is the reviewer's
-    alignment check. Rendering the mask alone would hand out the ROI
-    definition, which is the part the challenge keeps back.
-    """
+    """A mask must not be previewable as an image in its own right."""
     base = tmp_path / "sub"
     (base / "reference" / "masks").mkdir(parents=True)
     mask = base / "reference" / "masks" / MASK_FILENAME

@@ -99,15 +99,7 @@ def is_reference_path(relative_path: str) -> bool:
 def _build_artifacts(
     entries: list[dict[str, Any]], root: Path, challenge_type: str
 ) -> tuple[tuple[SubmissionArtifact, ...], tuple[IdentityConflict, ...]]:
-    """Normalize every submitted file entry into a :class:`SubmissionArtifact`.
-
-    Every submitted file gets a record, duplicates included. Two copies of the
-    same map under one identity produce two artifacts; deciding whether that is
-    valid belongs to a later phase, and dropping one here would hide it.
-
-    Reference and mask directories are excluded: they are scoring inputs rather
-    than submission content. See :func:`is_reference_path`.
-    """
+    """Normalize every submitted file entry into a :class:`SubmissionArtifact`."""
     challenge = (challenge_type or "").strip().lower() or None
     artifacts: list[SubmissionArtifact] = []
     conflicts: list[IdentityConflict] = []
@@ -270,20 +262,13 @@ def _directory_entries(root: Path, files: Iterable[Path], empty_directories: Ite
         entries.append({
             "relative_path": _as_relative_posix(directory, root),
             "mtime_ns": int(stat.st_mtime_ns),
-            # How many names this directory held when it was scanned. See
-            # _manifest_is_current: mtime alone cannot see a file that arrived
-            # within the same mtime tick as the manifest write.
             "entry_count": _directory_entry_count(directory),
         })
     return entries
 
 
 def _directory_entry_count(directory: Path) -> int:
-    """Names directly inside a directory, excluding the manifest itself.
-
-    One listing per directory, not per file, so this is cheap next to the
-    per-file stat that the staleness check already performs.
-    """
+    """Names directly inside a directory, excluding the manifest itself."""
     try:
         return sum(1 for entry in os.scandir(directory)
                    if entry.name != MANIFEST_FILENAME)
@@ -292,23 +277,7 @@ def _directory_entry_count(directory: Path) -> int:
 
 
 def _manifest_is_current(root: Path, manifest: dict[str, Any]) -> bool:
-    """Does this manifest still describe what is on disk?
-
-    Directory mtimes alone are not enough, and the reason is subtle. Writing the
-    manifest into the submission root changes that directory's mtime, so the
-    manifest would be stale the instant it was written; `_refresh_directory_mtimes`
-    therefore re-stamps the recorded mtimes after the write. A file added between
-    the scan and that re-stamp -- or, more often, one added within the same mtime
-    tick -- gets its directory's new mtime recorded without the file itself ever
-    being scanned. The manifest then reports itself current while missing a file.
-
-    That was reachable in practice: a methods document or a map copied into the
-    folder immediately after upload was invisible until something else changed.
-    Comparing each directory's name count closes it. A recursive rescan would
-    too, but load_manifest runs on every request against submissions of five
-    hundred files and is required not to walk the tree; one listing per
-    directory is bounded by the directory count, not the file count.
-    """
+    """Does this manifest still describe what is on disk?"""
     if manifest.get("config_fingerprint") != config_fingerprint():
         return False
     for item in manifest.get("files", []):

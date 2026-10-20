@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Private, end-to-end acceptance check for an ASL reference-data bundle.
-
-The source files are copied into a mode-0700 temporary workspace and deleted
-when the check ends. Only aggregate pass counts are printed.
-"""
+"""Private, end-to-end acceptance check for an ASL reference-data bundle."""
 
 from __future__ import annotations
 

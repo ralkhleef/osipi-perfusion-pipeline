@@ -58,10 +58,7 @@ _NII_SUFFIXES = (".nii.gz", ".nii")
 
 
 def _normalize_number(value: str) -> str:
-    """Strip leading zeros but keep the value a string.
-
-    ``001`` and ``1`` are the same participant; ``P01A`` is left intact.
-    """
+    """Strip leading zeros but keep the value a string."""
     digits = value.lstrip("0")
     if value.isdigit():
         return digits or "0"
@@ -81,11 +78,7 @@ def _match_prefixed(token: str, prefixes: tuple[str, ...]) -> str | None:
 
 @lru_cache(maxsize=32)
 def _dataset_names(challenge: str | None) -> tuple[str, ...]:
-    """Configured dataset ids for a challenge, or all known ids.
-
-    Dataset names are not hardcoded to synthetic/clinical: a challenge that
-    declares its own dataset names has them recognised automatically.
-    """
+    """Configured dataset ids for a challenge, or all known ids."""
     datasets = datasets_by_challenge()
     if challenge and challenge in datasets:
         return tuple(datasets[challenge])
@@ -94,12 +87,7 @@ def _dataset_names(challenge: str | None) -> tuple[str, ...]:
 
 @lru_cache(maxsize=32)
 def _compiled_patterns(challenge: str | None) -> tuple[re.Pattern[str], ...]:
-    """Compile the challenge's identity patterns once.
-
-    Validity is already guaranteed by config validation, so compilation
-    cannot fail here; the cache keeps a large submission from recompiling
-    the same expressions per file.
-    """
+    """Compile the challenge's identity patterns once."""
     if not challenge:
         return ()
     return tuple(
@@ -120,12 +108,7 @@ def strip_nifti_suffix(name: str) -> str:
 def parse_directory_identity(
     relative_parts: tuple[str, ...], *, challenge: str | None = None
 ) -> dict[str, str]:
-    """Identity implied by the directories containing a file.
-
-    ``relative_parts`` is the path relative to the submission root, including
-    the filename; only the directory components are inspected. Unrecognised
-    directories are skipped rather than guessed at.
-    """
+    """Identity implied by the directories containing a file."""
     known_datasets = {name.lower() for name in _dataset_names(challenge)}
     found: dict[str, str] = {}
     for raw in relative_parts[:-1]:
@@ -171,9 +154,6 @@ def parse_filename_identity(
             )
         return result
 
-    # BIDS-style and similar files often carry identity as independent tokens
-    # rather than one challenge-specific full-name pattern. Only explicit
-    # prefixes are accepted; file order or arbitrary numbers are never used.
     result: dict[str, str] = {}
     for token in re.split(r"[_\s]+", stem.lower()):
         for field, prefixes in (
@@ -193,11 +173,7 @@ def parse_filename_identity(
 def resolve_identity(
     relative_path: str, *, challenge: str | None = None
 ) -> tuple[dict[str, str | None], list[IdentityConflict]]:
-    """Combine directory and filename identity under the documented precedence.
-
-    Returns the resolved fields (missing ones as ``None``) and any conflicts
-    where the two sources disagreed.
-    """
+    """Combine directory and filename identity under the documented precedence."""
     parts = tuple(part for part in relative_path.split("/") if part)
     if not parts:
         return {"dataset": None, "participant": None, "repeat": None, "site": None}, []

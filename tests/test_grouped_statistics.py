@@ -1,17 +1,4 @@
-"""Aggregating per-scan ROI statistics across one axis.
-
-Disabled by default: the arithmetic is settled but the scientific choices,
-medians versus pooled voxels, pairing, minimum group size, are not, so nothing
-is computed until a challenge opts in. These tests pin both the arithmetic and
-the fact that it stays off.
-
-Expected values are hand-calculated. For medians 0.10, 0.20, 0.30:
-
-    mean          = 0.20
-    population SD = sqrt(((0.1)^2 + 0 + (0.1)^2) / 3) = sqrt(0.0066666...)
-                  = 0.0816496580...
-    CoV           = SD / 0.20 = 0.4082482904...
-"""
+"""Aggregating per-scan ROI statistics across one axis."""
 
 from __future__ import annotations
 
@@ -253,12 +240,7 @@ def test_grouping_works_without_any_challenge_specific_filename_pattern() -> Non
 
 
 def test_a_submission_carrying_no_identity_groups_into_nothing() -> None:
-    """Enabling grouping for ASL and DSC must not invent groups.
-
-    A team-named folder with no participant, repeat or site is the common
-    single-scan submission. It has to produce no rows at all, rather than one
-    group of everything pretending the scans are repeats of each other.
-    """
+    """Enabling grouping for ASL and DSC must not invent groups."""
     from osipi_pipeline.ingestion.identity_parser import resolve_identity
 
     identity, _ = resolve_identity("team_gamma/results/cbf_map.nii.gz", challenge="asl")

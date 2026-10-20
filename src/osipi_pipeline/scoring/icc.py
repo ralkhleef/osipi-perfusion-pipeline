@@ -1,53 +1,4 @@
-"""Intraclass correlation for a targets x sessions layout.
-
-The proposal names ICC alongside RMSE, bias and CoV. The other three have one
-uncontested definition each; ICC has six, and choosing among them is a
-scientific decision about what the challenge is measuring, not an
-implementation detail:
-
-* **Model 1** (one-way random). Each target is rated by a *different*,
-  randomly chosen set of sessions. Session effects cannot be separated from
-  error, so a systematic offset between sessions is absorbed into the
-  disagreement.
-* **Model 2** (two-way random, absolute agreement). The same sessions apply to
-  every target and are themselves a sample of possible sessions. A systematic
-  offset between sessions counts against agreement, and the result generalises
-  to sessions not measured.
-* **Model 3** (two-way mixed, consistency). The same sessions apply to every
-  target and are the only ones of interest. A systematic offset is treated as
-  a fixed property of the session and does not count against agreement, so
-  model 3 is never lower than model 2 on the same data.
-
-and, cutting across those, **single-measure** (``_1``) versus
-**average-measure** (``_k``): whether the reliability quoted is that of one
-measurement or of the mean of all ``k``.
-
-So this module implements all six and **chooses none**. The model comes from
-``challenges.<id>.grouped_statistics.icc.model`` and the default is
-:data:`MODEL_NONE`, under which nothing is computed and the pipeline goes on
-reporting ICC as unavailable exactly as before. That keeps the decision with
-the challenge leads while removing the code as a blocker: when they answer,
-enabling it is a one-line configuration change rather than a development task.
-
-Formulas follow Shrout & Fleiss (1979) with the McGraw & Wong (1996)
-correction to the model-2 denominator, from the two-way ANOVA of an
-``n`` targets x ``k`` sessions table with one observation per cell::
-
-    MSR = k * SUM_i (row_i - grand)^2 / (n - 1)            between targets
-    MSC = n * SUM_j (col_j - grand)^2 / (k - 1)            between sessions
-    MSE = SUM_ij (x_ij - row_i - col_j + grand)^2 / ((n-1)(k-1))   residual
-    MSW = SUM_ij (x_ij - row_i)^2 / (n * (k - 1))          within target
-
-Conventions shared with the rest of the scoring library: values are numbers,
-never formatted strings; an unavailable result carries a status and a reason
-rather than a zero; and a coefficient is a ratio at rest and a percentage only
-at presentation time.
-
-Confidence intervals are exact F-based intervals at a configurable level. They
-need an inverse F quantile, and the pipeline does not depend on SciPy, so one
-is computed here from the regularised incomplete beta function. Set
-``confidence_level`` to ``null`` to omit intervals entirely.
-"""
+"""Intraclass correlation for a targets x sessions layout."""
 
 from __future__ import annotations
 
@@ -66,9 +17,6 @@ MODEL_1_K = "icc1_k"
 MODEL_2_K = "icc2_k"
 MODEL_3_K = "icc3_k"
 
-#: Every model this module can compute, in the order they are conventionally
-#: presented. ``MODEL_NONE`` is deliberately not a member: it is the absence of
-#: a choice, not one of the choices.
 MODELS: tuple[str, ...] = (
     MODEL_1_1, MODEL_2_1, MODEL_3_1, MODEL_1_K, MODEL_2_K, MODEL_3_K,
 )
@@ -124,10 +72,6 @@ MIN_SESSIONS = 2
 #: and the ratio is meaningless rather than merely extreme.
 _VARIANCE_TOLERANCE = 1e-12
 
-#: An estimate this close to 1 is perfect agreement for reporting purposes.
-#: Looser than the variance tolerance on purpose: the interval formulas divide
-#: by (1 - ICC), which loses all precision long before that value underflows.
-#: Real repeated scans of the same synthetic phantom reach this.
 _PERFECT_AGREEMENT_TOLERANCE = 1e-9
 
 DEFAULT_CONFIDENCE_LEVEL = 0.95
@@ -166,13 +110,7 @@ class AnovaTable:
 
 
 def anova_table(matrix: Sequence[Sequence[float]]) -> AnovaTable:
-    """Two-way mean squares for a complete ``n x k`` table.
-
-    ``matrix`` is one row per target, one column per session. Raises
-    ``ValueError`` for a ragged or undersized table; callers that build tables
-    from real submissions should use :func:`compute_icc`, which reports those
-    conditions as a status instead.
-    """
+    """Two-way mean squares for a complete ``n x k`` table."""
     rows = [[float(value) for value in row] for row in matrix]
     n = len(rows)
     if n < MIN_TARGETS:
@@ -296,13 +234,7 @@ def f_cdf(value: float, d1: float, d2: float) -> float:
 
 
 def f_quantile(probability: float, d1: float, d2: float) -> float:
-    """Inverse F CDF by bracketing and bisection.
-
-    Bisection rather than Newton: the CDF is monotone, the brackets are cheap
-    to widen, and a derivative-free method cannot be thrown off by the flat
-    tails where an ICC interval endpoint often sits. A few dozen iterations of
-    a halving interval reach far more precision than the input medians carry.
-    """
+    """Inverse F CDF by bracketing and bisection."""
     if not 0.0 < probability < 1.0:
         raise ValueError("probability must lie strictly between 0 and 1")
     low, high = 0.0, 1.0
@@ -327,12 +259,7 @@ def f_quantile(probability: float, d1: float, d2: float) -> float:
 def _confidence_interval(
     table: AnovaTable, model: str, level: float,
 ) -> tuple[float | None, float | None]:
-    """Exact F-based interval for ``model`` at ``level``.
-
-    Models 1 and 3 have closed forms. Model 2's interval follows McGraw & Wong
-    and is computed on the single-measure scale, then converted for the
-    average-measure form, which is the same interval expressed per mean of k.
-    """
+    """Exact F-based interval for ``model`` at ``level``."""
     n, k = table.targets, table.sessions
     msr, msc, mse, msw = table.msr, table.msc, table.mse, table.msw
     alpha = 1.0 - level
@@ -347,20 +274,6 @@ def _confidence_interval(
             return None
         return k * bound / denominator
 
-    # Perfect agreement first, for every model, so all six agree about it.
-    #
-    # Real repeated scans of the same synthetic phantom agree to within
-    # floating-point noise, driving the residual mean square to ~1e-26 and the
-    # estimate to 1. The models used to diverge here: model 2 bailed out of its
-    # (1 - ICC) division while model 3's closed form still produced bounds, so
-    # two descriptions of the same perfect agreement disagreed about whether an
-    # interval existed.
-    #
-    # They now agree that there is none. Pinning the interval at [1, 1] would
-    # be the other way to make them consistent, and it is the wrong one: an
-    # interval of zero width claims infinite precision from a handful of
-    # scans. No residual variance means no interval, which is the same rule
-    # this pipeline applies everywhere else, unavailable is not a value.
     estimate = _point_estimate(table, model)
     if estimate is not None and abs(1.0 - estimate) <= _PERFECT_AGREEMENT_TOLERANCE:
         return None, None
@@ -390,17 +303,9 @@ def _confidence_interval(
                 return single_to_average(low), single_to_average(high)
             return low, high
 
-        # Model 2, absolute agreement: McGraw & Wong (1996), Table 7, ICC(A,1).
-        # The interval is not symmetric and does not share the closed form the
-        # other two models have, because MSC enters the denominator: the
-        # degrees of freedom for the residual are themselves estimated
-        # (Satterthwaite) from the point estimate.
         if abs(mse) <= _VARIANCE_TOLERANCE:
             return None, None
         point = _point_estimate(table, MODEL_2_1)
-        # (1 - point) divides the Satterthwaite terms below. Perfect agreement
-        # is already handled above; this guards the exact-1 case reached by a
-        # different route.
         if point is None or abs(1.0 - point) <= _VARIANCE_TOLERANCE:
             return None, None
 
@@ -477,9 +382,6 @@ CSV_COLUMNS: tuple[str, ...] = (
 )
 
 
-#: Export column name -> dataclass field, where the two differ. The column is
-#: `icc` because that is what a reader of the table is looking for; the field
-#: is `value` because the dataclass already says what statistic it holds.
 _COLUMN_FIELDS: dict[str, str] = {"icc": "value"}
 
 
@@ -508,12 +410,7 @@ def compute_icc(
     confidence_level: float | None = DEFAULT_CONFIDENCE_LEVEL,
     **identity: Any,
 ) -> IccResult:
-    """ICC for one complete ``targets x sessions`` table.
-
-    Every condition that makes an ICC undefined, too few targets, too few
-    sessions, a ragged table, no variance to partition, is reported as a
-    status rather than raised or silently returned as zero.
-    """
+    """ICC for one complete ``targets x sessions`` table."""
     if model == MODEL_NONE:
         return _unavailable(STATUS_NOT_CONFIGURED, model, **identity)
     if model not in MODELS:
@@ -566,14 +463,7 @@ def _field(row: Any, name: str) -> Any:
 def build_table(
     rows: Iterable[Any], *, session_field: str, source: str,
 ) -> tuple[list[list[float]], list[str], int]:
-    """A complete targets x sessions matrix from per-scan ROI rows.
-
-    Targets are participants and sessions are ``session_field`` (``repeat`` or
-    ``site``). A participant missing any session is **excluded**, not imputed:
-    the ANOVA above assumes one observation per cell, and filling a gap with a
-    mean would manufacture agreement the data never showed. The number dropped
-    is returned so a reviewer sees the cost rather than a quietly smaller n.
-    """
+    """A complete targets x sessions matrix from per-scan ROI rows."""
     by_target: dict[str, dict[str, float]] = {}
     sessions: set[str] = set()
     for row in rows:

@@ -38,14 +38,7 @@ _MASK_NAME_PATTERNS = mask_name_patterns()
 
 
 def _mask_display_label(mask_filename: str) -> str:
-    """The label the scoring tables give this mask.
-
-    Imported lazily: this module is imported by ``backend.scoring`` in some
-    paths, and a module-level import back the other way would be circular.
-
-    Falls back to a tidied filename only if scoring cannot be reached, and
-    even then the fallback is a name, never a path.
-    """
+    """The label the scoring tables give this mask."""
     try:
         from scoring import _mask_label_for_name  # noqa: PLC0415
 
@@ -163,8 +156,6 @@ def _json_float(value, ndigits: int = 6):
     if not math.isfinite(f):
         return None
     return round(f, ndigits)
-
-
 
 
 def _png_chunk(tag: bytes, data: bytes) -> bytes:
@@ -360,11 +351,6 @@ def _base_preview_item(submission_id: str, path: Path) -> dict:
         voxel_size = [float(v) for v in img.header.get_zooms()[: min(3, len(img.shape or []))]]
         orientation = "".join(code or "?" for code in nib.aff2axcodes(img.affine))
     except Exception as exc:
-        # Record why, rather than returning empty fields. A file that cannot be
-        # read used to be indistinguishable from one whose header happened to
-        # be blank: both arrived with no shape, no orientation and no dtype. The
-        # header check then reported "Not verified", which reads as "we did not
-        # look" when the truth is "we looked and the file is broken".
         read_error = str(exc) or exc.__class__.__name__
     try:
         stat = path.stat()
@@ -425,19 +411,7 @@ def _mask_candidates(submission_id: str, challenge_type: Optional[str]) -> list[
 
 
 def _mask_overlay_plane(mask_path: Path) -> str:
-    """A stable id for one mask's overlay, carrying no part of its name.
-
-    The id used to include the filename stem, so the overlay URL read
-    ``mask-overlay-gm-mask-2bb5715a`` and the mask filename reached the
-    browser, the address bar and every access log. A mask filename is
-    organiser information: it says which regions exist and what they are
-    called, which is part of what the challenge holds back.
-
-    The digest alone distinguishes one mask from another, which is all the
-    id has to do. It is longer than it needs to be for the handful of masks
-    a challenge defines, because a collision would silently show the wrong
-    region.
-    """
+    """A stable id for one mask's overlay, carrying no part of its name."""
     digest = hashlib.sha256(str(mask_path.resolve()).encode("utf-8")).hexdigest()[:16]
     return f"{MASK_OVERLAY_PLANE}-{digest}"
 
@@ -451,12 +425,7 @@ def _mask_overlay_path(submission_id: str, map_id: str, plane: str = MASK_OVERLA
 def _attach_mask_overlay(
     item: dict, submission_id: str, mask_paths: list[Path]
 ) -> dict:
-    """Create private-safe middle axial slices for every compatible mask.
-
-    A mask is compatible only when shape, affine/orientation, and voxel sizes
-    agree within the same tolerances used for scoring. No mask path or raw mask
-    data is returned to the browser.
-    """
+    """Create private-safe middle axial slices for every compatible mask."""
     # A cached map item must not retain an overlay after masks are removed or
     # replaced with incompatible geometry.
     item["mask_overlay_url"] = None
@@ -499,11 +468,7 @@ def _attach_mask_overlay(
                 f"/api/submissions/{make_safe_id(submission_id)}/previews/"
                 f"{item['map_id']}/{plane}.png"
             )
-            # The same label the scoring tables use, so a reviewer can match
-            # an overlay to its row. Deriving it from the filename instead
-            # gave "gm mask" beside a table row reading "gray matter", and
-            # the filename is an organiser asset name that should not be on
-            # screen at all.
+            # Use the same region label as the scoring tables.
             label = _mask_display_label(mask_path.name)
             item["mask_overlays"].append({"plane": plane, "label": label, "url": url})
         if item["mask_overlays"]:
@@ -574,14 +539,7 @@ _UNRECOGNIZED_MAP_TYPES = {"", "unknown", "mixed/other"}
 
 
 def _classify_preview_role(item: dict) -> dict:
-    """Tag a preview item with its role so galleries can show only 3-D parameter maps.
-
-    A file is a scored parameter map when it is exactly 3-D and has a recognized
-    configured map type (CBF/Perfmap, ATT, …). Configured non-map artifacts use
-    their configured role and label. Other 4-D files receive a challenge-neutral
-    signal-data label; they are kept for download but never scored as parameter
-    maps. This is display metadata only and does not change validation or scoring.
-    """
+    """Tag a preview item with its role so galleries can show only 3-D parameter maps."""
     shape = [d for d in (item.get("shape") or []) if d]
     ndim = len(shape)
     map_type = str(item.get("detected_map_type") or "").strip()

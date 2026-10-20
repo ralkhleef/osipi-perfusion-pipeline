@@ -1,10 +1,4 @@
-"""Acceptance coverage for every local intake shape used by the web UI.
-
-These tests exercise the HTTP endpoints, not just ingestion helpers. The
-1,800-file case is intentionally made of valid, tiny NIfTI images: it checks
-multipart parsing, path preservation, indexing, completeness, and deep NIfTI
-validation without adding a large binary fixture to the repository.
-"""
+"""Acceptance coverage for every local intake shape used by the web UI."""
 
 from __future__ import annotations
 

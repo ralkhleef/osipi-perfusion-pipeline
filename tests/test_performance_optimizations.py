@@ -248,14 +248,6 @@ def test_generated_outputs_require_configured_analysis_maps(
     )
 
 
-# ── The analysis is computed once, not once per reader ────────────────────
-#
-# The report, the HTML and PDF renderers, every export route and the frontend
-# each ask for the same analysis. The DCE lead's full cohort contains 60 large
-# 4-D signal pairs and takes several minutes, so recomputing it per request made
-# opening a report cost as much as producing it. It is now memoised on its
-# inputs.
-
 @pytest.fixture()
 def analysis_workspace(tmp_path, monkeypatch):
     import scoring
@@ -372,13 +364,6 @@ def test_a_cached_result_cannot_be_mutated_by_its_reader(analysis_workspace) -> 
     assert second["reference_scoring"].get("maps") != ["tampered"]
 
 
-# ── The cache survives a restart ──────────────────────────────────────────
-#
-# An in-memory cache empties when the app stops. A reviewer who restarts the
-# server and reopens yesterday's report should not wait a minute to be told
-# what it already computed, so the analysis is also written beside the
-# validation results and read back on a cold start.
-
 def test_a_cold_start_reads_the_saved_analysis(analysis_workspace, monkeypatch) -> None:
     import scoring
 
@@ -483,19 +468,7 @@ def test_clearing_on_disk_empties_the_folder(analysis_workspace) -> None:
 
 
 def test_a_file_added_in_the_same_mtime_tick_is_still_noticed(tmp_path: Path) -> None:
-    """The manifest must not report itself current while missing a file.
-
-    Writing the manifest into the submission root changes that directory's
-    mtime, so a freshly written manifest would be stale immediately; the
-    directory mtimes are therefore re-stamped after the write. A file that
-    arrives between the scan and that re-stamp -- or, far more often, within the
-    same coarse mtime tick -- had its directory's new mtime recorded without the
-    file ever being scanned, and the manifest then claimed to be current.
-
-    This was reachable in ordinary use: a methods document copied into the
-    folder right after upload was invisible until something else changed. It
-    showed up first as a test that failed about one run in three.
-    """
+    """The manifest must not report itself current while missing a file."""
     from osipi_pipeline.ingestion import manifest as manifest_mod
 
     root = tmp_path / "sub"
@@ -522,12 +495,6 @@ def test_a_file_added_in_the_same_mtime_tick_is_still_noticed(tmp_path: Path) ->
 
 
 def test_the_entry_count_is_one_listing_per_directory_not_per_file(tmp_path: Path) -> None:
-    """The cheap half of the fix, which is why it is a count and not a rescan.
-
-    load_manifest runs on every request against submissions of five hundred
-    files, and a separate test forbids it from walking the tree. The cost here
-    is bounded by the number of directories.
-    """
     from osipi_pipeline.ingestion import manifest as manifest_mod
 
     root = tmp_path / "sub"

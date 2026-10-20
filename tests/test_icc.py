@@ -1,17 +1,4 @@
-"""ICC, checked against the paper that defines it.
-
-The proposal names ICC alongside RMSE, bias and CoV. Unlike those three it has
-six defensible definitions, so the module implements all six and applies none
-by default; the model is configuration. That makes two things worth testing
-hard: that the arithmetic is right, and that the default really does compute
-nothing.
-
-The arithmetic is verified against Shrout & Fleiss (1979), whose Table 1 is
-the canonical worked example for exactly this. Their published values for the
-six models, and the ANOVA mean squares behind them, are reproduced here as
-constants. A test suite that only checked internal consistency could agree
-with itself while being wrong about ICC; this one cannot.
-"""
+"""ICC, checked against the paper that defines it."""
 
 from __future__ import annotations
 
@@ -87,11 +74,7 @@ def test_each_model_reproduces_the_published_value(model: str, expected: float) 
 
 
 def test_the_models_stand_in_their_documented_order() -> None:
-    """Model 3 ignores session offsets, so it cannot fall below model 2.
-
-    A sign error or a swapped mean square would usually break this ordering
-    before it broke any single value, which makes it a cheap structural check.
-    """
+    """Model 3 ignores session offsets, so it cannot fall below model 2."""
     values = {
         model: icc.compute_icc(SF_TABLE, model=model).value
         for model in icc.MODELS
@@ -164,7 +147,6 @@ def test_the_intervals_match_the_published_ones(
 
 @pytest.mark.parametrize("model", icc.MODELS)
 def test_every_interval_brackets_its_estimate_and_stays_in_range(model: str) -> None:
-    """The bug this catches: a model-2 interval that came out inverted."""
     result = icc.compute_icc(SF_TABLE, model=model, confidence_level=0.95)
     assert result.confidence_low is not None
     assert result.confidence_high is not None
@@ -355,13 +337,6 @@ def test_the_result_survives_a_json_round_trip() -> None:
     assert math.isfinite(payload["confidence_low"])
 
 
-# ── Through the configuration and the scoring layer ───────────────────────
-#
-# The module above is only useful if a challenge can actually turn it on. These
-# check the seam: the schema accepts a valid block and rejects a bad one, and a
-# configured model reaches the scoring result while `none` leaves the existing
-# "not configured" wording exactly as it was.
-
 @pytest.fixture()
 def challenge_icc(tmp_path, monkeypatch):
     """Test an isolated rules file without changing the running app's rules."""
@@ -504,10 +479,6 @@ def test_scoring_computes_icc_once_a_model_is_configured(challenge_icc) -> None:
 
     challenge_icc(model=icc.MODEL_3_1, axes=["inter_repeat"], confidence_level=0.95)
 
-    # Between-participant spread far larger than within-participant scatter,
-    # with the scatter *varying* so the residual is not identically zero. A
-    # constant offset would give ICC exactly 1 and no interval at all, which is
-    # correct but degenerate and would not exercise the interval path.
     visits = {
         "1": (0.201, 0.219),
         "2": (0.314, 0.298),
@@ -536,13 +507,7 @@ def test_scoring_computes_icc_once_a_model_is_configured(challenge_icc) -> None:
 
 
 def test_perfect_consistency_reports_no_interval_rather_than_a_fake_one() -> None:
-    """Zero residual means the F ratio is undefined; the estimate still stands.
-
-    Every participant moving by exactly the same amount between visits is
-    perfect consistency, ICC(3,1) = 1. There is no residual variance left to
-    build an interval from, so the bounds are unavailable rather than pinned
-    to 1 and presented as precision the data cannot support.
-    """
+    """Zero residual means the F ratio is undefined; the estimate still stands."""
     constant_offset = [[0.20, 0.215], [0.31, 0.325], [0.15, 0.165], [0.26, 0.275]]
     result = icc.compute_icc(constant_offset, model=icc.MODEL_3_1)
     assert result.status == icc.STATUS_AVAILABLE
@@ -553,14 +518,7 @@ def test_perfect_consistency_reports_no_interval_rather_than_a_fake_one() -> Non
 
 @pytest.mark.parametrize("model", icc.MODELS)
 def test_perfect_agreement_reports_no_interval_in_every_model(model: str) -> None:
-    """All six models agree that perfect agreement has no interval.
-
-    Model 2 used to bail out of its (1 - ICC) division while model 3's closed
-    form still produced bounds, so two descriptions of the same perfect
-    agreement disagreed about whether an interval existed. They now agree that
-    there is none: an interval of zero width would claim infinite precision
-    from a handful of scans, and no residual variance means no interval.
-    """
+    """All six models agree that perfect agreement has no interval."""
     import numpy as np
 
     rng = np.random.default_rng(4)

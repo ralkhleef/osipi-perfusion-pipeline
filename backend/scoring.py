@@ -1,34 +1,4 @@
-"""backend/scoring.py, Scoring framework for OSIPI pipeline.
-
-Provider system
---------------
-Two providers are registered:
-
-    osipi_tf62_dce_ktrans          [OFFICIAL]
-        OSIPI Task Force 6.2 DCE-MRI Ktrans challenge scoring.
-        Required directory layout under data/scoring/providers/osipi_tf62_dce_ktrans/:
-            challengeScoring.py       ← official scoring script
-            reference/                ← DRO / reference Ktrans NIfTI maps
-            masks/                    ← binary mask NIfTI files
-
-        If masks/ does not exist, the code falls back to searching reference/
-        for any file containing "mask" in its name.
-
-        Expected participant output filenames (from Docker execution):
-            Synthetic_P<n>_Visit<n>.nii[.gz]
-            Clinical_P<n>_Visit<n>.nii[.gz]
-
-        The script uses no CLI arguments, it reads hardcoded relative paths
-        (entryDirectories/, DROKtransNifti/, Masks/, scoringOutputs/) from its
-        cwd.  score_submission() patches entry_list in the script source and
-        runs it with cwd=provider_dir.
-
-    osipi_codecollection_dce_testdata   [DEVELOPMENT ONLY, never runs scoring]
-        CSV test data from OSIPI/DCE-DSC-MRI_CodeCollection.
-        Used only to test provider-discovery UI. NOT for scoring NIfTI maps.
-
-This module NEVER returns or fabricates metric values.
-"""
+"""backend/scoring.py, Scoring framework for OSIPI pipeline."""
 
 from __future__ import annotations
 
@@ -82,9 +52,6 @@ from osipi_pipeline.config.rules import (
 )
 from osipi_pipeline.ingestion.manifest import manifest_files
 
-# ---------------------------------------------------------------------------
-# Provider registry
-# ---------------------------------------------------------------------------
 
 PROVIDERS: dict[str, dict] = {
     # ── Official: OSIPI TF6.2 DCE Ktrans ─────────────────────────────────────
@@ -148,13 +115,8 @@ PROVIDERS: dict[str, dict] = {
 }
 
 
-
-
 def get_provider(challenge_type: str, map_type: str) -> Optional[dict]:
-    """Return the official provider matching challenge + map type, or None.
-
-    Skips development-only (not_for_scoring=True) providers.
-    """
+    """Return the official provider matching challenge + map type, or None."""
     ct = (challenge_type or "").lower().strip()
     mt = (map_type or "").lower().strip()
     for p in PROVIDERS.values():
@@ -170,11 +132,7 @@ def _resolve_provider(
     challenge_type: str,
     map_type: str,
 ) -> tuple[Optional[dict], str]:
-    """Return (provider_dict, error_message).
-
-    Prefers provider_id lookup; falls back to challenge/map lookup.
-    Returns (None, error) if nothing matches or provider is dev-only.
-    """
+    """Return (provider_dict, error_message)."""
     if provider_id:
         p = PROVIDERS.get(provider_id)
         if p is None:
@@ -190,10 +148,6 @@ def _resolve_provider(
         )
     return p, ""
 
-
-# ---------------------------------------------------------------------------
-# Path helpers: mirror docker_runner._safe_name
-# ---------------------------------------------------------------------------
 
 def _safe_name(value: str) -> str:
     """Convert to filesystem-safe lowercase-hyphenated form."""
@@ -226,30 +180,12 @@ def _strip_nifti_suffix(name: str) -> str:
 
 
 def _is_organiser_asset(path: Path) -> bool:
-    """Whether a file belongs to the organiser rather than to the submitter.
-
-    A submission may carry its own ``reference/`` directory, and the pipeline
-    reads it as a reference root. Those files are ground truth and ROI masks:
-    they are not the team's answer and must never be scored as one.
-
-    Without this check a ground-truth map is picked up as a submitted map and
-    compared against itself, producing a row with bias 0, RMSE 0 and
-    correlation 1. Lena's ASL data reported four maps for two submitted
-    files, two of them perfect, which is what made it unclear what the
-    numbers were computed from.
-    """
+    """Whether a file belongs to the organiser rather than to the submitter."""
     return bool({part.lower() for part in path.parts} & _PRIVATE_PATH_PARTS)
 
 
 def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
-    """Return NIfTI files that represent the output maps for this submission.
-
-    Priority order:
-    1. Docker execution output dir  (OUTPUTS_DIR/execution/{key}/outputs/)
-    2. Configured submitted-map subdirectories from config/settings.yaml
-
-    Organiser assets are excluded from both, see ``_is_organiser_asset``.
-    """
+    """Return NIfTI files that represent the output maps for this submission."""
     # IDs are single directory names, never caller-supplied paths. Preserve
     # valid underscores/case rather than silently resolving a different ID.
     if not submission_id or submission_id in {".", ".."} or any(c in submission_id for c in ("/", "\\", "\x00")):
@@ -283,12 +219,7 @@ def _find_output_niftis(submission_id: str, challenge_type: str) -> list[Path]:
 
 
 def _parameter_map_files(root: Path, files: list[Path]) -> list[Path]:
-    """Keep submitted parameter maps and exclude fitted/measured 4-D signals.
-
-    The manifest is the canonical classification already used by validation.
-    If an older output directory has no artifact records, retain the previous
-    all-NIfTI behaviour rather than making its results disappear.
-    """
+    """Keep submitted parameter maps and exclude fitted/measured 4-D signals."""
     from osipi_pipeline.ingestion.manifest import load_manifest
 
     manifest = load_manifest(root, refresh_if_stale=False) or {}
@@ -355,10 +286,6 @@ def _save_scoring_result(submission_id: str, result: dict) -> None:
         pass
 
 
-# ---------------------------------------------------------------------------
-# NIfTI map metadata + QC analysis
-# ---------------------------------------------------------------------------
-
 def _perfusion_map_types() -> dict[str, dict[str, object]]:
     return {
         key: {
@@ -373,11 +300,7 @@ def _perfusion_map_types() -> dict[str, dict[str, object]]:
 
 
 def _expected_dimensions(map_type_short: str) -> Optional[int]:
-    """Configured expected dimensionality for a parameter map (e.g. 3 for CBF/ATT).
-
-    Returns None when the map type has no configured dimension rule, in which
-    case dimensionality is not enforced.
-    """
+    """Configured expected dimensionality for a parameter map (e.g."""
     for spec in _perfusion_map_types().values():
         if str(spec.get("short")) == str(map_type_short):
             dims = spec.get("dimensions")
@@ -504,26 +427,11 @@ def _stats_from_values(values: list[float], total_voxel_count: int) -> tuple[dic
     return stats, finite_count, nan_count, inf_count, negative_count
 
 
-#: Above this voxel count a map is summarised in slabs instead of whole. A
-#: real DCE concentration curve is 250 million voxels; loading it, masking it
-#: and taking a median over the survivors peaked past 3 GB and the kernel
-#: killed the server. Parameter maps are far below this and take the exact
-#: path unchanged.
 _QC_STREAM_VOXELS = 32 * 1024 * 1024
 
 
 def _streamed_nifti_summary(img, total_voxel_count: int) -> dict:
-    """Voxel statistics for an image too large to hold, read a slab at a time.
-
-    Mean and standard deviation are accumulated with Chan's parallel form,
-    which combines per-slab moments exactly rather than summing squares, so
-    the answer matches the whole-array path to floating-point noise.
-
-    The median is the one statistic that cannot be accumulated: it needs every
-    finite value at once, which is the allocation being avoided. It is
-    reported as unavailable rather than approximated, because a silently
-    sampled median in a column headed "median" is worse than an empty cell.
-    """
+    """Voxel statistics for an image too large to hold, read a slab at a time."""
     import numpy as np  # noqa: PLC0415
 
     shape = tuple(int(v) for v in img.shape)
@@ -580,11 +488,6 @@ def _analyse_nifti_with_nibabel(path: Path) -> dict:
     import numpy as np  # type: ignore
     import nibabel as nib  # type: ignore
 
-    # Chunked reads of a .nii.gz file must share one gzip stream.  With
-    # nibabel's default (keep_file_open=False), every later time slab reopens
-    # the file and decompresses from byte zero.  A real 157-timepoint DCE curve
-    # is split into several slabs, so that default multiplied the decompression
-    # work and made a full cohort take tens of minutes.
     img = nib.load(str(path), keep_file_open=True)
     total_voxel_count = 1
     for dim in img.shape:
@@ -817,20 +720,10 @@ def _nifti_file_list(root: Path) -> list[Path]:
 
 
 def _nifti_geometry(path: Path) -> dict:
-    """Header, affine and an unread array proxy, without loading the data.
-
-    The counterpart to :func:`_load_nifti_values` for images too large to hold.
-    ``dataobj`` is nibabel's lazy proxy: slicing it reads only that slice, so a
-    caller can stream a 4-D volume it could never materialise. Keys match
-    ``_load_nifti_values`` where they overlap so ``_grids_compatible`` works on
-    either.
-    """
+    """Header, affine and an unread array proxy, without loading the data."""
     import nibabel as nib  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
 
-    # The caller reads this proxy repeatedly in increasing time order.  Keep
-    # the compressed stream alive so each slab continues from the previous
-    # one instead of starting decompression over from the beginning.
     img = nib.load(str(path), keep_file_open=True)
     header = img.header
     affine = [[float(v) for v in row]
@@ -848,11 +741,7 @@ def _nifti_geometry(path: Path) -> dict:
 
 
 def _load_nifti_values(path: Path) -> dict:
-    """Load a NIfTI map as a flat numeric array plus shape metadata.
-
-    Uses nibabel when installed; otherwise reads simple NIfTI-1 scalar data via
-    the same pure-Python fallback used by the QC metadata extractor.
-    """
+    """Load a NIfTI map as a flat numeric array plus shape metadata."""
     try:
         import numpy as np  # type: ignore
         import nibabel as nib  # type: ignore
@@ -863,15 +752,9 @@ def _load_nifti_values(path: Path) -> dict:
         zooms = [float(z) for z in img.header.get_zooms()[: len(data.shape)]]
         return {
             "shape": [int(v) for v in data.shape],
-            # Keep the flat float64 NumPy array (not a Python list): the previous
-            # per-element list conversion cost seconds per map on full-resolution
-            # data. Consumers (_comparison_metrics, diff maps) handle arrays.
             "values": data.reshape(-1),
             "affine": affine,
             "voxel_size": zooms,
-            # Header facts a reviewer needs to see rather than infer. The
-            # values are read as loaded, before any conversion, so the dtype
-            # is the submitter's, not float64 from the line above.
             "axis_codes": [str(code) for code in nib.aff2axcodes(img.affine)],
             "dtype": str(img.header.get_data_dtype()),
             "reader": "nibabel",
@@ -922,9 +805,6 @@ def _load_nifti_values(path: Path) -> dict:
             float(item[0]) * slope + intercept
             for item in struct.iter_unpack(endian + fmt_code, payload)
         ]
-        # Best-effort affine/voxel size from the fallback header (sform srows if
-        # present, else pixdim). None when unavailable, callers must treat a
-        # missing affine as "cannot verify grid" rather than "grids match".
         affine = None
         try:
             srow_x = struct.unpack(endian + "4f", raw[280:296])
@@ -939,10 +819,6 @@ def _load_nifti_values(path: Path) -> dict:
             voxel_size = [abs(float(v)) for v in pixdim[1 : 1 + len(shape)]]
         except Exception:
             voxel_size = None
-        # Orientation needs an affine to derive, and the datatype code has
-        # already been resolved to a name above. Both stay None when the
-        # header does not carry them, so a check can report "unknown" rather
-        # than claim a match it never verified.
         axis_codes = None
         if affine is not None:
             try:
@@ -965,26 +841,11 @@ def _load_nifti_values(path: Path) -> dict:
         }
 
 
-#: Rounding for the voxel size comparison, in millimetres. Two headers
-#: written by different tools disagree in the sixth decimal place routinely,
-#: and reporting that as a mismatch would train reviewers to ignore the check.
 _VOXEL_SIZE_TOLERANCE_MM = 1e-3
 
 
 def _header_check(submitted: dict, reference: dict) -> dict:
-    """Compare a submitted map's header against the ground truth's.
-
-    Requested by both challenge leads. A submission can be the right shape,
-    score plausibly, and still be flipped or at the wrong voxel size, in which
-    case every number computed from it is wrong in a way no metric reveals.
-    Orientation is the case that matters most: a left-right flip leaves the
-    shape identical and the statistics believable.
-
-    Each field is reported with both values and a verdict, rather than a
-    single pass/fail, so a reviewer can see *what* differs. A field neither
-    file declares is ``None``, meaning not verified, which is deliberately not
-    the same as ``True``.
-    """
+    """Compare a submitted map's header against the ground truth's."""
     def compare(key, normalise=lambda v: v):
         mine, theirs = submitted.get(key), reference.get(key)
         if mine is None or theirs is None:
@@ -1012,10 +873,6 @@ def _header_check(submitted: dict, reference: dict) -> dict:
     # dtype differing is normal and harmless: a team may submit float64 where
     # the ground truth is float32. Geometry differing is not.
     geometry = [name for name in mismatched if name != "dtype"]
-    # A file that could not be read is not the same as one nobody checked.
-    # Both used to arrive here with nothing comparable and both were reported
-    # as "not verified", which reads as "we did not look" when the truth is
-    # "we looked and the file is broken".
     unreadable = [
         side for side, data in (("submitted", submitted), ("reference", reference))
         if data.get("read_error")
@@ -1038,13 +895,7 @@ def _header_check(submitted: dict, reference: dict) -> dict:
 
 
 def _grids_compatible(a: dict, b: dict, *, vox_tol: float = 1e-3, aff_tol: float = 1e-2) -> Optional[bool]:
-    """Whether two loaded NIfTI maps share a physical-space grid.
-
-    Compares voxel sizes and the affine (rotation + translation) within
-    tolerance. Returns None when either affine is unavailable (grid cannot be
-    verified) so callers can decide whether to proceed. Same shape alone is NOT
-    sufficient: two identically shaped volumes 100 mm apart are not comparable.
-    """
+    """Whether two loaded NIfTI maps share a physical-space grid."""
     aff_a, aff_b = a.get("affine"), b.get("affine")
     vox_a, vox_b = a.get("voxel_size"), b.get("voxel_size")
     if aff_a is None or aff_b is None:
@@ -1069,12 +920,7 @@ def _write_float32_nifti(
     values: list[float],
     affine: Optional[list[list[float]]] = None,
 ) -> None:
-    """Write a minimal NIfTI-1 float32 map.
-
-    When ``affine`` (a 4x4 list, e.g. the submitted map's affine) is provided it
-    is written as the sform so difference maps land in the same physical space as
-    the source in imaging software. Without it, an identity grid is used.
-    """
+    """Write a minimal NIfTI-1 float32 map."""
     header = bytearray(348)
     header[0:4] = (348).to_bytes(4, "little")
     header[344:348] = b"n+1\x00"
@@ -1106,10 +952,6 @@ def _write_float32_nifti(
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         import numpy as np  # type: ignore
-        # ``values`` comes from NumPy's default C-order flattening, while the
-        # NIfTI on-disk convention stores the first spatial axis fastest
-        # (Fortran order). Reorder explicitly so the difference image retains
-        # the voxel layout of the submitted/reference maps.
         arr = np.asarray(values, dtype=np.float32).reshape(tuple(shape), order="C")
         arr = np.where(np.isfinite(arr), arr, np.float32("nan"))
         arr = np.asarray(arr, dtype="<f4").ravel(order="F")
@@ -1209,13 +1051,7 @@ def _reference_roots(submission_id: str, challenge_type: str) -> list[Path]:
 
 
 def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
-    """Reference maps grouped by detected type, one entry per physical file.
-
-    Both spellings of the maps directory are searched because either may be
-    what a provider shipped; on a case-insensitive filesystem they are the
-    same directory, so results are deduplicated by physical file identity
-    rather than by path text.
-    """
+    """Reference maps grouped by detected type, one entry per physical file."""
     map_dirs = _dedupe_paths([root / "maps", root / "Maps", root])
     by_type: dict[str, list[Path]] = {}
     seen: set = set()
@@ -1233,12 +1069,7 @@ def _reference_maps_by_type(root: Path) -> dict[str, list[Path]]:
 
 
 def _mask_overlaps(masks: list[dict]) -> list[dict]:
-    """Pairs of *effective* ROI masks that still share voxels, with how many.
-
-    Configured exclusions are applied first. This means the confirmed DCE
-    gray-matter-minus-hippocampus policy no longer produces an overlap warning,
-    while an unrelated partial overlap is still disclosed to the reviewer.
-    """
+    """Pairs of *effective* ROI masks that still share voxels, with how many."""
     try:
         import numpy as np  # noqa: PLC0415
     except Exception:  # pragma: no cover - numpy is a hard dependency in practice
@@ -1290,11 +1121,7 @@ _LOGGER = _logging.getLogger(__name__)
 
 
 def submission_artifacts(submission_id: str) -> list:
-    """Normalized artifacts for a submission, from the existing manifest.
-
-    Reuses the manifest the scoring path has already refreshed, no second
-    traversal of the submission tree.
-    """
+    """Normalized artifacts for a submission, from the existing manifest."""
     from osipi_pipeline.ingestion.manifest import load_manifest
     from osipi_pipeline.ingestion.models import SubmissionArtifact
 
@@ -1310,13 +1137,7 @@ def submission_artifacts(submission_id: str) -> list:
 def _attach_roi_descriptives(
     reference_scoring: dict, submission_id: str, challenge_type: str
 ) -> None:
-    """Populate ROI descriptive statistics on the reference-scoring result.
-
-    Distinguishes *expected scientific unavailability*, no masks, no
-    eligible Ktrans, from an unexpected internal error. The former is a
-    normal outcome recorded as a status, not an application fault, so it is
-    not logged as a crash.
-    """
+    """Populate ROI descriptive statistics on the reference-scoring result."""
     from services.roi_descriptive_service import (
         eligible_artifacts,
     )
@@ -1382,6 +1203,16 @@ def _reference_signal_files(root: Path, challenge_type: str) -> list[Path]:
     ]
 
 
+def _rss_worker_count(pairs: int) -> int:
+    """Threads for 4-D RSS; numpy and gzip release the GIL while reading."""
+    try:
+        configured = int(os.environ.get("OSIPI_RSS_WORKERS", "0"))
+    except ValueError:
+        configured = 0
+    workers = configured if configured > 0 else min(4, os.cpu_count() or 1)
+    return max(1, min(workers, pairs))
+
+
 def _score_signal_rss(
     reference_scoring: dict,
     submission_id: str,
@@ -1389,11 +1220,7 @@ def _score_signal_rss(
     *,
     artifact_dir: Optional[Path] = None,
 ) -> None:
-    """Attach conditional measured-vs-modelled 4-D RSS analysis.
-
-    The measured signal is optional. Absence is an explicit normal status, not
-    an error and not a reason to suppress map QC or other analyses.
-    """
+    """Attach conditional measured-vs-modelled 4-D RSS analysis."""
     from osipi_pipeline.scoring.rss_statistics import (
         METHODOLOGY as RSS_METHODOLOGY,
         streaming_voxelwise_rss,
@@ -1414,9 +1241,6 @@ def _score_signal_rss(
         "warnings": [],
     }
     reference_scoring["signal_rss"] = result
-    # The analysis has always been challenge-generic; it was named for DCE
-    # because DCE enabled it first. The old key is kept so an existing saved
-    # result or an external reader does not break on the rename.
     reference_scoring["dce_signal_rss"] = result
     if not rss_enabled:
         return
@@ -1451,11 +1275,6 @@ def _score_signal_rss(
     if not measured and not reference_measured:
         return
 
-    # A site mask is reused by every participant and repeat at that site.  The
-    # full DCE cohort has 60 scan pairs but only nine masks; loading and applying
-    # GM-minus-hippocampus from disk for every pair needlessly repeated the same
-    # decompression hundreds of times.  Keep only the compact boolean selector,
-    # not the larger floating-point source volume.
     prepared_masks = []
     for mask in masks:
         try:
@@ -1468,7 +1287,7 @@ def _score_signal_rss(
         except Exception as exc:
             prepared_masks.append((mask, None, None, str(exc)))
 
-    for identity in sorted(set(models_by_id) | set(measured_by_id), key=str):
+    def _rss_record(identity):
         model_items = models_by_id.get(identity, [])
         measured_items = measured_by_id.get(identity, [])
         if not measured_items and len(model_items) == 1 and reference_measured:
@@ -1497,8 +1316,7 @@ def _score_signal_rss(
                 f"Expected one measured and one modelled signal for this scan; "
                 f"found {len(measured_items)} measured and {len(model_items)} modelled."
             )
-            result["records"].append(record)
-            continue
+            return record
 
         model_artifact, measured_artifact = model_items[0], measured_items[0]
         model_path = root / str(model_artifact.path)
@@ -1515,11 +1333,6 @@ def _score_signal_rss(
             else "submission"
         )
         try:
-            # Headers and array proxies only. A real DCE concentration curve is
-            # 1 GB as float32 and 2 GB as float64, so materialising the measured
-            # and modelled volumes here, as this used to, asked for about 6 GB
-            # for one scan pair and the kernel killed the process. RSS sums over
-            # time, so it streams.
             model_meta = _nifti_geometry(model_path)
             measured_meta = _nifti_geometry(measured_path)
             if len(model_meta["shape"]) != 4 or len(measured_meta["shape"]) != 4:
@@ -1575,7 +1388,16 @@ def _score_signal_rss(
         except Exception as exc:
             record["status"] = "calculation_error"
             record["error"] = str(exc)
-        result["records"].append(record)
+        return record
+
+    identities = sorted(set(models_by_id) | set(measured_by_id), key=str)
+    workers = _rss_worker_count(len(identities))
+    if workers > 1:
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            result["records"].extend(pool.map(_rss_record, identities))
+    else:
+        result["records"].extend(_rss_record(identity) for identity in identities)
 
     available = sum(1 for row in result["records"] if row.get("status") == "available")
     result["available"] = available > 0
@@ -1585,13 +1407,7 @@ def _score_signal_rss(
 
 
 def _attach_threshold_flags(reference_scoring: dict, challenge_type: str) -> None:
-    """Mark ROI rows a reviewer should look at, when a challenge asks for it.
-
-    Advisory only. Nothing here fails, excludes or ranks a submission; it
-    annotates rows so a reviewer scanning a long table knows where to start.
-    No challenge ships a threshold, so this normally records that none is
-    configured and changes nothing.
-    """
+    """Mark ROI rows a reviewer should look at, when a challenge asks for it."""
     from osipi_pipeline.scoring.thresholds import (
         METHODOLOGY as THRESHOLD_METHODOLOGY,
         assess_row,
@@ -1613,13 +1429,8 @@ def _attach_threshold_flags(reference_scoring: dict, challenge_type: str) -> Non
 
 
 def _icc_definition(challenge_type: str) -> str:
-    """What the ICC column means for this challenge, in the reader's terms.
-
-    Two very different situations both produce a blank ICC: no model has been
-    chosen, or a model is chosen but this submission has no repeated scans to
-    apply it to. They are not the same and a reader has to be able to tell.
-    """
-    from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS, MODEL_NONE
+    """What the ICC column means for this challenge, in the reader's terms."""
+    from osipi_pipeline.scoring.icc import MODEL_DESCRIPTIONS
 
     settings = icc_settings_by_challenge().get((challenge_type or "").strip().lower(), {}) or {}
     models = settings.get("models", ())
@@ -1656,17 +1467,9 @@ def _attach_grouped_roi_statistics(reference_scoring: dict, challenge_type: str)
 
 
 def _attach_icc(reference_scoring: dict, challenge_type: str, roi_rows: list) -> None:
-    """Attach ICC when the challenge has chosen a model, and say so when not.
-
-    ICC needs the same per-scan ROI rows the grouping uses, arranged as a
-    participants x sessions table. The model is configuration because six
-    defensible models exist; with none chosen this records why the field is
-    empty rather than leaving a reader to guess whether it was zero, missing,
-    or not applicable.
-    """
+    """Attach ICC when the challenge has chosen a model, and say so when not."""
     from osipi_pipeline.scoring.icc import (
         METHODOLOGY as ICC_METHODOLOGY,
-        MODEL_NONE,
         REASON_NOT_CONFIGURED,
         compute_icc_for_rows,
         IccResult,
@@ -1716,19 +1519,12 @@ def _attach_icc(reference_scoring: dict, challenge_type: str, roi_rows: list) ->
 
 
 def _reference_scoring_result_keys_probe() -> dict:
-    """Return an empty reference-scoring result. Test seam for shape checks.
-
-    Calls the real builder with no maps, so the asserted key set is the one
-    production actually produces rather than a copy that could drift.
-    """
+    """Return an empty reference-scoring result."""
     return _score_reference_maps("__probe__", default_challenge_type(), [])
 
 
 def _roi_methodology() -> dict:
-    """Formula conventions for the ROI descriptive statistics.
-
-    Emitted once per result rather than repeated on every row.
-    """
+    """Formula conventions for the ROI descriptive statistics."""
     from services.roi_descriptive_service import methodology
 
     return methodology()
@@ -1741,15 +1537,7 @@ def attach_roi_descriptive_statistics(
     challenge_type: str,
     root: Path,
 ) -> dict:
-    """Populate ``roi_descriptive_statistics`` on a reference-scoring result.
-
-    ROI definitions come from :func:`masks_for_submission`, the single mask
-    discovery used by every scoring path. Computed once here; the API, JSON,
-    CSV and report model all read these records rather than recomputing.
-
-    Failure is non-fatal: descriptive statistics are additive, and existing
-    reference metrics must not be lost because an ROI could not be read.
-    """
+    """Populate ``roi_descriptive_statistics`` on a reference-scoring result."""
     from services.roi_descriptive_service import (
         compute_roi_descriptive_statistics,
         roi_definitions_from_masks,
@@ -1769,13 +1557,7 @@ def attach_roi_descriptive_statistics(
 
 
 def masks_for_submission(submission_id: str, challenge_type: str) -> list[dict]:
-    """ROI masks visible to this submission.
-
-    Submission-specific and challenge-specific masks take priority over the
-    legacy shared roots. This prevents, for example, generic ASL masks from
-    being applied to DCE maps while retaining shared masks as a fallback for
-    existing installations.
-    """
+    """ROI masks visible to this submission."""
     roots = _reference_roots(submission_id, challenge_type)
     challenge = challenge_type.lower().strip()
     generic = {
@@ -1798,12 +1580,7 @@ def _mask_scope(mask: dict) -> tuple:
 
 
 def _apply_mask_exclusion_policy(masks: list[dict], challenge_type: str) -> list[dict]:
-    """Annotate outer masks with configured, same-scope regions to subtract.
-
-    Source NIfTIs are never modified. The effective selector is created only
-    while calculating an analysis, keeping the private source assets intact
-    and making the scientific rule explicit in configuration.
-    """
+    """Annotate outer masks with configured, same-scope regions to subtract."""
     analysis = analysis_by_challenge().get((challenge_type or "").strip().lower(), {})
     configured = analysis.get("mask_exclusions") or {}
     policy = {
@@ -1840,9 +1617,6 @@ def _load_effective_mask(mask: dict, *, load_values=None) -> dict:
     base = loader(Path(mask["path"]))
     result = dict(base)
     shape = tuple(int(value) for value in base.get("shape") or ())
-    # Keep the canonical loader contract: values are flat and shape is carried
-    # separately. ROI consumers and the pure-Python NIfTI fallback both rely
-    # on that representation.
     selector = np.asarray(_mask_selector(base.get("values")), dtype=bool).reshape(-1)
     for excluded_path in mask.get("excluded_mask_paths") or ():
         excluded = loader(Path(excluded_path))
@@ -1867,20 +1641,7 @@ def _load_effective_mask(mask: dict, *, load_values=None) -> dict:
 def _reference_masks_across_roots(
     roots: Sequence[Path], *, challenge: Optional[str] = None
 ) -> list[dict]:
-    """ROI masks from *every* reference root, once per physical file.
-
-    Masks and ground-truth maps are independent assets and organisers do not
-    reliably keep them together: a shared ``masks/`` folder alongside a
-    per-challenge ``asl/maps/`` folder is a natural layout, and so is a mask
-    dropped in the reference root while the maps sit one level down. The map
-    root has to be a single choice, mixing two ground truths would be wrong,
-    but a mask found anywhere the pipeline is already allowed to look is a
-    mask the reviewer meant to provide.
-
-    Searching only the map root is what made a supplied mask silently do
-    nothing: no ROI rows, and whole-image bias and MAE reported with no
-    indication that the region breakdown was missing rather than empty.
-    """
+    """ROI masks from *every* reference root, once per physical file."""
     seen: set = set()
     masks: list[dict] = []
     for root in roots:
@@ -1942,11 +1703,8 @@ def _scan_identity(
     Resolved from the path relative to ``root`` when one is given, so the
     submission root or reference root is not itself mistaken for identity.
 
-    ``challenge`` unlocks that challenge's ``filename_identity_patterns``. It is
-    optional because the original caller -- matching a submitted map to its
-    reference -- works from directory structure alone; a layout that encodes the
-    scan in the filename instead (``Synthetic_P001_Visit1_Site1``) resolves to
-    nothing without it.
+    ``challenge`` enables that challenge's ``filename_identity_patterns`` for
+    layouts that encode the scan in the filename (``Synthetic_P001_Visit1_Site1``).
     """
     from osipi_pipeline.ingestion.identity_parser import resolve_identity
 
@@ -1965,18 +1723,7 @@ def _scan_identity(
 
 
 def _scan_label(dataset, participant, repeat, site) -> Optional[str]:
-    """A short human name for one scan, or None when nothing identifies it.
-
-    The DCE-2026 layout gives every scan the same filenames by design, so a
-    table keyed on the filename repeats "Ktrans.nii.gz" sixty times and tells a
-    reader nothing about which scan a row belongs to. The identity is already
-    resolved during ingestion; this turns it into something printable so it can
-    travel with the numbers into reports and CSVs.
-
-    Parts that are unknown are left out rather than filled in with a
-    placeholder: "P01 - Site 2" is honest about a missing repeat in a way that
-    "P01 - Site 2 - Repeat ?" is not.
-    """
+    """A short human name for one scan, or None when nothing identifies it."""
     parts = []
     if participant:
         parts.append(f"P{participant}" if str(participant).isdigit() else str(participant))
@@ -2000,21 +1747,7 @@ def _choose_reference_match(
     reference_root: Optional[Path] = None,
     challenge_type: Optional[str] = None,
 ) -> Optional[Path]:
-    """The ground-truth file belonging to this scan.
-
-    Scan identity is checked before the filename, because in a real challenge
-    submission the filename carries none. The DCE lead's data is laid out as
-    ``P05/site_2/scan_1/Ktrans.nii.gz`` with the ground truth in the same shape,
-    so all sixty candidates share the single token ``ktrans`` and tie. The
-    previous filename-only rule then broke the tie on path length, which is
-    arbitrary: it would score participant 5 at site 2 against participant 1 at
-    site 1 and report the result as a comparison. Wrong ground truth produces
-    numbers that look entirely reasonable, which is the worst kind of wrong.
-
-    A candidate whose participant, site, repeat and dataset all match is used.
-    Partial identities must not conflict. Filename evidence can disambiguate
-    compatible candidates, but ties and conflicting identities return None.
-    """
+    """The ground-truth file belonging to this scan."""
     if not candidates:
         return None
     wanted = _scan_identity(submitted_path, submission_root, challenge=challenge_type)
@@ -2078,17 +1811,7 @@ def _comparison_metrics(
     reference_values,
     selector=None,
 ) -> dict:
-    """Voxelwise comparison metrics.
-
-    Uses a vectorised NumPy path (100x+ faster on full-resolution maps) and falls
-    back to the pure-Python implementation when NumPy is unavailable. The two
-    paths compute the identical statistics, so scoring values are unchanged,
-    only faster. That equivalence is pinned by
-    ``tests/test_comparison_metrics_parity.py``, which compares the two paths
-    key by key over the cases that separate a vectorised implementation from a
-    loop: NaN and infinity on either side, ROI selectors, no finite overlap, a
-    zero reference mean, a constant map, and randomised maps.
-    """
+    """Voxelwise comparison metrics."""
     try:
         import numpy as np  # type: ignore
     except Exception:
@@ -2425,14 +2148,8 @@ def _score_reference_maps(
             result["maps"].append(row)
             continue
 
-        # Recorded before any dimensionality or shape check rejects the map,
-        # because a header mismatch is the most likely reason it was rejected
-        # and the reviewer needs to see the numbers either way.
         row["header_check"] = _header_check(sub_data, ref_data)
 
-        # Parameter maps (CBF/ATT) must be exactly the configured dimensionality
-        # (3-D). A 4-D file with a parameter-map name is a fitted model / time
-        # series, not a parameter map, and must not be scored voxelwise here.
         expected_dims = _expected_dimensions(map_type)
         sub_ndim = len(sub_data["shape"])
         row["submitted_dimensions"] = sub_ndim
@@ -2460,14 +2177,10 @@ def _score_reference_maps(
             )
             row["submitted_shape"] = sub_data["shape"]
             row["reference_shape"] = ref_data["shape"]
-            # TODO: add explicit, affine-aware optional resampling before enabling shape reconciliation.
+            # Maps are not resampled, so shapes must match exactly.
             result["maps"].append(row)
             continue
 
-        # Same shape is not enough: verify the submitted and reference maps share
-        # a physical-space grid (affine + voxel size) before voxelwise scoring.
-        # Two identically shaped volumes offset in space would otherwise produce
-        # misleading metrics. We do not silently resample.
         grid_ok = _grids_compatible(sub_data, ref_data)
         if grid_ok is False:
             row["status"] = "spatial_grid_mismatch"
@@ -2563,9 +2276,6 @@ def _score_reference_maps(
     compared_count = len(compared_metrics)
     result["summary"]["compared_map_count"] = compared_count
 
-    # Aggregate metrics PER MAP TYPE. CBF (mL/100g/min) and ATT (seconds) have
-    # different units, so averaging their RMSE/MAE/bias together is meaningless.
-    # Only same-map-type values (across subjects/repeats) may be averaged.
     by_map_type: dict[str, dict] = {}
     for map_row in result["maps"]:
         whole = map_row.get("whole_map") or {}
@@ -2596,9 +2306,6 @@ def _score_reference_maps(
     }
     result["summary"]["by_map_type"] = summary_by_map_type
 
-    # Flat cross-map aggregates are only meaningful within a single map type/unit.
-    # With more than one compared map type present, expose them as None (reports
-    # render "Not available") and rely on by_map_type instead of mixing units.
     distinct_types = list(summary_by_map_type.keys())
     if len(distinct_types) == 1:
         only = summary_by_map_type[distinct_types[0]]
@@ -2619,9 +2326,6 @@ def _score_reference_maps(
                 "so no combined average is reported, see per-map-type results in summary.by_map_type."
             )
 
-    # Repeatability/ICC require repeated (e.g. noise-varied) datasets, which a
-    # single submitted map cannot provide. State this explicitly so the reported
-    # coefficient of variation is never mistaken for a repeatability measure.
     result["repeatability_status"] = "unavailable_requires_repeated_datasets"
     result["metric_definitions"] = {
         "rmse": "Root-mean-square voxelwise error vs. reference (same units as the map).",
@@ -2872,12 +2576,7 @@ _ANALYSIS_CACHE_LOCK = threading.Lock()
 
 
 def clear_analysis_cache(*, on_disk: bool = False) -> None:
-    """Drop memoised analyses. Called when configuration changes.
-
-    The saved copies are keyed by a configuration fingerprint, so a config
-    change makes them unreachable without deleting them; ``on_disk`` is for
-    tests and for anyone who wants the folder actually emptied.
-    """
+    """Drop memoised analyses."""
     with _ANALYSIS_CACHE_LOCK:
         _ANALYSIS_CACHE.clear()
     if on_disk:
@@ -2891,17 +2590,7 @@ def clear_analysis_cache(*, on_disk: bool = False) -> None:
 def _analysis_cache_key(
     submission_id: str, challenge_type: str, files: list[Path],
 ) -> Optional[tuple]:
-    """Identity of an analysis: its inputs, not just its submission id.
-
-    Everything the result depends on and nothing else: the submitted maps, the
-    ground truth and masks it is compared against, and the challenge
-    configuration. Any of them changing produces a different key, so a stale
-    answer cannot be served; none of them changing means the answer is the one
-    already computed.
-
-    Only file identity is read (path, size, mtime), never contents, so building
-    a key costs a handful of stat calls against the several minutes it can save.
-    """
+    """Identity of an analysis: its inputs, not just its submission id."""
     from osipi_pipeline.ingestion.manifest import config_fingerprint
 
     def stamp(paths) -> tuple:
@@ -2925,19 +2614,12 @@ def _analysis_cache_key(
             for paths in _reference_maps_by_type(root).values()
             for path in paths
         )
-        # Ct reference curves are not parameter maps and therefore are absent
-        # from ``_reference_maps_by_type``. They still determine RSS and must
-        # invalidate a saved analysis when replaced.
         reference_signals = stamp(
             path for root in roots
             for path in _reference_signal_files(root, challenge_type)
         )
     except Exception:  # noqa: BLE001 - a key we cannot build is simply no key
         return None
-    # The schema label invalidates results from older analysis-input semantics,
-    # even if the configuration timestamp survives an in-place upgrade. It is
-    # deliberately challenge-neutral: the cache covers every configured
-    # challenge, not only the one that first introduced reference signals.
     return ("analysis-inputs-v2", submission_id, challenge_type,
             config_fingerprint(), submitted, masks, references, reference_signals)
 
@@ -2949,12 +2631,7 @@ def _analysis_cache_dir() -> Path:
 
 
 def _analysis_cache_file(submission_id: str, cache_key: tuple) -> Path:
-    """One file per (submission, inputs) pair.
-
-    The submission id leads the filename so a human can see what a file is
-    for, and the digest of the full key follows so a changed input lands on a
-    different file rather than overwriting a valid one.
-    """
+    """One file per (submission, inputs) pair."""
     digest = hashlib.sha1(
         json.dumps(cache_key, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()[:16]
@@ -2962,13 +2639,6 @@ def _analysis_cache_file(submission_id: str, cache_key: tuple) -> Path:
 
 
 def _read_cached_analysis(path: Path) -> Optional[dict]:
-    """A previously saved analysis, or nothing.
-
-    Any failure to read is a cache miss, never an error: a truncated file from
-    an interrupted write, a partial disk, or a file written by an older
-    version of this code must all end in recomputing rather than in a broken
-    report.
-    """
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -2979,15 +2649,8 @@ def _read_cached_analysis(path: Path) -> Optional[dict]:
 def _write_cached_analysis(path: Path, result: dict, submission_id: str) -> None:
     """Save an analysis, replacing whatever this submission had before.
 
-    Written to a temporary name and moved into place, so a reader never sees a
-    half-written file. Older entries for the same submission are removed: a
-    new key means the submitted maps, the references or the configuration
-    changed, which makes every earlier entry unreachable rather than merely
-    old, and keeping them would grow the folder for every re-upload.
-
-    Failing to cache is not failing to analyse. A read-only disk or a full one
-    costs the next reader some seconds and nothing else, so nothing here
-    propagates.
+    The file is written atomically and older entries for the same submission
+    are removed. Errors are ignored: failing to cache is not failing to analyse.
     """
     directory = _analysis_cache_dir()
     try:
@@ -3007,18 +2670,7 @@ def _write_cached_analysis(path: Path, result: dict, submission_id: str) -> None
 
 
 def _attach_scan_identity(maps: list[dict], submission_id: str, challenge_type: str) -> None:
-    """Say which scan each analysed file came from, and what it is.
-
-    The DCE-2026 layout reuses one set of filenames in every scan directory by
-    design, so a QC table keyed on the map type prints "Ktrans" sixty times and
-    a reader cannot tell one row from another -- nor which of them, on a mixed
-    upload, belongs to which challenge.
-
-    ``role_label`` exists for the same reason. A 4-D fitted concentration curve
-    is not a parameter map, so map detection correctly declines to name one and
-    the row read "Unknown" with every reference metric "Not available" -- which
-    looks like a failure rather than a file that was never a parameter map.
-    """
+    """Say which scan each analysed file came from, and what it is."""
     root = EXTRACTED_DIR / submission_id
     challenge = (challenge_type or "").strip().lower()
     roles_by_path: dict[str, str] = {}
@@ -3063,19 +2715,7 @@ def analyze_submission_niftis(
     challenge_type: str,
     artifact_dir: Optional[Path] = None,
 ) -> dict:
-    """Extract per-map scientific metadata and QC stats from output NIfTI maps.
-
-    This includes descriptive QC/statistics and, when matching reference maps
-    exist, reference-based comparison metrics. It is not official OSIPI scoring.
-
-    The result is memoised on its inputs. Every export route, the report, the
-    HTML and PDF renderers and the frontend each ask for this analysis. A full
-    DCE cohort contains 60 large 4-D signal pairs and takes several minutes:
-    recomputing it per request made opening a report cost as much as producing
-    it in the first place. ``artifact_dir`` runs are never served
-    from cache, because those write difference maps and RSS volumes to disk as
-    a side effect and the caller wants the files, not only the numbers.
-    """
+    """Extract per-map scientific metadata and QC stats from output NIfTI maps."""
     files = _find_output_niftis(submission_id, challenge_type)
 
     cache_key = None
@@ -3088,9 +2728,6 @@ def analyze_submission_niftis(
                 result = copy.deepcopy(cached)
                 result["cache_hit"] = "memory"
                 return result
-            # Nothing in this process, but the work may already have been done
-            # by a previous one. Restarting the app should not cost a minute
-            # per submission to tell a reviewer what it told them yesterday.
             on_disk = _read_cached_analysis(_analysis_cache_file(submission_id, cache_key))
             if on_disk is not None:
                 with _ANALYSIS_CACHE_LOCK:
@@ -3101,15 +2738,7 @@ def analyze_submission_niftis(
     maps = [_analyse_nifti_file(path) for path in files]
     _attach_scan_identity(maps, submission_id, challenge_type)
     reference_scoring = _score_reference_maps(submission_id, challenge_type, maps, artifact_dir)
-    # ROI descriptive statistics are computed exactly once, here, using the
-    # masks the reference scoring just discovered. Every downstream consumer
-    # (API, JSON, CSV, HTML, PDF, frontend) reads the records off this result
-    # rather than recomputing them.
     _attach_roi_descriptives(reference_scoring, submission_id, challenge_type)
-    # Three independent annotations of the same ROI rows. Each has its own
-    # enable switch, so none may be nested inside another: a nested call
-    # inherits the outer function's early returns and silently stops running
-    # in exactly the configurations where the outer feature is off.
     _attach_grouped_roi_statistics(reference_scoring, challenge_type)
     _attach_icc(
         reference_scoring, challenge_type,
@@ -3190,20 +2819,8 @@ def _with_nifti_status(
     return payload
 
 
-# ---------------------------------------------------------------------------
-# Infrastructure checks
-# ---------------------------------------------------------------------------
-
 def _check_tf62_infrastructure() -> dict:
-    """Check TF6.2 provider infrastructure: script + reference NIfTI + masks.
-
-    Does NOT check submission-specific outputs.
-    Returns:
-        all_present     : bool
-        missing         : list[str]
-        ref_nifti_count : int
-        mask_count      : int
-    """
+    """Check TF6.2 provider infrastructure: script + reference NIfTI + masks."""
     prov     = PROVIDERS["osipi_tf62_dce_ktrans"]
     script   = prov["script_file"]
     ref_dir  = prov["ref_data_dir"]
@@ -3261,10 +2878,6 @@ def _check_codecollection_infrastructure() -> dict:
         "available_files": available,
     }
 
-
-# ---------------------------------------------------------------------------
-# all_providers_status(), infrastructure snapshot (no submission needed)
-# ---------------------------------------------------------------------------
 
 def all_providers_status() -> list[dict]:
     """Return infrastructure-level status for every registered provider and installed package."""
@@ -3353,10 +2966,6 @@ def all_providers_status() -> list[dict]:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Submission-level prerequisite check (TF6.2 official provider)
-# ---------------------------------------------------------------------------
-
 _OSIPI_FNAME_RE = re.compile(
     r"^(Synthetic|Clinical)_P\d+_Visit\d+\.nii(\.gz)?$",
     re.IGNORECASE,
@@ -3368,15 +2977,7 @@ def _check_submission_prerequisites(
     challenge_type: str,
     provider: dict,
 ) -> dict:
-    """Check every prerequisite for scoring a single submission.
-
-    Returns:
-        all_present  : bool
-        missing      : list[str]
-        outputs_ready: bool   , execution produced ≥1 NIfTI file
-        ktrans_compat: bool   , at least one file matches OSIPI naming pattern
-        nifti_files  : list[Path]
-    """
+    """Check every prerequisite for scoring a single submission."""
     # First: infrastructure
     infra   = _check_tf62_infrastructure()
     missing = list(infra["missing"])
@@ -3414,10 +3015,6 @@ def _check_submission_prerequisites(
     }
 
 
-# ---------------------------------------------------------------------------
-# scoring_status(), per-submission
-# ---------------------------------------------------------------------------
-
 def scoring_status(
     submission_id: str,
     challenge_type: str,
@@ -3425,16 +3022,7 @@ def scoring_status(
     output_files: Optional[list[str]] = None,
     provider_id: Optional[str] = None,
 ) -> dict:
-    """Return scoring status for a single submission.
-
-    Checks the active configuration first:
-    - mode="none"    → not_configured (scoring disabled by reviewer)
-    - mode="builtin" → uses built-in TF6.2 provider (existing logic)
-    - mode="custom"  → checks the active custom package readiness
-
-    Never fabricates metric values. Returns status="not_configured" if any
-    prerequisite is missing.
-    """
+    """Return scoring status for a single submission."""
     providers_snap = all_providers_status()
 
     # ── Check active config unless a specific provider_id was requested ────────
@@ -3609,17 +3197,8 @@ def scoring_status(
     }, submission_id, challenge_type, True)
 
 
-# ---------------------------------------------------------------------------
-# Helpers for challengeScoring.py invocation
-# ---------------------------------------------------------------------------
-
 def _write_patched_runner(script: Path, entry_name: str) -> Path:
-    """Write a temp copy of challengeScoring.py with entry_list set to [entry_name].
-
-    challengeScoring.py uses no CLI arguments, it reads ``entry_list`` from
-    its own source.  We patch it so only the specified submission is scored.
-    The caller must delete the returned path when done.
-    """
+    """Write a temp copy of challengeScoring.py with entry_list set to [entry_name]."""
     source = script.read_text(encoding="utf-8")
     # Override entry_list and skip reproducibility (requires separate neutral dir)
     source = re.sub(
@@ -3640,12 +3219,7 @@ def _write_patched_runner(script: Path, entry_name: str) -> Path:
 
 
 def _setup_entry_directory(provider_dir: Path, entry_name: str, nifti_files: list) -> Path:
-    """Create entryDirectories/{entry_name}/ and link/copy submission NIfTIs there.
-
-    challengeScoring.py reads submission files from
-    ``entryDirectories/{entry_name}/`` relative to its cwd (provider_dir).
-    Uses symlinks where possible; falls back to file copy.
-    """
+    """Create entryDirectories/{entry_name}/ and link/copy submission NIfTIs there."""
     entry_dir = provider_dir / "entryDirectories" / entry_name
     entry_dir.mkdir(parents=True, exist_ok=True)
     for src in nifti_files:
@@ -3661,16 +3235,7 @@ def _setup_entry_directory(provider_dir: Path, entry_name: str, nifti_files: lis
 
 
 def _parse_osipi_tabular(tabular_path: Path, entry_name: str) -> dict:
-    """Parse OSIPI_score_tabular.txt and return metrics dict for entry_name.
-
-    Expected format (tab-separated)::
-
-        Team  Accuracy  Repeatability  Reproducibility  OSIPI score silver  OSIPI score gold
-        team1  0.812     0.934          nan               75.8                nan
-
-    Returns an empty dict if the file is missing or the entry is not found.
-    NaN values are returned as ``None`` so they serialise cleanly to JSON.
-    """
+    """Parse OSIPI_score_tabular.txt and return metrics dict for entry_name."""
     if not tabular_path.exists():
         return {}
     try:
@@ -3697,27 +3262,13 @@ def _parse_osipi_tabular(tabular_path: Path, entry_name: str) -> dict:
     return {}
 
 
-# ---------------------------------------------------------------------------
-# score_submission(), run the real scoring script
-# ---------------------------------------------------------------------------
-
 def score_submission(
     submission_id: str,
     challenge_type: str,
     map_type: str,
     provider_id: Optional[str] = None,
 ) -> dict:
-    """Run scoring for a single submission.
-
-    Dispatches to custom package, built-in TF6.2 provider, or returns
-    not_configured based on the active configuration.
-
-    Returns a result dict that is also written to
-    data/outputs/scoring/{safe_id}_score.json.
-
-    NEVER fabricates metric values. Returns status='not_configured'
-    or status='not_ready' if any prerequisite is absent.
-    """
+    """Run scoring for a single submission."""
     # ── Custom package dispatch ────────────────────────────────────────────────
     if not provider_id:
         active = get_active_entry(challenge_type)
@@ -3949,16 +3500,8 @@ def score_submission(
         runner_path.unlink(missing_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# Artifact + metric collection
-# ---------------------------------------------------------------------------
-
 def _collect_artifacts(score_dir: Path) -> list[str]:
-    """Return a list of artifact filenames produced by the scoring script.
-
-    Looks for JSON, CSV, PNG, PDF files in the output directory.
-    Returns relative paths (relative to score_dir) as strings.
-    """
+    """Return a list of artifact filenames produced by the scoring script."""
     if not score_dir.exists():
         return []
     extensions = {".json", ".csv", ".png", ".pdf", ".txt", ".html", ".nii"}
@@ -3968,12 +3511,6 @@ def _collect_artifacts(score_dir: Path) -> list[str]:
             artifacts.append(str(f.relative_to(score_dir)))
     return artifacts
 
-
-
-
-# ---------------------------------------------------------------------------
-# Batch helpers
-# ---------------------------------------------------------------------------
 
 def score_batch(
     submission_ids: list[str],

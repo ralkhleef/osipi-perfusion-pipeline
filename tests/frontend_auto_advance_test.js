@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-/**
- * The wizard running the steps that need no decision.
- *
- * Three of the six steps ask the reviewer for nothing: validation, the run
- * step and QC all compute from what was already uploaded. Clicking through
- * them is not review, it is just clicking.
- *
- * The whole risk of automating them is skipping something a person needed to
- * see, so `_autoAdvanceBlocker` is the function that matters and it is pure.
- * The rule it encodes:
- *
- *   errors   stop the wizard, because a failed submission is the thing a
- *            reviewer is here to look at
- *   warnings do not, because a warning is advisory by definition, and
- *            stopping on one would mean stopping on almost every real
- *            submission, which teaches people to ignore the interface
- *
- * Run: node tests/frontend_auto_advance_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -76,10 +57,6 @@ check("every one failing says so",
 }
 
 console.log("\nWarnings do NOT stop it");
-/* This is the decision most likely to be reversed by someone who has not
-   thought it through. The challenge lead's own ASL submission raises a
-   warning for having no methods document, so stopping on warnings would stop
-   on the one real submission there is. */
 check("a warning alone does not stop it",
   sandbox._autoAdvanceBlocker(warn(1)) === null, sandbox._autoAdvanceBlocker(warn(1)));
 check("many warnings still do not stop it",
@@ -136,10 +113,6 @@ check("the run step is awaited before the next one starts",
 check("QC is awaited too",
   /await renderScoreStep\(\)/.test(autoAdvanceBody));
 
-/* Reloading a page is not an instruction to run anything. renderValidateStep
-   is also how saved state is rebuilt on reload, and carrying the wizard
-   forward from there fought the restore's own navigation: two things deciding
-   which step you land on, from a state that is only a summary. */
 console.log("\nReloading does not re-run the wizard");
 check("the restore path is told it is a restore",
   /renderValidateStep\(synthData, \/\*isSingleMode=\*\/undefined, \/\*fromRestore=\*\/true\)/.test(appJs),
@@ -151,10 +124,6 @@ check("a fresh validation still advances",
   /_autoAdvanceToQc\(results\)/.test(appJs));
 
 
-/* ── Run Analysis sits beside Continue to Export ───────────────────────────
-   It lived in the status card at the top of QC and Preview, far from where a
-   reviewer looks for the next action, and pressing it changed nothing visible
-   up there, so it read as broken even when it had run. */
 console.log("\nRun Analysis is in the step footer");
 {
   const body = (() => {

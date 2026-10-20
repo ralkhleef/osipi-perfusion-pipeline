@@ -1,34 +1,15 @@
 #!/usr/bin/env python3
 """Build the DCE error-statistics scoring package.
 
-This is the one that computes what the DCE challenge lead actually asked for.
-Her ``known_error_params.json`` files define the metrics: signed bias and
-population variance of (submitted minus ground truth), per parameter, inside
-each ROI. Running it against her synthetic submission reproduces her recorded
-values to about 1e-8.
-
-Unlike ``make_example_scoring_package.py``, which produces scaffolding to edit,
-this package is the real calculation. It exists as a package rather than a
-script so it runs inside the application on any DCE submission, and so it can
-be handed to her to check herself.
+Computes signed bias and population variance of (submitted minus ground
+truth), per parameter, inside each ROI, matching ``known_error_params.json``.
+Unlike ``make_example_scoring_package.py``, this package is the real calculation.
 
     python3 scripts/make_dce_error_package.py
     python3 scripts/make_dce_error_package.py --out somewhere.zip
 
-Two things it gets right that a first attempt would not:
-
-*Nested masks.* Her shipped masks overlap: every one of the 262 hippocampus
-voxels is also grey matter. Her statistics do not overlap. Reading the masks
-literally made grey matter wrong by 10% on bias and 35% on variance while white
-matter and hippocampus matched exactly, which is the worst kind of error
-because most of the numbers still agree.
-
-*Clipping.* Where a submitted value is exactly zero and the ground truth is
-not, the injected error was truncated at the floor, because the parameter
-cannot go negative. Those voxels are counted and reported rather than silently
-skewing the result.
-
-No real or private data is involved. Nothing is written outside the output path.
+Nested masks are made exclusive before statistics are computed, and voxels
+clipped at zero are counted and reported.
 """
 
 from __future__ import annotations
@@ -68,7 +49,7 @@ inside each ROI:
     bias = mean(submitted - ground truth)
     var  = population variance of that difference, ddof=0
 
-which is what the challenge lead's known_error_params.json records.
+matching known_error_params.json.
 
 Not official OSIPI scoring. It computes error statistics; it does not rank.
 """
@@ -127,17 +108,7 @@ def find_masks(reference_dir):
 
 
 def make_exclusive(masks):
-    """Make nested ROIs disjoint, smallest wins.
-
-    The challenge lead's masks are nested: every hippocampus voxel is also grey
-    matter. Her statistics are not. Reading them literally mixes hippocampus
-    voxels into grey matter, and grey matter alone comes out wrong while the
-    others match, so nothing looks broken.
-
-    Only a mask wholly contained in another is subtracted. Partial overlap is
-    left alone, because that is a different situation and guessing at it would
-    be worse than reporting it as it is.
-    """
+    """Make nested ROIs disjoint, smallest wins. Partial overlaps are left alone."""
     names = sorted(masks, key=lambda n: int(masks[n].sum()))
     result, notes = {{}}, []
     for i, outer in enumerate(names):
@@ -181,9 +152,7 @@ def compare(submitted, truth, masks):
         if not inside.any():
             continue
         error = submitted[inside] - truth[inside]
-        # A submitted value of exactly zero where the truth is not means the
-        # error was clipped at the floor: the parameter cannot go negative, so
-        # part of it was never realised. Reported, not silently included.
+        # Count voxels clipped at zero.
         clipped = int(((submitted[inside] == 0) & (truth[inside] != 0)).sum())
         rois[label] = {{
             "n_voxels": int(inside.sum()),

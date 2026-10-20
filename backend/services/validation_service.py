@@ -1,10 +1,4 @@
-"""File-level validation for an ingested submission.
-
-Accepts a submission_id, resolves the folder path internally, and returns
-structured results. Errors and warnings are dicts with the same shape as the
-CLI validation package: {severity, code, message, path}.
-Results are saved to data/outputs/validation/ for the Outputs page.
-"""
+"""File-level validation for an ingested submission."""
 
 import json
 import sys
@@ -39,9 +33,6 @@ from osipi_pipeline.performance import (
     update_job,
 )
 
-# ---------------------------------------------------------------------------
-# Optional nibabel NIfTI readability check
-# ---------------------------------------------------------------------------
 
 # Locate the pipeline package regardless of working directory.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,12 +66,7 @@ def _run_nifti_validation(
     force_refresh: bool = False,
     workers: Optional[int] = None,
 ) -> tuple:
-    """Run nibabel readability checks on non-empty NIfTI files.
-
-    Returns (errors, warnings, nifti_summary) as lists. If nibabel is not
-    installed the function returns empty lists and no summary so that
-    validation can still complete without a hard dependency.
-    """
+    """Run nibabel readability checks on non-empty NIfTI files."""
     errors: List[Dict] = []
     warnings: List[Dict] = []
     summary: List[Dict] = []
@@ -117,9 +103,6 @@ def _run_nifti_validation(
 
     return errors, warnings, summary
 
-# ---------------------------------------------------------------------------
-# Shared constants
-# ---------------------------------------------------------------------------
 
 NIFTI_SUFFIXES = tuple_setting("nifti_suffixes")
 CODE_FILE_NAMES = set(tuple_setting("code_file_names"))
@@ -164,10 +147,6 @@ VALIDATION_SUBDIR = OUTPUTS_DIR / "validation"
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Issue helpers
-# ---------------------------------------------------------------------------
-
 def _err(code: str, message: str, path: str = "") -> Dict:
     return {"severity": "error", "code": code, "message": message, "path": path or None}
 
@@ -177,12 +156,7 @@ def _warn(code: str, message: str, path: str = "") -> Dict:
 
 
 def submission_artifacts(folder: Path, challenge: str):
-    """Normalized artifacts from the manifest that was just refreshed.
-
-    One reader, so counting, completeness checking and warning suppression all
-    see the same view of the submission. Reference and mask directories are
-    already excluded upstream.
-    """
+    """Normalized artifacts from the manifest that was just refreshed."""
     try:
         manifest = load_manifest(
             folder, refresh_if_stale=False, challenge_type=challenge
@@ -198,13 +172,7 @@ def submission_artifacts(folder: Path, challenge: str):
 
 
 def submission_counts(folder: Path, challenge: str) -> Dict:
-    """Role-based counts for the validation card and every report format.
-
-    Counting raw NIfTI files overstated a 16-scan DCE submission as 67 maps:
-    the 16 modelled signal-time curves are fitted signals, and the reference
-    map and ROI masks are organiser inputs, not submitted content. The correct
-    figure is 48 parameter maps, and it is computed once here.
-    """
+    """Role-based counts for the validation card and every report format."""
     artifacts = submission_artifacts(folder, challenge)
     counts = count_submission(artifacts).to_dict()
     # Grouped contents for the report's submission-contents table, so the
@@ -214,24 +182,13 @@ def submission_counts(folder: Path, challenge: str) -> Dict:
 
 
 def _unclassified_parameter_maps(folder: Path, challenge: str) -> int:
-    """Files that should be parameter maps but could not be classified.
-
-    Everything the pipeline already understands, a fitted signal, a methods
-    document, a reference map, an ROI mask, is excluded, so the
-    "map type could not be determined" warning fires only when a genuine
-    participant parameter map is unidentifiable.
-    """
+    """Files that should be parameter maps but could not be classified."""
     return int(submission_counts(folder, challenge).get("unclassified", 0))
 
 
 def _completeness_issues(folder: Path, challenge: str,
                          dataset: str | None = None) -> List[Dict]:
-    """Structural completeness issues from the normalized manifest artifacts.
-
-    Reads the manifest that was just refreshed rather than walking the tree
-    again. Any failure here is non-fatal: completeness is additive, and a
-    manifest problem is already reported by the surrounding checks.
-    """
+    """Structural completeness issues from the normalized manifest artifacts."""
     try:
         manifest = load_manifest(
             folder, refresh_if_stale=False, challenge_type=challenge
@@ -255,10 +212,6 @@ def _completeness_issues(folder: Path, challenge: str,
     )
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
 def validate_submission(
     submission_id: str,
     challenge_type: str | None = None,
@@ -280,17 +233,7 @@ def validate_submission(
     nifti_validation_workers: Optional[int] = None,
     job_id: Optional[str] = None,
 ) -> Dict:
-    """Validate the submission folder for the given submission_id.
-
-    Args:
-        mode: ``"auto"`` (default), detects whether the submission is
-              result-only or reproducible based on its contents.
-              ``"result_only"``, expects NIfTI output maps; run instructions
-              are non-blocking (result maps only, no Docker).
-              ``"result_validation"``, alias for ``"result_only"``.
-              ``"reproducible"``, does not require output maps; focuses on
-              executability via Dockerfile.
-    """
+    """Validate the submission folder for the given submission_id."""
     job_id = job_id or start_job("validation", total=1, stage="starting", key=submission_id)
     quick_qc = (qc_mode or "deep").strip().lower() == "quick"
     # Normalise challenge type first so it is available for all early-exit paths.
@@ -343,9 +286,6 @@ def validate_submission(
             submission_id=submission_id,
             challenge_type=normalized_challenge,
         )
-    # Completeness runs off the normalized artifacts the manifest already
-    # built, so map detection is not repeated here and filenames are never
-    # re-parsed. Returns nothing for challenges without the new config.
     completeness_issues = _completeness_issues(
         folder, normalized_challenge, dataset=dataset)
     if not all_files:
@@ -382,9 +322,6 @@ def validate_submission(
         if detected in _known_auto_detected():
             effective_map_type = detected
         elif _unclassified_parameter_maps(folder, normalized_challenge):
-            # Only a file that is genuinely expected to be a parameter map and
-            # could not be classified is worth reporting. A modelled signal, a
-            # methods document, a reference map or an ROI mask is none of those.
             effective_map_type = ""
             warnings.append(_warn(
                 "MAP_TYPE_UNDETECTED",
@@ -448,10 +385,6 @@ def validate_submission(
                     for name in expected_maps.get(normalized_challenge, ())
                 ]
 
-            # Challenges that declare required_maps/optional_maps get precise
-            # per-scan errors from the completeness checker instead. Emitting
-            # this warning too would either duplicate the error or, worse,
-            # warn about a map the configuration marks optional.
             suppressed = suppressed_legacy_map_ids(normalized_challenge)
             for label, patterns in expected_groups:
                 if label in suppressed:
@@ -486,11 +419,6 @@ def validate_submission(
 
     counts = submission_counts(folder, normalized_challenge)
 
-    # ---- README / SOP -------------------------------------------------------
-    #
-    # A challenge may require a methods document instead of a README. When that
-    # configured artifact is present the submission has documented itself, and
-    # warning about a missing README is simply wrong.
     readme_found = _has_readme(all_files)
     documentation_found = readme_found or counts.get("methods_documents", 0) > 0
 
@@ -547,10 +475,6 @@ def validate_submission(
                 str(folder),
             ))
     else:
-        # result_only mode: execution is not required, so absent run
-        # instructions and absent code are the expected state, not findings.
-        # Reporting them trained reviewers to ignore the warning channel on
-        # every correct result-only submission.
         pass
         if include_code == "yes" and not _has_code(all_files):
             warnings.append(_warn(
@@ -565,9 +489,6 @@ def validate_submission(
 
     # ---- Duplicate filenames ------------------------------------------------
 
-    # Scoped by scan identity, not bare basename: the DCE-2026 layout reuses
-    # standard filenames in every scan directory by design. Shared with the
-    # library validator so the two cannot drift apart.
     for fname, matches in duplicate_filename_groups(all_files, folder, normalized_challenge):
         warnings.append(_warn(
             "DUPLICATE_FILENAME",
@@ -575,22 +496,12 @@ def validate_submission(
             ", ".join(str(m) for m in matches),
         ))
 
-    # Detect whether the submission has NIfTI maps inside a results/ or maps/
-    # subdirectory (for example: submission_root/results/maps/map.nii.gz).
-    # A file only counts when it has a configured NIfTI suffix AND lives under
-    # a "results" or "maps" folder, a stray .gz archive must not count.
     has_result_maps = any(
         f.name.lower().endswith(NIFTI_SUFFIXES)
         and any(part.lower() in ("results", "maps") for part in f.parts)
         for f in all_files
     )
 
-    # Merge structural completeness into the existing issue lists so the
-    # single existing gate (passed = no errors) covers them too. No second
-    # status mechanism is introduced.
-    # Required parameter maps are outputs for reproducible submissions and are
-    # checked after execution. Input/package artifacts (for example DCE's
-    # modelled signal and methods document) still block the pre-run gate.
     effective_completeness_issues = [
         issue for issue in completeness_issues
         if not (reproducible and issue.get("code") == "REQUIRED_MAP_MISSING")
@@ -602,13 +513,8 @@ def validate_submission(
             warnings.append(issue)
 
     # ---- Methods document --------------------------------------------------
-    #
-    # The blanket requirement is gone: the challenge leads said a methods
-    # document is not needed for the runs being done now, so `methods` is no
-    # longer in any challenge's `required_artifacts`. What replaces it is
-    # narrower and, unlike a blanket rule, cannot be wrong about their policy:
-    # a submitter who told the upload form they had included one, and did not,
-    # gets an error. Saying no, or not being asked, produces nothing at all.
+    # Not in `required_artifacts`. Only an error when the submitter declared
+    # a methods document and none was found.
     methods_files = [
         artifact.path for artifact in submission_artifacts(folder, normalized_challenge)
         if getattr(artifact, "artifact_type", None) == "methods"
@@ -656,10 +562,6 @@ def validate_submission(
     finish_job(job_id, error=None if result.get("passed") else "")
     return result
 
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 def _finish(
     submission_id: str,
@@ -753,29 +655,13 @@ def _has_code(files: List[Path]) -> bool:
     return False
 
 
-# ---------------------------------------------------------------------------
-# Preflight check (reproducible mode), is this submission runnable?
-# ---------------------------------------------------------------------------
-
-
 def preflight_check(
     submission_id: str,
     challenge_type: str | None = None,
     team_name: Optional[str] = None,
     contact_email: Optional[str] = None,
 ) -> Dict:
-    """Check whether a submission is ready to execute without requiring output maps.
-
-    Returns a lightweight dict with:
-      ``runnable``              , True if execution can be attempted.
-      ``has_run_instructions``  , executor-supported Dockerfile found.
-      ``run_instructions_path`` , relative path to the Dockerfile, or "".
-      ``has_run_config``        , run_config.json found (uses default cmd if absent).
-      ``has_existing_maps``     , NIfTI files already present (informational).
-      ``existing_map_count``    , how many NIfTI files exist before execution.
-      ``errors``                , blocking issues (not runnable).
-      ``warnings``              , advisory issues (runnable but note these).
-    """
+    """Check whether a submission is ready to execute without requiring output maps."""
     normalized_challenge = (challenge_type or _default_challenge_type()).lower()
     safe_id = make_safe_id(submission_id)
     folder  = EXTRACTED_DIR / safe_id
@@ -873,25 +759,12 @@ def preflight_check(
     }
 
 
-# ---------------------------------------------------------------------------
-# Post-execution output validation
-# ---------------------------------------------------------------------------
-
-
 def validate_generated_outputs(
     output_dir: Path,
     challenge_type: str | None = None,
     map_type: Optional[str] = None,
 ) -> Dict:
-    """Validate NIfTI files generated by Docker execution (from /output).
-
-    Applies NIfTI-level checks (presence, map names, duplicate filenames,
-    zero-byte files) to the output directory produced by running a submission.
-    Does **not** require a submission_id, it operates directly on a directory.
-
-    Returns:
-        ``passed``, ``nifti_count``, ``output_files``, ``errors``, ``warnings``
-    """
+    """Validate NIfTI files generated by Docker execution (from /output)."""
     normalized_challenge = (challenge_type or _default_challenge_type()).lower()
     errors: List[Dict]   = []
     warnings: List[Dict] = []
@@ -983,11 +856,6 @@ def validate_generated_outputs(
     }
 
 
-# ---------------------------------------------------------------------------
-# Batch validation
-# ---------------------------------------------------------------------------
-
-
 def validate_batch(
     submission_ids: List[str],
     challenge_type: str | None = None,
@@ -1002,16 +870,7 @@ def validate_batch(
     dataset: Optional[str] = None,
     qc_mode: str = "deep",
 ) -> Dict:
-    """Validate multiple submissions and return an aggregate batch result.
-
-    Each submission is validated independently.  Failures in one submission do
-    not prevent the remaining ones from being validated.
-
-    ``challenge_types`` optionally maps ``submission_id -> challenge`` so a mixed
-    batch validates each submission under its own challenge; any submission not
-    listed falls back to ``challenge_type``. Challenges are never merged, each
-    submission is validated strictly under its own challenge's rules.
-    """
+    """Validate multiple submissions and return an aggregate batch result."""
     team_names    = team_names    or {}
     contact_emails = contact_emails or {}
     challenge_types = challenge_types or {}
@@ -1080,8 +939,6 @@ def validate_batch(
     batch_id = f"batch_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')}_{uuid.uuid4().hex[:8]}"
     final_results: List[Dict] = [r for r in results if r is not None]
 
-    # Track which challenges are actually present so a mixed batch is honest
-    # rather than being labelled with one global challenge.
     challenges_present = sorted({
         str(r.get("challenge_type") or "").upper()
         for r in final_results

@@ -1,16 +1,4 @@
-"""FastAPI integration tests for the OSIPI perfusion pipeline.
-
-These tests call the real FastAPI application via TestClient (in-process,
-no network required).  They exercise the full request → service → response
-path for the core pipeline endpoints.
-
-Prerequisites
--------------
-    pip install fastapi httpx pytest nibabel numpy
-
-All side effects (uploads, extractions, validation outputs) are redirected
-to isolated temporary directories via monkeypatching of path_config constants.
-"""
+"""FastAPI integration tests for the OSIPI perfusion pipeline."""
 
 from __future__ import annotations
 
@@ -26,25 +14,14 @@ from typing import Generator
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Guard: skip entire module when fastapi / httpx are not installed.
-# This lets the CI check pass even in minimal Python environments.
-# ---------------------------------------------------------------------------
 pytest.importorskip("fastapi", reason="fastapi is required for API tests")
 pytest.importorskip("httpx",   reason="httpx is required for TestClient")
 
 from fastapi.testclient import TestClient  # noqa: E402  (after importorskip)
 
 
-# ---------------------------------------------------------------------------
-# Helpers: build tiny in-memory ZIPs and NIfTI files
-# ---------------------------------------------------------------------------
-
 def _tiny_nifti_bytes(ndim: int = 3) -> bytes:
-    """Return a minimal but valid NIfTI-1 file as bytes (no nibabel required).
-
-    ``ndim`` lets a caller build the 4-D modelled signal DCE requires.
-    """
+    """Return a minimal but valid NIfTI-1 file as bytes (no nibabel required)."""
     # NIfTI-1 magic header: 348 bytes header + 4 bytes extension = 352 bytes
     header = bytearray(348)
     header[0:4] = (348).to_bytes(4, "little")          # sizeof_hdr
@@ -169,17 +146,9 @@ def _make_batch_zip() -> tuple[bytes, str]:
     return buf.getvalue(), "batch.zip"
 
 
-# ---------------------------------------------------------------------------
-# Pytest fixture: isolated directories + TestClient
-# ---------------------------------------------------------------------------
-
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
-    """Create a TestClient backed by an isolated temporary workspace.
-
-    All path_config constants are monkeypatched so uploads, extractions, and
-    validation outputs land in tmp_path rather than the real project tree.
-    """
+    """Create a TestClient backed by an isolated temporary workspace."""
     import sys
     repo_root = Path(__file__).resolve().parents[1]
     for extra in [str(repo_root / "src"), str(repo_root / "backend")]:
@@ -246,10 +215,6 @@ def client(tmp_path: Path, monkeypatch) -> Generator[TestClient, None, None]:
     with TestClient(app_module.app, raise_server_exceptions=True) as tc:
         yield tc
 
-
-# ---------------------------------------------------------------------------
-# Health + metadata endpoints
-# ---------------------------------------------------------------------------
 
 def test_health(client: TestClient) -> None:
     r = client.get("/api/health")
@@ -364,19 +329,10 @@ def test_configured_missing_maps_are_reported_for_each_challenge(client: TestCli
     dce = client.post("/api/validate", json={
         "submission_id": dce_sid, "challenge_type": "dce", "mode": "result_only",
     }).json()
-    # DCE has migrated to required_maps/optional_maps: kep and vp are now
-    # declared optional, so the legacy "expected map missing" warning is
-    # suppressed for them rather than contradicting the configuration.
-    # Required-map absence is reported as a blocking REQUIRED_MAP_MISSING
-    # error instead, see tests/test_completeness.py.
     dce_missing = [w["message"].lower() for w in dce.get("warnings", []) if w.get("code") == "EXPECTED_MAP_MISSING"]
     assert not any("kep" in msg for msg in dce_missing)
     assert not any("vp" in msg for msg in dce_missing)
 
-    # DSC has since migrated too: CBV, CBF and MTT are required, so a missing
-    # MTT is an error rather than a warning. The legacy warning is suppressed
-    # for any map the new rules already cover, so the same absence is not
-    # counted twice in the reviewer's summary.
     dsc_data, dsc_name = _make_maps_zip("dsc_missing.zip", ["cbv_map.nii", "cbf_map.nii"])
     dsc_sid = _upload_and_get_id(client, dsc_data, dsc_name)
     dsc = client.post("/api/validate", json={
@@ -575,10 +531,6 @@ def test_leaderboard_empty(client: TestClient) -> None:
     assert data["count"] == 0
 
 
-# ---------------------------------------------------------------------------
-# Upload: local ZIP
-# ---------------------------------------------------------------------------
-
 def test_upload_rejects_non_zip(client: TestClient) -> None:
     r = client.post(
         "/api/upload-submission",
@@ -615,10 +567,6 @@ def test_upload_batch_zip(client: TestClient) -> None:
         assert body.get("submission_count", 0) >= 2
         assert len(body.get("submissions", [])) >= 2
 
-
-# ---------------------------------------------------------------------------
-# Validate: single submission
-# ---------------------------------------------------------------------------
 
 def _upload_and_get_id(client: TestClient, zip_data: bytes, fname: str) -> str:
     r = client.post(
@@ -700,10 +648,6 @@ def test_validate_includes_nifti_summary(client: TestClient) -> None:
     assert isinstance(body["nifti_summary"], list)
 
 
-# ---------------------------------------------------------------------------
-# Validate-batch
-# ---------------------------------------------------------------------------
-
 def test_validate_batch_returns_summary(client: TestClient) -> None:
     data, fname = _make_result_only_zip()
     sid = _upload_and_get_id(client, data, fname)
@@ -726,10 +670,6 @@ def test_validate_batch_empty_ids_returns_400(client: TestClient) -> None:
     assert r.status_code == 400
 
 
-# ---------------------------------------------------------------------------
-# Preflight
-# ---------------------------------------------------------------------------
-
 def test_preflight_reproducible(client: TestClient) -> None:
     data, fname = _make_reproducible_zip()
     sid = _upload_and_get_id(client, data, fname)
@@ -751,10 +691,6 @@ def test_preflight_result_only(client: TestClient) -> None:
     assert body.get("has_run_instructions") is False
     assert body.get("runnable") is False
 
-
-# ---------------------------------------------------------------------------
-# Export: validation
-# ---------------------------------------------------------------------------
 
 def _upload_validate(client: TestClient) -> str:
     """Upload a result-only submission, validate it, return the submission_id."""
@@ -799,10 +735,6 @@ def test_export_validation_missing_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# Export: batch
-# ---------------------------------------------------------------------------
-
 def test_export_batch_csv(client: TestClient) -> None:
     data, fname = _make_result_only_zip()
     sid = _upload_and_get_id(client, data, fname)
@@ -839,18 +771,10 @@ def test_export_batch_missing_returns_404(client: TestClient) -> None:
     assert r.status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# Export: execution (before any runs, should 404)
-# ---------------------------------------------------------------------------
-
 def test_export_execution_before_run_returns_404(client: TestClient) -> None:
     r = client.get("/api/export-execution?submission_id=never_run")
     assert r.status_code == 404
 
-
-# ---------------------------------------------------------------------------
-# Scoring: not configured
-# ---------------------------------------------------------------------------
 
 def test_score_single_not_configured(client: TestClient) -> None:
     r = client.post("/api/score", json={
@@ -867,10 +791,6 @@ def test_score_export_no_results_returns_404(client: TestClient) -> None:
     r = client.get("/api/export-scoring?submission_id=never_scored")
     assert r.status_code == 404
 
-
-# ---------------------------------------------------------------------------
-# NIfTI file listing
-# ---------------------------------------------------------------------------
 
 def test_nifti_files_listing_after_upload(client: TestClient) -> None:
     data, fname = _make_result_only_zip()
@@ -915,10 +835,6 @@ def test_private_reference_and_mask_niftis_are_never_listed_or_served(
         response = client.get(f"/api/nifti/{sid}/{relative}")
         assert response.status_code == 403
 
-
-# ---------------------------------------------------------------------------
-# Helpers: build scoring package ZIPs
-# ---------------------------------------------------------------------------
 
 def _make_scoring_package_zip(
     package_id: str = "demo_dce_scoring",
@@ -987,7 +903,6 @@ def _make_zip_no_script() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("manifest.json", json.dumps(manifest))
-        # deliberately omit scoring.py
     return buf.getvalue()
 
 
@@ -1023,10 +938,6 @@ def _rewrite_scoring_package_zip(
             target.writestr(name, value)
     return output.getvalue()
 
-
-# ---------------------------------------------------------------------------
-# Scoring package endpoint tests
-# ---------------------------------------------------------------------------
 
 def test_scoring_packages_list_empty(client: TestClient) -> None:
     """GET /api/scoring/packages returns empty list when no packages installed."""
@@ -1095,9 +1006,6 @@ def test_scoring_package_upload_no_script(client: TestClient) -> None:
         "/api/scoring/packages/upload",
         files={"file": ("no_script.zip", _make_zip_no_script(), "application/zip")},
     )
-    # Should either reject at install time (400) or succeed (200) but mark not-ready.
-    # Either way a later check_ready would return not ready.
-    # We accept 200 or 4xx: the key invariant is it must NOT 500 silently with a bad state.
     assert r.status_code != 500 or "error" in r.text.lower()
 
 
@@ -1171,7 +1079,6 @@ def test_scoring_package_remove(client: TestClient) -> None:
     r2 = client.delete("/api/scoring/packages/pkg_to_remove")
     assert r2.status_code == 200
 
-    # Should no longer appear in list
     r3 = client.get("/api/scoring/packages")
     ids = [p["package_id"] for p in r3.json()]
     assert "pkg_to_remove" not in ids
@@ -1372,10 +1279,6 @@ def test_score_single_disabled_mode(client: TestClient) -> None:
     assert body.get("status") in ("not_configured", "not_ready", "failed", "error")
 
 
-# ---------------------------------------------------------------------------
-# ASL ZIP structural layout detection
-# ---------------------------------------------------------------------------
-
 def _make_asl_structural_zip(filename: str = "asl_submission.zip") -> tuple[bytes, str]:
     """ZIP with input/ + results/maps/ inside one root, must be ONE submission."""
     buf = io.BytesIO()
@@ -1405,10 +1308,6 @@ def test_asl_structural_zip_detected_as_single_submission(client: TestClient) ->
             + str([s.get("submission_id") for s in submissions])
         )
 
-
-# ---------------------------------------------------------------------------
-# Custom ASL scoring package: scoring_status returns "ready" when configured
-# ---------------------------------------------------------------------------
 
 def _make_asl_scoring_package_zip() -> bytes:
     """Minimal ASL custom scoring package ZIP."""
@@ -1444,8 +1343,7 @@ def _make_asl_scoring_package_zip() -> bytes:
 
 
 def test_custom_asl_scoring_status_ready_when_configured(client: TestClient) -> None:
-    """When a custom ASL package is installed and active, scoring_status returns 'ready'
-    even before any execution outputs exist (no docker run required)."""
+    """When a custom ASL package is installed and active, scoring_status returns 'ready' even before any execution outputs exist (no docker run..."""
     # 1. Install the ASL scoring package
     r = client.post(
         "/api/scoring/packages/upload",
@@ -1478,8 +1376,7 @@ def test_custom_asl_scoring_status_ready_when_configured(client: TestClient) -> 
 
 
 def test_custom_asl_score_runs_without_exec_outputs(client: TestClient) -> None:
-    """When custom ASL scoring is configured, /api/score should use the extracted
-    submission dir as fallback (not require docker exec outputs)."""
+    """When custom ASL scoring is configured, /api/score should use the extracted submission dir as fallback (not require docker exec outputs)."""
     # 1. Upload an ASL submission
     data, fname = _make_result_only_zip("asl_sub.zip")
     sid = _upload_and_get_id(client, data, fname)
@@ -1547,10 +1444,6 @@ def test_custom_dsc_scoring_uses_same_config_driven_package_framework(client: Te
     detected = body["nifti_analysis"]["summary"]["parameter_maps_detected"]
     assert {"CBV", "CBF", "MTT"}.issubset(set(detected))
 
-
-# ---------------------------------------------------------------------------
-# Proposal-coverage tests for Score & Preview, export, and full workflow behavior
-# ---------------------------------------------------------------------------
 
 def test_local_zip_upload_succeeds(client: TestClient) -> None:
     """Local ZIP upload via /api/upload-submission returns a submission_id."""
@@ -1639,13 +1532,7 @@ def test_compose_only_package_is_not_advertised_as_executable(client: TestClient
 
 
 def test_dockerfile_does_not_override_missing_dce_artifacts(client: TestClient) -> None:
-    """Execution instructions cannot bypass configured completeness errors.
-
-    The missing artifact used to be the methods document, which is no longer
-    required of anyone. So the submission below is missing a fitted signal
-    instead: still a configured per-scan requirement, and still not something a
-    Dockerfile is allowed to excuse.
-    """
+    """Execution instructions cannot bypass configured completeness errors."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("Dockerfile", "FROM python:3.11-slim\nCMD [\"python3\", \"run.py\"]\n")
@@ -1738,10 +1625,6 @@ def test_report_separates_cbf_att_and_flags_repeatability_unavailable(
     html = client.get(f"/api/report?submission_id={sid}").text
     assert "CBF" in html and "ATT" in html
     assert "Error CoV" in html
-    # The caveat now separates the two reasons ICC can be blank: no model
-    # chosen, versus a model chosen with no repeated scans to apply it to.
-    # Assert the substance rather than one sentence, so improving the wording
-    # does not fail the test but dropping the caveat does.
     assert "Repeatability CoV is not computed" in html
     assert "require repeated" in html
     assert "has not selected an ICC model" not in html
@@ -1944,16 +1827,8 @@ def test_batch_export_unblinded_includes_pii(client: TestClient) -> None:
     assert "contact_email" in text, "Unblinded export must include contact_email"
 
 
-# ===========================================================================
-# Additional coverage: submission unwrap, .gz handling, combined export,
-# HTML report, zero-byte NIfTI, ASL case-insensitivity.
-# ===========================================================================
-
 def _make_no_wrapper_structural_zip(filename: str = "nowrap_asl.zip") -> tuple[bytes, str]:
-    """ZIP with input/ and results/maps/ at the TOP level (no wrapper folder).
-
-    Must be detected as ONE submission, not split into <name>_input / <name>_results.
-    """
+    """ZIP with input/ and results/maps/ at the TOP level (no wrapper folder)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("input/sub-001_asl.nii", _tiny_nifti_bytes())
@@ -1963,8 +1838,7 @@ def _make_no_wrapper_structural_zip(filename: str = "nowrap_asl.zip") -> tuple[b
 
 
 def test_asl_wrapper_zip_unwrapped_to_results_maps(client: TestClient) -> None:
-    """A wrapped ASL ZIP becomes ONE submission whose maps sit at results/maps/
-    (the redundant top wrapper folder is removed)."""
+    """A wrapped ASL ZIP becomes ONE submission whose maps sit at results/maps/ (the redundant top wrapper folder is removed)."""
     zip_bytes, fname = _make_asl_structural_zip("lena_asl.zip")
     r = client.post("/api/upload-submission", files={"file": (fname, zip_bytes, "application/zip")})
     assert r.status_code == 200, r.text
@@ -2131,9 +2005,6 @@ def test_report_html_generated(client: TestClient) -> None:
     r = client.get(f"/api/report?submission_id={sid}")
     assert r.status_code == 200, r.text
     assert "text/html" in r.headers.get("content-type", "")
-    # Assert on identity and section structure, not on decorative copy: the
-    # headings were renamed when the report moved to a journal layout, and
-    # tests that pin exact section titles break on every restyle.
     assert "OSIPI" in r.text
     assert "Submission review report" in r.text
     # Generic QC bar charts were removed to keep the report table-focused.
@@ -2159,9 +2030,6 @@ def test_report_html_generated(client: TestClient) -> None:
     # The limitation is still stated, with wording that matches what the
     # BIDS checks now actually do rather than claiming none exist.
     assert "not the full specification" in r.text
-    # Report metadata: the labels lost their trailing colons when the block
-    # became a definition list, and submission/map counts moved into the
-    # leader sentence and the key-figures band.
     assert "Challenge" in r.text
     assert "Map types" in r.text
     assert "Maps" in r.text
@@ -2236,7 +2104,6 @@ def test_report_pdf_generated_when_reference_unavailable(client: TestClient) -> 
     ):
         assert expected in pdf_text
     assert "Reviewer summary" not in pdf_text
-    # The decorative "Small QC Charts" section was removed to reduce noise.
     assert "Small QC Charts" not in pdf_text
     # ReportLab emits wrapped lines as separate text operators, so match a short fragment.
     assert pdf_text.count("No compatible reference was provided") == 1
@@ -2323,10 +2190,6 @@ def test_custom_asl_scoring_status_case_insensitive(client: TestClient) -> None:
         f"Uppercase 'ASL' did not match 'asl' package: status={body.get('status')!r}"
     )
 
-
-# ---------------------------------------------------------------------------
-# Long-format (tidy) researcher CSV export
-# ---------------------------------------------------------------------------
 
 def _long_csv(client, *, sid=None, batch_id=None, blinded=False):
     params = {"format": "csv", "shape": "long", "blinded": str(blinded).lower()}
@@ -2492,10 +2355,6 @@ def test_wide_csv_and_json_exports_still_compatible(client, tmp_path):
     assert j.status_code == 200 and "submissions" in j.json()
 
 
-# ---------------------------------------------------------------------------
-# PDF / HTML report improvements (versions, per-map sections, voxel counts)
-# ---------------------------------------------------------------------------
-
 def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_path):
     sid = _asl_with_ref(client, tmp_path)
     _write_reference_mask(tmp_path, "gray_matter.nii.gz", [1, 1, 0, 1])
@@ -2506,9 +2365,6 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     assert "Pipeline version" in html and "Configuration version" in html
     # concise per-map results (full file geometry remains in JSON/CSV)
     assert "Key Results" in html and ">Units<" in html and ">Finite<" in html
-    # Geometry stays out of Key Results, which is a summary. It is reported in
-    # its own section instead, so scope the check to Key Results rather than
-    # to the whole document.
     _key_results = html[html.index("Key Results"):]
     _key_results = _key_results[:_key_results.index("</details>")]
     assert "Voxel size" not in _key_results
@@ -2516,11 +2372,6 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
     assert "Reference Comparison" in html
     assert "Valid voxels" in html
     assert "<th>ROI</th>" in html
-    # unavailable-metric note, CBF and ATT both present
-    # The caveat now separates the two reasons ICC can be blank: no model
-    # chosen, versus a model chosen with no repeated scans to apply it to.
-    # Assert the substance rather than one sentence, so improving the wording
-    # does not fail the test but dropping the caveat does.
     assert "Repeatability CoV is not computed" in html
     assert "require repeated" in html
     assert "has not selected an ICC model" not in html
@@ -2533,18 +2384,11 @@ def test_html_report_has_versions_map_results_and_reference_counts(client, tmp_p
 
 
 def test_html_report_shows_the_header_and_orientation_check(client, tmp_path):
-    """Both challenge leads asked to see this, so it must reach the report.
-
-    The check was computed and stored on the row for a while before anything
-    rendered it, which meant a flipped submission was caught internally and
-    then never mentioned to the reviewer.
-    """
     sid = _asl_with_ref(client, tmp_path)
     client.post("/api/validate", json={"submission_id": sid, "challenge_type": "asl",
                                        "force_validation_refresh": True})
     html = client.get(f"/api/report?submission_id={sid}").text
     assert "Header and Orientation Check" in html
-    # The four fields Olivia asked for, each reported by name.
     for field in ("Shape", "Voxel size", "Orientation", "Data type"):
         assert f"<th>{field}</th>" in html or f">{field}<" in html
     # These maps share a grid with the reference, so the verdict is a pass.
@@ -2602,9 +2446,6 @@ def test_dce_missing_ktrans_blocks_the_gate(client: TestClient) -> None:
 
 
 def test_dce_passes_without_a_methods_document(client: TestClient) -> None:
-    """It used to fail. The challenge leads said a methods document is not
-    needed for the runs being done now, so an otherwise complete submission
-    without one is complete."""
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     result = _validate_dce(client, entries, "dce_no_methods.zip")
@@ -2616,8 +2457,7 @@ def test_dce_passes_without_a_methods_document(client: TestClient) -> None:
 
 
 def test_a_readme_is_still_not_a_methods_document(client: TestClient) -> None:
-    """Worth keeping now that nothing is required: when the leads do ask for
-    one, or a submitter declares one, a README must not be counted as it."""
+    """Worth keeping now that nothing is required: when the leads do ask for one, or a submitter declares one, a README must not be counted as it."""
     entries = _dce_scan_entries()
     del entries["methods.txt"]
     entries["README.md"] = b"# submission"

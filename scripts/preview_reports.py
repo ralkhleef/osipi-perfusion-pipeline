@@ -1,18 +1,4 @@
-"""Preview the HTML and PDF evaluation reports without a live submission.
-
-A design/QA tool, not part of the running app. It feeds synthetic summaries,
-shaped exactly like ``_gather_summary`` output, through the real renderers so
-you can iterate on report styling quickly.
-
-Usage (from the repo root):
-
-    python scripts/preview_reports.py                    # all scenarios, blinded
-    python scripts/preview_reports.py batch_mixed        # one scenario
-    python scripts/preview_reports.py batch_mixed --unblinded
-
-Files are written to ``data/outputs/report_preview/``. Open the .html in a
-browser; use the browser's Print to PDF to check the print stylesheet.
-"""
+"""Preview the HTML and PDF evaluation reports without a live submission."""
 import argparse
 import pathlib
 import sys
@@ -28,11 +14,7 @@ OUT_DIR = ROOT / "data" / "outputs" / "report_preview"
 
 
 def _ref_map(map_type, idx, *, ref_mean, sub_mean, sd, rmse, mae):
-    """One scored map, shaped like backend/scoring.py's output.
-
-    Grey matter is offset slightly from the whole-image figures so the
-    Bland-Altman and identity plots show more than one point per submission.
-    """
+    """One scored map, shaped like backend/scoring.py's output."""
     def region(scale):
         submitted = sub_mean * scale
         reference = ref_mean * scale
@@ -114,9 +96,6 @@ def make_summary(idx, challenge, *, ref=True, warns=0, errs=0):
         "numeric_metrics": {"icc": None},
         "nifti_analysis": {
             "maps": maps,
-            # Mirrors what backend/scoring.py actually records per region,
-            # including mean_submitted / mean_reference /
-            # standard_deviation_error, which the agreement figures need.
             "reference_scoring": {"maps": [
                 _ref_map("CBF", idx, ref_mean=58.0, sub_mean=58.0 + 1.6 * idx - 2.4,
                          sd=6.4 + 0.4 * idx, rmse=7.21 + idx, mae=5.03 + idx),
@@ -149,13 +128,7 @@ def make_summary(idx, challenge, *, ref=True, warns=0, errs=0):
 
 
 def _stress(summary):
-    """Push long strings through every text slot to expose overlap.
-
-    Layout bugs hide behind tidy sample data: short map names and two-letter
-    challenges fit anything. This widens the values that feed the figures
-    band, the status line, and the table cells so collisions show up here
-    rather than on a real submission.
-    """
+    """Push long strings through every text slot to expose overlap."""
     summary = dict(summary)
     summary["analysis_fields"] = dict(summary["analysis_fields"])
     summary["analysis_fields"]["parameter_maps_detected"] = (

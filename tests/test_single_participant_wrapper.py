@@ -1,16 +1,4 @@
-"""A folder naming a participant is not a redundant wrapper.
-
-Submission ZIPs commonly wrap everything in one named folder, and that level
-carries nothing, so extraction promotes its contents. A ZIP of one participant
-extracts to a single ``P01/`` directory, which looks exactly the same and is
-not the same at all: promoting it discarded the only thing saying whose scans
-these are, and all eighteen files then failed as unidentifiable.
-
-The existing tests covered multi-participant layouts, where two or more top
-level folders mean no unwrapping happens. One participant on its own went
-straight down the wrapper path and was never exercised, which is how a
-reviewer found it and the suite did not.
-"""
+"""A folder naming a participant is not a redundant wrapper."""
 
 from __future__ import annotations
 

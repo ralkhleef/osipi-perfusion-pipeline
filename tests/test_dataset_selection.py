@@ -1,21 +1,4 @@
-"""Choosing a dataset for a submission whose folders do not name one.
-
-The DCE challenge lead lays her data out as participant, site, scan. There is
-no dataset level anywhere in it. That is a perfectly reasonable layout, and it
-failed every one of her 180 files as missing a dataset, because the challenge
-declares two datasets and completeness demanded one.
-
-Her grid, 3 sites and 2 repeats, matches the declared ``synthetic`` dataset and
-nothing else, so the answer was forced by the data. That is the only case in
-which one is chosen automatically. When two datasets fit, or none do, it
-declines and says so, because quietly picking one would attribute the
-submission to the wrong dataset and every grouped statistic after it would be
-checked against the wrong grid.
-
-A reviewer can also say outright which dataset a submission is, and saying so
-does not make it true: the counts are still checked, and a wrong answer is
-still reported.
-"""
+"""Choosing a dataset for a submission whose folders do not name one."""
 
 from __future__ import annotations
 
@@ -36,7 +19,6 @@ from osipi_pipeline.validation.completeness import (  # noqa: E402
 
 
 def scans(participants: int, sites: int, repeats: int, *, dataset=None):
-    """Parameter maps covering a grid, with no dataset unless asked."""
     out = []
     for p in range(1, participants + 1):
         for s in range(1, sites + 1):
@@ -114,7 +96,6 @@ def _codes(issues):
 
 
 def test_her_layout_no_longer_fails_every_file() -> None:
-    """The bug: 180 files, every one reported as missing a dataset."""
     issues = validate_completeness(scans(10, 3, 2), challenge="dce")
     assert "INCOMPLETE_ARTIFACT_IDENTITY" not in _codes(issues)
     assert DATASET_INFERRED in _codes(issues)
@@ -158,13 +139,7 @@ def test_a_submission_with_dataset_folders_is_untouched() -> None:
 
 
 def test_the_folders_win_over_a_reviewer_naming_a_different_dataset() -> None:
-    """The data outranks the form field.
-
-    A reviewer picking a dataset is for submissions that do not name one. When
-    the folders do say, silently relabelling every scan would rewrite the
-    submission's own identity from a dropdown, and the grouped statistics after
-    it would describe scans that were never in that dataset.
-    """
+    """The data outranks the form field."""
     declared = scans(5, 1, 2, dataset="clinical")
     issues = validate_completeness(declared, challenge="dce",
                                    dataset="synthetic")
@@ -173,12 +148,7 @@ def test_the_folders_win_over_a_reviewer_naming_a_different_dataset() -> None:
 
 
 def test_asl_gets_no_dataset_inference() -> None:
-    """ASL declares no datasets, so none of this applies to it.
-
-    ASL does declare required maps, so it still reports those, and asserting
-    no issues at all would pass for the wrong reason. What matters is that no
-    dataset was invented for a challenge that has none.
-    """
+    """ASL declares no datasets, so none of this applies to it."""
     codes = _codes(validate_completeness(scans(4, 3, 2), challenge="asl"))
     assert DATASET_INFERRED not in codes
     assert DATASET_AMBIGUOUS not in codes

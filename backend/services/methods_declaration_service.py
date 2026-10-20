@@ -1,27 +1,3 @@
-"""What the submitter said about their methods document.
-
-It used to be required outright for DCE: a submission without one failed
-validation. The challenge leads have since said it is not needed for the runs
-being done now, so the blanket requirement is gone. What is left is narrower
-and cannot be wrong about their policy:
-
-* the upload form asks whether a methods document is included;
-* the answer is recorded here, beside the submission rather than inside it, so
-  that a manifest rebuild cannot lose it;
-* a submitter who answers yes and sends none gets an error, because that is a
-  mismatch between what they said and what arrived;
-* a submitter who answers no, or who is never asked, is not stopped, and
-  nothing is added to their submission.
-
-That last point was a deliberate reversal. An earlier version dropped a blank
-template into any submission that declared no document, so that every
-submission would have the file. It was withdrawn because it answered a question
-nobody had asked: we do not know whether a team has a methods document of their
-own, or wants ours, and a submission that arrives without one has to move
-through the pipeline untouched either way. The template is still offered as a
-download on the upload screen -- take it or leave it -- and this module never
-writes into a submission.
-"""
 
 from __future__ import annotations
 
@@ -36,8 +12,6 @@ from services.path_config import OUTPUTS_DIR, PROJECT_ROOT
 #: and never copied into anyone's submission.
 TEMPLATE_PATH = PROJECT_ROOT / "config" / "methods_template.txt"
 
-#: The three answers. ``None`` means the submitter was never asked, which is not
-#: the same as answering no and must not be reported as if it were.
 PROVIDED = "yes"
 NOT_PROVIDED = "no"
 UNDECLARED = None
@@ -57,12 +31,7 @@ def _declaration_file(submission_id: str) -> Path:
 
 
 def normalize(value) -> Optional[str]:
-    """Turn whatever the form sent into ``"yes"``, ``"no"`` or ``None``.
-
-    Anything unrecognised becomes ``None``: an answer we cannot read is an
-    answer we do not have, and guessing which way it went would be worse than
-    recording that nobody said.
-    """
+    """Turn whatever the form sent into ``"yes"``, ``"no"`` or ``None``."""
     if value is None:
         return UNDECLARED
     if isinstance(value, bool):
@@ -119,13 +88,7 @@ def template_text() -> str:
 
 
 def summary(submission_id: str, methods_files: Optional[list] = None) -> dict:
-    """One description of the methods situation, for validation and reports.
-
-    ``methods_files`` is whatever the scan found. It catches a submitter who
-    declared a document and did not send one, and it is reported alongside the
-    declaration. Any file found is the submitter's own -- nothing here puts one
-    there -- so a file found is a document found.
-    """
+    """One description of the methods situation, for validation and reports."""
     declared = load(submission_id)["methods_document_declared"]
     found = [str(item) for item in (methods_files or [])]
 

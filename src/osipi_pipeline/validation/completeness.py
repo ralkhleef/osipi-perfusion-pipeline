@@ -1,26 +1,4 @@
-"""Configuration-driven submission completeness checks.
-
-Consumes normalized :class:`SubmissionArtifact` records, never filenames,
-so map-type detection happens exactly once, in the ingestion classifier.
-
-Scope is decided entirely by configuration. A challenge that declares no
-``required_maps``/``required_artifacts``/``datasets`` produces no issues at
-all, which is what leaves ASL and DSC behaving exactly as before.
-
-Two levels of scope:
-
-* **Scan level**, one ``(dataset, participant, repeat, site)`` combination.
-  Required maps and fitted signals must exist for every observed scan.
-* **Submission level**, the methods document, required once for the whole
-  submission regardless of how many scans it contains.
-
-Issues are ordered hierarchically so a single missing file does not bury the
-reader in consequences: identity problems first, then dataset structure, then
-missing files within an otherwise valid scan, then dimensionality.
-
-This module decides whether a submission is *structurally* valid. It computes
-no scientific quantity.
-"""
+"""Configuration-driven submission completeness checks."""
 
 from __future__ import annotations
 
@@ -58,12 +36,7 @@ _SCAN_ROLES = frozenset({"parameter_map", "fitted_signal"})
 
 
 def _issue(severity: str, code: str, message: str, **context: Any) -> dict:
-    """Build an issue in the existing shape, with additive structured context.
-
-    The legacy consumers read ``severity``/``code``/``message``/``path``; the
-    extra keys are ignored by them and consumed by anything that wants to
-    group by scan without re-parsing the message.
-    """
+    """Build an issue in the existing shape, with additive structured context."""
     issue = {
         "severity": severity,
         "code": code,
@@ -103,12 +76,7 @@ def _artifact_label(artifact_id: str) -> str:
 
 
 def _required_identity_fields(dataset_spec: Mapping[str, Any] | None) -> tuple[str, ...]:
-    """Identity axes a scan must carry for this dataset.
-
-    ``site`` is only required when the dataset declares more than one; a
-    clinical dataset with a single site may leave it implicit rather than
-    demanding a ``Site1`` directory that carries no information.
-    """
+    """Identity axes a scan must carry for this dataset."""
     fields = ["dataset", "participant", "repeat"]
     if dataset_spec and int(dataset_spec.get("sites") or 1) > 1:
         fields.append("site")
@@ -122,17 +90,7 @@ def validate_completeness(
     identity_conflicts: Iterable[Any] = (),
     dataset: str | None = None,
 ) -> list[dict]:
-    """Return validation issues for a submission's normalized artifacts.
-
-    Returns an empty list for any challenge that declares none of the
-    DCE-2026 configuration, so existing challenges are untouched.
-
-    ``dataset`` names the dataset a submission belongs to when its folders do
-    not. Organisers lay data out as participant, site, scan without a dataset
-    level, which is a perfectly reasonable layout that nonetheless failed every
-    file as missing a dataset. When it is not given and exactly one declared
-    dataset fits the observed grid, that one is used and the report says so.
-    """
+    """Return validation issues for a submission's normalized artifacts."""
     challenge = (challenge or "").strip().lower()
     required_maps = required_maps_by_challenge().get(challenge, ())
     required_artifacts = required_artifacts_by_challenge().get(challenge, ())
@@ -145,12 +103,7 @@ def validate_completeness(
     overrides = issue_severity_by_challenge().get(challenge, {})
 
     def apply_overrides(found: list[dict]) -> list[dict]:
-        """Re-label findings the challenge has chosen to treat differently.
-
-        Applied once at the end rather than threaded through every helper, so
-        there is a single place where a configured severity takes effect and
-        no helper can quietly forget to consult it.
-        """
+        """Re-label findings the challenge has chosen to treat differently."""
         if not overrides:
             return found
         for issue in found:
@@ -170,19 +123,10 @@ def validate_completeness(
     if required_maps and not scan_artifacts:
         issues.extend(_submission_missing_map_issues(required_maps))
 
-    # ── 2. Dataset identity ──────────────────────────────────────────────
-    # A submission with no dataset folder is assigned one, either because the
-    # reviewer said which it is or because only one declared dataset fits.
-    # Recorded as an informational issue rather than applied silently: the
-    # dataset decides which grid the counts below are checked against, so it
-    # has to be visible in the report.
     if datasets and not any(getattr(a, "dataset", None) for a in scan_artifacts):
         chosen, reason = (dataset, "selected by the reviewer") if dataset \
             else infer_dataset(scan_artifacts, datasets)
         if chosen and chosen in datasets:
-            # SubmissionArtifact is frozen, so this replaces rather than
-            # mutates. Assigning in place silently did nothing and every file
-            # still failed as missing a dataset, with the exception swallowed.
             scan_artifacts = [replace(a, dataset=chosen) for a in scan_artifacts]
             issues.append(_issue(
                 "info", DATASET_INFERRED,
@@ -221,13 +165,7 @@ def validate_completeness(
 def validate_generated_map_completeness(
     artifacts: Sequence[Any], *, challenge: str
 ) -> list[dict]:
-    """Check only the configured result-map requirements after execution.
-
-    Execution output is not a complete submission package, so it must not be
-    checked for methods documents or participant input artifacts.  This gate
-    answers the narrower question needed by the run step: did the process
-    produce the maps required before analysis can continue?
-    """
+    """Check only the configured result-map requirements after execution."""
     challenge = (challenge or "").strip().lower()
     required_maps = required_maps_by_challenge().get(challenge, ())
     optional_maps = optional_maps_by_challenge().get(challenge, ())
@@ -253,11 +191,7 @@ def validate_generated_map_completeness(
 
 
 def _conflict_issues(identity_conflicts: Iterable[Any]) -> list[dict]:
-    """Directory/filename disagreement.
-
-    Blocking for DCE: a disagreement can assign a scan to the wrong
-    participant, and the resulting statistics would be quietly wrong.
-    """
+    """Directory/filename disagreement."""
     issues = []
     for conflict in identity_conflicts or ():
         issues.append(_issue(
@@ -312,11 +246,7 @@ def _observed_grid(scan_artifacts) -> dict[str, int]:
 
 
 def _grid_matches(observed: Mapping[str, int], spec: Mapping[str, Any] | None) -> bool:
-    """Whether an observed grid fits a declared one.
-
-    A declared count of ``None`` means the organiser has not decided that axis
-    yet, so anything satisfies it. That is deliberately not the same as zero.
-    """
+    """Whether an observed grid fits a declared one."""
     if not spec:
         return False
     for key in ("participants", "repeats", "sites"):
@@ -329,18 +259,7 @@ def _grid_matches(observed: Mapping[str, int], spec: Mapping[str, Any] | None) -
 
 
 def infer_dataset(scan_artifacts, datasets) -> tuple[str | None, str]:
-    """Which declared dataset a submission without a dataset folder must be.
-
-    The DCE challenge lead's submission is laid out as participant, site, scan
-    with no dataset level at all, so every file failed as missing a dataset
-    even though its grid, 3 sites and 2 repeats, matches exactly one of the
-    declared datasets and nothing else.
-
-    Inference only happens when the answer is forced: exactly one declared
-    dataset fits the observed grid. Two candidates, or none, and it declines
-    and says so, because quietly picking one would attribute a submission to
-    the wrong dataset and every grouped statistic after it would be wrong.
-    """
+    """Which declared dataset a submission without a dataset folder must be."""
     if not datasets:
         return None, "the challenge declares no datasets"
     declared = {a.dataset for a in scan_artifacts if getattr(a, "dataset", None)}
@@ -368,11 +287,6 @@ def _identity_issues(scan_artifacts, datasets, issues) -> tuple[set[str], list]:
         return set(), list(scan_artifacts)
     incomplete: set[str] = set()
     complete = []
-    # Grouped by which fields are missing, because the cause is a missing
-    # folder level rather than a problem with each file. A submission laid out
-    # without a dataset folder produced one identical error per file: eighteen
-    # lines saying the same thing, which buries every other finding and tells
-    # the reader nothing the first line did not.
     grouped: dict[tuple[str, ...], list[Any]] = defaultdict(list)
     for artifact in scan_artifacts:
         spec = datasets.get(artifact.dataset or "")
@@ -413,12 +327,7 @@ def _identity_issues(scan_artifacts, datasets, issues) -> tuple[set[str], list]:
 
 
 def _dataset_structure_issues(complete, datasets) -> list[dict]:
-    """Validate participant, repeat, and site counts.
-
-    Counts unique identifiers rather than requiring consecutive numbering,
-    repeats labelled 1 and 3 satisfy a count of 2 unless OSIPI specifies
-    otherwise.
-    """
+    """Validate participant, repeat, and site counts."""
     if not datasets:
         return []
     issues: list[dict] = []
@@ -549,13 +458,7 @@ def _scan_requirement_issues(complete, required_maps, required_artifacts) -> lis
 
 
 def _submission_missing_map_issues(required_maps) -> list[dict]:
-    """Required maps when no submitted file could establish a scan at all.
-
-    Per-scan completeness cannot iterate an empty scan set. Without this
-    submission-level guard, a folder full of unrelated but readable NIfTI
-    files could pass ASL/DCE/DSC validation with zero recognized parameter
-    maps. One issue per configured requirement is both precise and bounded.
-    """
+    """Required maps when no submitted file could establish a scan at all."""
     return [
         _issue(
             "error",
@@ -568,15 +471,7 @@ def _submission_missing_map_issues(required_maps) -> list[dict]:
 
 
 def _submission_artifact_issues(artifacts, required_artifacts) -> list[dict]:
-    """Artifacts supplied once per submission, such as the methods document.
-
-    Missing and duplicated are checked over different sets, deliberately. Only
-    a required artifact can be missing. But *any* submission-level artifact can
-    arrive twice, and which of two documents describes the submission is not a
-    question the pipeline can answer -- so the duplicate warning does not wait
-    for the artifact to be required. It used to, which meant that relaxing the
-    methods-document requirement silently took the duplicate warning with it.
-    """
+    """Artifacts supplied once per submission, such as the methods document."""
     issues: list[dict] = []
     specs = artifact_type_specs()
 
@@ -615,12 +510,7 @@ def _submission_artifact_issues(artifacts, required_artifacts) -> list[dict]:
 
 
 def _dimension_issues(artifacts, required_maps, optional_maps) -> list[dict]:
-    """Enforce configured dimensionality on files that are actually present.
-
-    ``dimensions is None`` means the header could not be read. That is
-    already reported by the NIfTI validator, so emitting a dimension
-    mismatch here as well would give two errors for one root cause.
-    """
+    """Enforce configured dimensionality on files that are actually present."""
     issues: list[dict] = []
     map_specs = map_type_specs()
     artifact_specs = artifact_type_specs()
@@ -661,14 +551,7 @@ def _dimension_issues(artifacts, required_maps, optional_maps) -> list[dict]:
 
 
 def suppressed_legacy_map_ids(challenge: str) -> frozenset[str]:
-    """Map ids whose legacy EXPECTED_MAP_MISSING warning must be suppressed.
-
-    A challenge that has migrated to ``required_maps``/``optional_maps`` gets
-    precise errors from this module, so the legacy warning would either
-    duplicate the error or contradict it by warning about an optional map.
-    Challenges that have not migrated return an empty set and keep their
-    existing behaviour.
-    """
+    """Map ids whose legacy EXPECTED_MAP_MISSING warning must be suppressed."""
     challenge = (challenge or "").strip().lower()
     required = set(required_maps_by_challenge().get(challenge, ()))
     optional = set(optional_maps_by_challenge().get(challenge, ()))

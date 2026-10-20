@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Calculate simple, input-derived DCE map summaries.
-
-This example is not an official score. It deliberately contains no ranking,
-pass/fail rule, or challenge threshold.
-"""
+"""Calculate simple, input-derived DCE map summaries."""
 
 from __future__ import annotations
 

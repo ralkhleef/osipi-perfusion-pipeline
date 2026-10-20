@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-/**
- * How Preview Changes reads.
- *
- * It used to print `JSON.stringify(before) → JSON.stringify(after)` for each
- * changed field. Since the comparison treated lists as opaque, one changed map
- * meant a row containing both entire map arrays, and the only way to find out
- * what had changed was to read serialized objects. The server now diffs by id,
- * so each row is one setting; these two helpers turn the field path and the
- * values into something a reviewer reads rather than parses.
- *
- * Run: node tests/frontend_config_preview_test.js
- */
 "use strict";
 
 const fs = require("fs");

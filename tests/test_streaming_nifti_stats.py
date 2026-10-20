@@ -1,23 +1,4 @@
-"""Reading a NIfTI image in pieces rather than all at once.
-
-Reading whole images was fine while every image was 3-D. The DCE challenge
-sends 4-D concentration curves: one of the challenge lead's ``Ct.nii.gz`` files
-is 8 MB on disk and 0.93 GB decompressed, 121x compressed, and reading it whole
-cost 2.38 GB because the cast to float32 makes a second copy. Sixty of those
-could not be validated on an ordinary machine.
-
-Keeping one compressed stream open across those chunks reduced full-cohort
-validation from 83.6 seconds to 22.6 seconds in the production container, and
-the chunked statistics remain identical down to the tested floating-point
-tolerance.
-
-What these tests protect is the second half of that sentence. Saving memory is
-worthless if the numbers move, so most of what follows compares chunked results
-against reading the array whole, including the cases where a naive
-implementation would be subtly wrong: chunk boundaries that do not divide the
-axis evenly, NaN and infinity spread unevenly across chunks, and a final chunk
-shorter than the rest.
-"""
+"""Reading a NIfTI image in pieces rather than all at once."""
 
 from __future__ import annotations
 
@@ -112,11 +93,7 @@ def test_matches_whole_array_reading(shape) -> None:
 
 
 def test_a_final_short_chunk_is_not_overweighted() -> None:
-    """Averaging per-chunk means would weight a 1-wide tail like a 4-wide one.
-
-    The tail here is deliberately extreme, so a mean-of-means implementation
-    is off by a wide margin rather than in the last digits.
-    """
+    """Averaging per-chunk means would weight a 1-wide tail like a 4-wide one."""
     data = np.zeros((2, 2, 5), dtype=np.float32)
     data[..., 4] = 1000.0
     plane = 4
@@ -141,11 +118,7 @@ def test_an_all_nan_image_reports_no_finite_values() -> None:
 
 
 def test_the_only_finite_value_being_negative_is_not_lost() -> None:
-    """min and max start from the first finite value, not from zero.
-
-    Seeding them with 0.0 would report a maximum of 0 for an image whose
-    values are all negative, which is the kind of wrong that looks plausible.
-    """
+    """min and max start from the first finite value, not from zero."""
     data = np.full((2, 2, 6), np.nan, dtype=np.float32)
     data[..., 3] = -5.0
     stats = _streaming_stats(data, data.shape, max_voxels=4)
@@ -154,12 +127,7 @@ def test_the_only_finite_value_being_negative_is_not_lost() -> None:
 
 
 def test_the_file_that_caused_this_is_actually_split() -> None:
-    """The shape of the challenge lead's Ct.nii.gz. 250 million voxels.
-
-    Without this, a budget raised high enough to swallow the file whole would
-    leave every test above passing against a single-chunk read, and the memory
-    problem would quietly return.
-    """
+    """250 million voxels."""
     spans = list(_last_axis_chunks((121, 145, 91, 157), MAX_VOXELS_PER_READ))
     assert len(spans) > 1, "the default budget no longer splits a real 4-D image"
     # Whole timepoints per chunk, never a partial volume.
@@ -174,16 +142,7 @@ def test_a_small_3d_image_is_read_in_one_piece() -> None:
 
 
 def test_reducing_over_nan_does_not_warn() -> None:
-    """NaN propagation through min/max is the detection mechanism, not a slip.
-
-    Without errstate, NumPy warns "invalid value encountered in reduce" once
-    per chunk for any map that legitimately contains NaN. On a 4-D curve that
-    is a wall of warnings, and it breaks anyone running with -W error.
-
-    In a subprocess, because NumPy records a warning as already issued for a
-    given source line and stays quiet afterwards. In-process this test passed
-    with the guard removed, since an earlier test had already tripped it.
-    """
+    """NaN propagation through min/max is the detection mechanism, not a slip."""
     import subprocess
     import textwrap
 
@@ -212,16 +171,6 @@ def test_reducing_over_nan_does_not_warn() -> None:
         + result.stderr[-800:])
     assert "ok" in result.stdout
 
-
-# ── Threads help small files and hurt large ones ──────────────────────────
-#
-# Measured on the DCE challenge lead's real submission: four threads over
-# sixteen 3-D parameter maps is 2.5x faster than serial, while four threads
-# over four 4-D concentration curves is 1.8x SLOWER. gzip decompression holds
-# the GIL through the many small reads nibabel makes, so the threads take
-# turns while each holds a decompression buffer. Large files therefore use
-# separate processes and persistent gzip handles; small maps keep the faster
-# thread path.
 
 import time  # noqa: E402
 
@@ -254,14 +203,7 @@ def _sized(tmp_path, name: str, payload: int):
 
 
 def test_the_batch_is_split_by_size(tmp_path, monkeypatch) -> None:
-    """Large and small files take different routes, which is the whole point.
-
-    Small files go through the thread pool, where threads measurably help.
-    Large ones go to `_validate_large_files`, which runs them in separate
-    processes because gzip's hold on the GIL makes threads counterproductive
-    there. This asserts the split itself; the concurrency of each half is
-    covered separately.
-    """
+    """Large and small files take different routes, which is the whole point."""
     from osipi_pipeline.validation import nifti_validator as nv
 
     routed: dict[str, list[str]] = {"large": [], "small": []}
@@ -361,13 +303,6 @@ def test_a_batch_of_only_small_files_is_fully_parallel(tmp_path, monkeypatch) ->
     assert peak > 1
 
 
-# ── Large files go to processes, not threads ──────────────────────────────
-#
-# Measured on the DCE lead's real 1 GB concentration curves: four threads are
-# 1.8x SLOWER than serial because gzip holds the GIL through nibabel's many
-# small reads, while four processes are 3.3x FASTER because they do not share
-# one. On a 60-scan submission that is ~2 minutes of validation instead of ~9.
-
 def test_large_files_are_read_in_separate_processes(tmp_path, monkeypatch) -> None:
     from osipi_pipeline.validation import nifti_validator as nv
 
@@ -402,10 +337,7 @@ def test_large_files_are_read_in_separate_processes(tmp_path, monkeypatch) -> No
 def test_a_process_pool_that_cannot_start_falls_back_to_serial(
     tmp_path, monkeypatch,
 ) -> None:
-    """Some sandboxes and frozen builds forbid subprocesses.
-
-    Validation must still complete, just more slowly, rather than failing.
-    """
+    """Some sandboxes and frozen builds forbid subprocesses."""
     from osipi_pipeline.validation import nifti_validator as nv
 
     def refuse(*_args, **_kwargs):

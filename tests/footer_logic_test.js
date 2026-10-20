@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Runtime test for the wizard footer / next-step gating.
- * Extracts the real _isStepReady() and _stepBlockedReason() from frontend/app.js
- * and exercises them, so the "warnings must not block Continue" rule is verified
- * against the actual source (not a copy). Pure Node, no packages.
- * Run: node tests/footer_logic_test.js
- */
 "use strict";
 
 const fs = require("fs");
@@ -40,8 +33,6 @@ function issueCount(r, f) {
   if (Array.isArray(r[f])) return r[f].length;
   return Number(r[f === "warnings" ? "warning_count" : "error_count"] || 0);
 }
-// Worst case: pretend run-readiness can't be inferred. The validate gate must
-// NOT depend on this — it must rely on error count only.
 function inferredRunReadiness() { return "not_runnable"; }
 
 // Stubs for the upload-readiness gate (_canUpload).
@@ -121,10 +112,6 @@ __source = "local"; state.pendingLocalFiles = null; state.mode = "edit"; state.s
 ok("upload enabled in edit mode (re-validate existing)", _isStepReady("upload") === true);
 state.mode = "new"; state.submissionId = null;
 
-// ── Nav visibility + disabled-not-hidden (source-level guarantees) ──────────
-// The legacy single wizard-footer was retired in favour of per-step action
-// rows pinned to each step card (data-step-action-row). These checks assert
-// the "buttons stay visible, only disabled" invariant against that design.
 console.log("\n=== Nav visibility rules ===\n");
 ok("legacy single footer is retired (hidden) via _hideLegacyWizardFooter", /function _hideLegacyWizardFooter/.test(src) && /footer\.style\.display = "none"/.test(src));
 ok("per-step action rows drive navigation (data-step-action-row)", /data-step-action-row/.test(src) && /step-action-primary/.test(src));
