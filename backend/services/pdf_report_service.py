@@ -357,6 +357,7 @@ def _prototype_analysis_model(summaries: Sequence[Mapping[str, Any]]) -> dict[st
                 f"{_roi_number(row.get('confidence_low'))} to {_roi_number(row.get('confidence_high'))} "
                 f"({_roi_percent(row.get('confidence_level'))})"
                 if row.get("confidence_low") is not None and row.get("confidence_high") is not None
+                else "1 to 1" if isinstance(row.get("value"), (int, float)) and abs(1 - row["value"]) <= 1e-6
                 else "Not available"
             )
             icc_rows.append([scope, str(row.get("roi_label") or row.get("roi_id") or "—"),

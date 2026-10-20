@@ -234,5 +234,17 @@ check("the single-submission path carries the backend counts through",
   /counts:\s+data\.counts \|\| null/.test(SOURCE),
   "a batch of one would fall back to the raw file count again");
 
+const notes = { console };
+vm.createContext(notes);
+for (const name of ["_isNote", "_warningsOnly", "issueCount"]) vm.runInContext(extractFunction(name), notes);
+const inferred = { severity: "info", code: "DATASET_INFERRED", message: "Treated as synthetic." };
+const realWarning = { severity: "warning", code: "MISSING_SCAN", message: "A scan is missing." };
+checkEqual("an info note is not counted as a warning",
+  notes.issueCount({ warnings: [inferred] }, "warnings"), 0);
+checkEqual("real warnings are still counted",
+  notes.issueCount({ warnings: [inferred, realWarning, "plain text warning"] }, "warnings"), 2);
+check("notes are listed separately in the submission details",
+  /<div class="vp-section-heading">Notes<\/div>/.test(SOURCE));
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 if (failed > 0) process.exit(1);

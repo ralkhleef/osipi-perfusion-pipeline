@@ -1115,7 +1115,9 @@ def get_rankings():
             "passed": r.get("passed", False),
             "nifti_count": r.get("nifti_count", 0),
             "error_count": len(r.get("errors") or []),
-            "warning_count": len(r.get("warnings") or []),
+            "warning_count": sum(
+                1 for w in (r.get("warnings") or [])
+                if not (isinstance(w, dict) and w.get("severity") == "info")),
             "validated_at": r.get("validated_at") or r.get("checked_at", ""),
         })
 

@@ -222,6 +222,7 @@ def test_saying_no_uploads_and_validates_without_complaint(client) -> None:
     codes = [issue["code"] for issue in result["errors"] + result["warnings"]]
     assert "REQUIRED_ARTIFACT_MISSING" not in codes
     assert "METHODS_DOCUMENT_DECLARED_BUT_MISSING" not in codes
+    assert "README_MISSING" not in codes
     assert result["methods_document"]["status"] == "not_provided"
 
     # The submission is exactly what was uploaded. Saying "no" must not add,
@@ -251,6 +252,7 @@ def test_not_being_asked_blocks_nothing_and_claims_nothing(client) -> None:
     codes = [issue["code"] for issue in result["errors"]]
     assert "METHODS_DOCUMENT_DECLARED_BUT_MISSING" not in codes
     assert result["methods_document"]["status"] == "not_declared"
+    assert "README_MISSING" in [issue["code"] for issue in result["warnings"]]
 
 
 def test_a_submission_with_its_own_document_moves_on_without_the_template(client) -> None:

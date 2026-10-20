@@ -31,6 +31,8 @@ function extractFunction(name) {
 const sandbox = { console };
 vm.createContext(sandbox);
 vm.runInContext(extractFunction("_autoAdvanceBlocker"), sandbox);
+vm.runInContext(extractFunction("_isNote"), sandbox);
+vm.runInContext(extractFunction("_warningsOnly"), sandbox);
 vm.runInContext(extractFunction("_autoAdvanceNote"), sandbox);
 
 const ok = (n) => Array.from({ length: n }, () => ({ passed: true, warnings: [] }));

@@ -50,9 +50,12 @@ Docker Desktop must be installed and running. The first start downloads and
 builds the image, which takes a few minutes. The app then opens at
 http://localhost:8000. In the app:
 
-1. Upload: enter a team name and email, choose *Select folder*, and select
-   the `submission` folder. The app refuses the ground truth and mask folders
-   here.
+1. Upload: enter a team name and email, set *Methods document* to *No* (the
+   test data has none), choose *Select folder*, and select the `submission`
+   folder. The app refuses the ground truth and mask folders here. A ZIP of
+   the `submission` folder works too, and so do individual files when their
+   names give the participant, site and scan, for example
+   `P01_site-1_scan-1_Ktrans.nii.gz`.
 2. Review: press *Validate*. When validation passes, the app moves on to
    QC & Preview by itself.
 3. QC & Preview: open *Reviewer settings*, then *Private reference assets*.

@@ -919,9 +919,19 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("scroll", _closeFilterMenus, true);
 window.addEventListener("resize", _closeFilterMenus);
 
+function _isNote(item) {
+  return !!item && typeof item === "object" && item.severity === "info";
+}
+
+function _warningsOnly(items) {
+  return (items || []).filter((item) => !_isNote(item));
+}
+
 function issueCount(result, field) {
   if (!result) return 0;
-  if (Array.isArray(result[field])) return result[field].length;
+  if (Array.isArray(result[field])) {
+    return field === "warnings" ? _warningsOnly(result[field]).length : result[field].length;
+  }
   const countField = field === "warnings" ? "warning_count" : "error_count";
   return Number(result[countField] || 0);
 }
@@ -1255,7 +1265,7 @@ function _autoAdvanceBlocker(results) {
 
 function _autoAdvanceNote(results) {
   const list = results || [];
-  const warned = list.filter((r) => (r.warnings || []).length > 0).length;
+  const warned = list.filter((r) => _warningsOnly(r.warnings).length > 0).length;
   if (!warned) return "";
   return warned === 1
     ? " One submission has warnings worth reading."
@@ -1762,7 +1772,7 @@ function saveSessionState() {
         displayAlias:       _displayAliases[r.submission_id] || r.display_alias || null,
         passed:             r.passed,
         errorCount:         (r.errors   || []).length,
-        warningCount:       (r.warnings || []).length,
+        warningCount:       _warningsOnly(r.warnings).length,
         mapType:            r.map_type,
         niftiCount:         r.nifti_count,
         hasRunInstructions: r.has_run_instructions,
@@ -1774,7 +1784,7 @@ function saveSessionState() {
         validatedAt:        r.validated_at,
         // Store first 3 errors/warnings as short text only, no raw logs
         topErrors:   (r.errors   || []).slice(0, 3).map((e) => msgText(e).slice(0, 80)),
-        topWarnings: (r.warnings || []).slice(0, 3).map((w) => msgText(w).slice(0, 80)),
+        topWarnings: _warningsOnly(r.warnings).slice(0, 3).map((w) => msgText(w).slice(0, 80)),
       })),
     } : null;
 
@@ -2613,7 +2623,7 @@ async function uploadLocalFiles() {
     files.forEach((f) => fd.append("files", f, f.name));
     return _xhrUpload(`${API}/api/upload-submissions`, fd, onProgress);
   }
-  files.forEach((f) => fd.append("files", f, f.webkitRelativePath || f.name));
+  files.forEach((f) => fd.append("files", f, f.webkitRelativePath || `uploaded_files/${f.name}`));
   return _xhrUpload(`${API}/api/upload-folder-batch`, fd, onProgress);
 }
 
@@ -3836,8 +3846,6 @@ async function runBatchValidation(submissionIds) {
 
 function _renderSingleAsValidate(data) {
   // Build a pseudo-batch response from a single validation result
-  const errCount  = (data.errors   || []).length;
-  const warnCount = (data.warnings || []).length;
   const normalized = {
     results: [{
       submission_id:        data.submission_id || state.submissionId,
@@ -3875,10 +3883,11 @@ function _validationIssueDetails(r) {
     rNiftiCount > 0 ? msgs.filter((m) => m !== "No output files found") : msgs;
 
   const errors = withoutSpuriousNoOutput(dedupeMessages((r.errors || []).map(simplifyMessage)));
-  const warnings = withoutSpuriousNoOutput(dedupeMessages((r.warnings || []).map(simplifyMessage)))
+  const warnings = withoutSpuriousNoOutput(dedupeMessages(_warningsOnly(r.warnings).map(simplifyMessage)))
     .filter((w) => !errors.some((e) => e.toLowerCase() === w.toLowerCase()));
+  const notes = dedupeMessages((r.warnings || []).filter(_isNote).map(msgText));
   const checks = buildSuccessChecks(r, errors.length, warnings.length, r.map_type);
-  return { errors, warnings, checks, niftiCount: rNiftiCount };
+  return { errors, warnings, notes, checks, niftiCount: rNiftiCount };
 }
 
 function _renderValidationFilterBar() {
@@ -3971,7 +3980,7 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
                                                || (r.passed && !!(r.has_run_instructions ?? r.has_dockerfile))).length;
   const resultOnlyCount  = results.filter((r) => r.run_readiness === "result_only"
                                                || (r.passed && !r.has_run_instructions && (r.nifti_count > 0 || r.has_result_maps))).length;
-  const needsReviewCount = results.filter((r) => !r.passed || (r.warnings || []).length > 0).length;
+  const needsReviewCount = results.filter((r) => !r.passed || _warningsOnly(r.warnings).length > 0).length;
 
   // Reset filter state
   _reviewFilter.filter  = "all";
@@ -4029,7 +4038,7 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
     list.classList.add("worklist");
     list.innerHTML = "";
     results.forEach((r, idx) => {
-      const { errors, warnings, checks, niftiCount: rNiftiCount } = issueDetails.get(r.submission_id) || _validationIssueDetails(r);
+      const { errors, warnings, notes = [], checks, niftiCount: rNiftiCount } = issueDetails.get(r.submission_id) || _validationIssueDetails(r);
       const passed   = r.passed;
       const hasWarn  = warnings.length > 0;
       const hasRunInstructions = !!(r.has_run_instructions ?? r.has_dockerfile);
@@ -4078,6 +4087,11 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
              <div class="vp-section-heading">Items to review</div>
              <ul class="issue-list">${warnings.map((m) => `<li class="review-item">${escapeHtml(m)}</li>`).join("")}</ul>
            </div>` : "";
+      const notesHtml = notes.length > 0
+        ? `<div class="vp-section" style="margin-top:8px">
+             <div class="vp-section-heading">Notes</div>
+             <ul class="issue-list">${notes.map((m) => `<li>${escapeHtml(m)}</li>`).join("")}</ul>
+           </div>` : "";
       const techHtml = checks.length > 0
         ? `<details class="tech-checks-toggle" style="margin-top:8px">
              <summary>Technical details</summary>
@@ -4113,7 +4127,7 @@ function renderValidateStep(data, isSingleMode, fromRestore) {
       const detailsHtml = `
           <div class="validation-detail-inner">
             ${detailChips}
-            ${resultOnlyNote}${niftiLine}${noIssueHtml}${errHtml}${warnHtml}${techHtml}${execHtml}
+            ${resultOnlyNote}${niftiLine}${noIssueHtml}${errHtml}${warnHtml}${notesHtml}${techHtml}${execHtml}
             ${_structureControlHtml(r.submission_id)}
             <details class="validation-technical-detail">
               <summary>Technical reference</summary>
@@ -5943,9 +5957,10 @@ function _iccRowsHtml(analyses) {
     const scope = [`Submission ${index + 1}`, row.challenge, row.dataset, row.map_type, row.axis, fixed]
       .filter(Boolean).join(" / ");
     const number = (value) => typeof value === "number" && Number.isFinite(value) ? _fmtMetricVal(value) : "Not available";
+    const perfect = typeof row.value === "number" && Math.abs(1 - row.value) <= 1e-6;
     const interval = row.confidence_low != null && row.confidence_high != null
       ? `${number(row.confidence_low)} to ${number(row.confidence_high)} (${number(row.confidence_level * 100)}%)`
-      : "Not available";
+      : perfect ? "1 to 1" : "Not available";
     const cells = [scope, row.roi_label || row.roi_id || "—",
       (row.model_description || row.model || "Not configured").split(":")[0], number(row.value), interval,
       row.target_count ?? 0, row.session_count ?? 0,
@@ -9258,7 +9273,7 @@ function renderScorePreviewPanel() {
   const issuesHtml = valResults.map((r) => {
     const name = escapeHtml(submissionDisplayName(r, r.submission_id || "submission"));
     const errs = dedupeMessages((r.errors || []).map(simplifyMessage));
-    const warns = dedupeMessages((r.warnings || []).map(simplifyMessage));
+    const warns = dedupeMessages(_warningsOnly(r.warnings).map(simplifyMessage));
     if (!errs.length && !warns.length) return `<div class="summary-detail-sub"><b>${name}</b>, no issues.</div>`;
     const ehtml = errs.map((e) => `<li class="sdi-err">${escapeHtml(e)}</li>`).join("");
     const whtml = warns.map((w) => `<li class="sdi-warn">${escapeHtml(w)}</li>`).join("");

@@ -429,7 +429,7 @@ def validate_submission(
             f"Add one of the configured README/metadata files: {', '.join(sorted(README_NAMES))}.",
             str(folder),
         ))
-    elif not documentation_found:
+    elif not documentation_found and methods_declaration_summary(submission_id)["declared"] != "no":
         warnings.append(_warn(
             "README_MISSING",
             "No README, SOP or methods document was found. Consider adding one.",
@@ -603,7 +603,7 @@ def _finish(
         "errors": errors,
         "error_count": len(errors),
         "warnings": warnings,
-        "warning_count": len(warnings),   # pre-computed so JS doesn't have to call .length
+        "warning_count": sum(1 for w in warnings if not (isinstance(w, dict) and w.get("severity") == "info")),
         "nifti_count": nifti_count,
         # Role-based counts. `nifti_count` remains the raw file count for
         # backward compatibility; `counts` is what the UI and reports display.
